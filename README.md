@@ -107,6 +107,26 @@ On Windows, use:
 
 Those launchers install Bun automatically when it is missing, then install the project packages before starting the server. On Windows, `UpdateAndStart.bat` and `UpdateForkAndStart.bat` now bootstrap missing Git too when a supported package manager is available. If you already have Bun set up, `bun run start` still works as usual.
 
+On Unix-like systems, `start.sh` can also update the tracked Git branch before launch:
+
+```bash
+./start.sh --self-update
+```
+
+To update without starting the server:
+
+```bash
+./start.sh --self-update-only
+```
+
+To check for updates on every launch without failing startup when Git is unavailable or the repo is not updateable:
+
+```bash
+SILLYBUNNY_AUTO_UPDATE=1 ./start.sh
+```
+
+Use `./start.sh --skip-self-update` to bypass the automatic check for a single launch.
+
 Open `http://127.0.0.1:8000`.
 
 For lower-memory or phone-style environments:
