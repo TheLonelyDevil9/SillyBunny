@@ -91,23 +91,6 @@ const defaultExampleSeparator = '***';
 const defaultChatStart = '***';
 const defaultToastPosition = 'toast-top-center';
 const SILLYBUNNY_PALETTE_PRESETS = Object.freeze({
-    'moonlit-bunny': {
-        label: 'Moonlit Bunny',
-        values: {
-            main_text_color: 'rgba(204, 211, 224, 1)',
-            italics_text_color: 'rgba(139, 147, 166, 1)',
-            underline_text_color: 'rgba(248, 202, 132, 1)',
-            quote_text_color: 'rgba(122, 178, 232, 1)',
-            blur_tint_color: 'rgba(23, 28, 36, 0.94)',
-            chat_tint_color: 'rgba(10, 14, 22, 0.12)',
-            user_mes_blur_tint_color: 'rgba(44, 52, 68, 0.72)',
-            bot_mes_blur_tint_color: 'rgba(27, 33, 44, 0.72)',
-            shadow_color: 'rgba(4, 8, 15, 0.55)',
-            border_color: 'rgba(173, 192, 219, 0.18)',
-            blur_strength: 10,
-            shadow_width: 2,
-        },
-    },
     'forest-dusk': {
         label: 'Forest Dusk',
         values: {
@@ -184,23 +167,17 @@ export const chat_styles = Object.freeze({
     DEFAULT: 0,
     BUBBLES: 1,
     DOCUMENT: 2,
-    ECHO: 3,
-    WHISPER: 4,
-    HUSH: 5,
-    RIPPLE: 6,
-    TIDE: 7,
 });
 
 const CHAT_STYLE_BODY_CLASSES = Object.freeze({
     [chat_styles.DEFAULT]: 'flatchat',
     [chat_styles.BUBBLES]: 'bubblechat',
     [chat_styles.DOCUMENT]: 'documentstyle',
-    [chat_styles.ECHO]: 'echostyle',
-    [chat_styles.WHISPER]: 'whisperstyle',
-    [chat_styles.HUSH]: 'hushstyle',
-    [chat_styles.RIPPLE]: 'ripplestyle',
-    [chat_styles.TIDE]: 'tidestyle',
 });
+
+function isValidChatDisplayValue(value) {
+    return Number.isInteger(value) && value >= 0;
+}
 
 export const send_on_enter_options = {
     DISABLED: -1,
@@ -1152,19 +1129,33 @@ function applyChatDisplay() {
         power_user.chat_display = chat_styles.DEFAULT;
     }
 
-    if (!(power_user.chat_display in CHAT_STYLE_BODY_CLASSES)) {
-        console.debug('applyChatDisplay: saw unsupported chat display type, resetting to default');
+    if (!isValidChatDisplayValue(power_user.chat_display)) {
+        console.debug('applyChatDisplay: saw invalid chat display type, resetting to default');
         power_user.chat_display = chat_styles.DEFAULT;
     }
 
     console.debug(`poweruser.chat_display ${power_user.chat_display}`);
-    $('#chat_display').val(power_user.chat_display).prop('selected', true);
-    const nextClass = CHAT_STYLE_BODY_CLASSES[power_user.chat_display];
+    const select = document.getElementById('chat_display');
+    const styleValue = String(power_user.chat_display);
+
+    if (select instanceof HTMLSelectElement) {
+        select.dataset.sbCurrentValue = styleValue;
+
+        if (Array.from(select.options).some(option => option.value === styleValue)) {
+            select.value = styleValue;
+        }
+    }
+
+    const nextClass = CHAT_STYLE_BODY_CLASSES[power_user.chat_display] ?? '';
     const allClasses = Object.values(CHAT_STYLE_BODY_CLASSES).join(' ');
 
-    console.debug(`applying ${nextClass}`);
+    console.debug(`applying ${nextClass || '(extension-managed)'}`);
     $('body').removeClass(allClasses);
-    $('body').addClass(nextClass);
+
+    if (nextClass) {
+        $('body').addClass(nextClass);
+    }
+
     document.dispatchEvent(new CustomEvent('sb:chat-style-updated', {
         detail: {
             value: power_user.chat_display,
@@ -1778,7 +1769,7 @@ export async function loadPowerUserSettings(settings, data) {
         context_presets = data.context;
     }
 
-    if (typeof power_user.chat_display !== 'number') {
+    if (!isValidChatDisplayValue(power_user.chat_display)) {
         power_user.chat_display = chat_styles.DEFAULT;
     }
 
@@ -1882,7 +1873,15 @@ export async function loadPowerUserSettings(settings, data) {
     $('#enableZenSliders').prop('checked', power_user.enableZenSliders).trigger('input');
     $('#enableLabMode').prop('checked', power_user.enableLabMode).trigger('input', { fromInit: true });
     $(`input[name="avatar_style"][value="${power_user.avatar_style}"]`).prop('checked', true);
-    $(`#chat_display option[value=${power_user.chat_display}]`).prop('selected', true).trigger('change');
+    const chatDisplaySelect = $('#chat_display');
+    const hasChatDisplayOption = chatDisplaySelect.find(`option[value="${power_user.chat_display}"]`).length > 0;
+
+    if (hasChatDisplayOption) {
+        chatDisplaySelect.val(String(power_user.chat_display)).trigger('change');
+    } else {
+        applyChatDisplay();
+    }
+
     $(`#toastr_position option[value=${power_user.toastr_position}]`).prop('selected', true).trigger('change');
     $('#chat_width_slider').val(power_user.chat_width);
     $('#token_padding').val(power_user.token_padding);
@@ -3522,8 +3521,13 @@ jQuery(() => {
     });
 
     $('#chat_display').on('change', function () {
-        const value = $(this).find(':selected').val();
-        power_user.chat_display = Number(value);
+        const selectedValue = $(this).find(':selected').val() ?? this.value;
+        power_user.chat_display = Number(selectedValue);
+
+        if (!isValidChatDisplayValue(power_user.chat_display)) {
+            power_user.chat_display = chat_styles.DEFAULT;
+        }
+
         applyChatDisplay();
         saveSettingsDebounced();
     });

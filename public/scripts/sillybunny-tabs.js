@@ -29,22 +29,12 @@ const SB_THEMES = Object.freeze([
         label: 'Bold Stylized',
         description: 'Sharper accents, stronger contrast, and more expressive active states.',
     },
-    {
-        id: 'moonlit-bunny',
-        label: 'Moonlit Bunny',
-        description: 'A Moonlit Echoes-inspired fork for SillyBunny with cooler midnight glass and soft blue-gold highlights.',
-    },
 ]);
 
 const SB_MESSAGE_STYLES = Object.freeze([
     { id: '0', label: 'Flat', icon: 'fa-grip-lines' },
     { id: '1', label: 'Bubbles', icon: 'fa-comment-dots' },
     { id: '2', label: 'Document', icon: 'fa-file-lines' },
-    { id: '3', label: 'Echo', icon: 'fa-wave-square' },
-    { id: '4', label: 'Whisper', icon: 'fa-feather-pointed' },
-    { id: '5', label: 'Hush', icon: 'fa-volume-xmark' },
-    { id: '6', label: 'Ripple', icon: 'fa-water' },
-    { id: '7', label: 'Tide', icon: 'fa-water-ladder' },
 ]);
 
 const SB_SHELLS = Object.freeze({
@@ -161,13 +151,13 @@ const SB_SEARCH_TARGET_SELECTOR = [
     '.menu_button',
     '.inline-drawer-toggle',
     '.standoutHeader',
+    '.range-block-title',
+    '.range-block-header',
+    '.extension_name',
     'h3',
     'h4',
     'h5',
     'strong',
-    '.range-block',
-    '.extension_container',
-    '.persona_management_global_settings .range-block',
     '.bg-header-row-1',
     '.bg-header-row-2',
 ].join(', ');
@@ -231,6 +221,48 @@ function normalizeText(value) {
         .toLowerCase();
 }
 
+function clampText(value, maxLength = 120) {
+    const normalizedValue = String(value ?? '').replace(/\s+/g, ' ').trim();
+    if (normalizedValue.length <= maxLength) {
+        return normalizedValue;
+    }
+
+    return `${normalizedValue.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function getSearchTextCandidates(element) {
+    const candidates = [
+        element.dataset.sbSearchLabel,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title'),
+        element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.placeholder : '',
+        element instanceof HTMLSelectElement ? element.selectedOptions?.[0]?.textContent : '',
+        element.matches('.range-block, .range-block-title, .range-block-header')
+            ? element.closest('.range-block')?.querySelector('.range-block-title, .range-block-header, label, strong, h4, h5')?.textContent
+            : '',
+        element.matches('.extension_container, .extension_name')
+            ? element.closest('.extension_container')?.querySelector('.inline-drawer-toggle, .inline-drawer-header, .extension_name, h3, h4, strong')?.textContent
+            : '',
+        element.textContent,
+    ];
+
+    return candidates
+        .map(candidate => String(candidate ?? '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .filter((candidate, index, collection) => collection.indexOf(candidate) === index);
+}
+
+function getSearchDisplayText(element, fallback = '') {
+    return clampText(getSearchTextCandidates(element)[0] || fallback, 110);
+}
+
+function getSearchText(element, sectionLabel = '') {
+    return normalizeText([
+        ...getSearchTextCandidates(element),
+        sectionLabel,
+    ].join(' '));
+}
+
 function isActuallyVisible(element) {
     return Boolean(element) && element.getClientRects().length > 0;
 }
@@ -248,8 +280,15 @@ function getThemeOption(themeId) {
 }
 
 function normalizeMessageStyle(styleId) {
-    const value = String(styleId ?? SB_MESSAGE_STYLES[0].id);
-    return SB_MESSAGE_STYLES.some(style => style.id === value) ? value : SB_MESSAGE_STYLES[0].id;
+    const select = getMessageStyleSelect();
+    const fallbackValue = select?.options?.[0]?.value ?? SB_MESSAGE_STYLES[0].id;
+    const value = String(styleId ?? fallbackValue);
+
+    if (!select) {
+        return value;
+    }
+
+    return Array.from(select.options).some(option => option.value === value) ? value : fallbackValue;
 }
 
 function getMessageStyleSelect() {
@@ -737,7 +776,7 @@ function injectThemePicker() {
     const card = createElement('div', { id: 'sb-theme-card', className: 'sb-theme-card' });
     const header = createElement('div', { className: 'sb-theme-card-header' });
     const title = createElement('strong', { text: 'Shell Style' });
-    const description = createElement('p', { text: 'Switch the navigation shell between four built-in visual directions, including a Moonlit Echoes-inspired SillyBunny fork.' });
+    const description = createElement('p', { text: 'Switch the navigation shell between three built-in visual directions.' });
     const optionRow = createElement('div', { className: 'sb-theme-option-row' });
     const sliderGroup = createElement('div', { className: 'sb-theme-slider-group' });
     const sliderHeader = createElement('div', { className: 'sb-theme-slider-header' });
@@ -834,17 +873,21 @@ function createSearchIndex(tabState) {
             continue;
         }
 
-        const searchText = normalizeText(element.textContent);
-        if (searchText.length < 3 || seen.has(searchText)) {
+        const sectionLabel = getSearchSectionLabel(element, tabState.label);
+        const searchText = getSearchText(element, sectionLabel);
+        const displayText = getSearchDisplayText(element, sectionLabel);
+        const dedupeKey = `${sectionLabel}::${displayText}`;
+
+        if (searchText.length < 3 || seen.has(dedupeKey)) {
             continue;
         }
 
-        seen.add(searchText);
+        seen.add(dedupeKey);
         entries.push({
             element,
             searchText,
-            displayText: String(element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
-            sectionLabel: getSearchSectionLabel(element, tabState.label),
+            displayText,
+            sectionLabel,
             tabId: tabState.id,
             tabLabel: tabState.label,
         });

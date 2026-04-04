@@ -207,7 +207,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomeActionCard {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, #17110e);
     min-width: 0;
     min-height: 88px;
     width: 100%;
@@ -530,7 +530,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomeRecentShell {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, #16110e);
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -605,7 +605,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomePanel .recentChatList .noRecentChat {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, #16110e);
     display: flex;
     align-items: center;
     gap: 14px;
@@ -644,7 +644,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomeRecent .recentChatList .recentChat {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, #16110e);
     position: relative;
     display: flex;
     align-items: flex-start;
@@ -832,7 +832,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 }
 
 .welcomePromptPanel {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, #16110e);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -875,7 +875,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 }
 
 .welcomeGuidePanel {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, #16110e);
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -915,7 +915,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 }
 
 .welcomeGuideCard {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, #16110e);
     display: flex;
     flex-direction: column;
     gap: 10px;

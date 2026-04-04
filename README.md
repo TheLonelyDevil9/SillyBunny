@@ -41,11 +41,10 @@ Current UI work includes:
 - A custom left/right navigation shell for workspace and customization flows
 - Search-first navigation across presets, lore, extensions, personas, and settings
 - A mobile navigation layer for smaller screens
-- Four built-in shell themes:
+- Three built-in shell themes:
   - Modern Glass
   - Clean Minimal
   - Bold Stylized
-  - Moonlit Bunny
 - Built-in SillyBunny palette presets:
   - Forest Dusk
   - Forest Dawn
@@ -54,11 +53,6 @@ Current UI work includes:
   - Flat
   - Bubbles
   - Document
-  - Echo
-  - Whisper
-  - Hush
-  - Ripple
-  - Tide
 
 ### Native Agent Mode
 

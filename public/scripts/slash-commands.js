@@ -1503,36 +1503,6 @@ export function initDefaultSlashCommands() {
         helpString: t`Sets the message style to flat chat mode.`,
     }));
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'echo',
-        callback: setEchoModeCallback,
-        aliases: ['echostyle'],
-        helpString: t`Sets the message style to Echo mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'whisper',
-        callback: setWhisperModeCallback,
-        aliases: ['whisperstyle'],
-        helpString: t`Sets the message style to Whisper mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'hush',
-        callback: setHushModeCallback,
-        aliases: ['hushstyle'],
-        helpString: t`Sets the message style to Hush mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'ripple',
-        callback: setRippleModeCallback,
-        aliases: ['ripplestyle'],
-        helpString: t`Sets the message style to Ripple mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-        name: 'tide',
-        callback: setTideModeCallback,
-        aliases: ['tidestyle'],
-        helpString: t`Sets the message style to Tide mode.`,
-    }));
-    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'continue',
         callback: continueChatCallback,
         aliases: ['cont'],
@@ -5872,31 +5842,6 @@ function setBubbleModeCallback() {
 
 function setFlatModeCallback() {
     $('#chat_display').val(chat_styles.DEFAULT).trigger('change');
-    return '';
-}
-
-function setEchoModeCallback() {
-    $('#chat_display').val(chat_styles.ECHO).trigger('change');
-    return '';
-}
-
-function setWhisperModeCallback() {
-    $('#chat_display').val(chat_styles.WHISPER).trigger('change');
-    return '';
-}
-
-function setHushModeCallback() {
-    $('#chat_display').val(chat_styles.HUSH).trigger('change');
-    return '';
-}
-
-function setRippleModeCallback() {
-    $('#chat_display').val(chat_styles.RIPPLE).trigger('change');
-    return '';
-}
-
-function setTideModeCallback() {
-    $('#chat_display').val(chat_styles.TIDE).trigger('change');
     return '';
 }
 

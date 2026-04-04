@@ -32,14 +32,14 @@
     --sb-shell-tab-active-bg: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #f1b285) 18%, transparent), color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent));
     --sb-shell-border: color-mix(in srgb, var(--SmartThemeBorderColor) 96%, transparent);
     --sb-shell-shadow: 0 32px 90px color-mix(in srgb, var(--SmartThemeShadowColor) 34%, transparent);
-    --sb-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent));
-    --sb-button-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
+    --sb-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 6%, var(--SmartThemeBlurTintColor)), color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, #17110e));
+    --sb-button-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, #17110e);
     --sb-button-hover: color-mix(in srgb, var(--color-primary, #f1b285) 14%, transparent);
     --sb-positive-fg: color-mix(in srgb, var(--color-primary, #f1b285) 82%, white);
     --sb-positive-bg: color-mix(in srgb, var(--color-primary, #f1b285) 22%, transparent);
     --sb-muted-fg: rgba(241, 231, 223, 0.74);
     --sb-muted-bg: rgba(255, 255, 255, 0.07);
-    --sb-input-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, transparent);
+    --sb-input-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, #17110e);
     --sb-input-border: color-mix(in srgb, var(--SmartThemeBorderColor) 92%, transparent);
     --sb-focus-ring: color-mix(in srgb, var(--color-primary, #f1b285) 70%, transparent);
     --sb-ambient-a: rgba(241, 178, 133, 0.12);
@@ -53,13 +53,6 @@
     --sb-page-control-opacity: 1;
     --sb-page-overlay-opacity: 1;
     --sb-message-radius: 22px;
-    --sb-echo-avatar-width: clamp(104px, 18vw, 220px);
-    --sb-echo-avatar-mobile-width: clamp(74px, 27vw, 120px);
-    --sb-whisper-avatar-width: clamp(140px, 36%, 280px);
-    --sb-whisper-avatar-height: 160px;
-    --sb-ripple-avatar-width: clamp(104px, 16vw, 176px);
-    --sb-ripple-avatar-mobile-width: 88px;
-    --sb-ripple-avatar-ratio: 1.4;
 }
 
 :root[data-sb-theme='modern-glass'] {
@@ -98,7 +91,7 @@
     --sb-card-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 98%, #17110e);
     --sb-button-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     --sb-button-hover: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
-    --sb-input-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 94%, transparent);
+    --sb-input-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, #16110e);
     --sb-ambient-a: rgba(255, 223, 197, 0.04);
     --sb-ambient-b: rgba(255, 188, 138, 0.025);
 }
@@ -122,32 +115,6 @@
     --sb-ambient-b: color-mix(in srgb, var(--color-accent, #df8e70) 10%, transparent);
 }
 
-:root[data-sb-theme='moonlit-bunny'] {
-    --sb-accent: color-mix(in srgb, var(--SmartThemeQuoteColor) 78%, #d9e8ff 22%);
-    --sb-accent-soft: color-mix(in srgb, var(--SmartThemeUnderlineColor) 72%, #f8d7a0 28%);
-    --color-primary: color-mix(in srgb, var(--sb-accent) 84%, #dcecff 16%);
-    --color-accent: color-mix(in srgb, var(--sb-accent-soft) 72%, #f3c88e 28%);
-    --sb-shell-surface: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBlurTintColor) 95%, #090d14), color-mix(in srgb, #0c1119 88%, transparent));
-    --sb-shell-main-bg: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBlurTintColor) 90%, #0a0f17), color-mix(in srgb, #090d14 94%, transparent));
-    --sb-shell-nav-bg: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, #0c1420), color-mix(in srgb, #0a0f17 96%, transparent));
-    --sb-shell-header-bg: linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, var(--SmartThemeBlurTintColor)), color-mix(in srgb, #0a1018 92%, transparent));
-    --sb-shell-header-glow: color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent);
-    --sb-shell-tab-active-bg: linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, transparent), color-mix(in srgb, var(--SmartThemeUnderlineColor) 10%, transparent));
-    --sb-shell-border: color-mix(in srgb, var(--SmartThemeBorderColor) 52%, rgba(190, 210, 236, 0.26));
-    --sb-shell-shadow: 0 32px 82px rgba(3, 6, 12, 0.5);
-    --sb-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 5%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, #101722));
-    --sb-button-bg: color-mix(in srgb, var(--SmartThemeQuoteColor) 5%, var(--SmartThemeBlurTintColor));
-    --sb-button-hover: linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent), color-mix(in srgb, var(--SmartThemeUnderlineColor) 8%, transparent));
-    --sb-positive-fg: color-mix(in srgb, var(--SmartThemeUnderlineColor) 74%, white 26%);
-    --sb-positive-bg: color-mix(in srgb, var(--SmartThemeUnderlineColor) 18%, transparent);
-    --sb-muted-fg: rgba(215, 223, 236, 0.74);
-    --sb-input-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, rgba(13, 18, 27, 0.78));
-    --sb-input-border: color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, var(--sb-shell-border));
-    --sb-focus-ring: color-mix(in srgb, var(--SmartThemeQuoteColor) 64%, white 18%);
-    --sb-ambient-a: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
-    --sb-ambient-b: color-mix(in srgb, var(--SmartThemeUnderlineColor) 12%, transparent);
-}
-
 body {
     text-rendering: optimizeLegibility;
 }
@@ -168,14 +135,6 @@ body::before {
     opacity: 0.46;
 }
 
-:root[data-sb-theme='moonlit-bunny'] body::before {
-    background:
-        radial-gradient(circle at 14% 12%, color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent), transparent 28%),
-        radial-gradient(circle at 82% 6%, color-mix(in srgb, var(--SmartThemeUnderlineColor) 12%, transparent), transparent 22%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%);
-    opacity: 0.86;
-}
-
 .popup,
 #sb-mobile-nav {
     position: relative;
@@ -194,7 +153,7 @@ body::before {
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: var(--SmartThemeChatTintColor);
+    background: color-mix(in srgb, var(--SmartThemeChatTintColor) 82%, var(--SmartThemeBlurTintColor) 18%);
     opacity: var(--sb-page-overlay-opacity);
 }
 
@@ -218,13 +177,6 @@ body::before {
         linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-header-glow) 80%, transparent), transparent 110%),
         color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
     opacity: var(--sb-shell-surface-opacity);
-}
-
-:root[data-sb-theme='moonlit-bunny'] #top-bar::before {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent), transparent 68%),
-        linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 6%, transparent), transparent 42%),
-        color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
 }
 
 hr {
@@ -327,8 +279,17 @@ input.text_pole {
     background: var(--sb-input-bg);
     border-color: var(--sb-input-border);
     border-radius: 14px;
+    color: var(--SmartThemeBodyColor);
+    caret-color: var(--color-primary, #f1b285);
     line-height: 1.45;
     transition: border-color var(--sb-transition-fast), box-shadow var(--sb-transition-fast), background-color var(--sb-transition-fast);
+}
+
+.text_pole::placeholder,
+textarea.text_pole::placeholder,
+input.text_pole::placeholder {
+    color: color-mix(in srgb, var(--SmartThemeBodyColor) 60%, transparent);
+    opacity: 1;
 }
 
 .text_pole:focus,
@@ -368,15 +329,8 @@ select.text_pole {
     pointer-events: none;
     background:
         linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent), transparent 90%),
-        color-mix(in srgb, var(--SmartThemeBlurTintColor) 94%, transparent);
+        color-mix(in srgb, var(--SmartThemeBlurTintColor) 94%, #17110e);
     opacity: var(--sb-page-card-opacity);
-}
-
-:root[data-sb-theme='moonlit-bunny'] #send_form::before {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent), transparent 86%),
-        linear-gradient(135deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 5%, transparent), transparent 42%),
-        color-mix(in srgb, var(--SmartThemeBlurTintColor) 94%, transparent);
 }
 
 #nonQRFormItems {
@@ -408,6 +362,14 @@ select.text_pole {
     font-size: calc(var(--bottomFormIconSize) * 0.58);
 }
 
+#send_form .mes_stop {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    font-size: calc(var(--bottomFormIconSize) * 0.68);
+}
+
 #rightSendForm > div:hover,
 #leftSendForm > div:hover,
 #send_form .mes_stop:hover,
@@ -426,6 +388,8 @@ select.text_pole {
     line-height: 1.56;
     border-radius: 18px;
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 3%, transparent);
+    color: var(--SmartThemeBodyColor);
+    caret-color: var(--color-primary, #f1b285);
     font-size: calc(var(--mainFontSize) * 0.98);
     transition: border-color var(--sb-transition-fast), box-shadow var(--sb-transition-fast), background-color var(--sb-transition-fast);
 }
@@ -451,26 +415,41 @@ select.text_pole {
 
 @media screen and (max-width: 760px) {
     #send_form {
-        padding: 4px 6px 6px;
+        padding: 6px 8px 8px;
     }
 
     #nonQRFormItems {
-        gap: 6px;
+        align-items: flex-end;
+        gap: 8px;
         padding: 4px 6px 2px;
+    }
+
+    #leftSendForm,
+    #rightSendForm {
+        width: auto !important;
+        min-width: max-content;
+        flex-wrap: nowrap !important;
     }
 
     #leftSendForm > div,
     #rightSendForm > div:not(.mes_stop),
-    #send_form .mes_stop,
     #options_button {
-        width: 40px;
-        min-width: 40px;
-        height: 40px;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+    }
+
+    #send_form .mes_stop {
+        width: 52px;
+        min-width: 52px;
+        height: 52px;
+        font-size: calc(var(--bottomFormIconSize) * 0.8);
     }
 
     #send_textarea {
-        min-height: 54px;
-        padding: 10px 12px 12px;
+        min-height: 72px;
+        padding: 12px 14px 16px;
+        font-size: calc(var(--mainFontSize) * 1.02);
     }
 }
 .popup {
@@ -502,522 +481,16 @@ body.bubblechat .mes[is_user='true']::before {
     background: var(--SmartThemeUserMesBlurTintColor);
 }
 
-:root[data-sb-theme='moonlit-bunny'] body.bubblechat .mes::before {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 6%, transparent), transparent 58%),
-        var(--SmartThemeBotMesBlurTintColor);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 78%, transparent);
-    box-shadow: 0 16px 30px color-mix(in srgb, var(--SmartThemeShadowColor) 18%, transparent);
-}
-
-:root[data-sb-theme='moonlit-bunny'] body.bubblechat .mes[is_user='true']::before {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 6%, transparent), transparent 65%),
-        var(--SmartThemeUserMesBlurTintColor);
-}
-
 .mes[is_user='true'] .mes_block {
     border-left: 2px solid color-mix(in srgb, var(--color-primary, #f1b285) 60%, transparent);
     padding-left: 10px;
 }
-
-:root[data-sb-theme='moonlit-bunny'] .mes[is_user='true'] .mes_block {
-    border-left-color: color-mix(in srgb, var(--SmartThemeUnderlineColor) 58%, transparent);
-}
-
-body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) .mes {
-    background: transparent;
-}
-
-body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) .mes .mes_block {
-    overflow: visible;
-}
-
-body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) .last_mes .mesAvatarWrapper {
-    padding-bottom: 0;
-}
-
-body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) .mes[is_user='true'] .mes_block {
-    border-left: none;
-    padding-left: 0;
-}
-
-body:is(.echostyle, .whisperstyle, .hushstyle, .tidestyle) .mes .mes_text {
-    position: relative;
-}
-
-body.echostyle .mes {
-    padding: 0;
-    margin: 12px 0 0;
-    border-radius: var(--sb-message-radius);
-}
-
-body.echostyle .mes .mes_block {
-    padding: 0;
-}
-
-body.echostyle .mes .ch_name {
-    padding: 0 14px;
-    margin-bottom: 8px;
-}
-
-body.echostyle .mes .mes_text {
-    min-height: 118px;
-    padding: 16px 18px 16px calc(var(--sb-echo-avatar-width) + 18px);
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 4%, transparent), transparent 64%),
-        var(--SmartThemeBotMesBlurTintColor);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
-    border-radius: var(--sb-message-radius);
-    overflow: hidden;
-    box-shadow: 0 20px 36px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
-}
-
-body.echostyle .mes .mes_text::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: var(--sb-echo-avatar-width);
-    background-image: var(--sb-message-avatar, none);
-    background-size: cover;
-    background-position: center;
-    opacity: 0.78;
-    mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.82) 64%, transparent 100%);
-    -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.82) 64%, transparent 100%);
-    pointer-events: none;
-}
-
-body.echostyle .mes .mes_text::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(90deg, color-mix(in srgb, var(--SmartThemeBlurTintColor) 6%, transparent), transparent 34%);
-}
-
-body.echostyle .mes[is_user='true'] .mes_text {
-    padding: 16px calc(var(--sb-echo-avatar-width) + 18px) 16px 18px;
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 4%, transparent), transparent 64%),
-        var(--SmartThemeUserMesBlurTintColor);
-}
-
-body.echostyle .mes[is_user='true'] .mes_text::before {
-    inset: 0 0 0 auto;
-    mask-image: linear-gradient(270deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.82) 64%, transparent 100%);
-    -webkit-mask-image: linear-gradient(270deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.82) 64%, transparent 100%);
-}
-
-body.echostyle .mes[is_user='true'] .mes_text::after {
-    background: linear-gradient(270deg, color-mix(in srgb, var(--SmartThemeBlurTintColor) 6%, transparent), transparent 34%);
-}
-
-body.whisperstyle .mes,
-body.hushstyle .mes {
-    position: relative;
-    padding: 18px 18px 14px;
-    margin: 12px 0 0;
-    border-radius: var(--sb-message-radius);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
-    box-shadow: 0 20px 36px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
-    overflow: hidden;
-}
-
-body.whisperstyle .mes {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 5%, transparent), transparent 70%),
-        var(--SmartThemeBotMesBlurTintColor);
-}
-
-body.whisperstyle .mes[is_user='true'] {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 5%, transparent), transparent 70%),
-        var(--SmartThemeUserMesBlurTintColor);
-}
-
-body.whisperstyle .mes::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: var(--sb-whisper-avatar-width);
-    height: var(--sb-whisper-avatar-height);
-    background-image: var(--sb-message-avatar, none);
-    background-size: cover;
-    background-position: center top;
-    opacity: 0.4;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.48) 56%, transparent 100%);
-    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.48) 56%, transparent 100%);
-    pointer-events: none;
-}
-
-body.whisperstyle .mes::after,
-body.hushstyle .mes::after {
-    content: '';
-    position: absolute;
-    top: 18px;
-    right: 14px;
-    bottom: 18px;
-    width: 3px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--SmartThemeBodyColor) 78%, transparent);
-    opacity: 0.82;
-}
-
-body.whisperstyle .mes[is_user='true']::after,
-body.hushstyle .mes[is_user='true']::after {
-    background: color-mix(in srgb, var(--color-primary, #f1b285) 82%, transparent);
-}
-
-body.whisperstyle .mes .mes_block,
-body.hushstyle .mes .mes_block {
-    padding: 0;
-}
-
-body.whisperstyle .mes .ch_name,
-body.hushstyle .mes .ch_name {
-    margin-bottom: 10px;
-    padding-right: 18px;
-}
-
-body.whisperstyle .mes .mes_text,
-body.hushstyle .mes .mes_text {
-    padding: 0 10px 0 0;
-}
-
-body.hushstyle .mes {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent), transparent 65%),
-        var(--SmartThemeBotMesBlurTintColor);
-}
-
-body.hushstyle .mes[is_user='true'] {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--color-primary, #f1b285) 5%, transparent), transparent 65%),
-        var(--SmartThemeUserMesBlurTintColor);
-}
-
-body.ripplestyle .mes {
-    padding: 0;
-    margin: 12px 0;
-    align-items: stretch;
-    overflow: hidden;
-    border-radius: var(--sb-message-radius);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeQuoteColor) 4%, transparent), transparent 66%),
-        var(--SmartThemeBotMesBlurTintColor);
-    box-shadow: 0 20px 36px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
-}
-
-body.ripplestyle .mes[is_user='true'] {
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeUnderlineColor) 4%, transparent), transparent 66%),
-        var(--SmartThemeUserMesBlurTintColor);
-}
-
-body.ripplestyle .mes .mesAvatarWrapper {
-    flex: 0 0 var(--sb-ripple-avatar-width);
-    width: var(--sb-ripple-avatar-width);
-    min-width: var(--sb-ripple-avatar-width);
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    padding: 0 0 12px;
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 18%, transparent);
-}
-
-body.ripplestyle .mes .avatar {
-    width: 100%;
-    height: 100%;
-    min-height: 140px;
-    margin: 0;
-    border-radius: var(--sb-message-radius) 0 0 0;
-    overflow: hidden;
-}
-
-body.ripplestyle .mes .avatar img {
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    object-fit: cover;
-}
-
-body.ripplestyle .mes .mesIDDisplay,
-body.ripplestyle .mes .mes_timer,
-body.ripplestyle .mes .tokenCounterDisplay {
-    margin: 0 12px;
-    width: calc(100% - 24px);
-    justify-self: start;
-}
-
-body.ripplestyle .mes .mes_block {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 16px 18px 18px 14px;
-}
-
-body.ripplestyle .mes .ch_name {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding-bottom: 10px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent);
-}
-
-body.ripplestyle .mes .mes_text {
-    padding: 0;
-}
-
-body.tidestyle #chat {
-    padding-inline: 14px;
-}
-
-body.tidestyle .mes {
-    padding: 0;
-    margin: 12px 0 0;
-}
-
-body.tidestyle .mes .mes_block {
-    padding: 0;
-    background: none !important;
-    box-shadow: none !important;
-}
-
-body.tidestyle .mes .ch_name {
-    margin-bottom: 6px;
-    padding-inline: 2px;
-}
-
-body.tidestyle .mes[is_user='true'] .ch_name {
-    text-align: right;
-}
-
-body.tidestyle .mes[is_user='true'] .ch_name > .flex-container {
-    justify-content: flex-end;
-}
-
-body.tidestyle .mes .mes_text {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    max-width: min(100%, 56rem);
-    padding: 6px 0 0;
-}
-
-body.tidestyle .mes[is_user='true'] .mes_text {
-    margin-left: auto;
-    align-items: flex-end;
-}
-
-body.tidestyle .mes .mes_text > :is(p, ul, ol, pre, blockquote, table) {
-    width: fit-content;
-    max-width: 100%;
-    margin: 0;
-    padding: 10px 14px;
-    border-radius: 18px;
-    background: var(--SmartThemeBotMesBlurTintColor);
-    box-shadow: 0 12px 24px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
-}
-
-body.tidestyle .mes[is_user='true'] .mes_text > :is(p, ul, ol, pre, blockquote, table) {
-    background: var(--SmartThemeUserMesBlurTintColor);
-}
-
-body.hideChatAvatars.ripplestyle .mes {
-    display: block;
-}
-
-body.hideChatAvatars.ripplestyle .mes .mesAvatarWrapper {
-    display: flex;
-    flex-wrap: wrap;
-    width: auto;
-    min-width: 0;
-    padding: 12px 14px 0;
-    background: none;
-}
-
-body.hideChatAvatars.ripplestyle .mes .mes_block {
-    padding: 12px 14px 18px;
-}
-
 @media screen and (max-width: 1000px) {
-    body.echostyle .mes .mes_text {
-        min-height: 92px;
-        padding-left: calc(var(--sb-echo-avatar-mobile-width) + 16px);
-    }
-
-    body.echostyle .mes .mes_text::before {
-        width: var(--sb-echo-avatar-mobile-width);
-    }
-
-    body.echostyle .mes[is_user='true'] .mes_text {
-        padding-right: calc(var(--sb-echo-avatar-mobile-width) + 16px);
-        padding-left: 16px;
-    }
-
-    body.whisperstyle .mes::before,
-    body.hushstyle .mes::before {
-        width: min(45%, 180px);
-        height: 134px;
-    }
-
-    body.ripplestyle .mes .mesAvatarWrapper {
-        display: grid;
-        grid-template-columns: 64px repeat(2, minmax(0, max-content));
-        grid-template-areas:
-            "avatar id tokens"
-            "avatar timer timer";
-        align-items: center;
-        justify-content: start;
-        column-gap: 10px;
-        row-gap: 4px;
-        width: auto;
-        min-width: 0;
-        padding: 12px 14px 0;
-        background: none;
-    }
-
-    body.ripplestyle .mes .avatar {
-        grid-area: avatar;
-        width: 64px;
-        height: 64px;
-        min-height: 64px;
-        border-radius: calc(var(--sb-message-radius) - 8px);
-    }
-
-    body.ripplestyle .mes .avatar img {
-        height: 100%;
-    }
-
-    body.ripplestyle .mes {
-        display: block;
-    }
-
-    body.ripplestyle .mes .mesIDDisplay,
-    body.ripplestyle .mes .tokenCounterDisplay,
-    body.ripplestyle .mes .mes_timer {
-        margin: 0;
-        width: auto;
-        min-width: 0;
-        justify-self: start;
-        text-align: left;
-        line-height: 1.15;
-    }
-
-    body.ripplestyle .mes .mesIDDisplay {
-        grid-area: id;
-        align-self: end;
-    }
-
-    body.ripplestyle .mes .tokenCounterDisplay {
-        grid-area: tokens;
-        align-self: end;
-    }
-
-    body.ripplestyle .mes .mes_timer {
-        grid-area: timer;
-        font-size: calc(var(--mainFontSize) * 0.82);
-    }
-
-    body.ripplestyle .mes .mes_block {
-        padding: 10px 14px 14px;
-    }
-
-    body.tidestyle #chat {
-        padding-inline: 8px;
-    }
-
-    body.tidestyle .mes .mes_text {
-        max-width: 100%;
-    }
-
-    body.hideChatAvatars.ripplestyle .mes .mesAvatarWrapper {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 10px;
-        padding: 12px 14px 0;
-    }
-
-    /* Word wrapping for all chat styles */
-    body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) .mes .mes_text {
-        overflow-wrap: break-word;
-        word-break: break-word;
-        min-width: 0;
-    }
-
-    /* Ensure media containers don't overflow */
     .mes .mes_media_wrapper,
     .mes .mes_img_container,
     .mes .mes_video_container {
         max-width: 100%;
         min-width: 0;
-    }
-}
-
-@media screen and (max-width: 620px) {
-    body.echostyle .mes .mes_text {
-        padding-left: calc(clamp(64px, 24vw, 100px) + 14px);
-    }
-
-    body.echostyle .mes .mes_text::before {
-        width: clamp(64px, 24vw, 100px);
-    }
-
-    body.echostyle .mes[is_user='true'] .mes_text {
-        padding-right: calc(clamp(64px, 24vw, 100px) + 14px);
-        padding-left: 14px;
-    }
-
-    body.whisperstyle .mes::before,
-    body.hushstyle .mes::before {
-        width: min(38%, 140px);
-        height: 120px;
-    }
-
-    body.ripplestyle .mes .mesAvatarWrapper {
-        grid-template-columns: 52px minmax(0, 1fr);
-        grid-template-areas:
-            "avatar id"
-            "avatar timer"
-            "avatar tokens";
-        column-gap: 8px;
-    }
-
-    body.ripplestyle .mes .avatar {
-        width: 52px;
-        height: 52px;
-        min-height: 52px;
-    }
-
-    body.ripplestyle .mes .mesIDDisplay,
-    body.ripplestyle .mes .tokenCounterDisplay,
-    body.ripplestyle .mes .mes_timer {
-        font-size: calc(var(--mainFontSize) * 0.78);
-    }
-}
-
-@media screen and (max-width: 450px) {
-    body.echostyle .mes .mes_text {
-        padding-left: calc(clamp(60px, 22vw, 90px) + 12px);
-    }
-
-    body.echostyle .mes .mes_text::before {
-        width: clamp(60px, 22vw, 90px);
-    }
-
-    body.echostyle .mes[is_user='true'] .mes_text {
-        padding-right: calc(clamp(60px, 22vw, 90px) + 12px);
-        padding-left: 12px;
-    }
-
-    body.whisperstyle .mes::before,
-    body.hushstyle .mes::before {
-        width: min(32%, 120px);
-        height: 110px;
     }
 }
 
@@ -1513,14 +986,16 @@ input[type='range']::-moz-range-thumb {
 
 #user_avatar_block:not(.gridView) .avatar-container .ch_description {
     grid-column: 1;
-    display: block;
+    display: -webkit-box;
     min-width: 0;
     margin-top: 0;
     line-height: 1.5;
     white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
+    overflow: hidden;
+    text-overflow: ellipsis;
     overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
 }
 
 #user_avatar_block:not(.gridView) .avatar-container .avatar_container_states {
@@ -1845,23 +1320,6 @@ input[type='range']::-moz-range-thumb {
 
 .sb-theme-preset-button i {
     color: var(--sb-accent);
-}
-
-.sb-theme-preset-button[data-sb-palette='moonlit-bunny'] {
-    background:
-        linear-gradient(135deg, color-mix(in srgb, #7ab2e8 18%, var(--sb-button-bg)), color-mix(in srgb, #f8ca84 12%, var(--sb-button-bg)));
-    border-color: color-mix(in srgb, #7ab2e8 26%, var(--sb-shell-border));
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
-}
-
-.sb-theme-preset-button[data-sb-palette='moonlit-bunny']:hover {
-    background:
-        linear-gradient(135deg, color-mix(in srgb, #7ab2e8 24%, var(--sb-button-hover)), color-mix(in srgb, #f8ca84 16%, var(--sb-button-hover)));
-    border-color: color-mix(in srgb, #f8ca84 28%, var(--sb-shell-border));
-}
-
-.sb-theme-preset-button[data-sb-palette='moonlit-bunny'] i {
-    color: #c8e0ff;
 }
 
 .sb-theme-message-style-grid {
@@ -2189,15 +1647,20 @@ input[type='range']::-moz-range-thumb {
 
     #leftSendForm > div,
     #rightSendForm > div:not(.mes_stop),
-    #send_form .mes_stop,
     #options_button {
         width: 38px;
         min-width: 38px;
         height: 38px;
     }
 
+    #send_form .mes_stop {
+        width: 48px;
+        min-width: 48px;
+        height: 48px;
+    }
+
     #send_textarea {
-        min-height: 60px;
-        padding: 12px 14px 14px;
+        min-height: 74px;
+        padding: 12px 14px 16px;
     }
 }

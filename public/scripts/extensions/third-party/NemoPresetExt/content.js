@@ -10,7 +10,7 @@ import { background_settings } from '../../../backgrounds.js';
 import { promptManager } from '../../../openai.js';
 
 const EXTENSION_NAME = 'NemoPresetExt';
-const BUILT_IN_DIVIDER_PATTERNS = ['=+', '-{3,}', '\\*{3,}'];
+const BUILT_IN_DIVIDER_PATTERNS = ['=+', '-{3,}', '\\*{3,}', '[^\\w\\s]*[─—-]\\+'];
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'm4v']);
 const BACKGROUND_LOCK_KEY = 'custom_background';
 
@@ -39,6 +39,9 @@ function ensureSettings() {
     }
     if (!settings.promptSectionStates || typeof settings.promptSectionStates !== 'object') {
         settings.promptSectionStates = {};
+    }
+    if (!settings.openSectionStates || typeof settings.openSectionStates !== 'object') {
+        settings.openSectionStates = {};
     }
     if (typeof settings.enableAnimatedBackgrounds !== 'boolean') {
         settings.enableAnimatedBackgrounds = true;
@@ -151,7 +154,7 @@ function injectPromptToolbar(promptList) {
         const settings = ensureSettings();
         const sections = Array.from(promptList.querySelectorAll('.nemo-sb-section-row'));
         sections.forEach(section => {
-            settings.promptSectionStates[section.dataset.sectionId] = false;
+            setPromptSectionOpenState(settings, section.dataset.sectionId, section.dataset.sectionName || section.dataset.sectionId, false);
         });
         saveSettingsDebounced();
         schedulePromptRefresh();
@@ -160,7 +163,7 @@ function injectPromptToolbar(promptList) {
         const settings = ensureSettings();
         const sections = Array.from(promptList.querySelectorAll('.nemo-sb-section-row'));
         sections.forEach(section => {
-            settings.promptSectionStates[section.dataset.sectionId] = true;
+            setPromptSectionOpenState(settings, section.dataset.sectionId, section.dataset.sectionName || section.dataset.sectionId, true);
         });
         saveSettingsDebounced();
         schedulePromptRefresh();
@@ -201,14 +204,48 @@ function buildDividerRegex() {
         .split(',')
         .map(pattern => pattern.trim())
         .filter(Boolean);
-    const allPatterns = [...new Set([...BUILT_IN_DIVIDER_PATTERNS, ...customPatterns])];
+    const allPatterns = [...new Set([
+        ...BUILT_IN_DIVIDER_PATTERNS,
+        ...customPatterns,
+        ...customPatterns.map(escapeRegex),
+    ])];
 
     try {
-        return new RegExp(`^(${allPatterns.join('|')})`);
+        return new RegExp(`^(${allPatterns.join('|')})`, 'u');
     } catch (error) {
         console.warn('[NemoPresetExt] Invalid divider regex, falling back to built-ins.', error);
-        return new RegExp(`^(${BUILT_IN_DIVIDER_PATTERNS.join('|')})`);
+        return new RegExp(`^(${BUILT_IN_DIVIDER_PATTERNS.join('|')})`, 'u');
     }
+}
+
+function escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getPromptSectionOpenState(settings, sectionId, sectionName) {
+    if (typeof settings.promptSectionStates?.[sectionId] === 'boolean') {
+        return settings.promptSectionStates[sectionId];
+    }
+
+    if (typeof settings.promptSectionStates?.[sectionName] === 'boolean') {
+        return settings.promptSectionStates[sectionName];
+    }
+
+    if (typeof settings.openSectionStates?.[sectionName] === 'boolean') {
+        return settings.openSectionStates[sectionName];
+    }
+
+    return true;
+}
+
+function setPromptSectionOpenState(settings, sectionId, sectionName, isOpen) {
+    settings.promptSectionStates[sectionId] = isOpen;
+    settings.promptSectionStates[sectionName] = isOpen;
+    settings.openSectionStates[sectionName] = isOpen;
+}
+
+function isDividerPrompt(promptName, dividerRegex, settings) {
+    return dividerRegex.test(promptName) || Object.prototype.hasOwnProperty.call(settings.openSectionStates, promptName);
 }
 
 function cleanupPromptSections() {
@@ -225,10 +262,11 @@ function cleanupPromptSections() {
     });
 }
 
-function createSectionRow(sectionId, title, isOpen) {
+function createSectionRow(sectionId, title, sectionName, isOpen) {
     const row = document.createElement('li');
     row.className = `nemo-sb-section-row ${isOpen ? '' : 'is-collapsed'}`.trim();
     row.dataset.sectionId = sectionId;
+    row.dataset.sectionName = sectionName;
     row.innerHTML = `
         <button class="nemo-sb-section-toggle" type="button" aria-label="Toggle section">
             <i class="fa-solid ${isOpen ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
@@ -239,7 +277,8 @@ function createSectionRow(sectionId, title, isOpen) {
     row.querySelector('.nemo-sb-section-title').textContent = title;
     row.querySelector('.nemo-sb-section-toggle').addEventListener('click', () => {
         const settings = ensureSettings();
-        settings.promptSectionStates[sectionId] = !(settings.promptSectionStates[sectionId] ?? true);
+        const nextIsOpen = !getPromptSectionOpenState(settings, sectionId, sectionName);
+        setPromptSectionOpenState(settings, sectionId, sectionName, nextIsOpen);
         saveSettingsDebounced();
         schedulePromptRefresh();
     });
@@ -280,11 +319,11 @@ function refreshPromptSections() {
         rows.forEach(row => {
             const promptName = getPromptRowName(row);
 
-            if (dividerRegex.test(promptName)) {
-                const sectionId = row.dataset.pmIdentifier || `nemo-section-${sections.length}`;
-                const isOpen = settings.promptSectionStates[sectionId] ?? true;
+            if (isDividerPrompt(promptName, dividerRegex, settings)) {
+                const sectionId = row.dataset.pmIdentifier || promptName || `nemo-section-${sections.length}`;
+                const isOpen = getPromptSectionOpenState(settings, sectionId, promptName);
                 const sectionTitle = stripDividerPrefix(promptName, dividerRegex);
-                const sectionRow = createSectionRow(sectionId, sectionTitle, isOpen);
+                const sectionRow = createSectionRow(sectionId, sectionTitle, promptName, isOpen);
 
                 row.before(sectionRow);
                 row.classList.add('nemo-sb-divider-row');
@@ -866,7 +905,7 @@ function injectSettingsPanel() {
                         <span>Save</span>
                     </button>
                 </div>
-                <div class="nemo-presetext-settings-help">Built-in divider patterns include headings that start with <code>===</code>, <code>---</code>, or <code>***</code>.</div>
+                <div class="nemo-presetext-settings-help">Built-in divider patterns include headings that start with <code>===</code>, <code>---</code>, <code>***</code>, or symbol prefixes like <code>⭐─+</code>.</div>
             </div>
         </div>
     `;

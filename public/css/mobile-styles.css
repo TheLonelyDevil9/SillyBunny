@@ -137,22 +137,28 @@
 
     /* Input area mobile optimization */
     #send_textarea {
-        min-height: calc(var(--bottomFormBlockSize) * 1.2);
-        padding: 8px;
+        min-height: calc(var(--bottomFormBlockSize) * 1.45);
+        padding: 10px 12px;
     }
 
     #send_form .mes_stop {
-        font-size: calc(var(--mainFontSize) * 1.5);
-        padding-right: 4px;
+        min-width: 50px;
+        min-height: 50px;
+        font-size: calc(var(--mainFontSize) * 1.55);
+        padding-right: 0;
     }
 
     #send_form .mes_stop i {
-        font-size: 1.2em;
+        font-size: 1.28em;
     }
 
     /* Ensure stop button is properly sized */
+    #leftSendForm,
     #rightSendForm {
+        width: auto !important;
+        min-width: max-content;
         min-height: calc(var(--bottomFormBlockSize) * 1.2);
+        flex-wrap: nowrap !important;
     }
 
     .bg_folder_tile .jg-button {
@@ -649,9 +655,10 @@
 
     #leftSendForm,
     #rightSendForm {
-        width: 1.15em;
-        flex-wrap: wrap;
-        height: unset;
+        width: auto !important;
+        min-width: max-content;
+        flex-wrap: nowrap !important;
+        height: auto;
     }
 }
 
@@ -721,6 +728,18 @@
         margin-top: 36px;
     }
 
+    .sb-shell-root,
+    .sb-shell-root.openDrawer,
+    .sb-shell-root.fillLeft.openDrawer,
+    .sb-shell-root.fillRight.openDrawer {
+        top: var(--topBarBlockSize) !important;
+        margin-top: 0 !important;
+        height: calc(100dvh - var(--topBarBlockSize)) !important;
+        max-height: calc(100dvh - var(--topBarBlockSize)) !important;
+        width: 100dvw !important;
+        max-width: 100dvw !important;
+    }
+
     .scrollableInner {
         overflow-y: auto;
         overflow-x: hidden;
@@ -749,12 +768,14 @@
 
     /* Input area optimization for small phones */
     #send_textarea {
-        min-height: calc(var(--bottomFormBlockSize) * 1.4);
-        padding: 10px;
+        min-height: calc(var(--bottomFormBlockSize) * 1.5);
+        padding: 12px;
         font-size: calc(var(--mainFontSize) * 1.05);
     }
 
     #send_form .mes_stop {
+        min-width: 52px;
+        min-height: 52px;
         font-size: calc(var(--mainFontSize) * 1.6);
     }
 }
