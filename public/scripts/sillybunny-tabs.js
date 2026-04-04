@@ -1065,6 +1065,8 @@ function openShell(shellKey, tabId = null) {
         return;
     }
 
+    closeMobileNav();
+
     if (tabId) {
         setActiveTab(shellKey, tabId);
     }
