@@ -267,6 +267,10 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
     row.className = `nemo-sb-section-row ${isOpen ? '' : 'is-collapsed'}`.trim();
     row.dataset.sectionId = sectionId;
     row.dataset.sectionName = sectionName;
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.setAttribute('aria-expanded', String(isOpen));
+    row.setAttribute('aria-label', `Toggle ${title}`);
     row.innerHTML = `
         <button class="nemo-sb-section-toggle" type="button" aria-label="Toggle section">
             <i class="fa-solid ${isOpen ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
@@ -275,12 +279,27 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
         <span class="nemo-sb-section-count"></span>
     `;
     row.querySelector('.nemo-sb-section-title').textContent = title;
-    row.querySelector('.nemo-sb-section-toggle').addEventListener('click', () => {
+    const toggleSection = () => {
         const settings = ensureSettings();
         const nextIsOpen = !getPromptSectionOpenState(settings, sectionId, sectionName);
         setPromptSectionOpenState(settings, sectionId, sectionName, nextIsOpen);
         saveSettingsDebounced();
         schedulePromptRefresh();
+    };
+
+    row.querySelector('.nemo-sb-section-toggle').addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSection();
+    });
+    row.addEventListener('click', toggleSection);
+    row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        event.preventDefault();
+        toggleSection();
     });
     return row;
 }

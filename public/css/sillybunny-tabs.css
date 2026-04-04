@@ -1233,7 +1233,7 @@
     }
 
     #sb-mobile-nav {
-        display: block;
+        display: none;
         position: fixed;
         inset: var(--topBarBlockSize) 0 0;
         z-index: 3600;
@@ -1261,6 +1261,7 @@
 
     #sb-mobile-nav.sb-nav-open {
         opacity: 1;
+        display: block;
         pointer-events: auto;
     }
 

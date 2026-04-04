@@ -1420,6 +1420,12 @@ function buildMobileNav() {
 
     const overlay = createElement('div', { id: 'sb-mobile-nav' });
     const content = createElement('div', { id: 'sb-mobile-nav-content' });
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+
+    if ('inert' in overlay) {
+        overlay.inert = true;
+    }
 
     const sections = [
         {
@@ -1478,7 +1484,7 @@ function buildMobileNav() {
     document.body.appendChild(overlay);
 }
 
-function toggleMobileNav() {
+function setMobileNavOpenState(isOpen) {
     const overlay = document.getElementById('sb-mobile-nav');
     const button = document.getElementById('sb-hamburger');
 
@@ -1486,27 +1492,33 @@ function toggleMobileNav() {
         return;
     }
 
-    const isOpen = overlay.classList.contains('sb-nav-open');
-    overlay.classList.toggle('sb-nav-open', !isOpen);
-    button.classList.toggle('is-open', !isOpen);
-    button.setAttribute('aria-expanded', String(!isOpen));
-    button.innerHTML = !isOpen
+    overlay.hidden = !isOpen;
+    overlay.classList.toggle('sb-nav-open', isOpen);
+    overlay.setAttribute('aria-hidden', String(!isOpen));
+
+    if ('inert' in overlay) {
+        overlay.inert = !isOpen;
+    }
+
+    button.classList.toggle('is-open', isOpen);
+    button.setAttribute('aria-expanded', String(isOpen));
+    button.innerHTML = isOpen
         ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
         : '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
 }
 
-function closeMobileNav() {
+function toggleMobileNav() {
     const overlay = document.getElementById('sb-mobile-nav');
-    const button = document.getElementById('sb-hamburger');
 
-    if (!(overlay instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+    if (!(overlay instanceof HTMLElement)) {
         return;
     }
 
-    overlay.classList.remove('sb-nav-open');
-    button.classList.remove('is-open');
-    button.setAttribute('aria-expanded', 'false');
-    button.innerHTML = '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
+    setMobileNavOpenState(!overlay.classList.contains('sb-nav-open'));
+}
+
+function closeMobileNav() {
+    setMobileNavOpenState(false);
 }
 
 function injectCharacterCloseButton() {

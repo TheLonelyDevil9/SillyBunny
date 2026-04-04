@@ -27,10 +27,17 @@
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent);
     border-radius: 14px;
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 .nemo-sb-section-row.is-collapsed {
     opacity: 0.92;
+}
+
+.nemo-sb-section-row:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 82%, transparent);
+    outline-offset: 2px;
 }
 
 .nemo-sb-section-toggle {
