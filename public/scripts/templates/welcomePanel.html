@@ -1,0 +1,153 @@
+<div class="welcomePanel">
+    <div class="welcomeHero">
+        <div class="welcomeHeroCopy">
+            <div class="welcomeHeroEyebrow">Home</div>
+            <div class="welcomeHeaderTitle">
+                <img src="img/sillybunny-pixel-logo.png" alt="SillyBunny badge" data-i18n="[alt]SillyBunny badge" class="welcomeHeaderLogo">
+                <div class="welcomeHeroTitleGroup">
+                    <span class="welcomeHeaderVersionDisplay">{{version}}</span>
+                    <p class="welcomeHeroBlurb">A SillyTavern fork with bun instead. Bunny!</p>
+                </div>
+                <div class="welcomePanelToggles">
+                    <button class="mes_button showRecentChats" title="Show recent chats" data-i18n="[title]Show recent chats">
+                        <i class="fa-solid fa-list-ul fa-fw"></i>
+                    </button>
+                    <button class="mes_button hideRecentChats" title="Hide recent chats" data-i18n="[title]Hide recent chats">
+                        <i class="fa-solid fa-xmark fa-fw"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="welcomeActionGrid">
+                <button class="menu_button menu_button_icon welcomeActionCard openTemporaryChat">
+                    <i class="fa-solid fa-comment-dots"></i>
+                    <span class="welcomeActionMeta">
+                        <strong data-i18n="Temporary Chat">Temporary Chat</strong>
+                        <span>Open a quick throwaway session when you want to test without committing.</span>
+                    </span>
+                </button>
+                <button class="menu_button menu_button_icon welcomeActionCard welcomeAssistantButton">
+                    <i class="fa-solid fa-user-graduate"></i>
+                    <span class="welcomeActionMeta">
+                        <strong>Open Assistant</strong>
+                        <span>Keep the landing page clean until you actually want help, guidance, or a scratch conversation.</span>
+                    </span>
+                </button>
+            </div>
+            <div class="welcomeShortcuts">
+                <button class="menu_button menu_button_icon welcomeShortcut open_characters_library">
+                    <i class="fa-solid fa-image-portrait"></i>
+                    <span data-i18n="Sample characters">Sample characters</span>
+                </button>
+                <button class="menu_button menu_button_icon welcomeShortcut external_import_button">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <span data-i18n="Import Characters">Import characters</span>
+                </button>
+                <a class="menu_button menu_button_icon welcomeShortcut" target="_blank" href="https://github.com/platberlitz/SillyBunny">
+                    <i class="fa-brands fa-github"></i>
+                    <span>Source</span>
+                </a>
+                <a class="menu_button menu_button_icon welcomeShortcut" target="_blank" href="https://docs.sillytavern.app/">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Guides</span>
+                </a>
+                <a class="menu_button menu_button_icon welcomeShortcut" target="_blank" href="https://github.com/platberlitz/SillyBunny/issues">
+                    <i class="fa-solid fa-bug"></i>
+                    <span>Issues</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="welcomeHeroMedia">
+            <div class="welcomeHeroScene">
+                <span class="welcomeHeroSpark welcomeHeroSpark--1"></span>
+                <span class="welcomeHeroSpark welcomeHeroSpark--2"></span>
+                <span class="welcomeHeroSpark welcomeHeroSpark--3"></span>
+                <span class="welcomeHeroSpark welcomeHeroSpark--4"></span>
+                <span class="welcomeHeroRing welcomeHeroRing--1"></span>
+                <span class="welcomeHeroRing welcomeHeroRing--2"></span>
+                <div class="welcomeHeroMascot" role="img" aria-label="Animated SillyBunny bunny mascot">
+                    <img src="img/sillybunny-bunny-frame-1.svg" alt="" class="welcomeHeroFrame welcomeHeroFrame--1">
+                    <img src="img/sillybunny-bunny-frame-2.svg" alt="" class="welcomeHeroFrame welcomeHeroFrame--2">
+                    <img src="img/sillybunny-bunny-frame-3.svg" alt="" class="welcomeHeroFrame welcomeHeroFrame--3">
+                    <img src="img/sillybunny-bunny-frame-4.svg" alt="" class="welcomeHeroFrame welcomeHeroFrame--4">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="welcomeRecentShell">
+        <div class="welcomeHeader">
+            <div class="welcomeHeaderText">
+                <div class="recentChatsTitle" data-i18n="Recent Chats">
+                    Recent Chats
+                </div>
+                <p>Jump back into a thread, pin the keepers, or start fresh when inspiration changes direction.</p>
+            </div>
+        </div>
+        <div class="welcomeRecent">
+            <div class="recentChatList">
+            {{#if empty}}
+                <div class="noRecentChat">
+                    <i class="fa-solid fa-comment-dots"></i>
+                    <div>
+                        <strong>No recent chats yet</strong>
+                        <span>Your first session can start with a temporary chat, a sample character, or an imported card.</span>
+                    </div>
+                </div>
+            {{/if}}
+            {{#each chats}}
+                {{#with this}}
+                <div class="recentChat {{#if hidden}}hidden{{/if}} {{#if is_group}}group{{/if}}" data-file="{{chat_name}}" data-avatar="{{avatar}}" data-group="{{group}}">
+                    {{#if pinned}}
+                        <div class="recentChatPinned">
+                            <i class="fa-solid fa-thumbtack fa-fw fa-xs" title="Pinned chat" data-i18n="[title]Pinned chat"></i>
+                        </div>
+                    {{/if}}
+                    <div class="avatar" title="[Character] {{char_name}}&#10;File: {{avatar}}">
+                        <img src="{{char_thumbnail}}" alt="{{char_name}}">
+                    </div>
+                    <div class="recentChatInfo">
+                        <div class="chatNameContainer">
+                            <div class="chatName" title="{{file_name}}">
+                                <strong class="characterName">{{char_name}}</strong>
+                                <span>&ndash;</span>
+                                <span>{{chat_name}}</span>
+                            </div>
+                            <small class="chatDate" title="{{date_long}}">{{date_short}}</small>
+                            <div class="chatActions">
+                                <button class="menu_button menu_button_icon pinChat {{#if pinned}}active{{/if}}" title="Pin chat" data-i18n="[title]Pin chat">
+                                    <i class="fa-solid fa-thumbtack fa-fw"></i>
+                                </button>
+                                <button class="menu_button menu_button_icon renameChat" title="Rename chat" data-i18n="[title]Rename chat">
+                                    <i class="fa-solid fa-pen-to-square fa-fw"></i>
+                                </button>
+                                <button class="menu_button menu_button_icon deleteChat" title="Delete chat" data-i18n="[title]Delete chat">
+                                    <i class="fa-solid fa-trash fa-fw"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chatMessageContainer">
+                            <div class="chatMessage" title="{{mes}}">
+                                {{mes}}
+                            </div>
+                            <div class="chatStats">
+                                <div class="counterBlock">
+                                    <i class="fa-solid fa-comment fa-xs"></i>
+                                    <small>{{chat_items}}</small>
+                                </div>
+                                <small class="fileSize">{{file_size}}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {{/with}}
+            {{/each}}
+            {{#if more}}
+                <button class="menu_button menu_button_icon showMoreChats">
+                    <small class="fa-solid fa-chevron-down fa-fw fa-1x"></small>
+                </button>
+            {{/if}}
+            </div>
+        </div>
+    </div>
+</div>

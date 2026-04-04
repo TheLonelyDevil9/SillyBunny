@@ -1,0 +1,693 @@
+.world_info_select_block {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.budget_cap_note {
+    flex-basis: 100%;
+    line-height: 0.1;
+}
+
+#world_popup {
+    min-height: 100px;
+    min-width: 100px;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 3010;
+    overflow-y: hidden;
+    gap: 14px;
+}
+
+.WIEntryContentAndMemo {
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+    gap: 10px;
+}
+
+.WIEntryContentAndMemo .world_entry_thin_controls {
+    flex: 1;
+}
+
+#wiTopBlock {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+#wiActivationCard,
+#WIMultiSelector {
+    min-width: 0;
+}
+
+#wiActivationCard .range-block-title,
+#WIMultiSelector .range-block-title {
+    padding: 10px 14px 12px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+}
+
+#WIMultiSelector .range-block-range,
+#wiActivationCard .inline-drawer {
+    padding-top: 12px;
+}
+
+#wiActivationCard .inline-drawer {
+    width: 100%;
+}
+
+#wiActivationSettings {
+    gap: 12px;
+    align-items: start;
+}
+
+#wiSliders {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+#wiSliders > .alignitemscenter.flex-container.flexFlowColumn {
+    min-width: 0;
+    padding: 12px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 74%, transparent);
+}
+
+#world_popup_bottom_holder {
+    display: flex;
+    flex-flow: row;
+    justify-content: space-evenly;
+    align-items: center;
+}
+
+#world_popup_bottom_holder div {
+    width: fit-content;
+    user-select: none;
+}
+
+#form_rename_world {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.world_popup_expander {
+    flex-grow: 1;
+}
+
+#world_popup_entries_list {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+#world_popup_entries_list:empty {
+    width: 100%;
+    height: 100%;
+}
+
+#world_popup_entries_list:empty::before {
+    content: 'No entries found.';
+    font-size: calc(var(--mainFontSize) + .1rem);
+    font-weight: bolder;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0.8;
+}
+
+.world_entry_form_control {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.world_entry_form_control .keyprimarytextpole,
+.world_entry_form_control .keysecondarytextpole {
+    padding-right: 25px;
+}
+
+.world_entry_thin_controls {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* .world_entry_thin_controls>div {
+    flex: 1;
+} */
+
+.world_entry_form_control label h4 {
+    margin-bottom: 0;
+    margin-top: 0;
+}
+
+.world_entry_form_control label h5 {
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+.world_entry_form_control textarea {
+    height: auto;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.delete_entry_button {
+    height: min-content;
+}
+
+.world_entry_form_control.world_entry_form_horizontal {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.world_entry .inline-drawer-header {
+    cursor: initial;
+}
+
+.world_entry .inline-drawer-header,
+.world_entry .inline-drawer-header:hover {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+}
+
+.world_entry .inline-drawer-header-pointer {
+    cursor: pointer;
+}
+
+.world_entry .killSwitch {
+    cursor: pointer;
+}
+
+.world_entry_form_control input[type=button] {
+    cursor: pointer;
+}
+
+.world_entry_form_horizontal h5 {
+    margin: 0 1rem;
+}
+
+.world_entry_form_control .checkbox {
+    align-items: center;
+    display: flex;
+    flex-direction: row;
+    column-gap: 10px;
+}
+
+.world_entry_form_control .checkbox h4 {
+    margin: 0;
+    display: inline-block;
+}
+
+.world_entry_form_radios label {
+    margin-left: 0;
+}
+
+.world_entry_form_radios h4 {
+    display: inline;
+}
+
+#world_popup h5 {
+    color: var(--grey70);
+}
+
+/* possible place for WI Entry header styling */
+/* .world_entry_form .inline-drawer-header {
+    background-color: var(--SmartThemeShadowColor);
+} */
+
+#world_editor_select {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#world_editor_select,
+#world_editor_select~.select2-container,
+#world_info_sort_order,
+#world_info_search {
+    flex: 1;
+}
+
+#world_info_sort_order,
+#world_info_search {
+    min-width: 6em;
+}
+
+#world_editor_select~.select2-container {
+    overflow: hidden;
+}
+
+#world_editor_select~.select2-container .select2-selection--single .select2-selection__rendered {
+    padding-right: 30px;
+}
+
+#world_editor_select~.select2-container .select2-selection .select2-selection__clear {
+    right: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.world_entry .killSwitch.fa-toggle-on {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.wi-card-entry {
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 84%, transparent);
+    border-radius: 18px;
+    padding: 12px 14px;
+    margin-bottom: 0;
+    background: var(--sb-card-bg, color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent));
+    box-shadow: 0 16px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
+}
+
+.world_entry {
+    transition: opacity var(--animation-duration-3x);
+    min-width: 0;
+}
+
+.world_entry_edit {
+    display: contents;
+}
+
+.disabledWIEntry {
+    opacity: 0.4;
+    filter: grayscale(1);
+}
+
+.disabledWIEntry:not(input):hover {
+    opacity: 1;
+    filter: grayscale(0.5);
+}
+
+.height32px {
+    height: 32px;
+}
+
+.WIEntryHeaderTitleMobile {
+    display: none;
+}
+
+.WIEntryHeaderMain {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+}
+
+.WIEntryHeaderBody {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.2fr) minmax(300px, 1fr);
+    gap: 12px;
+    align-items: start;
+    min-width: 0;
+}
+
+.WIEntryTitleAndStatus {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 52px;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+}
+
+.WIEntryTitleAndStatus > .flex-container {
+    min-width: 0;
+}
+
+.WIEntryTitleAndStatus textarea {
+    min-height: 42px;
+    max-height: 7rem;
+    padding: 9px 12px;
+    line-height: 1.45;
+}
+
+.WIEntryTitleAndStatus select {
+    min-width: 52px;
+    min-height: 42px;
+    padding: 0;
+    text-align: center;
+    text-align-last: center;
+}
+
+.WIEntryTitleAndStatus select[name="entryStateSelector"] {
+    width: 52px;
+    font-size: calc(var(--mainFontSize) * 1.04);
+    line-height: 1;
+}
+
+.WIEnteryHeaderControls {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(92px, 1fr));
+    gap: 8px;
+    align-items: start;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 74%, transparent);
+}
+
+.WIEnteryHeaderControls > [name="PositionBlock"] {
+    min-width: 0;
+}
+
+.WIEnteryHeaderControls .world_entry_form_control {
+    gap: 6px;
+    min-width: 0;
+}
+
+.WIEnteryHeaderControls .world_entry_form_control input,
+.WIEnteryHeaderControls .world_entry_form_control select {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 12px;
+}
+
+.WIEnteryHeaderControls input[name="depth"],
+.WIEnteryHeaderControls input[name="order"],
+.WIEnteryHeaderControls input[name="probability"] {
+    text-align: center;
+}
+
+.WIEntryHeaderActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.WIEntryHeaderActions .menu_button {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.world_entry .select2-selection--multiple,
+.world_entry textarea.keyprimarytextpole,
+.world_entry textarea.keysecondarytextpole {
+    max-height: 160px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+span.select2-container .select2-selection__choice__display:has(> .regex_item),
+span.select2-container .select2-results__option:has(> .result_block .regex_item) {
+    background-color: #D27D2D30;
+}
+
+.regex_item .regex_icon {
+    background-color: var(--black30a);
+    color: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 7px;
+    font-weight: bold;
+    font-size: calc(var(--mainFontSize) * 0.75);
+    padding: 0px 3px;
+    position: relative;
+    top: -1px;
+    margin-right: 3px;
+}
+
+.select2-results__option .regex_item .regex_icon {
+    margin-right: 6px;
+}
+
+.select2-results__option .item_count {
+    margin-left: 10px;
+    float: right;
+}
+
+select.keyselect+span.select2-container .select2-selection--multiple {
+    padding-right: 30px;
+}
+
+.switch_input_type_icon {
+    cursor: pointer;
+    font-weight: bold;
+    height: 20px;
+    width: fit-content;
+    margin-right: 5px;
+    margin-top: calc(5px + var(--mainFontSize));
+    position: absolute;
+    right: 0;
+    padding: 1px;
+
+    background-color: transparent;
+    border: none;
+    font-size: 1em;
+
+    opacity: 0.5;
+    color: var(--SmartThemeBodyColor);
+    transition: opacity var(--animation-duration-2x);
+}
+
+.switch_input_type_icon:hover {
+    opacity: 1;
+}
+
+#wiCheckboxes {
+    align-self: start;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+#wiCheckboxes .checkbox_label {
+    min-height: 56px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 74%, transparent);
+}
+
+#world_popup_primary_actions,
+#world_popup_toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.world_popup_action_group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    min-width: 0;
+    padding: 12px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 74%, transparent);
+}
+
+.world_popup_action_group > * {
+    margin: 0;
+}
+
+.world_popup_action_group--select {
+    flex: 1 1 320px;
+}
+
+.world_popup_action_group--select > small {
+    opacity: 0.7;
+}
+
+.world_popup_action_group--select > #world_create_button {
+    min-width: 96px;
+    justify-content: center;
+}
+
+.world_popup_action_group--select > #world_editor_select,
+.world_popup_action_group--select > .select2-container {
+    flex: 1 1 240px;
+    min-width: 220px;
+}
+
+.world_popup_action_group--library,
+.world_popup_action_group--entry {
+    flex: 1 1 220px;
+}
+
+.world_popup_action_group--filters {
+    flex: 1 1 320px;
+    margin-left: auto;
+    justify-content: flex-end;
+}
+
+.world_popup_action_group--filters > #world_info_search {
+    flex: 1 1 220px;
+    min-width: 180px;
+    min-height: 42px;
+}
+
+.world_popup_action_group--filters > #world_info_sort_order {
+    flex: 0 1 170px;
+    min-width: 150px;
+    min-height: 42px;
+}
+
+.world_popup_action_group--filters > #world_info_pagination {
+    flex: 1 1 100%;
+}
+
+.world_popup_action_group--library > .menu_button,
+.world_popup_action_group--entry > .menu_button {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.world_entry:has(input[name="delay_until_recursion"]:not(:checked)) .world_entry_form_control:has(input[name="delayUntilRecursionLevel"]) {
+    display: none;
+}
+
+.world_entry:not(:has(select[name="position"] option[value="7"]:checked)) .world_entry_form_control:has(input[name="outletName"]) {
+    display: none;
+}
+
+.world_entry label[for="__invisible"] {
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+#WIMultiSelector .select2-container .select2-selection--multiple {
+    max-height: 25vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+@media screen and (max-width: 1280px) {
+    #wiTopBlock {
+        grid-template-columns: 1fr;
+    }
+
+    .WIEntryHeaderBody {
+        grid-template-columns: 1fr;
+    }
+
+    .WIEnteryHeaderControls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .WIEnteryHeaderControls > [name="PositionBlock"] {
+        grid-column: 1 / -1;
+    }
+
+    #wiActivationSettings {
+        flex-direction: column;
+    }
+
+    #wiSliders,
+    #wiCheckboxes {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+
+    .world_popup_action_group--filters > #world_info_pagination {
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 960px) {
+    #wiSliders,
+    #wiCheckboxes {
+        grid-template-columns: 1fr;
+    }
+
+    .world_popup_action_group,
+    .world_popup_action_group--filters,
+    .world_popup_action_group--library,
+    .world_popup_action_group--entry {
+        flex-basis: 100%;
+    }
+
+    .world_popup_action_group--select > #world_editor_select,
+    .world_popup_action_group--select > .select2-container,
+    .world_popup_action_group--filters > #world_info_search,
+    .world_popup_action_group--filters > #world_info_sort_order {
+        flex-basis: 100%;
+        min-width: 0;
+    }
+
+    .WIEntryContentAndMemo {
+        flex-wrap: wrap !important;
+    }
+
+    .world_entry .inline-drawer-header,
+    .world_entry .inline-drawer-header:hover {
+        grid-template-columns: 1fr;
+    }
+
+    .WIEntryHeaderMain {
+        flex-wrap: wrap;
+    }
+
+    .WIEntryHeaderActions {
+        padding-top: 0;
+        justify-content: flex-start;
+    }
+
+    .WIEnteryHeaderControls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .world_entry_form_control.world_entry_form_horizontal {
+        align-items: flex-start;
+        gap: 8px 10px;
+    }
+
+    .world_entry_form_horizontal h5 {
+        margin: 0 0 4px;
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 620px) {
+    .WIEntryTitleAndStatus {
+        grid-template-columns: minmax(0, 1fr) 48px;
+    }
+
+    .WIEntryTitleAndStatus select[name="entryStateSelector"] {
+        width: 48px;
+        min-width: 48px;
+    }
+
+    .WIEnteryHeaderControls {
+        grid-template-columns: 1fr;
+    }
+}

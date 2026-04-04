@@ -1,0 +1,1268 @@
+#chat .mes[type="assistant_message"] .mes_button {
+    display: none;
+}
+
+.welcomePanel,
+.welcomeGuidePanel,
+.welcomePromptPanel {
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    --welcome-strong-fg: var(--sb-landing-strong, color-mix(in srgb, var(--SmartThemeBodyColor) 92%, var(--SmartThemeBlurTintColor) 8%));
+    --welcome-muted-fg: var(--sb-landing-muted, color-mix(in srgb, var(--SmartThemeBodyColor) 74%, var(--SmartThemeBlurTintColor) 26%));
+    color: var(--welcome-strong-fg);
+}
+
+.welcomeHeroMedia,
+.welcomeActionCard,
+.welcomeRecentShell,
+.welcomePanel .recentChatList .noRecentChat,
+.welcomeRecent .recentChatList .recentChat,
+.welcomeRecent .recentChatList .showMoreChats,
+.welcomePromptPanel,
+.welcomeGuidePanel,
+.welcomeGuideCard {
+    position: relative;
+    isolation: isolate;
+}
+
+:root[data-sb-surface-tone='light'] .welcomePanel,
+:root[data-sb-surface-tone='light'] .welcomeGuidePanel,
+:root[data-sb-surface-tone='light'] .welcomePromptPanel {
+    --welcome-strong-fg: #2d1c17;
+    --welcome-muted-fg: color-mix(in srgb, #2d1c17 66%, #7d6357 34%);
+}
+
+.welcomePanel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: 100%;
+    padding: 18px;
+    border-radius: 28px;
+    --sb-welcome-panel-bg:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary, #f1b285) 16%, transparent), transparent 30%),
+        radial-gradient(circle at bottom left, rgba(255, 164, 108, 0.12), transparent 32%),
+        var(--sb-card-bg, color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent));
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 88%, transparent);
+    box-shadow: 0 30px 70px color-mix(in srgb, var(--SmartThemeShadowColor) 18%, transparent);
+}
+
+:root[data-sb-surface-tone='light'] .welcomePanel {
+    --sb-welcome-panel-bg:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary, #f1b285) 12%, transparent), transparent 32%),
+        radial-gradient(circle at bottom left, rgba(255, 180, 124, 0.12), transparent 32%),
+        linear-gradient(180deg, color-mix(in srgb, #ffffff 88%, var(--SmartThemeBlurTintColor)), color-mix(in srgb, #f6ede5 84%, var(--SmartThemeBlurTintColor)));
+}
+
+:root[data-sb-surface-tone='light'] .welcomeActionCard,
+:root[data-sb-surface-tone='light'] .welcomeRecentShell,
+:root[data-sb-surface-tone='light'] .welcomeGuidePanel,
+:root[data-sb-surface-tone='light'] .welcomePromptPanel {
+    --sb-welcome-surface-bg: color-mix(in srgb, #ffffff 78%, var(--SmartThemeBlurTintColor));
+}
+
+.welcomePanel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(135deg, rgba(255, 213, 160, 0.05), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 26%);
+    pointer-events: none;
+}
+
+.welcomePanel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-panel-bg);
+    opacity: var(--sb-page-card-opacity, 1);
+}
+
+.welcomePanel.recentHidden .welcomeRecentShell,
+.welcomePanel.recentHidden .hideRecentChats,
+.welcomePanel:not(.recentHidden) .showRecentChats {
+    display: none;
+}
+
+#chat:has(.welcomePanel) {
+    padding-bottom: 12px;
+    scroll-padding-bottom: 12px;
+}
+
+#chat .mes:has(.welcomePanel) {
+    width: 100%;
+    padding: 0;
+}
+
+#chat .mes:has(.welcomePanel) .mes_block,
+#chat .mes:has(.welcomePanel) .mes_text {
+    width: 100%;
+    padding: 0;
+}
+
+#chat .mes:has(.welcomePanel) .mes_block {
+    overflow-y: visible;
+}
+
+body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
+    display: none;
+}
+
+.welcomeHero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.46fr) minmax(240px, 0.9fr);
+    gap: 18px;
+    align-items: stretch;
+}
+
+.welcomeHeroCopy {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.welcomeHeroEyebrow {
+    font-size: calc(var(--mainFontSize) * 0.78);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeHeaderTitle {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    min-width: 0;
+}
+
+.welcomeHeaderLogo {
+    width: 72px;
+    height: 72px;
+    flex: 0 0 auto;
+    object-fit: contain;
+    image-rendering: pixelated;
+    padding: 8px;
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+    box-shadow: 0 18px 30px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
+}
+
+.welcomeHeroTitleGroup {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.welcomeHeaderVersionDisplay {
+    display: block;
+    font-size: calc(var(--mainFontSize) * 1.72);
+    font-weight: 800;
+    line-height: 1.05;
+    max-width: 100%;
+    white-space: normal;
+    text-wrap: balance;
+}
+
+.welcomeHeroBlurb {
+    margin: 10px 0 0;
+    max-width: 56ch;
+    font-size: calc(var(--mainFontSize) * 0.96);
+    line-height: 1.55;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomePanelToggles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.welcomePanelToggles .mes_button {
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 84%, transparent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.welcomeActionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-auto-rows: 1fr;
+    gap: 14px;
+}
+
+.welcomeActionCard {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    min-width: 0;
+    min-height: 88px;
+    width: 100%;
+    height: 100%;
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left;
+    border-radius: 20px;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 86%, transparent);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
+}
+
+.welcomeActionCard::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+}
+
+.welcomeActionCard i {
+    width: 20px;
+    margin-top: 2px;
+    font-size: calc(var(--mainFontSize) * 1.04);
+    text-align: center;
+    color: color-mix(in srgb, var(--color-primary, #f1b285) 64%, var(--SmartThemeBodyColor));
+}
+
+.welcomeActionMeta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    min-height: 100%;
+    white-space: normal;
+}
+
+.welcomeActionMeta strong {
+    font-size: calc(var(--mainFontSize) * 0.92);
+}
+
+.welcomeActionMeta span {
+    font-size: calc(var(--mainFontSize) * 0.74);
+    line-height: 1.45;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeShortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.welcomeShortcut {
+    display: flex;
+    flex: 1 1 158px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 0 16px;
+    min-width: 0;
+    max-width: 220px;
+    width: auto;
+    text-decoration: none;
+}
+
+.welcomeShortcut i {
+    font-size: calc(var(--mainFontSize) * 0.92);
+}
+
+.welcomeHeroMedia {
+    --sb-welcome-media-bg:
+        radial-gradient(circle at top, color-mix(in srgb, var(--sb-accent, #f1b285) 26%, transparent), transparent 46%),
+        radial-gradient(circle at 22% 78%, color-mix(in srgb, var(--sb-accent-soft, #e69875) 16%, transparent), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(11, 18, 14, 0.24));
+    position: relative;
+    min-height: clamp(224px, 30vw, 320px);
+    padding: 20px 16px 16px;
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 88%, transparent);
+}
+
+.welcomeHeroBadge {
+    position: absolute;
+    top: 20px;
+    left: 18px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--sb-accent-soft, #e69875) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-accent-soft, #e69875) 28%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.72);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: color-mix(in srgb, var(--sb-accent-soft, #e69875) 72%, white);
+    z-index: 2;
+}
+
+:root[data-sb-surface-tone='light'] .welcomeHeroMedia {
+    --sb-welcome-media-bg:
+        radial-gradient(circle at top, color-mix(in srgb, var(--sb-accent, #f1b285) 18%, transparent), transparent 44%),
+        radial-gradient(circle at 22% 78%, color-mix(in srgb, var(--sb-accent-soft, #e69875) 12%, transparent), transparent 30%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(242, 230, 220, 0.86));
+}
+
+.welcomeHeroMedia::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-media-bg);
+    opacity: var(--sb-page-card-opacity, 1);
+}
+
+.welcomeHeroScene {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(100%, 312px);
+    min-height: clamp(188px, 25vw, 248px);
+    padding: 12px 8px 22px;
+}
+
+.welcomeHeroScene::before,
+.welcomeHeroScene::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.welcomeHeroScene::before {
+    inset: 18px 18px auto;
+    height: 64%;
+    border-radius: 999px;
+    background:
+        radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--sb-accent, #f1b285) 28%, transparent), transparent 55%),
+        radial-gradient(circle at 65% 60%, color-mix(in srgb, var(--sb-accent-soft, #e69875) 22%, transparent), transparent 52%);
+    filter: blur(12px);
+    opacity: 0.95;
+}
+
+.welcomeHeroScene::after {
+    bottom: 4px;
+    width: min(100%, 190px);
+    height: 28px;
+    border-radius: 999px;
+    background:
+        radial-gradient(circle at center, color-mix(in srgb, var(--sb-accent, #f1b285) 28%, transparent), transparent 72%),
+        linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 70%, transparent));
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 78%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.welcomeHeroMascot {
+    position: relative;
+    z-index: 1;
+    width: clamp(110px, 16vw, 152px);
+    aspect-ratio: 1 / 1;
+    filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.2));
+    animation: welcomeBunnyFloat 4.6s ease-in-out infinite;
+}
+
+.welcomeHeroFrame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    animation: welcomeBunnyFrameCycle 920ms steps(1, end) infinite;
+}
+
+.welcomeHeroFrame--1 {
+    animation-delay: 0s;
+}
+
+.welcomeHeroFrame--2 {
+    animation-delay: -0.23s;
+}
+
+.welcomeHeroFrame--3 {
+    animation-delay: -0.46s;
+}
+
+.welcomeHeroFrame--4 {
+    animation-delay: -0.69s;
+}
+
+.welcomeHeroSpark,
+.welcomeHeroRing {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.welcomeHeroSpark {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    background:
+        radial-gradient(circle at center, color-mix(in srgb, var(--sb-accent-soft, #e69875) 88%, white), transparent 62%),
+        radial-gradient(circle at center, color-mix(in srgb, var(--sb-accent, #f1b285) 36%, transparent), transparent 78%);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--sb-accent-soft, #e69875) 36%, transparent);
+    animation: welcomeSparkFloat 5.2s ease-in-out infinite;
+}
+
+.welcomeHeroSpark--1 {
+    top: 20%;
+    left: 18%;
+    animation-delay: -0.4s;
+}
+
+.welcomeHeroSpark--2 {
+    top: 16%;
+    right: 20%;
+    animation-delay: -1.9s;
+}
+
+.welcomeHeroSpark--3 {
+    bottom: 24%;
+    left: 24%;
+    animation-delay: -2.7s;
+}
+
+.welcomeHeroSpark--4 {
+    bottom: 20%;
+    right: 22%;
+    animation-delay: -1.1s;
+}
+
+.welcomeHeroRing {
+    border: 1px solid color-mix(in srgb, var(--sb-accent, #f1b285) 22%, transparent);
+    border-radius: 999px;
+    opacity: 0.92;
+}
+
+.welcomeHeroRing--1 {
+    width: min(100%, 192px);
+    height: 100px;
+    bottom: 14px;
+    background: radial-gradient(circle at center, color-mix(in srgb, var(--sb-accent, #f1b285) 6%, transparent), transparent 74%);
+}
+
+.welcomeHeroRing--2 {
+    width: min(100%, 132px);
+    height: 132px;
+    top: 18px;
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--sb-accent-soft, #e69875) 18%, transparent);
+    animation: welcomeOrbitSpin 18s linear infinite;
+}
+
+@keyframes welcomeBunnyFloat {
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+    25% {
+        transform: translateY(-8px) scale(1.015);
+    }
+    55% {
+        transform: translateY(-14px) scale(1.03);
+    }
+    75% {
+        transform: translateY(-6px) scale(1.01);
+    }
+}
+
+@keyframes welcomeSparkFloat {
+    0%,
+    100% {
+        transform: translateY(0) scale(0.92);
+        opacity: 0.58;
+    }
+    50% {
+        transform: translateY(-12px) scale(1.08);
+        opacity: 1;
+    }
+}
+
+@keyframes welcomeBunnyFrameCycle {
+    0%,
+    24.99% {
+        opacity: 1;
+    }
+
+    25%,
+    100% {
+        opacity: 0;
+    }
+}
+
+@keyframes welcomeOrbitSpin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.welcomeRecentShell {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+    padding: 18px;
+    border-radius: 24px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+}
+
+.welcomeRecentShell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-card-opacity, 1);
+}
+
+.welcomeHeader {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.welcomeHeaderText {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.recentChatsTitle {
+    font-size: calc(var(--mainFontSize) * 1.12);
+    font-weight: 700;
+}
+
+.welcomeHeaderText p {
+    margin: 0;
+    color: var(--welcome-muted-fg);
+    font-size: calc(var(--mainFontSize) * 0.82);
+    line-height: 1.45;
+}
+
+.welcomeRecent .recentChatList {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+    gap: 10px;
+}
+
+.welcomeRecent {
+    min-height: 0;
+    max-height: min(50vh, 440px);
+    max-height: min(50dvh, 440px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.welcomeRecent .welcomePanelLoader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.welcomePanel .recentChatList .noRecentChat {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 20px;
+    background: transparent;
+    border: 1px dashed color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 74%, transparent);
+    color: var(--welcome-muted-fg);
+}
+
+.welcomePanel .recentChatList .noRecentChat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+}
+
+.welcomePanel .recentChatList .noRecentChat i {
+    font-size: calc(var(--mainFontSize) * 1.3);
+    color: #ffc68a;
+}
+
+.welcomePanel .recentChatList .noRecentChat strong,
+.welcomePanel .recentChatList .noRecentChat span {
+    display: block;
+}
+
+.welcomePanel .recentChatList .noRecentChat span {
+    margin-top: 4px;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    line-height: 1.45;
+}
+
+.welcomeRecent .recentChatList .recentChat {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 80%, transparent);
+    background: transparent;
+    transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.welcomeRecent .recentChatList .recentChat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+    transition: background 180ms ease;
+}
+
+.welcomeRecent .recentChatList .recentChat:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 26%, var(--sb-shell-border, transparent));
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
+}
+
+.welcomeRecent .recentChatList .recentChat:hover::before {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+}
+
+.welcomeRecent .recentChatList .recentChat .avatar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 78%, transparent);
+}
+
+.welcomeRecent .recentChatList .recentChat .avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    border-radius: inherit;
+    box-sizing: border-box;
+}
+
+.welcomeRecent .recentChatList .recentChat .recentChatInfo {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatNameContainer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
+    gap: 10px;
+    font-size: calc(var(--mainFontSize) * 0.96);
+}
+
+.welcomeRecent .recentChatList .recentChat .chatNameContainer .chatName {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatDate {
+    padding-top: 2px;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeRecent .recentChatList .recentChat .chatActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatActions button {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    margin: 0;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatMessageContainer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeRecent .recentChatList .recentChat .chatMessageContainer .chatMessage {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    line-height: 1.5;
+}
+
+body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContainer .chatMessage {
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatStats {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatStats .counterBlock {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatStats .counterBlock::after {
+    content: "|";
+    margin-left: 4px;
+    color: color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 84%, transparent);
+}
+
+.welcomeRecent .recentChatList .recentChat.hidden {
+    display: none;
+}
+
+.welcomeRecent .recentChatList .showMoreChats {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 76%, transparent);
+    align-self: center;
+    min-width: 44px;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--SmartThemeShadowColor) 16%, transparent);
+}
+
+.welcomeRecent .recentChatList .showMoreChats::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+}
+
+.welcomeRecent .recentChatList .showMoreChats.rotated {
+    transform: rotate(180deg);
+}
+
+.welcomeRecent .recentChatList .recentChat .recentChatPinned {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: #ffc68a;
+    opacity: 0.92;
+}
+
+.welcomePromptPanel {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 22px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+}
+
+.welcomePromptPanel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-card-opacity, 1);
+}
+
+.welcomePromptCopy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 46ch;
+}
+
+.welcomePromptCopy span {
+    font-size: calc(var(--mainFontSize) * 0.8);
+    line-height: 1.5;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomePromptActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.welcomeGuidePanel {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px;
+    border-radius: 24px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+}
+
+.welcomeGuidePanel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-card-opacity, 1);
+}
+
+.welcomeGuidePanel h3 {
+    margin: 0;
+    border: 0;
+    padding: 0;
+}
+
+.welcomeGuideHeader p {
+    margin: 10px 0 0;
+    color: var(--welcome-muted-fg);
+    line-height: 1.55;
+}
+
+.welcomeGuideGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.welcomeGuideCard {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 18px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 78%, transparent);
+}
+
+.welcomeGuideCard::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+}
+
+.welcomeGuideCard p {
+    margin: 0;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    line-height: 1.5;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeGuideActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.welcomeGuideLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    font-size: calc(var(--mainFontSize) * 0.82);
+}
+
+.welcomeGuideLinks a,
+.welcomeGuideLinks span {
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeAssistantButton {
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #f1b285) 16%, transparent), transparent 86%),
+        color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+}
+
+@media screen and (max-width: 1100px) {
+    .welcomeGuideGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media screen and (max-width: 1040px), screen and (max-height: 780px) {
+    .welcomeHero {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        justify-items: center;
+    }
+
+    .welcomeHeroCopy {
+        width: 100%;
+    }
+
+    .welcomeHeroMedia {
+        order: -1;
+        width: min(100%, 320px);
+        min-height: 184px;
+        padding: 14px 12px 12px;
+        align-self: center;
+    }
+
+    .welcomeHeroScene {
+        width: min(100%, 232px);
+        min-height: 164px;
+        padding: 6px 6px 18px;
+    }
+
+    .welcomeHeroMascot {
+        width: clamp(82px, 18vw, 108px);
+    }
+
+    .welcomeHeroRing--1 {
+        width: min(100%, 168px);
+        height: 86px;
+    }
+
+    .welcomeHeroRing--2 {
+        width: min(100%, 112px);
+        height: 112px;
+        top: 12px;
+    }
+
+    .welcomeHeroScene::after {
+        width: min(100%, 156px);
+        height: 24px;
+    }
+}
+
+@media screen and (max-width: 760px) {
+    .welcomePanel,
+    .welcomeGuidePanel,
+    .welcomePromptPanel {
+        gap: 14px;
+        padding: 12px;
+        border-radius: 20px;
+    }
+
+    .welcomeHeaderTitle {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .welcomeHeaderLogo {
+        width: 54px;
+        height: 54px;
+        padding: 7px;
+        border-radius: 20px;
+    }
+
+    .welcomeHeaderVersionDisplay {
+        font-size: calc(var(--mainFontSize) * 1.32);
+    }
+
+    .welcomeHeroBlurb {
+        margin-top: 6px;
+        font-size: calc(var(--mainFontSize) * 0.84);
+        line-height: 1.45;
+    }
+
+    .welcomePanelToggles {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .welcomePanelToggles .mes_button {
+        width: 36px;
+        height: 36px;
+    }
+
+    .welcomeHero {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .welcomeHeroMedia {
+        width: min(100%, 226px);
+        min-height: 166px;
+        padding: 12px 10px 10px;
+        border-radius: 20px;
+    }
+
+    .welcomeActionGrid,
+    .welcomeGuideGrid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .welcomeActionCard {
+        min-height: 72px;
+        padding: 10px 12px;
+        gap: 10px;
+        border-radius: 18px;
+    }
+
+    .welcomeActionMeta {
+        gap: 4px;
+    }
+
+    .welcomeActionMeta strong {
+        font-size: calc(var(--mainFontSize) * 0.86);
+    }
+
+    .welcomeActionMeta span {
+        font-size: calc(var(--mainFontSize) * 0.68);
+        line-height: 1.35;
+    }
+
+    .welcomeHeroScene {
+        width: min(100%, 188px);
+        min-height: 136px;
+        padding-bottom: 14px;
+    }
+
+    .welcomeHeroMascot {
+        width: clamp(68px, 21vw, 88px);
+    }
+
+    .welcomeShortcuts {
+        justify-content: stretch;
+        gap: 8px;
+    }
+
+    .welcomeShortcut {
+        flex-basis: 100%;
+        max-width: none;
+        width: 100%;
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 16px;
+        font-size: calc(var(--mainFontSize) * 0.82);
+    }
+
+    .welcomePromptPanel {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .welcomeRecentShell {
+        gap: 10px;
+        padding: 12px;
+        border-radius: 20px;
+    }
+
+    .recentChatsTitle {
+        font-size: calc(var(--mainFontSize) * 1);
+    }
+
+    .welcomeHeaderText p {
+        font-size: calc(var(--mainFontSize) * 0.76);
+    }
+
+    .welcomeRecent {
+        max-height: min(30vh, 240px);
+        max-height: min(30dvh, 240px);
+    }
+
+    .welcomePromptActions {
+        justify-content: flex-start;
+    }
+
+    .welcomeRecent .recentChatList .recentChat {
+        padding: 10px;
+        gap: 10px;
+        border-radius: 16px;
+    }
+
+    .welcomeRecent .recentChatList .recentChat .avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 14px;
+    }
+
+    .welcomeRecent .recentChatList .recentChat .chatNameContainer {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        font-size: calc(var(--mainFontSize) * 0.84);
+    }
+
+    .welcomeRecent .recentChatList .recentChat .chatActions {
+        flex-wrap: wrap;
+    }
+
+    .welcomeRecent .recentChatList .recentChat .chatActions button {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        border-radius: 10px;
+    }
+
+    .welcomeRecent .recentChatList .recentChat .chatMessageContainer {
+        flex-direction: column;
+        gap: 8px;
+        font-size: calc(var(--mainFontSize) * 0.74);
+    }
+}
+
+@media screen and (max-height: 820px) {
+    .welcomeRecent {
+        max-height: min(40vh, 320px);
+        max-height: min(40dvh, 320px);
+    }
+}
+
+@media screen and (max-width: 520px), screen and (max-height: 760px) {
+    #chat:has(.welcomePanel) {
+        padding-bottom: 16px;
+        scroll-padding-bottom: 16px;
+    }
+
+    .welcomePanel {
+        gap: 12px;
+        padding: 12px;
+    }
+
+    .welcomeHero {
+        gap: 12px;
+    }
+
+    .welcomeHeroMedia {
+        width: min(100%, 198px);
+        min-height: 144px;
+        padding: 10px 8px 8px;
+    }
+
+    .welcomeHeroScene {
+        width: min(100%, 166px);
+        min-height: 116px;
+        padding-bottom: 12px;
+    }
+
+    .welcomeHeroScene::after {
+        width: min(100%, 132px);
+        height: 20px;
+    }
+
+    .welcomeHeroMascot {
+        width: 64px;
+    }
+
+    .welcomeHeroRing--1 {
+        width: min(100%, 140px);
+        height: 70px;
+        bottom: 10px;
+    }
+
+    .welcomeHeroRing--2 {
+        width: min(100%, 96px);
+        height: 96px;
+        top: 8px;
+    }
+
+    .welcomeHeaderVersionDisplay {
+        font-size: calc(var(--mainFontSize) * 1.24);
+    }
+
+    .welcomeActionCard {
+        min-height: 68px;
+        padding: 9px 11px;
+    }
+
+    .welcomeActionCard i {
+        width: 18px;
+        font-size: calc(var(--mainFontSize) * 0.96);
+    }
+
+    .welcomeShortcut {
+        min-height: 40px;
+    }
+
+    .welcomeRecent {
+        max-height: min(26vh, 210px);
+        max-height: min(26dvh, 210px);
+    }
+}
