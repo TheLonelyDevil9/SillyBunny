@@ -502,18 +502,57 @@ function triggerDrawerToggle(selector) {
     }
 }
 
-function forceDrawerState(drawerRootOrId, shouldOpen) {
+function getDrawerRoot(drawerRootOrId) {
+    return typeof drawerRootOrId === 'string'
+        ? document.getElementById(drawerRootOrId)
+        : drawerRootOrId;
+}
+
+function getDrawerIcon(drawerIconOrSelector) {
+    if (typeof drawerIconOrSelector === 'string') {
+        return document.querySelector(drawerIconOrSelector);
+    }
+
+    return drawerIconOrSelector;
+}
+
+function syncDrawerIconState(drawerIconOrSelector, shouldOpen) {
+    const icon = getDrawerIcon(drawerIconOrSelector);
+
+    if (!(icon instanceof HTMLElement)) {
+        return;
+    }
+
+    icon.classList.toggle('openIcon', Boolean(shouldOpen));
+    icon.classList.toggle('closedIcon', !shouldOpen);
+}
+
+function isDrawerActuallyOpen(drawerRootOrId) {
+    const el = getDrawerRoot(drawerRootOrId);
+
+    if (!(el instanceof HTMLElement) || !el.classList.contains('openDrawer')) {
+        return false;
+    }
+
+    const styles = getComputedStyle(el);
+    return styles.display !== 'none'
+        && styles.visibility !== 'hidden'
+        && styles.pointerEvents !== 'none'
+        && el.getClientRects().length > 0;
+}
+
+function forceDrawerState(drawerRootOrId, shouldOpen, drawerIconOrSelector = null) {
     const el = typeof drawerRootOrId === 'string'
         ? document.getElementById(drawerRootOrId)
         : drawerRootOrId;
     if (!(el instanceof HTMLElement)) return;
     el.classList.toggle('openDrawer', Boolean(shouldOpen));
     el.classList.toggle('closedDrawer', !shouldOpen);
+    syncDrawerIconState(drawerIconOrSelector, shouldOpen);
 }
 
 function isShellOpen(shellKey) {
-    const shellRoot = document.getElementById(getShellConfig(shellKey).rootPanelId);
-    return Boolean(shellRoot?.classList.contains('openDrawer'));
+    return isDrawerActuallyOpen(getShellConfig(shellKey).rootPanelId);
 }
 
 function isShellTabOpen(shellKey, tabId) {
@@ -522,13 +561,20 @@ function isShellTabOpen(shellKey, tabId) {
 }
 
 function isCharacterPanelOpen() {
-    const panel = document.getElementById('right-nav-panel');
-    return Boolean(panel?.classList.contains('openDrawer'));
+    return isDrawerActuallyOpen('right-nav-panel');
 }
 
 function closeCharacterPanel() {
-    if (isCharacterPanelOpen()) {
+    const panel = document.getElementById('right-nav-panel');
+
+    if (panel instanceof HTMLElement && panel.classList.contains('openDrawer')) {
         triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
+        window.requestAnimationFrame(() => {
+            if (panel.classList.contains('openDrawer')) {
+                forceDrawerState(panel, false, '#rightNavDrawerIcon');
+            }
+        });
+
         // Restore overflow:hidden on parent after closing (iOS Safari fix)
         const host = document.getElementById('rightNavHolder');
         if (host) host.style.overflow = '';
@@ -556,7 +602,7 @@ function toggleCharacterPanel() {
     // Fallback: if the jQuery drawer-toggle handler didn't fire, force-open
     window.requestAnimationFrame(() => {
         if (!isCharacterPanelOpen()) {
-            forceDrawerState('right-nav-panel', true);
+            forceDrawerState('right-nav-panel', true, '#rightNavDrawerIcon');
         }
     });
 }
@@ -1138,11 +1184,20 @@ function openShell(shellKey, tabId = null) {
         setActiveTab(shellKey, tabId);
     }
 
+    if (isDrawerActuallyOpen(shellRoot)) {
+        return;
+    }
+
+    if (shellRoot.classList.contains('openDrawer')) {
+        forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
+        return;
+    }
+
     if (!shellRoot.classList.contains('openDrawer')) {
         triggerDrawerToggle(shellConfig.hostToggleSelector);
         window.requestAnimationFrame(() => {
-            if (!shellRoot.classList.contains('openDrawer')) {
-                forceDrawerState(shellRoot, true);
+            if (!isDrawerActuallyOpen(shellRoot)) {
+                forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
             }
         });
     }
@@ -1152,9 +1207,24 @@ function closeShell(shellKey) {
     const shellConfig = getShellConfig(shellKey);
     const shellRoot = document.getElementById(shellConfig.rootPanelId);
 
-    if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
-        clearShellSearch(shellKey);
+    if (!(shellRoot instanceof HTMLElement) || !shellRoot.classList.contains('openDrawer')) {
+        return;
+    }
+
+    clearShellSearch(shellKey);
+
+    if (!isDrawerActuallyOpen(shellRoot)) {
+        forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
+        return;
+    }
+
+    if (shellRoot.classList.contains('openDrawer')) {
         triggerDrawerToggle(shellConfig.hostToggleSelector);
+        window.requestAnimationFrame(() => {
+            if (shellRoot.classList.contains('openDrawer')) {
+                forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
+            }
+        });
     }
 }
 
@@ -1811,6 +1881,8 @@ function initAll() {
     sbState.initialized = true;
 
     hideHostToggles();
+    forceDrawerState(leftShellRoot, false, getShellConfig('left').hostIconSelector);
+    forceDrawerState(rightShellRoot, false, getShellConfig('right').hostIconSelector);
     buildTopBar();
     buildShell('left');
     buildShell('right');

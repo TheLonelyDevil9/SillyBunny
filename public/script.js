@@ -8567,21 +8567,59 @@ export function selectRightMenuWithAnimation(selectedMenuId) {
         'rm_api_block': 'grid',
         'rm_characters_block': 'flex',
     };
-    $('#result_info').toggle(selectedMenuId === 'rm_ch_create_block');
-    document.querySelectorAll('#right-nav-panel .right_menu').forEach((menu) => {
-        $(menu).css('display', 'none');
+    const normalizedSelectedMenuId = selectedMenuId?.replace('#', '') || '';
+    const shouldAnimate = !isMobile() && animation_duration > 0;
 
-        if (selectedMenuId && selectedMenuId.replace('#', '') === menu.id) {
-            const mode = displayModes[menu.id] ?? 'block';
-            $(menu).css('display', mode);
-            $(menu).css('opacity', 0.0);
-            $(menu).transition({
+    $('#result_info').toggle(normalizedSelectedMenuId === 'rm_ch_create_block');
+    document.querySelectorAll('#right-nav-panel .right_menu').forEach((menu) => {
+        const $menu = $(menu);
+        const isSelected = normalizedSelectedMenuId === menu.id;
+
+        menu.classList.toggle('sb-active-right-menu', isSelected);
+        menu.style.removeProperty('transition');
+        menu.style.removeProperty('transform');
+
+        if (!isSelected) {
+            $menu.css('display', 'none');
+            $menu.css('opacity', '');
+            menu.style.visibility = 'hidden';
+            menu.style.pointerEvents = 'none';
+            return;
+        }
+
+        const mode = displayModes[menu.id] ?? 'block';
+        $menu.css('display', mode);
+        menu.style.visibility = 'visible';
+        menu.style.pointerEvents = 'auto';
+
+        if (!shouldAnimate || typeof $menu.transition !== 'function') {
+            $menu.css('opacity', 1);
+            return;
+        }
+
+        $menu.css('opacity', 0);
+        window.requestAnimationFrame(() => {
+            if (!menu.classList.contains('sb-active-right-menu') || $menu.css('display') === 'none') {
+                return;
+            }
+
+            $menu.transition({
                 opacity: 1.0,
                 duration: animation_duration,
                 easing: animation_easing,
-                complete: function () { },
+                complete: function () {
+                    if (menu.classList.contains('sb-active-right-menu')) {
+                        $menu.css('opacity', 1);
+                    }
+                },
             });
-        }
+        });
+
+        window.setTimeout(() => {
+            if (menu.classList.contains('sb-active-right-menu') && $menu.css('display') !== 'none') {
+                $menu.css('opacity', 1);
+            }
+        }, animation_duration + 50);
     });
 }
 

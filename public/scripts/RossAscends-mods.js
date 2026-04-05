@@ -433,8 +433,12 @@ function OpenNavPanels() {
 
         //auto-open L nav if locked and previously open
         if (accountStorage.getItem('LNavLockOn') == 'true' && accountStorage.getItem('LNavOpened') == 'true') {
-            console.debug('RA -- clicking left nav to open');
-            $('#leftNavDrawerIcon').trigger('click');
+            console.debug('RA -- opening left shell');
+            if (window.SillyBunnyShell?.openTab) {
+                window.SillyBunnyShell.openTab('left');
+            } else {
+                $('#leftNavDrawerIcon').trigger('click');
+            }
         }
 
         //auto-open WI if locked and previously open

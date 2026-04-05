@@ -1581,6 +1581,12 @@
     #right-nav-panel.openDrawer * {
         pointer-events: auto !important;
     }
+
+    #right-nav-panel.openDrawer .right_menu.sb-active-right-menu {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
