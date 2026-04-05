@@ -328,14 +328,16 @@ export {
 };
 
 /**
- * Wait for page to load before continuing the app initialization.
+ * Wait for the DOM to be ready before continuing app initialization.
+ * Avoid blocking startup on late asset loads, which can hang on Safari/iOS.
  */
 await new Promise((resolve) => {
-    if (document.readyState === 'complete') {
-        resolve();
-    } else {
-        window.addEventListener('load', resolve);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', resolve, { once: true });
+        return;
     }
+
+    resolve();
 });
 
 function createDeferredModuleLoader(specifier) {
@@ -380,24 +382,78 @@ function scheduleDeferredInitializers(initializers) {
     runNext();
 }
 
+const STARTUP_STAGE_TIMEOUTS = Object.freeze({
+    clientVersion: 5000,
+    csrfTokenRequest: 7000,
+    initLocales: 8000,
+    initPresetManager: 8000,
+    initSystemMessages: 10000,
+    readSecretState: 6000,
+    settingsRequest: 10000,
+});
+
+function createTimeoutError(operationName, timeoutMs) {
+    const error = new Error(`${operationName} timed out after ${timeoutMs}ms`);
+    error.name = 'TimeoutError';
+    error.operationName = operationName;
+    error.timeoutMs = timeoutMs;
+    return error;
+}
+
 /**
  * Wraps a promise with a timeout to prevent indefinite hangs.
  * @param {Promise} promise - The promise to wrap
  * @param {number} timeoutMs - Timeout in milliseconds
  * @param {*} fallbackValue - Value to resolve with on timeout
  * @param {string} operationName - Name for logging
+ * @param {{ rejectOnTimeout?: boolean }} [options] - Timeout behavior
  * @returns {Promise} Promise that resolves with result or fallback
  */
-function withTimeout(promise, timeoutMs, fallbackValue, operationName) {
-    return Promise.race([
-        promise,
-        new Promise((resolve) => {
-            setTimeout(() => {
-                console.warn(`${operationName} timed out after ${timeoutMs}ms, using fallback`);
-                resolve(fallbackValue);
-            }, timeoutMs);
-        })
-    ]);
+function withTimeout(promise, timeoutMs, fallbackValue, operationName, { rejectOnTimeout = false } = {}) {
+    let timeoutId = null;
+    const wrappedPromise = Promise.resolve(promise);
+    const timeoutPromise = new Promise((resolve, reject) => {
+        timeoutId = window.setTimeout(() => {
+            const timeoutError = createTimeoutError(operationName, timeoutMs);
+            console.warn(timeoutError.message);
+
+            if (rejectOnTimeout) {
+                reject(timeoutError);
+                return;
+            }
+
+            resolve(fallbackValue);
+        }, timeoutMs);
+    });
+
+    return Promise.race([wrappedPromise, timeoutPromise]).finally(() => {
+        if (timeoutId !== null) {
+            window.clearTimeout(timeoutId);
+        }
+    });
+}
+
+async function runStartupStage(stageName, action, { timeoutMs = 0 } = {}) {
+    const startedAt = performance.now();
+    const stageLabel = `[Startup] ${stageName}`;
+    console.debug(`${stageLabel} started`);
+
+    try {
+        const pendingStage = Promise.resolve().then(action);
+        const result = timeoutMs > 0
+            ? await withTimeout(pendingStage, timeoutMs, undefined, stageName, { rejectOnTimeout: true })
+            : await pendingStage;
+
+        console.debug(`${stageLabel} completed in ${Math.round(performance.now() - startedAt)}ms`);
+        return result;
+    } catch (error) {
+        if (!error.startupStage) {
+            error.startupStage = stageName;
+        }
+
+        console.error(`${stageLabel} failed after ${Math.round(performance.now() - startedAt)}ms`, error);
+        throw error;
+    }
 }
 
 const loadDynamicStylesModule = createDeferredModuleLoader('./scripts/dynamic-styles.js');
@@ -809,8 +865,21 @@ async function firstLoadInit() {
     };
 
     try {
-        const tokenResponse = await fetch('/csrf-token');
-        const tokenData = await tokenResponse.json();
+        const tokenData = await runStartupStage('load CSRF token', async () => {
+            const tokenResponse = await withTimeout(
+                fetch('/csrf-token'),
+                STARTUP_STAGE_TIMEOUTS.csrfTokenRequest,
+                null,
+                'csrf-token request',
+                { rejectOnTimeout: true },
+            );
+
+            if (!tokenResponse.ok) {
+                throw new Error(`Failed to load CSRF token: ${tokenResponse.status} ${tokenResponse.statusText}`);
+            }
+
+            return tokenResponse.json();
+        });
         token = tokenData.token;
 
         registerPromptManagerMigration();
@@ -821,10 +890,10 @@ async function firstLoadInit() {
         addDOMPurifyHooks();
         reloadMarkdownProcessor();
         applyBrowserFixes();
-        await getClientVersion();
-        await initSecrets();
-        await readSecretState();
-        await initLocales();
+        await runStartupStage('load client version', () => getClientVersion(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.clientVersion });
+        await runStartupStage('initialize secrets', () => initSecrets());
+        await runStartupStage('read secret state', () => readSecretState(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.readSecretState });
+        await runStartupStage('initialize locales', () => initLocales(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initLocales });
         initChatUtilities();
         initDefaultSlashCommands();
         initTextGenModels();
@@ -836,9 +905,9 @@ async function firstLoadInit() {
         initExtensions();
         initExtensionSlashCommands();
         ToolManager.initToolSlashCommands();
-        await initPresetManager();
-        await initSystemMessages();
-        await getSettings(initLoaderHandle);
+        await runStartupStage('initialize preset manager', () => initPresetManager(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initPresetManager });
+        await runStartupStage('initialize system messages', () => initSystemMessages(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initSystemMessages });
+        await runStartupStage('load settings', () => getSettings(initLoaderHandle, { requestTimeoutMs: STARTUP_STAGE_TIMEOUTS.settingsRequest }));
         initAgents();
         initKeyboard();
         initTags();
@@ -913,7 +982,11 @@ async function firstLoadInit() {
         ]);
     } catch (error) {
         console.error('Application initialization failed.', error);
-        toastr.error(t`SillyBunny couldn't finish starting. Please refresh the page.`, t`Startup Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
+        const failedStage = error?.startupStage;
+        const message = failedStage
+            ? `SillyBunny couldn't finish starting during ${failedStage}. Please refresh the page.`
+            : t`SillyBunny couldn't finish starting. Please refresh the page.`;
+        toastr.error(message, t`Startup Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
         throw error;
     } finally {
         await releaseStartupLoader('startup finally');
@@ -8020,13 +8093,16 @@ function reloadLoop() {
 
 //MARK: getSettings()
 ///////////////////////////////////////////
-export async function getSettings(initLoaderHandle = null) {
-    const response = await fetch('/api/settings/get', {
+export async function getSettings(initLoaderHandle = null, { requestTimeoutMs = 0 } = {}) {
+    const settingsRequest = fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
         cache: 'no-cache',
     });
+    const response = requestTimeoutMs > 0
+        ? await withTimeout(settingsRequest, requestTimeoutMs, null, 'settings request', { rejectOnTimeout: true })
+        : await settingsRequest;
 
     if (!response.ok) {
         reloadLoop();
