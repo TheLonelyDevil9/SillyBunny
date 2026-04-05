@@ -1063,6 +1063,21 @@ function toggleChatSidebar() {
     setChatSidebarOpenState(!isChatSidebarOpen());
 }
 
+function handleRecentChatsToggle() {
+    const chatContext = getChatUiContext();
+
+    if (!chatContext.canBrowseChats) {
+        return;
+    }
+
+    if (isMobileViewport()) {
+        openMobileChatTools();
+        return;
+    }
+
+    toggleChatSidebar();
+}
+
 function buildMobileChatTools() {
     const existingMobileTools = getChatMobileRefs();
     if (existingMobileTools) {
@@ -1312,7 +1327,7 @@ function buildChatBar() {
             icon: 'fa-box-archive',
             title: 'Toggle recent chats sidebar',
         },
-        toggleChatSidebar,
+        handleRecentChatsToggle,
     );
     const toggleConnectionButton = createTopBarIconButton(
         {
@@ -1320,7 +1335,7 @@ function buildChatBar() {
             icon: 'fa-plug',
             title: 'Show connection profiles',
         },
-        () => toggleConnectionStrip(),
+        handleConnectionProfilesToggle,
     );
     const managerButton = createTopBarIconButton(
         {
@@ -1442,6 +1457,21 @@ function toggleConnectionStrip() {
 
     setChatSidebarOpenState(false);
     setConnectionStripOpenState(!isConnectionStripOpen());
+}
+
+function handleConnectionProfilesToggle() {
+    const connectionProfilesSource = document.getElementById('connection_profiles');
+
+    if (!(connectionProfilesSource instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    if (isMobileViewport()) {
+        openMobileChatTools();
+        return;
+    }
+
+    toggleConnectionStrip();
 }
 
 function getSearchTerms(query = getChatbarState().searchQuery) {
