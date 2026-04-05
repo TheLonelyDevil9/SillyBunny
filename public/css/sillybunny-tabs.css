@@ -370,6 +370,9 @@
 
 .sb-shell-tab-copy strong {
     font-size: calc(var(--mainFontSize) * 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sb-shell-tab-copy small {
@@ -1314,6 +1317,11 @@
     }
 
     #clickSlidersTips {
+        display: none !important;
+    }
+
+    /* Hide help button on Presets page */
+    .topRightInset {
         display: none !important;
     }
 

@@ -1077,99 +1077,98 @@ export function initTextGenModels() {
         }));
     }
 
-    if (!isMobile()) {
-        $('#mancer_model').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getMancerModelTemplate,
-        });
-        $('#model_togetherai_select').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getTogetherModelTemplate,
-        });
-        $('#ollama_model').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-        });
-        $('#tabby_model').select2({
-            placeholder: t`[Currently loaded]`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            allowClear: true,
-        });
-        $('#llamacpp_model').select2({
-            placeholder: t`[Currently loaded]`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            allowClear: true,
-        });
-        $('#model_infermaticai_select').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getInfermaticAIModelTemplate,
-        });
-        $('#model_dreamgen_select').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getDreamGenModelTemplate,
-        });
-        $('#openrouter_model').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getOpenRouterModelTemplate,
-            matcher: textValueMatcher,
-        });
-        $('#vllm_model').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getVllmModelTemplate,
-        });
-        $('#aphrodite_model').select2({
-            placeholder: t`Select a model`,
-            searchInputPlaceholder: t`Search models...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            templateResult: getAphroditeModelTemplate,
-        });
-        $('.openrouter_quantizations').select2({
-            closeOnSelect: false,
-            placeholder: t`Select quantizations. No selection = all quantizations.`,
-            searchInputCssClass: 'text_pole',
-            searchInputPlaceholder: t`Search quantizations...`,
-            width: '100%',
-        });
-        providersSelect.select2({
-            sorter: data => data.sort((a, b) => a.text.localeCompare(b.text)),
-            placeholder: t`Select providers. No selection = all providers.`,
-            searchInputPlaceholder: t`Search providers...`,
-            searchInputCssClass: 'text_pole',
-            width: '100%',
-            closeOnSelect: false,
-        });
-        providersSelect.on('select2:select', function (/** @type {any} */ evt) {
-            const element = evt.params.data.element;
-            const $element = $(element);
+    // Enable Select2 with keyboard search on all devices including mobile
+    $('#mancer_model').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getMancerModelTemplate,
+    });
+    $('#model_togetherai_select').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getTogetherModelTemplate,
+    });
+    $('#ollama_model').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+    });
+    $('#tabby_model').select2({
+        placeholder: t`[Currently loaded]`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        allowClear: true,
+    });
+    $('#llamacpp_model').select2({
+        placeholder: t`[Currently loaded]`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        allowClear: true,
+    });
+    $('#model_infermaticai_select').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getInfermaticAIModelTemplate,
+    });
+    $('#model_dreamgen_select').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getDreamGenModelTemplate,
+    });
+    $('#openrouter_model').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getOpenRouterModelTemplate,
+        matcher: textValueMatcher,
+    });
+    $('#vllm_model').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getVllmModelTemplate,
+    });
+    $('#aphrodite_model').select2({
+        placeholder: t`Select a model`,
+        searchInputPlaceholder: t`Search models...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        templateResult: getAphroditeModelTemplate,
+    });
+    $('.openrouter_quantizations').select2({
+        closeOnSelect: false,
+        placeholder: t`Select quantizations. No selection = all quantizations.`,
+        searchInputCssClass: 'text_pole',
+        searchInputPlaceholder: t`Search quantizations...`,
+        width: '100%',
+    });
+    providersSelect.select2({
+        sorter: data => data.sort((a, b) => a.text.localeCompare(b.text)),
+        placeholder: t`Select providers. No selection = all providers.`,
+        searchInputPlaceholder: t`Search providers...`,
+        searchInputCssClass: 'text_pole',
+        width: '100%',
+        closeOnSelect: false,
+    });
+    providersSelect.on('select2:select', function (/** @type {any} */ evt) {
+        const element = evt.params.data.element;
+        const $element = $(element);
 
-            $element.detach();
-            $(this).append($element);
-            $(this).trigger('change');
-        });
-    }
+        $element.detach();
+        $(this).append($element);
+        $(this).trigger('change');
+    });
 }

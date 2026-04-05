@@ -723,6 +723,16 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.welcomeRecent .recentChatList .recentChat .chatNameContainer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
+    gap: 10px;
+    font-size: calc(var(--mainFontSize) * 0.96);
+    overflow: hidden;
 }
 
 .welcomeRecent .recentChatList .recentChat .chatDate {

@@ -1603,6 +1603,14 @@ function toggleMobileNav() {
     }
 
     const isOpen = !overlay.hidden && overlay.getAttribute('aria-hidden') === 'false';
+
+    // If opening mobile nav, close any open shells first
+    if (!isOpen) {
+        closeShell('left');
+        closeShell('right');
+        closeCharacterPanel();
+    }
+
     setMobileNavOpenState(!isOpen);
 }
 

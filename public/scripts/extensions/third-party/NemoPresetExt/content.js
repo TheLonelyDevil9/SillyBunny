@@ -88,10 +88,22 @@ function attachPromptEnhancer() {
         promptListObserver.disconnect();
     }
 
-    promptListObserver = new MutationObserver(() => {
-        if (!isRefreshingPromptSections) {
-            schedulePromptRefresh();
+    promptListObserver = new MutationObserver((mutations) => {
+        if (isRefreshingPromptSections) {
+            return;
         }
+
+        // Ignore mutations caused by our own section rows
+        const isOwnMutation = mutations.every(m =>
+            Array.from(m.addedNodes).concat(Array.from(m.removedNodes)).every(n =>
+                n instanceof HTMLElement && (n.classList?.contains('nemo-sb-section-row') || n.classList?.contains('nemo-sb-divider-row')),
+            ),
+        );
+        if (isOwnMutation) {
+            return;
+        }
+
+        schedulePromptRefresh();
     });
 
     promptListObserver.observe(promptListElement, {
@@ -316,6 +328,11 @@ function refreshPromptSections() {
 
     isRefreshingPromptSections = true;
 
+    // Disconnect observer during DOM changes to prevent feedback loops
+    if (promptListObserver) {
+        promptListObserver.disconnect();
+    }
+
     try {
         cleanupPromptSections();
 
@@ -398,6 +415,14 @@ function refreshPromptSections() {
             });
     } finally {
         isRefreshingPromptSections = false;
+
+        // Reconnect observer after our DOM changes are done
+        if (promptListObserver && promptListElement) {
+            promptListObserver.observe(promptListElement, {
+                childList: true,
+                subtree: true,
+            });
+        }
     }
 }
 
