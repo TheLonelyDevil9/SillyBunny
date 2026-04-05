@@ -327,7 +327,7 @@
     }
 
     body {
-        touch-action: none;
+        touch-action: manipulation;
         overflow: hidden;
         position: fixed;
     }

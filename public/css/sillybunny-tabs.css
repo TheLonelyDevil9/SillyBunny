@@ -640,6 +640,9 @@
     height: 100%;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 18px;
 }
 
@@ -1010,6 +1013,15 @@
     padding: 0;
 }
 
+.sb-shell-root .scrollableInner,
+.sb-shell-root .scrollableInnerFull {
+    padding: 0;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    -webkit-overflow-scrolling: auto !important;
+}
+
 .sb-managed .drag-grabber {
     display: none !important;
 }
@@ -1068,6 +1080,31 @@
 }
 
 @media screen and (max-width: 768px) {
+    #top-bar,
+    #sb-mobile-nav,
+    #sb-mobile-nav-content,
+    .sb-shell-root,
+    .sb-shell-main,
+    .sb-shell-header,
+    .sb-shell-panel-scroller,
+    .sb-shell-root button,
+    .sb-shell-root input,
+    .sb-shell-root select,
+    .sb-shell-root textarea,
+    .sb-shell-root label {
+        touch-action: manipulation;
+    }
+
+    .sb-shell-nav {
+        touch-action: pan-x;
+    }
+
+    .sb-shell-panel-scroller,
+    .sb-shell-root .scrollableInner,
+    .sb-shell-root .scrollableInnerFull {
+        touch-action: pan-y;
+    }
+
     .sb-mobile-toggle {
         display: inline-flex;
     }
