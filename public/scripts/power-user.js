@@ -90,6 +90,8 @@ const defaultStoryString = '{{#if system}}{{system}}\n{{/if}}{{#if description}}
 const defaultExampleSeparator = '***';
 const defaultChatStart = '***';
 const defaultToastPosition = 'toast-top-center';
+const DEFAULT_STORY_STRING_POSITION = 0;
+const DEFAULT_STORY_STRING_ROLE = 0;
 const SILLYBUNNY_PALETTE_PRESETS = Object.freeze({
     'forest-dusk': {
         label: 'Forest Dusk',
@@ -335,8 +337,8 @@ export const power_user = {
         example_separator: defaultExampleSeparator,
         use_stop_strings: true,
         names_as_stop_strings: true,
-        story_string_position: extension_prompt_types.IN_PROMPT,
-        story_string_role: extension_prompt_roles.SYSTEM,
+        story_string_position: DEFAULT_STORY_STRING_POSITION,
+        story_string_role: DEFAULT_STORY_STRING_ROLE,
         story_string_depth: 1,
     },
 
@@ -442,9 +444,9 @@ const contextControls = [
     { id: 'context_chat_start', property: 'chat_start', isCheckbox: false, isGlobalSetting: false },
     { id: 'context_use_stop_strings', property: 'use_stop_strings', isCheckbox: true, isGlobalSetting: false, defaultValue: false },
     { id: 'context_names_as_stop_strings', property: 'names_as_stop_strings', isCheckbox: true, isGlobalSetting: false, defaultValue: true },
-    { id: 'context_story_string_position', property: 'story_string_position', isCheckbox: false, isGlobalSetting: false, defaultValue: extension_prompt_types.IN_PROMPT, trigger: true },
+    { id: 'context_story_string_position', property: 'story_string_position', isCheckbox: false, isGlobalSetting: false, defaultValue: DEFAULT_STORY_STRING_POSITION, trigger: true },
     { id: 'context_story_string_depth', property: 'story_string_depth', isCheckbox: false, isGlobalSetting: false, defaultValue: 1 },
-    { id: 'context_story_string_role', property: 'story_string_role', isCheckbox: false, isGlobalSetting: false, defaultValue: extension_prompt_roles.SYSTEM },
+    { id: 'context_story_string_role', property: 'story_string_role', isCheckbox: false, isGlobalSetting: false, defaultValue: DEFAULT_STORY_STRING_ROLE },
 
     // Existing power user settings
     { id: 'always-force-name2-checkbox', property: 'always_force_name2', isCheckbox: true, isGlobalSetting: true, defaultValue: true },
