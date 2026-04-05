@@ -1,19 +1,35 @@
 # SillyBunny
 
-SillyBunny is a fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern) with a better UI and a Bun-first runtime.
+SillyBunny is a fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern) with a distinct product direction: a Bun-first runtime, a custom frontend shell, and native in-app agent features, while still aiming to preserve the core SillyTavern workflow people already know.
 
-The goal is to keep the familiar SillyTavern workflow, data habits, and compatibility story, while shipping a more polished frontend shell, faster Bun-based startup, and native agent features directly in the app.
+The goal is not to stop being compatible with SillyTavern. The goal is to build a fork that feels more opinionated, more polished, and more integrated, without throwing away the upstream ecosystem, data habits, and familiar chat workflow.
 
 > [!WARNING]
 > SillyBunny is an active fork. Expect ongoing UI iteration, Bun compatibility work, and occasional upstream sync churn.
 
-## What makes it different
+## Why it is different from SillyTavern
 
-- Bun is the default runtime
-- The UI is reworked around a custom SillyBunny navigation shell instead of the stock layout
-- Several built-in visual themes, palette presets, and message styles are included out of the box
-- Native Agent Mode is built into the app instead of being bolted on as a separate orchestration layer
-- SillyTavern workflow and data compatibility remain a priority inside a Bun-only runtime
+SillyBunny exists because this fork wants to make a few strong bets instead of staying visually and operationally identical to upstream:
+
+- Bun is the default runtime, with startup and deployment shaped around it first.
+- The UI is intentionally reworked around a custom SillyBunny shell instead of the stock SillyTavern layout.
+- The app ships a more curated visual identity out of the box, including built-in shell themes, palette presets, and message styles.
+- Agent features are treated as a native product surface, not just an optional bolt-on.
+- Mobile ergonomics, shell navigation, and presentation polish are treated as first-class product concerns.
+
+In short: SillyTavern is the upstream foundation, while SillyBunny is the fork that pushes harder on runtime changes, UI direction, and integrated agent tooling.
+
+## What stays aligned with SillyTavern
+
+Even with those differences, SillyBunny is still intended to feel familiar if you already use SillyTavern:
+
+- Core chat workflow should remain recognizable.
+- Data compatibility and migration safety are still a priority.
+- Upstream behavior remains the reference point when something feels off.
+- Extension and ecosystem compatibility matter, even when the shell and runtime diverge.
+- Future parity work and stable-version syncs are planned, not accidental.
+
+For the longer-term upstream sync and parity direction, see [UPSTREAM_PARITY.md](UPSTREAM_PARITY.md).
 
 ## Current features
 
@@ -147,6 +163,8 @@ SillyBunny is still a fork of SillyTavern, and a large amount of the application
 - Upstream subreddit: <https://reddit.com/r/SillyTavernAI>
 
 If something feels off, compare behavior against the upstream `release` branch first.
+
+The current parity and sync direction for future stable updates is tracked in [UPSTREAM_PARITY.md](UPSTREAM_PARITY.md).
 
 ## License
 
