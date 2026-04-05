@@ -2,14 +2,29 @@
    SillyBunny Navigation Shell
    ============================================================================= */
 
-/* Pre-hide old ST drawer headers before shell JS runs.
-   Prevents "User Settings" text from flashing on first paint. */
+/* Pre-hide old ST drawer toggles before shell JS runs. */
 #top-settings-holder > .drawer > .drawer-toggle {
     display: none !important;
 }
 
-#top-settings-holder > .drawer > .drawer-content:not(.openDrawer) {
+/*
+ * Keep closed top-bar drawers fully inert from first paint onward.
+ * This prevents theme/layout overrides from leaving invisible shells
+ * sitting on the left/right edges and stealing the first tap/click.
+ */
+#top-settings-holder > .drawer > .drawer-content.closedDrawer:not(.openDrawer) {
     display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    border-width: 0 !important;
+    box-shadow: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
 }
 
 #top-bar {
@@ -1558,6 +1573,23 @@
     #left-nav-panel .sb-shell-panel-scroller,
     #left-nav-panel .sb-shell-panel,
     #left-nav-panel .sb-shell-panel * {
+        pointer-events: auto !important;
+    }
+}
+
+/* Force character panel visibility on mobile when open.
+ * The panel may be clipped or invisible due to parent overflow or stacking context.
+ * Clicks still reach it via the fixed positioning, but visual rendering needs help. */
+@media screen and (max-width: 1000px) {
+    #right-nav-panel.openDrawer {
+        display: flex !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+        z-index: 3500 !important;
+    }
+
+    #right-nav-panel.openDrawer * {
         pointer-events: auto !important;
     }
 }
