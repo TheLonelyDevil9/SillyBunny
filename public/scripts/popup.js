@@ -769,7 +769,9 @@ export class Popup {
         // After the dialog is actually completely closed, remove it from the DOM
         runAfterAnimation(this.dlg, async () => {
             // Call the close on the dialog
-            this.dlg.close();
+            if (this.dlg.hasAttribute('open')) {
+                this.dlg.close();
+            }
 
             // Run a possible custom handler right before DOM removal
             if (this.onClose) {

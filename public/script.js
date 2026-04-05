@@ -244,7 +244,7 @@ import {
     isPersonaPanelOpen,
 } from './scripts/personas.js';
 import { getBackgrounds, initBackgrounds, loadBackgroundSettings, background_settings } from './scripts/backgrounds.js';
-import { loader } from './scripts/action-loader.js';
+import { cleanupActionLoaderArtifacts, loader } from './scripts/action-loader.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
 import { initTextGenModels } from './scripts/textgen-models.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, isExternalMediaAllowed, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, addDOMPurifyHooks } from './scripts/chats.js';
@@ -743,6 +743,12 @@ export async function pingServer() {
 
 //MARK: firstLoadInit
 async function firstLoadInit() {
+    const scheduleStartupLoaderCleanup = (reason) => {
+        cleanupActionLoaderArtifacts({ removePreloader: true, reason });
+        requestAnimationFrame(() => cleanupActionLoaderArtifacts({ removePreloader: true, reason: `${reason} (raf)` }));
+        window.setTimeout(() => cleanupActionLoaderArtifacts({ removePreloader: true, reason: `${reason} (timeout)` }), 250);
+    };
+
     const initLoaderOverlay = loader.createOverlay();
     initLoaderOverlay.classList.add('splash-screen');
 
@@ -825,8 +831,10 @@ async function firstLoadInit() {
         addDebugFunctions();
         await eventSource.emit(event_types.APP_INITIALIZED);
         await initLoaderHandle.hide();
+        scheduleStartupLoaderCleanup('startup loader hide');
         await fixViewport();
         await eventSource.emit(event_types.APP_READY);
+        scheduleStartupLoaderCleanup('app ready');
         scheduleLowPriorityWork(async () => {
             try {
                 await doDailyExtensionUpdatesCheck();
@@ -852,6 +860,7 @@ async function firstLoadInit() {
                 console.error('Failed to hide startup loader.', error);
             });
         }
+        scheduleStartupLoaderCleanup('startup finally');
     }
 }
 
