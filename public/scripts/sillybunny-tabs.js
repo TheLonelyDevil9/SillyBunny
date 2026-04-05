@@ -21,6 +21,8 @@ const SB_SURFACE_TRANSPARENCY = Object.freeze({
     step: 5,
     defaultValue: 0,
 });
+const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
+const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
 
 const SB_THEMES = Object.freeze([
     {
@@ -176,6 +178,22 @@ const sbState = {
     theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
     surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
     shells: {},
+    chatbar: {
+        desktop: null,
+        sidebar: null,
+        mobileTools: null,
+        searchQuery: '',
+        searchTimer: 0,
+        refreshTimer: 0,
+        refreshToken: 0,
+        pendingSearchScroll: false,
+        isApplyingSearch: false,
+        chatObserver: null,
+        sourceObserver: null,
+        connectionStripOpen: false,
+        sidebarOpen: false,
+        mobileToolsOpen: false,
+    },
 };
 
 function normalizeTheme(themeId) {
@@ -514,6 +532,1314 @@ function createProxyButton({ id, icon, label, title, className = '' }, onClick) 
     return button;
 }
 
+function createTopBarIconButton({ id = '', icon, title, className = '', label = '' }, onClick) {
+    const button = createElement('button', {
+        id,
+        className: `sb-chatbar-button ${className}`.trim(),
+        attrs: {
+            type: 'button',
+            title,
+            'aria-label': title,
+        },
+    });
+
+    button.innerHTML = `
+        <i class="fa-solid ${icon}" aria-hidden="true"></i>
+        ${label ? `<span>${label}</span>` : ''}
+    `;
+
+    stopProxyPointerPropagation(button);
+    button.addEventListener('click', onClick);
+
+    return button;
+}
+
+function getChatbarState() {
+    return sbState.chatbar;
+}
+
+function getChatDesktopRefs() {
+    return getChatbarState().desktop;
+}
+
+function getChatMobileRefs() {
+    return getChatbarState().mobileTools;
+}
+
+function getChatSidebarRefs() {
+    return getChatbarState().sidebar;
+}
+
+function escapeSelectorValue(value) {
+    if (globalThis.CSS?.escape) {
+        return globalThis.CSS.escape(String(value ?? ''));
+    }
+
+    return String(value ?? '').replace(/["\\]/g, '\\$&');
+}
+
+function escapeRegExp(value) {
+    return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripDecoratedOptionText(value) {
+    return String(value ?? '').replace(/[[(].*?[\])]/g, '').trim();
+}
+
+function getRequestHeadersFromContext(context = getSillyTavernContext()) {
+    if (typeof context?.getRequestHeaders === 'function') {
+        return context.getRequestHeaders();
+    }
+
+    return {
+        'Content-Type': 'application/json',
+    };
+}
+
+function getChatUiContext() {
+    const context = getSillyTavernContext();
+
+    if (!context) {
+        return {
+            context: null,
+            chatId: '',
+            group: null,
+            character: null,
+            hasChat: false,
+            canBrowseChats: false,
+            canStartNewChat: false,
+            label: '',
+        };
+    }
+
+    const group = context.groupId
+        ? context.groups?.find(item => String(item?.id) === String(context.groupId)) ?? null
+        : null;
+    const character = context.characterId !== undefined && context.characterId !== null
+        ? context.characters?.[context.characterId] ?? null
+        : null;
+    const chatId = String(context.getCurrentChatId?.() ?? '').trim();
+    const canBrowseChats = Boolean(group || character);
+
+    return {
+        context,
+        chatId,
+        group,
+        character,
+        hasChat: Boolean(chatId),
+        canBrowseChats,
+        canStartNewChat: canBrowseChats,
+        label: String(group?.name ?? character?.name ?? '').trim(),
+    };
+}
+
+function getChatSortTimestamp(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 1e12 ? value : value * 1000;
+    }
+
+    if (typeof value === 'string') {
+        const numericValue = Number(value);
+
+        if (Number.isFinite(numericValue) && numericValue > 0) {
+            return numericValue > 1e12 ? numericValue : numericValue * 1000;
+        }
+
+        const parsedValue = Date.parse(value);
+        if (Number.isFinite(parsedValue)) {
+            return parsedValue;
+        }
+    }
+
+    return 0;
+}
+
+function formatChatTimestamp(value) {
+    const timestamp = getChatSortTimestamp(value);
+    if (!timestamp) {
+        return '';
+    }
+
+    try {
+        return new Date(timestamp).toLocaleDateString();
+    } catch {
+        return '';
+    }
+}
+
+function formatChatPreview(value) {
+    return clampText(String(value ?? '').replace(/\s+/g, ' ').trim() || 'No preview yet.', 120);
+}
+
+function normalizeChatInfo(chatInfo) {
+    const rawFileName = chatInfo?.file_name ?? chatInfo?.id ?? chatInfo?.chat_id ?? chatInfo ?? '';
+    const fileName = String(rawFileName).replace(/\.jsonl$/i, '').trim();
+
+    return {
+        fileName,
+        preview: formatChatPreview(chatInfo?.mes ?? chatInfo?.preview ?? chatInfo?.message ?? ''),
+        lastMessage: chatInfo?.last_mes ?? chatInfo?.updated_at ?? chatInfo?.create_date ?? '',
+        sortTimestamp: getChatSortTimestamp(chatInfo?.last_mes ?? chatInfo?.updated_at ?? chatInfo?.create_date ?? ''),
+        chatItems: Number(chatInfo?.chat_items ?? chatInfo?.message_count ?? 0) || 0,
+        fileSize: String(chatInfo?.file_size ?? '').trim(),
+    };
+}
+
+function sortChatFiles(files) {
+    return [...files].sort((left, right) => {
+        if (right.sortTimestamp !== left.sortTimestamp) {
+            return right.sortTimestamp - left.sortTimestamp;
+        }
+
+        return left.fileName.localeCompare(right.fileName);
+    });
+}
+
+async function fetchCharacterChatFiles(chatContext) {
+    const avatarUrl = chatContext.character?.avatar;
+
+    if (!avatarUrl) {
+        return [];
+    }
+
+    try {
+        const response = await fetch('/api/characters/chats', {
+            method: 'POST',
+            headers: getRequestHeadersFromContext(chatContext.context),
+            body: JSON.stringify({ avatar_url: avatarUrl }),
+        });
+
+        if (!response.ok) {
+            return [];
+        }
+
+        const data = await response.json();
+        if (typeof data === 'object' && data?.error === true) {
+            return [];
+        }
+
+        const chats = Array.isArray(data) ? data : Object.values(data ?? {});
+        return sortChatFiles(chats.map(normalizeChatInfo).filter(chat => chat.fileName));
+    } catch (error) {
+        console.error('Failed to fetch character chats', error);
+        return [];
+    }
+}
+
+async function fetchGroupChatFiles(chatContext) {
+    const groupChats = Array.isArray(chatContext.group?.chats) ? chatContext.group.chats : [];
+
+    if (!groupChats.length) {
+        return [];
+    }
+
+    const headers = getRequestHeadersFromContext(chatContext.context);
+
+    try {
+        const chats = await Promise.all(groupChats.map(async chatId => {
+            try {
+                const response = await fetch('/api/chats/group/info', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ id: chatId }),
+                });
+
+                if (!response.ok) {
+                    return normalizeChatInfo({ file_name: chatId });
+                }
+
+                return normalizeChatInfo(await response.json());
+            } catch {
+                return normalizeChatInfo({ file_name: chatId });
+            }
+        }));
+
+        return sortChatFiles(chats.filter(chat => chat.fileName));
+    } catch (error) {
+        console.error('Failed to fetch group chats', error);
+        return [];
+    }
+}
+
+async function getChatFilesForContext(chatContext = getChatUiContext()) {
+    if (!chatContext.canBrowseChats) {
+        return [];
+    }
+
+    return chatContext.group
+        ? fetchGroupChatFiles(chatContext)
+        : fetchCharacterChatFiles(chatContext);
+}
+
+async function openChatById(chatId, { closeMobileTools = false } = {}) {
+    const nextChatId = String(chatId ?? '').trim();
+    const chatContext = getChatUiContext();
+
+    if (!nextChatId || !chatContext.context) {
+        return;
+    }
+
+    if (nextChatId === chatContext.chatId) {
+        if (closeMobileTools) {
+            closeMobileChatTools();
+        }
+        return;
+    }
+
+    try {
+        if (chatContext.group?.id) {
+            await chatContext.context.openGroupChat?.(chatContext.group.id, nextChatId);
+        } else {
+            await chatContext.context.openCharacterChat?.(nextChatId);
+        }
+    } finally {
+        if (closeMobileTools) {
+            closeMobileChatTools();
+        }
+
+        scheduleChatbarRefresh(80);
+    }
+}
+
+async function handleRenameChat() {
+    const chatContext = getChatUiContext();
+    const currentChatId = chatContext.chatId;
+
+    if (!currentChatId || typeof chatContext.context?.renameChat !== 'function') {
+        return;
+    }
+
+    const newChatName = await chatContext.context.Popup?.show?.input?.('Rename chat', 'Enter a new chat name:', currentChatId);
+
+    if (!newChatName || String(newChatName).trim() === currentChatId) {
+        return;
+    }
+
+    await chatContext.context.renameChat(currentChatId, String(newChatName).trim());
+    scheduleChatbarRefresh(120);
+}
+
+async function handleDeleteChat() {
+    const chatContext = getChatUiContext();
+
+    if (!chatContext.chatId) {
+        return;
+    }
+
+    const confirmed = await chatContext.context?.Popup?.show?.confirm?.('Delete chat?', 'This action cannot be undone.');
+    if (!confirmed) {
+        return;
+    }
+
+    await chatContext.context?.executeSlashCommandsWithOptions?.('/delchat');
+    scheduleChatbarRefresh(150);
+}
+
+async function handleCloseChat() {
+    const chatContext = getChatUiContext();
+
+    if (typeof chatContext.context?.closeCurrentChat === 'function') {
+        await chatContext.context.closeCurrentChat();
+    } else {
+        document.getElementById('option_close_chat')?.click();
+    }
+
+    scheduleChatbarRefresh(80);
+}
+
+function handleNewChat() {
+    document.getElementById('option_start_new_chat')?.click();
+    scheduleChatbarRefresh(100);
+}
+
+function handleChatManagerClick() {
+    document.getElementById('option_select_chat')?.click();
+}
+
+function createChatField({ id = '', icon, title, tagName = 'label', className = '' }) {
+    const field = createElement(tagName, {
+        id,
+        className: `sb-chatbar-field ${className}`.trim(),
+        attrs: {
+            title,
+        },
+    });
+    const fieldIcon = createElement('i', { className: `fa-solid ${icon}` });
+
+    field.appendChild(fieldIcon);
+    return field;
+}
+
+function setButtonDisabled(button, disabled) {
+    if (!(button instanceof HTMLElement)) {
+        return;
+    }
+
+    button.toggleAttribute('disabled', Boolean(disabled));
+    button.classList.toggle('is-disabled', Boolean(disabled));
+}
+
+function setButtonPressed(button, pressed) {
+    if (!(button instanceof HTMLElement)) {
+        return;
+    }
+
+    button.classList.toggle('is-active', Boolean(pressed));
+    button.setAttribute('aria-pressed', String(Boolean(pressed)));
+}
+
+function setSearchStatusText(statusText) {
+    const normalizedText = String(statusText ?? '').trim();
+
+    for (const refs of [getChatDesktopRefs(), getChatMobileRefs()]) {
+        const status = refs?.searchStatus;
+        if (!(status instanceof HTMLElement)) {
+            continue;
+        }
+
+        status.textContent = normalizedText;
+        status.hidden = !normalizedText;
+    }
+}
+
+function populateChatSelector(select, chatNames, chatContext, placeholder) {
+    if (!(select instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const currentValue = String(chatContext.chatId ?? '').trim();
+    const uniqueNames = Array.from(new Set(chatNames.map(name => String(name ?? '').trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+
+    select.replaceChildren();
+
+    if (!uniqueNames.length) {
+        const option = createElement('option', { text: placeholder });
+        option.value = '';
+        option.selected = true;
+        select.appendChild(option);
+        select.disabled = true;
+        return;
+    }
+
+    for (const chatName of uniqueNames) {
+        const option = createElement('option', { text: chatName });
+        option.value = chatName;
+        option.selected = chatName === currentValue;
+        select.appendChild(option);
+    }
+
+    if (currentValue && !uniqueNames.includes(currentValue)) {
+        const option = createElement('option', { text: currentValue });
+        option.value = currentValue;
+        option.selected = true;
+        select.appendChild(option);
+    }
+
+    select.disabled = false;
+    select.value = currentValue || uniqueNames[0];
+}
+
+function createChatFileButton(chatFile, currentChatId, onSelect, { compact = false } = {}) {
+    const button = createElement('button', {
+        className: `sb-chat-file ${compact ? 'is-compact' : ''}`.trim(),
+        attrs: {
+            type: 'button',
+        },
+    });
+
+    const dateLabel = formatChatTimestamp(chatFile.lastMessage);
+    button.classList.toggle('is-current', chatFile.fileName === currentChatId);
+    button.innerHTML = `
+        <div class="sb-chat-file-head">
+            <strong>${chatFile.fileName}</strong>
+            <small>${dateLabel || ''}</small>
+        </div>
+        <span class="sb-chat-file-preview">${chatFile.preview}</span>
+        <div class="sb-chat-file-meta">
+            <small>${chatFile.chatItems ? `${chatFile.chatItems} msg` : ''}</small>
+            <small>${chatFile.fileSize || ''}</small>
+        </div>
+    `;
+
+    button.addEventListener('click', () => {
+        void onSelect(chatFile.fileName);
+    });
+
+    return button;
+}
+
+function renderChatFiles(listRoot, files, currentChatId, { compact = false, emptyTitle = 'No chats yet.', emptyBody = 'Start a chat to see it here.', onSelect } = {}) {
+    if (!(listRoot instanceof HTMLElement)) {
+        return;
+    }
+
+    listRoot.replaceChildren();
+
+    if (!files.length) {
+        const empty = createElement('div', { className: `sb-chat-files-empty ${compact ? 'is-compact' : ''}`.trim() });
+        empty.innerHTML = `<strong>${emptyTitle}</strong><p>${emptyBody}</p>`;
+        listRoot.appendChild(empty);
+        return;
+    }
+
+    for (const chatFile of files) {
+        listRoot.appendChild(createChatFileButton(chatFile, currentChatId, onSelect, { compact }));
+    }
+}
+
+function buildChatSidebar() {
+    const existingSidebar = getChatSidebarRefs();
+    if (existingSidebar) {
+        return existingSidebar;
+    }
+
+    const template = document.getElementById('generic_draggable_template');
+    const movingDivs = document.getElementById('movingDivs');
+
+    if (!(template instanceof HTMLTemplateElement) || !(movingDivs instanceof HTMLElement)) {
+        return null;
+    }
+
+    const fragment = template.content.cloneNode(true);
+    const root = fragment.querySelector('.draggable');
+    const title = fragment.querySelector('.dragTitle');
+    const closeButton = fragment.querySelector('.dragClose');
+
+    if (!(root instanceof HTMLElement) || !(title instanceof HTMLElement) || !(closeButton instanceof HTMLElement)) {
+        return null;
+    }
+
+    root.id = 'sb-chat-sidebar';
+    root.classList.add('sb-chat-sidebar');
+    root.style.top = 'calc(var(--sb-topbar-stack-height) + 18px)';
+    root.style.right = '16px';
+    root.style.left = 'auto';
+    root.style.bottom = 'auto';
+
+    title.textContent = 'Recent Chats';
+
+    const body = createElement('div', { className: 'sb-chat-sidebar-body' });
+    const list = createElement('div', { className: 'sb-chat-sidebar-list' });
+    body.appendChild(list);
+    root.appendChild(body);
+
+    closeButton.addEventListener('click', () => setChatSidebarOpenState(false));
+
+    movingDivs.appendChild(root);
+
+    getChatbarState().sidebar = { root, title, list };
+    return getChatbarState().sidebar;
+}
+
+function isChatSidebarOpen() {
+    return Boolean(getChatbarState().sidebarOpen);
+}
+
+function setChatSidebarOpenState(shouldOpen) {
+    const refs = buildChatSidebar();
+
+    if (!refs?.root) {
+        return;
+    }
+
+    const isOpen = Boolean(shouldOpen);
+    getChatbarState().sidebarOpen = isOpen;
+    refs.root.style.display = isOpen ? 'flex' : 'none';
+    refs.root.classList.toggle('sb-chat-sidebar-visible', isOpen);
+    setButtonPressed(getChatDesktopRefs()?.toggleSidebarButton, isOpen);
+
+    if (isOpen) {
+        scheduleChatbarRefresh(0);
+    }
+}
+
+function toggleChatSidebar() {
+    const chatContext = getChatUiContext();
+    if (!chatContext.canBrowseChats) {
+        return;
+    }
+
+    setConnectionStripOpenState(false);
+    setChatSidebarOpenState(!isChatSidebarOpen());
+}
+
+function buildMobileChatTools() {
+    const existingMobileTools = getChatMobileRefs();
+    if (existingMobileTools) {
+        return existingMobileTools;
+    }
+
+    const overlay = createElement('div', { id: 'sb-mobile-chat-tools' });
+    const panel = createElement('div', { id: 'sb-mobile-chat-tools-panel' });
+    const header = createElement('div', { className: 'sb-mobile-chat-header' });
+    const title = createElement('div', { className: 'sb-mobile-chat-title' });
+    const closeButton = createTopBarIconButton(
+        {
+            id: 'sb-mobile-chat-close',
+            icon: 'fa-xmark',
+            title: 'Close chat tools',
+            className: 'sb-mobile-chat-close',
+        },
+        () => closeMobileChatTools(),
+    );
+    const chatSelectField = createChatField({
+        id: 'sb-mobile-chat-select-field',
+        icon: 'fa-comments',
+        title: 'Switch chat',
+        className: 'is-mobile',
+    });
+    const chatSelect = createElement('select', {
+        id: 'sb-mobile-chat-select',
+        className: 'text_pole',
+        attrs: {
+            'aria-label': 'Switch chat',
+        },
+    });
+    const searchField = createChatField({
+        id: 'sb-mobile-chat-search-field',
+        icon: 'fa-magnifying-glass',
+        title: 'Search current chat',
+        className: 'is-mobile',
+    });
+    const searchInput = createElement('input', {
+        id: 'sb-mobile-chat-search',
+        className: 'text_pole',
+        attrs: {
+            type: 'search',
+            placeholder: 'Search this chat...',
+            'aria-label': 'Search this chat',
+        },
+    });
+    const searchStatus = createElement('small', { className: 'sb-chatbar-search-status' });
+    const actions = createElement('div', { className: 'sb-mobile-chat-actions' });
+    const recentSection = createElement('section', { className: 'sb-mobile-chat-section' });
+    const recentTitle = createElement('strong', { className: 'sb-mobile-chat-section-title', text: 'Recent Chats' });
+    const recentList = createElement('div', { className: 'sb-mobile-chat-files' });
+    const connectionSection = createElement('section', { className: 'sb-mobile-chat-section sb-mobile-chat-connection' });
+    const connectionTitle = createElement('strong', { className: 'sb-mobile-chat-section-title', text: 'Connection Profile' });
+    const connectionField = createChatField({
+        id: 'sb-mobile-chat-connection-field',
+        icon: 'fa-plug',
+        title: 'Switch connection profile',
+        className: 'is-mobile',
+    });
+    const connectionSelect = createElement('select', {
+        id: 'sb-mobile-chat-connection-select',
+        className: 'text_pole',
+        attrs: {
+            'aria-label': 'Switch connection profile',
+        },
+    });
+    const connectionStatus = createElement('small', { className: 'sb-mobile-chat-connection-status' });
+
+    searchStatus.hidden = true;
+    connectionSection.hidden = true;
+
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+
+    if ('inert' in overlay) {
+        overlay.inert = true;
+    }
+
+    title.innerHTML = '<strong>Chat Tools</strong><small>Switch, search, and manage chats without leaving the page.</small>';
+    header.append(title, closeButton);
+
+    chatSelectField.appendChild(chatSelect);
+    searchField.append(searchInput, searchStatus);
+    connectionField.appendChild(connectionSelect);
+    connectionSection.append(connectionTitle, connectionField, connectionStatus);
+
+    const buttons = {
+        managerButton: createTopBarIconButton({ icon: 'fa-address-book', title: 'View chat files', label: 'Files', className: 'is-mobile-wide' }, handleChatManagerClick),
+        newButton: createTopBarIconButton({ icon: 'fa-comments', title: 'Start a new chat', label: 'New', className: 'is-mobile-wide' }, handleNewChat),
+        renameButton: createTopBarIconButton({ icon: 'fa-pen', title: 'Rename this chat', label: 'Rename', className: 'is-mobile-wide' }, () => { void handleRenameChat(); }),
+        deleteButton: createTopBarIconButton({ icon: 'fa-trash', title: 'Delete this chat', label: 'Delete', className: 'is-mobile-wide' }, () => { void handleDeleteChat(); }),
+        closeButton: createTopBarIconButton({ icon: 'fa-xmark', title: 'Close this chat', label: 'Close', className: 'is-mobile-wide' }, () => { void handleCloseChat(); }),
+    };
+
+    actions.append(
+        buttons.managerButton,
+        buttons.newButton,
+        buttons.renameButton,
+        buttons.deleteButton,
+        buttons.closeButton,
+    );
+
+    recentSection.append(recentTitle, recentList);
+    panel.append(header, chatSelectField, searchField, actions, connectionSection, recentSection);
+    overlay.appendChild(panel);
+
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) {
+            closeMobileChatTools();
+        }
+    });
+
+    chatSelect.addEventListener('change', () => {
+        void openChatById(chatSelect.value, { closeMobileTools: true });
+    });
+    searchInput.addEventListener('input', () => setChatSearchQuery(searchInput.value, { source: searchInput }));
+    connectionSelect.addEventListener('change', () => {
+        syncConnectionProfileSelection(connectionSelect.value);
+    });
+
+    document.body.appendChild(overlay);
+
+    getChatbarState().mobileTools = {
+        overlay,
+        panel,
+        chatSelect,
+        searchInput,
+        searchStatus,
+        recentList,
+        connectionSection,
+        connectionSelect,
+        connectionStatus,
+        ...buttons,
+    };
+
+    return getChatbarState().mobileTools;
+}
+
+function setMobileChatToolsOpenState(shouldOpen) {
+    const refs = buildMobileChatTools();
+    const isOpen = Boolean(shouldOpen) && isMobileViewport();
+
+    if (!refs?.overlay) {
+        return;
+    }
+
+    getChatbarState().mobileToolsOpen = isOpen;
+    refs.overlay.hidden = !isOpen;
+    refs.overlay.classList.toggle('sb-chat-tools-open', isOpen);
+    refs.overlay.setAttribute('aria-hidden', String(!isOpen));
+
+    if ('inert' in refs.overlay) {
+        refs.overlay.inert = !isOpen;
+    }
+
+    if (isOpen) {
+        scheduleChatbarRefresh(0);
+    }
+}
+
+function openMobileChatTools() {
+    if (!isMobileViewport()) {
+        return;
+    }
+
+    closeMobileNav();
+    closeShell('left');
+    closeShell('right');
+    closeCharacterPanel();
+    setConnectionStripOpenState(false);
+    setMobileChatToolsOpenState(true);
+}
+
+function closeMobileChatTools() {
+    setMobileChatToolsOpenState(false);
+}
+
+function toggleMobileChatTools() {
+    setMobileChatToolsOpenState(!getChatbarState().mobileToolsOpen);
+}
+
+function buildConnectionStrip() {
+    const strip = createElement('div', { id: 'sb-connection-strip' });
+    const selectField = createChatField({
+        id: 'sb-connection-strip-field',
+        icon: 'fa-plug',
+        title: 'Switch connection profile',
+        className: 'is-connection',
+    });
+    const select = createElement('select', {
+        id: 'sb-connection-strip-select',
+        className: 'text_pole',
+        attrs: {
+            'aria-label': 'Switch connection profile',
+        },
+    });
+    const status = createElement('div', { id: 'sb-connection-strip-status', className: 'sb-connection-strip-status' });
+
+    selectField.appendChild(select);
+    strip.append(selectField, status);
+
+    select.addEventListener('change', () => {
+        syncConnectionProfileSelection(select.value);
+    });
+
+    return { strip, select, status };
+}
+
+function buildChatBar() {
+    const row = createElement('div', { id: 'sb-chatbar' });
+    const leading = createElement('div', { className: 'sb-chatbar-cluster sb-chatbar-leading' });
+    const chatSelectField = createChatField({
+        id: 'sb-chatbar-select-field',
+        icon: 'fa-comments',
+        title: 'Switch chat',
+    });
+    const chatSelect = createElement('select', {
+        id: 'sb-chatbar-select',
+        className: 'text_pole',
+        attrs: {
+            'aria-label': 'Switch chat',
+        },
+    });
+    const searchField = createChatField({
+        id: 'sb-chatbar-search-field',
+        icon: 'fa-magnifying-glass',
+        title: 'Search current chat',
+    });
+    const searchInput = createElement('input', {
+        id: 'sb-chatbar-search',
+        className: 'text_pole',
+        attrs: {
+            type: 'search',
+            placeholder: 'Search this chat...',
+            'aria-label': 'Search this chat',
+        },
+    });
+    const searchStatus = createElement('small', { className: 'sb-chatbar-search-status' });
+
+    searchStatus.hidden = true;
+    const trailing = createElement('div', { className: 'sb-chatbar-cluster sb-chatbar-actions' });
+
+    const toggleSidebarButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-sidebar-toggle',
+            icon: 'fa-box-archive',
+            title: 'Toggle recent chats sidebar',
+        },
+        toggleChatSidebar,
+    );
+    const toggleConnectionButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-connection-toggle',
+            icon: 'fa-plug',
+            title: 'Show connection profiles',
+        },
+        () => toggleConnectionStrip(),
+    );
+    const managerButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-files',
+            icon: 'fa-address-book',
+            title: 'View chat files',
+        },
+        handleChatManagerClick,
+    );
+    const newButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-new',
+            icon: 'fa-comments',
+            title: 'Start a new chat',
+        },
+        handleNewChat,
+    );
+    const renameButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-rename',
+            icon: 'fa-pen',
+            title: 'Rename this chat',
+        },
+        () => { void handleRenameChat(); },
+    );
+    const deleteButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-delete',
+            icon: 'fa-trash',
+            title: 'Delete this chat',
+        },
+        () => { void handleDeleteChat(); },
+    );
+    const closeButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-close',
+            icon: 'fa-xmark',
+            title: 'Close this chat',
+        },
+        () => { void handleCloseChat(); },
+    );
+
+    chatSelectField.appendChild(chatSelect);
+    searchField.append(searchInput, searchStatus);
+    leading.append(toggleSidebarButton, toggleConnectionButton);
+    trailing.append(managerButton, newButton, renameButton, deleteButton, closeButton);
+    row.append(leading, chatSelectField, searchField, trailing);
+
+    const connectionStrip = buildConnectionStrip();
+
+    chatSelect.addEventListener('change', () => {
+        void openChatById(chatSelect.value);
+    });
+    searchInput.addEventListener('input', () => setChatSearchQuery(searchInput.value, { source: searchInput }));
+
+    getChatbarState().desktop = {
+        root: row,
+        chatSelect,
+        searchInput,
+        searchStatus,
+        toggleSidebarButton,
+        toggleConnectionButton,
+        managerButton,
+        newButton,
+        renameButton,
+        deleteButton,
+        closeButton,
+        connectionStrip: connectionStrip.strip,
+        connectionSelect: connectionStrip.select,
+        connectionStatus: connectionStrip.status,
+    };
+
+    return {
+        row,
+        connectionStrip: connectionStrip.strip,
+    };
+}
+
+function syncConnectionProfileSelection(value) {
+    const sourceSelect = document.getElementById('connection_profiles');
+
+    if (!(sourceSelect instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const nextValue = String(value ?? '').trim();
+    if (!nextValue || sourceSelect.value === nextValue) {
+        return;
+    }
+
+    sourceSelect.value = nextValue;
+    sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function isConnectionStripOpen() {
+    return Boolean(getChatbarState().connectionStripOpen);
+}
+
+function setConnectionStripOpenState(shouldOpen) {
+    const desktopRefs = getChatDesktopRefs();
+    const nextState = Boolean(shouldOpen);
+
+    if (!desktopRefs?.connectionStrip) {
+        return;
+    }
+
+    getChatbarState().connectionStripOpen = nextState;
+    desktopRefs.connectionStrip.classList.toggle('is-open', nextState);
+    desktopRefs.connectionStrip.hidden = !nextState;
+    setButtonPressed(desktopRefs.toggleConnectionButton, nextState);
+}
+
+function toggleConnectionStrip() {
+    const desktopRefs = getChatDesktopRefs();
+
+    if (!(desktopRefs?.toggleConnectionButton instanceof HTMLElement) || desktopRefs.toggleConnectionButton.hidden) {
+        return;
+    }
+
+    setChatSidebarOpenState(false);
+    setConnectionStripOpenState(!isConnectionStripOpen());
+}
+
+function getSearchTerms(query = getChatbarState().searchQuery) {
+    return String(query ?? '')
+        .trim()
+        .split(/\s+/)
+        .map(term => term.trim())
+        .filter(Boolean);
+}
+
+function clearChatSearchHighlights() {
+    for (const mark of document.querySelectorAll(SB_CHAT_SEARCH_MARK_SELECTOR)) {
+        if (!(mark instanceof HTMLElement) || !mark.parentNode) {
+            continue;
+        }
+
+        mark.replaceWith(document.createTextNode(mark.textContent ?? ''));
+    }
+
+    document.getElementById('chat')?.normalize();
+    setSearchStatusText('');
+}
+
+function highlightMessageText(root, regex) {
+    if (!(root instanceof HTMLElement)) {
+        return { count: 0, firstMatch: null };
+    }
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            if (!node.nodeValue?.trim()) {
+                return NodeFilter.FILTER_REJECT;
+            }
+
+            const parent = node.parentElement;
+            if (!parent || parent.closest(SB_CHAT_SEARCH_MARK_SELECTOR)) {
+                return NodeFilter.FILTER_REJECT;
+            }
+
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+
+    const textNodes = [];
+    while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+    }
+
+    let count = 0;
+    let firstMatch = null;
+
+    for (const textNode of textNodes) {
+        const textValue = textNode.nodeValue ?? '';
+        regex.lastIndex = 0;
+
+        if (!regex.test(textValue)) {
+            continue;
+        }
+
+        regex.lastIndex = 0;
+        const fragment = document.createDocumentFragment();
+        let previousIndex = 0;
+
+        for (const match of textValue.matchAll(regex)) {
+            const matchValue = match[0];
+            const matchIndex = match.index ?? 0;
+
+            if (!matchValue) {
+                continue;
+            }
+
+            fragment.append(textValue.slice(previousIndex, matchIndex));
+
+            const mark = createElement('mark', {
+                className: 'sb-chat-search-hit',
+                text: matchValue,
+                attrs: {
+                    'data-sb-chat-search': 'true',
+                },
+            });
+
+            if (!firstMatch) {
+                firstMatch = mark;
+            }
+
+            fragment.appendChild(mark);
+            previousIndex = matchIndex + matchValue.length;
+            count += 1;
+        }
+
+        fragment.append(textValue.slice(previousIndex));
+        textNode.parentNode?.replaceChild(fragment, textNode);
+    }
+
+    return { count, firstMatch };
+}
+
+function applyChatSearchHighlights({ scrollToFirst = false } = {}) {
+    const chatbarState = getChatbarState();
+    const terms = getSearchTerms();
+
+    chatbarState.pendingSearchScroll = false;
+    clearTimeout(chatbarState.searchTimer);
+    chatbarState.isApplyingSearch = true;
+    clearChatSearchHighlights();
+
+    if (!terms.length || !getChatUiContext().hasChat) {
+        chatbarState.isApplyingSearch = false;
+        return;
+    }
+
+    const regex = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi');
+    let totalMatches = 0;
+    let firstMatch = null;
+
+    try {
+        for (const node of document.querySelectorAll('#chat .mes_text')) {
+            const result = highlightMessageText(node, regex);
+            totalMatches += result.count;
+            firstMatch ??= result.firstMatch;
+        }
+    } finally {
+        chatbarState.isApplyingSearch = false;
+    }
+
+    setSearchStatusText(totalMatches ? `${totalMatches} match${totalMatches === 1 ? '' : 'es'}` : 'No matches');
+
+    if (scrollToFirst && firstMatch instanceof HTMLElement) {
+        firstMatch.scrollIntoView({
+            block: 'center',
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        });
+    }
+}
+
+function scheduleChatSearchHighlight({ scrollToFirst = false } = {}) {
+    const chatbarState = getChatbarState();
+    chatbarState.pendingSearchScroll = chatbarState.pendingSearchScroll || scrollToFirst;
+
+    clearTimeout(chatbarState.searchTimer);
+    chatbarState.searchTimer = window.setTimeout(() => {
+        const shouldScroll = chatbarState.pendingSearchScroll;
+        chatbarState.pendingSearchScroll = false;
+        applyChatSearchHighlights({ scrollToFirst: shouldScroll });
+    }, SB_CHATBAR_SEARCH_DEBOUNCE);
+}
+
+function setChatSearchQuery(value, { source = null } = {}) {
+    const nextValue = String(value ?? '');
+    getChatbarState().searchQuery = nextValue;
+
+    for (const input of [getChatDesktopRefs()?.searchInput, getChatMobileRefs()?.searchInput]) {
+        if (!(input instanceof HTMLInputElement) || input === source) {
+            continue;
+        }
+
+        input.value = nextValue;
+    }
+
+    if (!nextValue.trim()) {
+        clearChatSearchHighlights();
+        return;
+    }
+
+    scheduleChatSearchHighlight({ scrollToFirst: true });
+}
+
+function initChatSearchObserver() {
+    const chatRoot = document.getElementById('chat');
+
+    if (!(chatRoot instanceof HTMLElement) || getChatbarState().chatObserver) {
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        if (getChatbarState().isApplyingSearch || !getSearchTerms().length) {
+            return;
+        }
+
+        scheduleChatSearchHighlight({ scrollToFirst: false });
+    });
+
+    observer.observe(chatRoot, { childList: true, subtree: true });
+    getChatbarState().chatObserver = observer;
+}
+
+async function getConnectionStatusText() {
+    const context = getSillyTavernContext();
+
+    if (!context) {
+        return '';
+    }
+
+    if (context.onlineStatus === 'no_connection') {
+        return 'No connection...';
+    }
+
+    let apiValue = String(context.mainApi ?? 'Connected').trim();
+    let modelValue = String(context.onlineStatus ?? '').trim();
+
+    try {
+        const nextApiValue = await context.SlashCommandParser?.commands?.api?.callback?.({ quiet: 'true' }, '');
+        if (nextApiValue) {
+            apiValue = String(nextApiValue).trim();
+        }
+    } catch {
+        // Ignore slash command lookup failures and use the current context values.
+    }
+
+    try {
+        const nextModelValue = await context.SlashCommandParser?.commands?.model?.callback?.({ quiet: 'true' }, '');
+        if (typeof nextModelValue === 'string' && nextModelValue.trim()) {
+            modelValue = nextModelValue.trim();
+        }
+    } catch {
+        // Ignore slash command lookup failures and use the current context values.
+    }
+
+    const apiBlock = document.getElementById('rm_api_block');
+
+    if (apiBlock instanceof HTMLElement) {
+        const apiOption = apiBlock.querySelector(`select:not(#main_api) option[value="${escapeSelectorValue(apiValue)}"]`)
+            ?? apiBlock.querySelector(`select#main_api option[value="${escapeSelectorValue(apiValue)}"]`);
+        const modelOption = apiBlock.querySelector(`option[value="${escapeSelectorValue(modelValue)}"]`);
+
+        apiValue = stripDecoratedOptionText(apiOption?.textContent ?? apiValue);
+        modelValue = stripDecoratedOptionText(modelOption?.textContent ?? modelValue);
+    }
+
+    return modelValue ? `${apiValue} - ${modelValue}` : apiValue;
+}
+
+function bindConnectionProfileSourceObserver() {
+    if (getChatbarState().sourceObserver) {
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        scheduleChatbarRefresh(60);
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    getChatbarState().sourceObserver = observer;
+}
+
+async function refreshChatbarState() {
+    const chatbarState = getChatbarState();
+    const refreshToken = ++chatbarState.refreshToken;
+    const desktopRefs = getChatDesktopRefs();
+    const mobileRefs = getChatMobileRefs();
+
+    if (!desktopRefs) {
+        return;
+    }
+
+    const chatContext = getChatUiContext();
+    const files = await getChatFilesForContext(chatContext);
+    const connectionStatusText = await getConnectionStatusText();
+
+    if (refreshToken !== chatbarState.refreshToken) {
+        return;
+    }
+
+    const chatNames = files.map(chat => chat.fileName);
+
+    if (chatContext.chatId && !chatNames.includes(chatContext.chatId)) {
+        chatNames.unshift(chatContext.chatId);
+    }
+
+    populateChatSelector(desktopRefs.chatSelect, chatNames, chatContext, chatContext.canBrowseChats ? 'No saved chats yet' : 'No chat selected');
+    populateChatSelector(mobileRefs?.chatSelect, chatNames, chatContext, chatContext.canBrowseChats ? 'No saved chats yet' : 'No chat selected');
+
+    setButtonDisabled(desktopRefs.managerButton, !chatContext.canBrowseChats);
+    setButtonDisabled(desktopRefs.toggleSidebarButton, !chatContext.canBrowseChats);
+    setButtonDisabled(desktopRefs.newButton, !chatContext.canStartNewChat);
+    setButtonDisabled(desktopRefs.renameButton, !chatContext.hasChat);
+    setButtonDisabled(desktopRefs.deleteButton, !chatContext.hasChat);
+    setButtonDisabled(desktopRefs.closeButton, !chatContext.hasChat);
+    setButtonDisabled(desktopRefs.chatSelect, !chatContext.canBrowseChats);
+    setButtonDisabled(desktopRefs.searchInput, !chatContext.hasChat);
+
+    if (mobileRefs) {
+        setButtonDisabled(mobileRefs.managerButton, !chatContext.canBrowseChats);
+        setButtonDisabled(mobileRefs.newButton, !chatContext.canStartNewChat);
+        setButtonDisabled(mobileRefs.renameButton, !chatContext.hasChat);
+        setButtonDisabled(mobileRefs.deleteButton, !chatContext.hasChat);
+        setButtonDisabled(mobileRefs.closeButton, !chatContext.hasChat);
+        setButtonDisabled(mobileRefs.chatSelect, !chatContext.canBrowseChats);
+        setButtonDisabled(mobileRefs.searchInput, !chatContext.hasChat);
+    }
+
+    const connectionProfilesSource = document.getElementById('connection_profiles');
+    const hasConnectionProfiles = connectionProfilesSource instanceof HTMLSelectElement;
+
+    desktopRefs.toggleConnectionButton.hidden = !hasConnectionProfiles;
+    desktopRefs.connectionStrip.hidden = !hasConnectionProfiles || !isConnectionStripOpen();
+
+    if (!hasConnectionProfiles) {
+        setConnectionStripOpenState(false);
+        desktopRefs.connectionSelect.replaceChildren();
+        desktopRefs.connectionStatus.textContent = '';
+
+        if (mobileRefs?.connectionSection instanceof HTMLElement) {
+            mobileRefs.connectionSection.hidden = true;
+            mobileRefs.connectionSelect.replaceChildren();
+            mobileRefs.connectionStatus.textContent = '';
+        }
+    } else {
+        const optionsMarkup = connectionProfilesSource.innerHTML;
+        desktopRefs.connectionSelect.innerHTML = optionsMarkup;
+        desktopRefs.connectionSelect.value = connectionProfilesSource.value;
+        desktopRefs.connectionStatus.textContent = connectionStatusText;
+
+        if (mobileRefs?.connectionSection instanceof HTMLElement) {
+            mobileRefs.connectionSection.hidden = false;
+            mobileRefs.connectionSelect.innerHTML = optionsMarkup;
+            mobileRefs.connectionSelect.value = connectionProfilesSource.value;
+            mobileRefs.connectionStatus.textContent = connectionStatusText;
+        }
+    }
+
+    renderChatFiles(getChatSidebarRefs()?.list, files, chatContext.chatId, {
+        onSelect: chatId => openChatById(chatId),
+    });
+    renderChatFiles(mobileRefs?.recentList, files, chatContext.chatId, {
+        compact: true,
+        onSelect: chatId => openChatById(chatId, { closeMobileTools: true }),
+    });
+
+    setButtonPressed(desktopRefs.toggleSidebarButton, isChatSidebarOpen());
+    setButtonPressed(desktopRefs.toggleConnectionButton, isConnectionStripOpen());
+
+    if (!chatContext.canBrowseChats) {
+        setChatSidebarOpenState(false);
+    }
+
+    if (!chatContext.hasChat) {
+        clearChatSearchHighlights();
+    } else if (getSearchTerms().length) {
+        scheduleChatSearchHighlight({ scrollToFirst: false });
+    }
+}
+
+function scheduleChatbarRefresh(delay = 0) {
+    clearTimeout(getChatbarState().refreshTimer);
+    getChatbarState().refreshTimer = window.setTimeout(() => {
+        void refreshChatbarState();
+    }, delay);
+}
+
+function bindChatbarEvents() {
+    const context = getSillyTavernContext();
+    const eventSource = context?.eventSource;
+    const eventTypes = context?.eventTypes ?? context?.event_types;
+
+    bindConnectionProfileSourceObserver();
+    initChatSearchObserver();
+
+    if (!eventSource || !eventTypes) {
+        window.setTimeout(bindChatbarEvents, 180);
+        scheduleChatbarRefresh(180);
+        return;
+    }
+
+    const refresh = () => scheduleChatbarRefresh(80);
+    const events = [
+        eventTypes.APP_READY,
+        eventTypes.CHAT_CHANGED,
+        eventTypes.CHAT_CREATED,
+        eventTypes.GROUP_CHAT_CREATED,
+        eventTypes.CHAT_DELETED,
+        eventTypes.GROUP_CHAT_DELETED,
+        eventTypes.CHARACTER_DELETED,
+        eventTypes.CHARACTER_RENAMED,
+        eventTypes.GROUP_UPDATED,
+        eventTypes.ONLINE_STATUS_CHANGED,
+    ].filter(Boolean);
+
+    for (const eventName of new Set(events)) {
+        eventSource.on(eventName, refresh);
+    }
+
+    scheduleChatbarRefresh(80);
+
+    document.addEventListener('click', event => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        if (isConnectionStripOpen()
+            && !target.closest('#sb-connection-strip')
+            && !target.closest('#sb-chatbar-connection-toggle')) {
+            setConnectionStripOpenState(false);
+        }
+    });
+}
+
 function triggerDrawerToggle(selector) {
     const toggle = document.querySelector(selector);
     if (toggle instanceof HTMLElement) {
@@ -602,6 +1928,8 @@ function closeCharacterPanel() {
 
 function toggleCharacterPanel() {
     closeMobileNav();
+    closeMobileChatTools();
+    setConnectionStripOpenState(false);
     injectCharacterCloseButton();
 
     if (isCharacterPanelOpen()) {
@@ -632,6 +1960,9 @@ function toggleShellPanel(shellKey, tabId = null) {
         return;
     }
 
+    closeMobileChatTools();
+    setConnectionStripOpenState(false);
+
     if (tabId ? isShellTabOpen(shellKey, tabId) : isShellOpen(shellKey)) {
         closeShell(shellKey);
         return;
@@ -656,6 +1987,8 @@ async function returnToLandingPage() {
     closeShell('right');
     closeCharacterPanel();
     closeMobileNav();
+    closeMobileChatTools();
+    setConnectionStripOpenState(false);
 
     if (isLandingPageVisible()) {
         document.getElementById('chat')?.scrollTo({
@@ -713,6 +2046,8 @@ function buildTopBar() {
 
     topBar.replaceChildren();
 
+    const stack = createElement('div', { id: 'sb-topbar-stack' });
+    const primaryRow = createElement('div', { id: 'sb-topbar-primary' });
     const topBarInner = createElement('div', { id: 'sb-topbar-inner' });
     const leftGroup = createElement('div', { className: 'sb-topbar-group sb-topbar-group-left' });
     const centerGroup = createElement('div', { className: 'sb-topbar-brand' });
@@ -782,13 +2117,18 @@ function buildTopBar() {
     leftGroup.append(mobileButton, leftButton, homeButton);
     rightGroup.append(charactersButton, rightButton);
     topBarInner.append(leftGroup, centerGroup, rightGroup);
-    topBar.append(topBarInner);
+    primaryRow.appendChild(topBarInner);
+
+    const chatBar = buildChatBar();
+    stack.append(primaryRow, chatBar.row);
+    topBar.append(stack, chatBar.connectionStrip);
 
     observeProxyButton('sb-left-shell-toggle', getShellConfig('left').hostIconSelector);
     observeProxyButton('sb-right-shell-toggle', getShellConfig('right').hostIconSelector);
     observeProxyButton('sb-character-toggle', '#rightNavDrawerIcon');
     bindTopBarBrand();
     updateTopBarBrand();
+    scheduleChatbarRefresh(80);
 }
 
 function hideHostToggles() {
@@ -1619,6 +2959,7 @@ function buildMobileNav() {
             label: 'Quick Actions',
             items: [
                 { action: 'home', icon: 'fa-house', label: 'Home' },
+                { action: 'chat-tools', icon: 'fa-comments', label: 'Chats' },
                 { action: 'characters', icon: 'fa-address-card', label: 'Characters' },
                 { shell: 'right', tab: 'settings', icon: 'fa-sliders', label: 'Settings' },
             ],
@@ -1663,6 +3004,8 @@ function buildMobileNav() {
 
                 if (item.action === 'home') {
                     void returnToLandingPage();
+                } else if (item.action === 'chat-tools') {
+                    openMobileChatTools();
                 } else if (item.action === 'characters') {
                     toggleCharacterPanel();
                 } else {
@@ -1763,6 +3106,8 @@ function toggleMobileNav() {
         closeShell('left');
         closeShell('right');
         closeCharacterPanel();
+        closeMobileChatTools();
+        setConnectionStripOpenState(false);
     }
 
     setMobileNavOpenState(!isOpen);
@@ -1819,6 +3164,7 @@ function applyDefaultDrawerStates() {
 function syncMobileViewportState() {
     if (!isMobileViewport()) {
         closeMobileNav();
+        closeMobileChatTools();
     }
 }
 
@@ -1926,8 +3272,10 @@ function initAll() {
     buildShell('left');
     buildShell('right');
     buildMobileNav();
+    buildMobileChatTools();
     injectCharacterCloseButton();
     buildTopBar();
+    bindChatbarEvents();
     interceptDrawerOpeners();
     bindWorldInfoRoute();
     initAgentOverview();
@@ -1954,6 +3302,17 @@ function initAll() {
         },
         setSurfaceTransparency(value) {
             setSurfaceTransparency(value);
+        },
+        openChatTools() {
+            if (isMobileViewport()) {
+                openMobileChatTools();
+                return;
+            }
+
+            setChatSidebarOpenState(true);
+        },
+        toggleChatSidebar() {
+            toggleChatSidebar();
         },
         getTheme() {
             return sbState.theme;
