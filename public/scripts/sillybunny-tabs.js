@@ -502,6 +502,15 @@ function triggerDrawerToggle(selector) {
     }
 }
 
+function forceDrawerState(drawerRootOrId, shouldOpen) {
+    const el = typeof drawerRootOrId === 'string'
+        ? document.getElementById(drawerRootOrId)
+        : drawerRootOrId;
+    if (!(el instanceof HTMLElement)) return;
+    el.classList.toggle('openDrawer', Boolean(shouldOpen));
+    el.classList.toggle('closedDrawer', !shouldOpen);
+}
+
 function isShellOpen(shellKey) {
     const shellRoot = document.getElementById(getShellConfig(shellKey).rootPanelId);
     return Boolean(shellRoot?.classList.contains('openDrawer'));
@@ -1122,6 +1131,11 @@ function openShell(shellKey, tabId = null) {
 
     if (!shellRoot.classList.contains('openDrawer')) {
         triggerDrawerToggle(shellConfig.hostToggleSelector);
+        window.requestAnimationFrame(() => {
+            if (!shellRoot.classList.contains('openDrawer')) {
+                forceDrawerState(shellRoot, true);
+            }
+        });
     }
 }
 
@@ -1498,14 +1512,6 @@ function buildMobileNav() {
     }
 
     const sections = [
-        {
-            label: 'Quick Access',
-            items: [
-                { action: 'home', icon: 'fa-house', label: 'Home' },
-                { action: 'characters', icon: 'fa-address-card', label: 'Characters' },
-                { shell: 'right', tab: null, icon: 'fa-gear', label: 'Customize' },
-            ],
-        },
         {
             label: 'Workspace',
             items: [

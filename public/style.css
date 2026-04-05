@@ -986,7 +986,7 @@ body .panelControlBar {
     background-color: var(--color-primary, #f1b285) !important;
     color: var(--color-background, #130f0d) !important;
     border-color: transparent !important;
-    border-radius: 9999px;
+    border-radius: var(--avatar-roundness, 8px);
     font-weight: 600;
 }
 
@@ -1096,7 +1096,7 @@ body .panelControlBar {
     opacity: 0.7;
     cursor: pointer;
     z-index: 2001;
-    margin-left: 10px;
+    margin-left: 0;
     padding: 0;
     transition: var(--animation-duration-2x);
     display: flex;
