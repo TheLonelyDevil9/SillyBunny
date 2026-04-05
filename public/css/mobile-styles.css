@@ -809,13 +809,17 @@
         font-size: 18px;
     }
 
-    /* Force hide original user settings drawer on mobile */
-    #user-settings-button.sb-drawer-host,
-    #user-settings-button.sb-embedded-drawer {
+    /* Hide all original ST drawer content that hasn't been reparented into the shell yet */
+    #ai-config-button > .drawer-content:not(.sb-managed),
+    #user-settings-button > .drawer-content:not(.sb-managed),
+    #sys-settings-button > .drawer-content:not(.sb-managed),
+    #advanced-formatting-button > .drawer-content:not(.sb-managed),
+    #WI-SP-button > .drawer-content:not(.sb-managed),
+    #extensions-settings-button > .drawer-content:not(.sb-managed),
+    #persona-management-button > .drawer-content:not(.sb-managed),
+    #backgrounds-button > .drawer-content:not(.sb-managed),
+    #rightNavHolder > .drawer-content:not(.sb-managed) {
         display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
     }
 
     /* Ensure Select2 search input is visible and usable on mobile */

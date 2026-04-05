@@ -177,8 +177,17 @@
     min-width: 0;
     flex: 0 0 auto;
     overflow: hidden;
-    visibility: hidden;
-    pointer-events: none;
+}
+
+/*
+ * Hide all original ST drawer toggles and content on load.
+ * The SillyBunny shell reparents drawer content into its own panels,
+ * so we only need to suppress the original host wrappers and their
+ * toggle buttons to prevent a flash of unstyled drawers.
+ */
+#top-settings-holder > .sb-drawer-host > .drawer-toggle,
+#top-settings-holder > .sb-drawer-host > .drawer-content:not(.sb-managed) {
+    display: none !important;
 }
 
 #top-settings-holder {
