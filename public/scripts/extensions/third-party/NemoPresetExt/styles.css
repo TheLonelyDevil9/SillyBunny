@@ -351,4 +351,27 @@ body.nemo-animated-bg-active #bg1 {
     .nemo-animated-bg-volume input[type="range"] {
         width: 100%;
     }
+
+    /* Improve touch targets on mobile */
+    .nemo-sb-section-trigger {
+        padding: 14px 16px;
+        min-height: 48px;
+    }
+
+    .nemo-sb-section-toggle {
+        width: 32px;
+        height: 32px;
+    }
+
+    /* Ensure section rows are tappable */
+    .nemo-sb-section-row {
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Prevent pointer-events issues on mobile */
+    #completion_prompt_manager_list {
+        position: relative;
+        z-index: auto;
+    }
 }

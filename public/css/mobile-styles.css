@@ -101,24 +101,25 @@
 
     /* Reduce mobile nav spacing */
     #sb-mobile-nav {
-        padding: 10px;
+        padding: 12px;
     }
 
     #sb-mobile-nav-content {
-        padding: 14px 12px 20px;
+        padding: 14px 12px 18px;
         gap: 12px;
     }
 
     .sb-mobile-section {
-        gap: 8px;
+        gap: 10px;
     }
 
     .sb-mobile-section-list {
-        gap: 8px;
+        gap: 10px;
     }
 
     .sb-nav-item {
-        padding: 12px 14px;
+        padding: 14px 16px;
+        gap: 12px;
     }
 
     /* Settings panel spacing */
@@ -128,11 +129,11 @@
     }
 
     .range-block {
-        margin-bottom: 10px;
+        margin-bottom: 12px;
     }
 
     .range-block-title {
-        margin-bottom: 6px;
+        margin-bottom: 8px;
     }
 
     /* Input area mobile optimization */
@@ -152,6 +153,11 @@
         justify-content: center;
     }
 
+    /* Hide stop button when not generating */
+    #send_form .mes_stop:not(.active):not([style*="display: flex"]):not([style*="display: inline-flex"]) {
+        display: none !important;
+    }
+
     #send_form .mes_stop i {
         font-size: 1.2em;
         line-height: 1;
@@ -166,6 +172,20 @@
         min-height: calc(var(--bottomFormBlockSize) * 1.2);
         flex-wrap: nowrap !important;
         align-items: center;
+    }
+
+    /* Ensure consistent hamburger button sizing */
+    #sb-hamburger {
+        width: 46px !important;
+        min-width: 46px !important;
+        max-width: 46px !important;
+        height: 46px !important;
+        min-height: 46px !important;
+        padding: 0 !important;
+    }
+
+    #sb-hamburger i {
+        font-size: calc(var(--mainFontSize) * 1.1);
     }
 
     .bg_folder_tile .jg-button {
@@ -747,6 +767,21 @@
         max-width: 100dvw !important;
     }
 
+    /* Fix closing artifact - ensure smooth transition */
+    .sb-shell-root.fillLeft:not(.openDrawer),
+    .sb-shell-root.fillRight:not(.openDrawer) {
+        transition: opacity 180ms ease, visibility 0s 180ms;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    .sb-shell-root.fillLeft.openDrawer,
+    .sb-shell-root.fillRight.openDrawer {
+        transition: opacity 180ms ease;
+        opacity: 1;
+        visibility: visible;
+    }
+
     .scrollableInner {
         overflow-y: auto;
         overflow-x: hidden;
@@ -755,12 +790,30 @@
     #horde_model {
         height: unset;
     }
+
+    /* Fix help button positioning - make it sticky */
+    .topRightInset {
+        position: sticky;
+        top: calc(var(--topBarBlockSize) + 10px);
+        z-index: 100;
+        float: right;
+        margin-left: 10px;
+    }
+
+    .note-link-span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+    }
 }
 
 @media screen and (max-width: 620px) {
     /* Tighter mobile nav spacing for small phones */
     #sb-mobile-nav {
-        padding: 8px;
+        padding: 10px;
     }
 
     #sb-mobile-nav-content {
@@ -769,7 +822,7 @@
     }
 
     .sb-nav-item {
-        padding: 10px 12px;
+        padding: 12px 14px;
         gap: 10px;
     }
 
@@ -781,8 +834,8 @@
     }
 
     #send_form .mes_stop {
-        min-width: 54px;
-        min-height: 54px;
+        min-width: 52px;
+        min-height: 52px;
         font-size: calc(var(--mainFontSize) * 1.6);
     }
 }

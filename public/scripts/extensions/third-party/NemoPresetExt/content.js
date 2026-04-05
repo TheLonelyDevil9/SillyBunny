@@ -300,6 +300,7 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
         toggleSection();
     };
     trigger.addEventListener('click', activateTrigger);
+    trigger.addEventListener('touchend', activateTrigger);
     return row;
 }
 

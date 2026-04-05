@@ -1531,6 +1531,44 @@ function buildMobileNav() {
     });
 
     document.body.appendChild(overlay);
+
+    // Auto-close mobile nav when clicking on main content areas
+    const autoCloseSelectors = [
+        '#send_textarea',
+        '#send_but',
+        '.mes',
+        '#chat',
+        '.drawer-content',
+    ];
+
+    document.addEventListener('click', event => {
+        if (!overlay.classList.contains('sb-nav-open')) {
+            return;
+        }
+
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        // Don't close if clicking the hamburger button itself
+        if (target.closest('#sb-hamburger')) {
+            return;
+        }
+
+        // Don't close if clicking inside the mobile nav
+        if (target.closest('#sb-mobile-nav')) {
+            return;
+        }
+
+        // Close if clicking any of the auto-close areas
+        for (const selector of autoCloseSelectors) {
+            if (target.matches(selector) || target.closest(selector)) {
+                closeMobileNav();
+                return;
+            }
+        }
+    }, { passive: false });
 }
 
 function setMobileNavOpenState(isOpen) {

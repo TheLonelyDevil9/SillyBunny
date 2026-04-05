@@ -86,6 +86,7 @@
     border-radius: 999px;
     padding: 0 18px;
     min-height: 46px;
+    height: 46px;
     min-width: 118px;
     display: inline-flex;
     align-items: center;
@@ -162,7 +163,9 @@
     display: none;
     padding: 0;
     width: 46px;
+    height: 46px;
     min-width: 46px;
+    min-height: 46px;
 }
 
 #sb-home-toggle {
@@ -1366,14 +1369,14 @@
         position: relative;
         isolation: isolate;
         width: min(100%, 420px);
-        max-height: calc(100dvh - var(--topBarBlockSize) - 24px);
+        max-height: calc(100dvh - var(--topBarBlockSize) - 48px);
         margin: 0 auto;
-        padding: 18px 16px 24px;
+        padding: 14px 12px 18px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 12px;
         overflow-y: auto;
-        border-radius: 26px;
+        border-radius: 20px;
         border: 1px solid color-mix(in srgb, var(--sb-shell-border) 88%, transparent);
         background: transparent;
         box-shadow: 0 24px 70px color-mix(in srgb, var(--SmartThemeShadowColor) 28%, transparent);
