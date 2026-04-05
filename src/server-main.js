@@ -81,6 +81,71 @@ let startupDirectories = [];
 /** @type {import('./command-line.js').CommandLineArguments} */
 const cliArgs = globalThis.COMMAND_LINE_ARGS;
 
+const IMMUTABLE_PUBLIC_EXTENSIONS = new Set([
+    '.woff',
+    '.woff2',
+    '.ttf',
+    '.otf',
+    '.eot',
+]);
+
+const CACHEABLE_PUBLIC_EXTENSIONS = new Set([
+    '.css',
+    '.js',
+    '.mjs',
+    '.map',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.webp',
+    '.avif',
+    '.svg',
+    '.ico',
+    '.json',
+    '.txt',
+    '.webmanifest',
+    '.mp3',
+    '.wav',
+    '.ogg',
+    '.m4a',
+    '.mp4',
+    '.webm',
+    '.ogv',
+    '.m4v',
+]);
+
+function setDocumentCacheHeaders(response) {
+    response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.setHeader('Pragma', 'no-cache');
+    response.setHeader('Expires', '0');
+}
+
+/**
+ * Apply conservative cache headers to static frontend assets.
+ * HTML stays uncached so shell updates show immediately, while fonts and static
+ * assets get longer-lived caching to speed up warm loads.
+ * @param {import('express').Response} response
+ * @param {string} filePath
+ */
+function setStaticAssetCacheHeaders(response, filePath) {
+    const extension = path.extname(filePath).toLowerCase();
+
+    if (extension === '.html') {
+        setDocumentCacheHeaders(response);
+        return;
+    }
+
+    if (IMMUTABLE_PUBLIC_EXTENSIONS.has(extension)) {
+        response.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+        return;
+    }
+
+    if (CACHEABLE_PUBLIC_EXTENSIONS.has(extension)) {
+        response.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    }
+}
+
 if (!cliArgs.enableIPv6 && !cliArgs.enableIPv4) {
     console.error('error: You can\'t disable all internet protocols: at least IPv6 or IPv4 must be enabled.');
     process.exit(1);
@@ -214,6 +279,7 @@ app.get('/', cacheBuster.middleware, (request, response) => {
         return response.redirect(redirectUrl);
     }
 
+    setDocumentCacheHeaders(response);
     return response.sendFile('index.html', { root: path.join(serverDirectory, 'public') });
 });
 
@@ -234,7 +300,11 @@ app.get('/login', loginPageMiddleware);
 // Host frontend assets
 const webpackMiddleware = getWebpackServeMiddleware();
 app.use(webpackMiddleware);
-app.use(express.static(path.join(serverDirectory, 'public'), {}));
+app.use(express.static(path.join(serverDirectory, 'public'), {
+    etag: true,
+    lastModified: true,
+    setHeaders: setStaticAssetCacheHeaders,
+}));
 
 // Public API
 app.use('/api/users', usersPublicRouter);

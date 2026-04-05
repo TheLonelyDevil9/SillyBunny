@@ -12,6 +12,64 @@ export let accountsEnabled = false;
 
 // Extend the session every 10 minutes
 const SESSION_EXTEND_INTERVAL = 10 * 60 * 1000;
+let sessionExtendTimeoutId = null;
+let lastSessionExtendAt = Date.now();
+let sessionExtendInFlight = false;
+
+function clearSessionExtendTimer() {
+    if (sessionExtendTimeoutId !== null) {
+        window.clearTimeout(sessionExtendTimeoutId);
+        sessionExtendTimeoutId = null;
+    }
+}
+
+function getNextSessionExtendDelay() {
+    return Math.max(1000, SESSION_EXTEND_INTERVAL - (Date.now() - lastSessionExtendAt));
+}
+
+function scheduleUserSessionExtend() {
+    clearSessionExtendTimer();
+
+    if (!currentUser || document.hidden) {
+        return;
+    }
+
+    sessionExtendTimeoutId = window.setTimeout(async () => {
+        sessionExtendTimeoutId = null;
+        await maybeExtendUserSession();
+    }, getNextSessionExtendDelay());
+}
+
+async function maybeExtendUserSession() {
+    if (!currentUser || document.hidden || sessionExtendInFlight) {
+        scheduleUserSessionExtend();
+        return;
+    }
+
+    sessionExtendInFlight = true;
+
+    try {
+        await extendUserSession();
+        lastSessionExtendAt = Date.now();
+    } finally {
+        sessionExtendInFlight = false;
+        scheduleUserSessionExtend();
+    }
+}
+
+function refreshUserSessionScheduling() {
+    if (!currentUser || document.hidden) {
+        clearSessionExtendTimer();
+        return;
+    }
+
+    if (Date.now() - lastSessionExtendAt >= SESSION_EXTEND_INTERVAL) {
+        void maybeExtendUserSession();
+        return;
+    }
+
+    scheduleUserSessionExtend();
+}
 
 /**
  * Enable or disable user account controls in the UI.
@@ -24,6 +82,8 @@ export async function setUserControls(isEnabled) {
     if (!isEnabled) {
         $('#logout_button').hide();
         $('#admin_button').hide();
+        currentUser = null;
+        clearSessionExtendTimer();
         return;
     }
 
@@ -70,6 +130,8 @@ async function getCurrentUser() {
         }
 
         currentUser = await response.json();
+        lastSessionExtendAt = Date.now();
+        refreshUserSessionScheduling();
         $('#admin_button').toggle(accountsEnabled && isAdmin());
     } catch (error) {
         console.error('Error getting current user:', error);
@@ -859,6 +921,8 @@ async function openAdminPanel() {
  * @returns {Promise<void>}
  */
 async function logout() {
+    currentUser = null;
+    clearSessionExtendTimer();
     await fetch('/api/users/logout', {
         method: 'POST',
         headers: getRequestHeaders({ omitContentType: true }),
@@ -926,9 +990,12 @@ jQuery(() => {
     $('#account_button').on('click', () => {
         openUserProfile();
     });
-    setInterval(async () => {
-        if (currentUser) {
-            await extendUserSession();
-        }
-    }, SESSION_EXTEND_INTERVAL);
+
+    const activityEvents = ['pointerdown', 'keydown', 'touchstart', 'mousedown'];
+    activityEvents.forEach((eventName) => {
+        document.addEventListener(eventName, refreshUserSessionScheduling, { passive: true });
+    });
+    window.addEventListener('focus', refreshUserSessionScheduling, { passive: true });
+    document.addEventListener('visibilitychange', refreshUserSessionScheduling);
+    refreshUserSessionScheduling();
 });

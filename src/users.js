@@ -958,6 +958,9 @@ export async function loginPageMiddleware(request, response) {
         console.error('Error during auto-login:', error);
     }
 
+    response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.setHeader('Pragma', 'no-cache');
+    response.setHeader('Expires', '0');
     return response.sendFile('login.html', { root: path.join(serverDirectory, 'public') });
 }
 

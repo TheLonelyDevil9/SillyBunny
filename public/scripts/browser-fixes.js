@@ -71,13 +71,50 @@ function applyBrowserFixes() {
     }
 
     if (isMobile()) {
-        const fixFunkyPositioning = () => {
-            console.debug('[Mobile] Device viewport change detected.');
+        const viewport = window.visualViewport;
+        let viewportFixScheduled = false;
+        let lastViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+
+        const applyPositionFix = () => {
+            if (viewportFixScheduled) {
+                return;
+            }
+
+            viewportFixScheduled = true;
+            lastViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
             document.documentElement.style.position = 'fixed';
-            requestAnimationFrame(() => document.documentElement.style.position = '');
+            requestAnimationFrame(() => {
+                document.documentElement.style.position = '';
+                viewportFixScheduled = false;
+            });
         };
-        window.addEventListener('resize', fixFunkyPositioning);
-        window.addEventListener('orientationchange', fixFunkyPositioning);
+
+        const fixFunkyPositioning = () => {
+            const currentViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+            const viewportDelta = Math.abs(currentViewportHeight - lastViewportHeight);
+
+            if (viewportDelta < 24) {
+                return;
+            }
+
+            applyPositionFix();
+        };
+
+        const resetViewportBaseline = () => {
+            lastViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+        };
+
+        viewport?.addEventListener('resize', fixFunkyPositioning, { passive: true });
+        window.addEventListener('resize', fixFunkyPositioning, { passive: true });
+        window.addEventListener('orientationchange', () => {
+            resetViewportBaseline();
+            applyPositionFix();
+        }, { passive: true });
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                resetViewportBaseline();
+            }
+        });
     }
 
     addSafariPatch();

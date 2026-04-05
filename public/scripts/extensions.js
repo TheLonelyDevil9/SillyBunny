@@ -216,17 +216,36 @@ function showHideExtensionsMenu() {
     // Get the number of menu items that are not hidden
     const hasMenuItems = $('#extensionsMenu').children().filter((_, child) => $(child).css('display') !== 'none').length > 0;
 
-    // We have menu items, so we can stop checking
-    if (hasMenuItems) {
-        clearInterval(menuInterval);
-    }
-
     // Show or hide the menu button
     $('#extensionsMenuButton').toggle(hasMenuItems);
 }
 
-// Periodically check for new extensions
-const menuInterval = setInterval(showHideExtensionsMenu, 1000);
+function observeExtensionsMenu() {
+    const menu = document.getElementById('extensionsMenu');
+
+    if (!menu) {
+        return;
+    }
+
+    showHideExtensionsMenu();
+
+    const observer = new MutationObserver(() => {
+        showHideExtensionsMenu();
+    });
+
+    observer.observe(menu, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden'],
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observeExtensionsMenu, { once: true });
+} else {
+    observeExtensionsMenu();
+}
 
 /**
  * Gets the type of an extension based on its external ID.

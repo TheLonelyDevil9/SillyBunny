@@ -480,6 +480,17 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     animation: welcomeOrbitSpin 18s linear infinite;
 }
 
+html[data-page-visibility='hidden'] .welcomeHeroMascot,
+html[data-page-visibility='hidden'] .welcomeHeroFrame,
+html[data-page-visibility='hidden'] .welcomeHeroSpark,
+html[data-page-visibility='hidden'] .welcomeHeroRing,
+body.app-backgrounded .welcomeHeroMascot,
+body.app-backgrounded .welcomeHeroFrame,
+body.app-backgrounded .welcomeHeroSpark,
+body.app-backgrounded .welcomeHeroRing {
+    animation-play-state: paused !important;
+}
+
 @keyframes welcomeBunnyFloat {
     0%,
     100% {

@@ -253,11 +253,9 @@ import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.j
 import { currentUser, setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
-import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
 import { INTERACTABLE_CONTROL_CLASS, initKeyboard } from './scripts/keyboard.js';
-import { initDynamicStyles } from './scripts/dynamic-styles.js';
 import { initInputMarkdown } from './scripts/input-md-formatting.js';
 import { AbortReason } from './scripts/util/AbortReason.js';
 import { initSystemPrompts } from './scripts/sysprompt.js';
@@ -265,18 +263,14 @@ import { registerExtensionSlashCommands as initExtensionSlashCommands } from './
 import { ToolManager } from './scripts/tool-calling.js';
 import { addShowdownPatch } from './scripts/util/showdown-patch.js';
 import { applyBrowserFixes } from './scripts/browser-fixes.js';
-import { initServerHistory } from './scripts/server-history.js';
 import { initSettingsSearch } from './scripts/setting-search.js';
-import { initBulkEdit } from './scripts/bulk-edit.js';
 import { getContext } from './scripts/st-context.js';
 import { extractReasoningFromData, extractReasoningSignatureFromData, initReasoning, parseReasoningInSwipes, PromptReasoning, ReasoningHandler, removeReasoningFromString, updateReasoningUI } from './scripts/reasoning.js';
 import { accountStorage } from './scripts/util/AccountStorage.js';
 import { initWelcomeScreen, openPermanentAssistantChat, openPermanentAssistantCard, getPermanentAssistantAvatar } from './scripts/welcome-screen.js';
-import { initDataMaid } from './scripts/data-maid.js';
 import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPrompts, findItemizedPromptSet, initItemizedPrompts, itemizedParams, itemizedPrompts, loadItemizedPrompts, promptItemize, replaceItemizedPromptText, saveItemizedPrompts, swapItemizedPrompts } from './scripts/itemized-prompts.js';
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
-import { initAccessibility } from './scripts/a11y.js';
 import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
@@ -343,6 +337,66 @@ await new Promise((resolve) => {
         window.addEventListener('load', resolve);
     }
 });
+
+function createDeferredModuleLoader(specifier) {
+    let modulePromise;
+    return () => modulePromise ??= import(specifier);
+}
+
+function scheduleLowPriorityWork(callback, { timeout = 2000 } = {}) {
+    if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => {
+            void callback();
+        }, { timeout });
+        return;
+    }
+
+    window.setTimeout(() => {
+        void callback();
+    }, 0);
+}
+
+function scheduleDeferredInitializers(initializers) {
+    const queue = [...initializers];
+
+    const runNext = () => {
+        const initializer = queue.shift();
+
+        if (!initializer) {
+            return;
+        }
+
+        scheduleLowPriorityWork(async () => {
+            try {
+                await initializer();
+            } catch (error) {
+                console.error('Deferred feature initialization failed.', error);
+            } finally {
+                runNext();
+            }
+        });
+    };
+
+    runNext();
+}
+
+const loadDynamicStylesModule = createDeferredModuleLoader('./scripts/dynamic-styles.js');
+const loadServerHistoryModule = createDeferredModuleLoader('./scripts/server-history.js');
+const loadBulkEditModule = createDeferredModuleLoader('./scripts/bulk-edit.js');
+const loadScrapersModule = createDeferredModuleLoader('./scripts/scrapers.js');
+const loadDataMaidModule = createDeferredModuleLoader('./scripts/data-maid.js');
+const loadAccessibilityModule = createDeferredModuleLoader('./scripts/a11y.js');
+
+function syncPageVisibilityState() {
+    const isBackgrounded = document.hidden;
+    document.documentElement.dataset.pageVisibility = isBackgrounded ? 'hidden' : 'visible';
+    document.body.classList.toggle('app-backgrounded', isBackgrounded);
+}
+
+document.addEventListener('visibilitychange', syncPageVisibilityState);
+window.addEventListener('pageshow', syncPageVisibilityState);
+window.addEventListener('pagehide', syncPageVisibilityState);
+syncPageVisibilityState();
 
 // Configure toast library:
 toastr.options = {
@@ -744,7 +798,6 @@ async function firstLoadInit() {
         await getSettings(initLoaderHandle);
         initAgents();
         initKeyboard();
-        initDynamicStyles();
         initTags();
         initBookmarks();
         await getUserAvatars(true, user_avatar);
@@ -763,23 +816,32 @@ async function firstLoadInit() {
         initCfg();
         initLogprobs();
         initInputMarkdown();
-        initServerHistory();
         initSettingsSearch();
-        initBulkEdit();
         initReasoning();
         initWelcomeScreen();
-        await initScrapers();
         initCustomSelectedSamplers();
-        initDataMaid();
         initItemizedPrompts();
-        initAccessibility();
         initSwipePicker();
         addDebugFunctions();
-        doDailyExtensionUpdatesCheck();
         await eventSource.emit(event_types.APP_INITIALIZED);
         await initLoaderHandle.hide();
         await fixViewport();
         await eventSource.emit(event_types.APP_READY);
+        scheduleLowPriorityWork(async () => {
+            try {
+                await doDailyExtensionUpdatesCheck();
+            } catch (error) {
+                console.error('Deferred extension update check failed.', error);
+            }
+        });
+        scheduleDeferredInitializers([
+            async () => (await loadDynamicStylesModule()).initDynamicStyles(),
+            async () => (await loadServerHistoryModule()).initServerHistory(),
+            async () => (await loadBulkEditModule()).initBulkEdit(),
+            async () => (await loadScrapersModule()).initScrapers(),
+            async () => (await loadDataMaidModule()).initDataMaid(),
+            async () => (await loadAccessibilityModule()).initAccessibility(),
+        ]);
     } catch (error) {
         console.error('Application initialization failed.', error);
         toastr.error(t`SillyBunny couldn't finish starting. Please refresh the page.`, t`Startup Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
