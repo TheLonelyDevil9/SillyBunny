@@ -2,7 +2,12 @@ import { registerDebugFunction } from './power-user.js';
 import { updateSecretDisplay } from './secrets.js';
 
 const storageKey = 'language';
-const overrideLanguage = localStorage.getItem(storageKey);
+let overrideLanguage = null;
+try {
+    overrideLanguage = localStorage.getItem(storageKey);
+} catch {
+    console.warn('localStorage unavailable (private browsing?), using default locale');
+}
 const localeFile = String(overrideLanguage || navigator.language || navigator.userLanguage || 'en').toLowerCase();
 var langs;
 // Don't change to let/const! It will break module loading.

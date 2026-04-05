@@ -1,3 +1,19 @@
+function safeGetItem(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function safeSetItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // Safari private browsing or quota exceeded — silently ignore
+    }
+}
+
 const SB_STORAGE_KEYS = Object.freeze({
     leftTab: 'sb-left-tab',
     rightTab: 'sb-right-tab',
@@ -166,8 +182,8 @@ const SB_SEARCH_TARGET_SELECTOR = [
 const sbState = {
     initialized: false,
     isMobileViewport: null,
-    theme: normalizeTheme(localStorage.getItem(SB_STORAGE_KEYS.theme)),
-    surfaceTransparency: normalizeSurfaceTransparency(localStorage.getItem(SB_STORAGE_KEYS.surfaceTransparency)),
+    theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
+    surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
     shells: {},
 };
 
@@ -477,7 +493,7 @@ function setShellTheme(themeId, { persist = true } = {}) {
     document.documentElement.dataset.sbTheme = nextTheme;
 
     if (persist) {
-        localStorage.setItem(SB_STORAGE_KEYS.theme, nextTheme);
+        safeSetItem(SB_STORAGE_KEYS.theme, nextTheme);
     }
 
     updateThemePickerUi();
@@ -503,7 +519,7 @@ function setSurfaceTransparency(value, { persist = true } = {}) {
     document.documentElement.style.setProperty('--sb-page-overlay-opacity', overlayOpacity.toFixed(2));
 
     if (persist) {
-        localStorage.setItem(SB_STORAGE_KEYS.surfaceTransparency, String(nextTransparency));
+        safeSetItem(SB_STORAGE_KEYS.surfaceTransparency, String(nextTransparency));
     }
 
     updateThemePickerUi();
@@ -1212,7 +1228,7 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     }
 
     shellState.activeTabId = tabId;
-    localStorage.setItem(shellConfig.storageKey, tabId);
+    safeSetItem(shellConfig.storageKey, tabId);
 
     for (const [currentTabId, tabState] of shellState.tabs.entries()) {
         const isActive = currentTabId === tabId;
@@ -1398,7 +1414,7 @@ function buildShell(shellKey) {
 
     panelBody.append(...Array.from(shellState.tabs.values()).map(tabState => tabState.panel));
 
-    const storedTabId = localStorage.getItem(shellConfig.storageKey);
+    const storedTabId = safeGetItem(shellConfig.storageKey);
     const nextActiveTab = shellState.tabs.has(storedTabId) ? storedTabId : shellConfig.defaultTabId;
     setActiveTab(shellKey, nextActiveTab);
 
@@ -2018,6 +2034,39 @@ function injectModelFilterInput($select) {
     syncModelFilterInput($select);
 }
 
+function deferUntilAppReady(callback) {
+    const context = getSillyTavernContext();
+    const eventSource = context?.eventSource;
+    const eventTypes = context?.eventTypes ?? context?.event_types;
+
+    if (eventSource && eventTypes?.APP_READY) {
+        eventSource.on(eventTypes.APP_READY, () => {
+            window.requestAnimationFrame(callback);
+        });
+        return;
+    }
+
+    // Fallback: poll until SillyTavern context is available
+    let attempts = 0;
+    const MAX_ATTEMPTS = 50; // 50 * 200ms = 10s
+    const poll = () => {
+        attempts++;
+        const ctx = getSillyTavernContext();
+        const es = ctx?.eventSource;
+        const et = ctx?.eventTypes ?? ctx?.event_types;
+
+        if (es && et?.APP_READY) {
+            es.on(et.APP_READY, () => window.requestAnimationFrame(callback));
+        } else if (attempts < MAX_ATTEMPTS) {
+            window.setTimeout(poll, 200);
+        } else {
+            console.warn('[SillyBunny Shell] APP_READY never fired, running deferred init anyway');
+            window.requestAnimationFrame(callback);
+        }
+    };
+    window.setTimeout(poll, 200);
+}
+
 function initAll() {
     if (sbState.initialized) {
         return;
@@ -2042,17 +2091,13 @@ function initAll() {
         });
     });
 
+    // Phase 1: Structural DOM work (no dependency on loaded app data)
     hideHostToggles();
     buildTopBar();
     buildShell('left');
     buildShell('right');
     buildMobileNav();
     injectCharacterCloseButton();
-    interceptDrawerOpeners();
-    bindWorldInfoRoute();
-    bindStartupDrawerSanityCheck();
-    initAgentOverview();
-    applyDefaultDrawerStates();
     syncMobileViewportState();
     setShellTheme(sbState.theme, { persist: false });
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
@@ -2080,8 +2125,17 @@ function initAll() {
         },
     };
 
-    window.requestAnimationFrame(() => {
-        normalizeTopDrawerState({ reason: 'post-init-frame' });
+    // Phase 2: Deferred until app data is loaded (settings, characters, extensions)
+    deferUntilAppReady(() => {
+        interceptDrawerOpeners();
+        bindWorldInfoRoute();
+        bindStartupDrawerSanityCheck();
+        initAgentOverview();
+        applyDefaultDrawerStates();
+
+        window.requestAnimationFrame(() => {
+            normalizeTopDrawerState({ reason: 'post-init-frame' });
+        });
     });
 }
 

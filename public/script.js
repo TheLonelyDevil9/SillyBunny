@@ -387,9 +387,12 @@ const STARTUP_STAGE_TIMEOUTS = Object.freeze({
     csrfTokenRequest: 7000,
     initLocales: 8000,
     initPresetManager: 8000,
+    initSecrets: 10000,
     initSystemMessages: 10000,
+    loadSettings: 30000,
     readSecretState: 6000,
     settingsRequest: 10000,
+    globalInit: 60000,
 });
 
 function createTimeoutError(operationName, timeoutMs) {
@@ -865,6 +868,19 @@ async function firstLoadInit() {
     };
 
     try {
+        // Global failsafe: force-remove splash if init hangs beyond this threshold
+        const globalTimeoutId = window.setTimeout(() => {
+            console.error(`[Startup] Global init timeout after ${STARTUP_STAGE_TIMEOUTS.globalInit}ms — forcing loader release`);
+            releaseStartupLoader('global timeout failsafe');
+            toastr.warning(
+                t`Some features may not have loaded. Please refresh if the app is unresponsive.`,
+                t`Slow startup detected`,
+                { timeOut: 0, extendedTimeOut: 0 },
+            );
+        }, STARTUP_STAGE_TIMEOUTS.globalInit);
+
+        const clearGlobalTimeout = () => window.clearTimeout(globalTimeoutId);
+
         const tokenData = await runStartupStage('load CSRF token', async () => {
             const tokenResponse = await withTimeout(
                 fetch('/csrf-token'),
@@ -891,7 +907,7 @@ async function firstLoadInit() {
         reloadMarkdownProcessor();
         applyBrowserFixes();
         await runStartupStage('load client version', () => getClientVersion(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.clientVersion });
-        await runStartupStage('initialize secrets', () => initSecrets());
+        await runStartupStage('initialize secrets', () => initSecrets(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initSecrets });
         await runStartupStage('read secret state', () => readSecretState(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.readSecretState });
         await runStartupStage('initialize locales', () => initLocales(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initLocales });
         initChatUtilities();
@@ -907,40 +923,42 @@ async function firstLoadInit() {
         ToolManager.initToolSlashCommands();
         await runStartupStage('initialize preset manager', () => initPresetManager(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initPresetManager });
         await runStartupStage('initialize system messages', () => initSystemMessages(), { timeoutMs: STARTUP_STAGE_TIMEOUTS.initSystemMessages });
-        await runStartupStage('load settings', () => getSettings(initLoaderHandle, { requestTimeoutMs: STARTUP_STAGE_TIMEOUTS.settingsRequest }));
+        await runStartupStage('load settings', () => getSettings(initLoaderHandle, { requestTimeoutMs: STARTUP_STAGE_TIMEOUTS.settingsRequest }), { timeoutMs: STARTUP_STAGE_TIMEOUTS.loadSettings });
         initAgents();
         initKeyboard();
         initTags();
         initBookmarks();
         await releaseStartupLoader('startup loader release');
-        await withTimeout(
-            getUserAvatars(true, user_avatar),
-            5000,
-            [],
-            'getUserAvatars'
-        ).catch(error => {
-            console.error('getUserAvatars failed, continuing with empty avatars', error);
-            return [];
-        });
-        await withTimeout(
-            getCharacters(),
-            8000,
-            undefined,
-            'getCharacters'
-        ).catch(error => {
-            console.error('getCharacters failed, continuing with empty character list', error);
-            characters.splice(0, characters.length); // Ensure empty array
-            return undefined;
-        });
-        await withTimeout(
-            getBackgrounds(),
-            5000,
-            undefined,
-            'getBackgrounds'
-        ).catch(error => {
-            console.error('getBackgrounds failed, continuing with default background', error);
-            return undefined;
-        });
+        await Promise.all([
+            withTimeout(
+                getUserAvatars(true, user_avatar),
+                5000,
+                [],
+                'getUserAvatars',
+            ).catch(error => {
+                console.error('getUserAvatars failed, continuing with empty avatars', error);
+                return [];
+            }),
+            withTimeout(
+                getCharacters(),
+                8000,
+                undefined,
+                'getCharacters',
+            ).catch(error => {
+                console.error('getCharacters failed, continuing with empty character list', error);
+                characters.splice(0, characters.length);
+                return undefined;
+            }),
+            withTimeout(
+                getBackgrounds(),
+                5000,
+                undefined,
+                'getBackgrounds',
+            ).catch(error => {
+                console.error('getBackgrounds failed, continuing with default background', error);
+                return undefined;
+            }),
+        ]);
         await initTokenizers();
         initBackgrounds();
         initAuthorsNote();
@@ -989,6 +1007,7 @@ async function firstLoadInit() {
         toastr.error(message, t`Startup Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
         throw error;
     } finally {
+        clearGlobalTimeout();
         await releaseStartupLoader('startup finally');
 
         // Guaranteed cleanup after 500ms if loader still visible
