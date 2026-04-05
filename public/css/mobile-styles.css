@@ -855,7 +855,7 @@
      * reparent the content. Once the shell adds data-sb-shell-ready
      * or sb-shell-root, the drawer becomes visible through its own rules.
      */
-    #top-settings-holder .drawer-content:not([data-sb-shell-ready]):not(.sb-managed):not(.sb-shell-embedded-content) {
+    #top-settings-holder .drawer-content:not(#right-nav-panel):not([data-sb-shell-ready]):not(.sb-managed):not(.sb-shell-embedded-content) {
         opacity: 0 !important;
         pointer-events: none !important;
     }

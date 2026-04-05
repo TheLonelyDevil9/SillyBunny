@@ -1570,6 +1570,12 @@
  * iOS Safari clips position:fixed descendants inside overflow:hidden ancestors.
  * Use JS-toggled class instead of :has() which can cause Safari rendering issues. */
 @media screen and (max-width: 1000px) {
+    #top-settings-holder #right-nav-panel.openDrawer {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
+
     #right-nav-panel.openDrawer {
         display: flex !important;
         opacity: 1 !important;
