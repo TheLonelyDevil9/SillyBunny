@@ -1579,13 +1579,8 @@
 
 /* Force character panel visibility on mobile when open.
  * iOS Safari clips position:fixed descendants inside overflow:hidden ancestors.
- * Override the sb-drawer-host overflow to let the panel escape. */
+ * Use JS-toggled class instead of :has() which can cause Safari rendering issues. */
 @media screen and (max-width: 1000px) {
-    #rightNavHolder:has(.openDrawer) {
-        overflow: visible !important;
-        width: auto !important;
-    }
-
     #right-nav-panel.openDrawer {
         display: flex !important;
         opacity: 1 !important;

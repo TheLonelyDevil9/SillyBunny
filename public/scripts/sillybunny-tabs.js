@@ -529,6 +529,9 @@ function isCharacterPanelOpen() {
 function closeCharacterPanel() {
     if (isCharacterPanelOpen()) {
         triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
+        // Restore overflow:hidden on parent after closing (iOS Safari fix)
+        const host = document.getElementById('rightNavHolder');
+        if (host) host.style.overflow = '';
     }
 }
 
@@ -542,6 +545,12 @@ function toggleCharacterPanel() {
 
     closeShell('left');
     closeShell('right');
+
+    // iOS Safari clips position:fixed inside overflow:hidden ancestors.
+    // Temporarily allow overflow on the parent so the panel renders.
+    const host = document.getElementById('rightNavHolder');
+    if (host) host.style.overflow = 'visible';
+
     triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
 
     // Fallback: if the jQuery drawer-toggle handler didn't fire, force-open
