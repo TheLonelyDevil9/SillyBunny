@@ -5,6 +5,14 @@ const SB_STORAGE_KEYS = Object.freeze({
     surfaceTransparency: 'sb-surface-transparency',
 });
 
+function safeGetItem(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function safeSetItem(key, value) {
+    try { localStorage.setItem(key, value); } catch { }
+}
+
 const SB_IDLE_BRAND_LABEL = 'SillyBunny';
 const SB_MOBILE_MEDIA_QUERY = '(max-width: 768px)';
 const SB_SURFACE_TRANSPARENCY = Object.freeze({
@@ -165,8 +173,8 @@ const SB_SEARCH_TARGET_SELECTOR = [
 
 const sbState = {
     initialized: false,
-    theme: normalizeTheme(localStorage.getItem(SB_STORAGE_KEYS.theme)),
-    surfaceTransparency: normalizeSurfaceTransparency(localStorage.getItem(SB_STORAGE_KEYS.surfaceTransparency)),
+    theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
+    surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
     shells: {},
 };
 
@@ -343,7 +351,7 @@ function setShellTheme(themeId, { persist = true } = {}) {
     document.documentElement.dataset.sbTheme = nextTheme;
 
     if (persist) {
-        localStorage.setItem(SB_STORAGE_KEYS.theme, nextTheme);
+        safeSetItem(SB_STORAGE_KEYS.theme, nextTheme);
     }
 
     updateThemePickerUi();
@@ -369,7 +377,7 @@ function setSurfaceTransparency(value, { persist = true } = {}) {
     document.documentElement.style.setProperty('--sb-page-overlay-opacity', overlayOpacity.toFixed(2));
 
     if (persist) {
-        localStorage.setItem(SB_STORAGE_KEYS.surfaceTransparency, String(nextTransparency));
+        safeSetItem(SB_STORAGE_KEYS.surfaceTransparency, String(nextTransparency));
     }
 
     updateThemePickerUi();
@@ -526,6 +534,13 @@ function toggleCharacterPanel() {
     closeShell('left');
     closeShell('right');
     triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
+
+    // Fallback: if the jQuery drawer-toggle handler didn't fire, force-open
+    window.requestAnimationFrame(() => {
+        if (!isCharacterPanelOpen()) {
+            forceDrawerState('right-nav-panel', true);
+        }
+    });
 }
 
 function toggleShellPanel(shellKey, tabId = null) {
@@ -1070,7 +1085,7 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     }
 
     shellState.activeTabId = tabId;
-    localStorage.setItem(shellConfig.storageKey, tabId);
+    safeSetItem(shellConfig.storageKey, tabId);
 
     for (const [currentTabId, tabState] of shellState.tabs.entries()) {
         const isActive = currentTabId === tabId;
@@ -1238,7 +1253,7 @@ function buildShell(shellKey) {
 
     panelBody.append(...Array.from(shellState.tabs.values()).map(tabState => tabState.panel));
 
-    const storedTabId = localStorage.getItem(shellConfig.storageKey);
+    const storedTabId = safeGetItem(shellConfig.storageKey);
     const nextActiveTab = shellState.tabs.has(storedTabId) ? storedTabId : shellConfig.defaultTabId;
     setActiveTab(shellKey, nextActiveTab);
 
@@ -1483,6 +1498,14 @@ function buildMobileNav() {
     }
 
     const sections = [
+        {
+            label: 'Quick Access',
+            items: [
+                { action: 'home', icon: 'fa-house', label: 'Home' },
+                { action: 'characters', icon: 'fa-address-card', label: 'Characters' },
+                { shell: 'right', tab: null, icon: 'fa-gear', label: 'Customize' },
+            ],
+        },
         {
             label: 'Workspace',
             items: [

@@ -2,6 +2,16 @@
    SillyBunny Navigation Shell
    ============================================================================= */
 
+/* Pre-hide old ST drawer headers before shell JS runs.
+   Prevents "User Settings" text from flashing on first paint. */
+#top-settings-holder > .drawer > .drawer-toggle {
+    display: none !important;
+}
+
+#top-settings-holder > .drawer > .drawer-content:not(.openDrawer) {
+    display: none !important;
+}
+
 #top-bar {
     position: fixed;
     top: 0;
