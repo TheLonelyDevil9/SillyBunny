@@ -684,6 +684,13 @@ function toggleCharacterPanel() {
     closeShell('left');
     closeShell('right');
     triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
+
+    // Fallback: if the jQuery drawer-toggle handler didn't fire, force-open
+    window.requestAnimationFrame(() => {
+        if (!isCharacterPanelOpen()) {
+            forceDrawerState('right-nav-panel', true);
+        }
+    });
 }
 
 function toggleShellPanel(shellKey, tabId = null) {
