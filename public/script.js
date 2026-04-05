@@ -868,10 +868,13 @@ async function firstLoadInit() {
     };
 
     try {
-        // Global failsafe: force-remove splash if init hangs beyond this threshold
+        // Global failsafe: force-remove splash if init hangs beyond this threshold.
+        // Bypasses the Popup hide() chain entirely — on iOS WebKit, dialog.close()
+        // or transition events can hang, so we nuke overlays from DOM directly.
         const globalTimeoutId = window.setTimeout(() => {
             console.error(`[Startup] Global init timeout after ${STARTUP_STAGE_TIMEOUTS.globalInit}ms — forcing loader release`);
-            releaseStartupLoader('global timeout failsafe');
+            startupLoaderReleased = true;
+            cleanupActionLoaderArtifacts({ removePreloader: true, reason: 'global timeout failsafe' });
             toastr.warning(
                 t`Some features may not have loaded. Please refresh if the app is unresponsive.`,
                 t`Slow startup detected`,
@@ -982,6 +985,7 @@ async function firstLoadInit() {
         await eventSource.emit(event_types.APP_INITIALIZED);
         await fixViewport();
         await eventSource.emit(event_types.APP_READY);
+        window.__clearStartupFailsafe?.();
         scheduleStartupLoaderCleanup('app ready');
         scheduleLowPriorityWork(async () => {
             try {
@@ -1010,14 +1014,9 @@ async function firstLoadInit() {
         clearGlobalTimeout();
         await releaseStartupLoader('startup finally');
 
-        // Guaranteed cleanup after 500ms if loader still visible
+        // Guaranteed cleanup after 500ms — remove preloader AND any stuck loader dialogs
         setTimeout(() => {
-            const preloader = document.getElementById('preloader');
-            if (preloader && preloader.style.display !== 'none') {
-                console.warn('Force-removing stuck loader');
-                preloader.style.display = 'none';
-                preloader.remove();
-            }
+            cleanupActionLoaderArtifacts({ removePreloader: true, reason: 'finally timeout failsafe' });
         }, 500);
     }
 }

@@ -8340,6 +8340,31 @@
             bindViewportSizing();
         }
     </script>
+    <script>
+        // Startup failsafe: forcefully remove all overlays if initialization hangs.
+        // This is a non-module script so it runs even if script.js fails entirely.
+        (function() {
+            var FAILSAFE_MS = 30000;
+            var tid = setTimeout(function() {
+                var preloader = document.getElementById('preloader');
+                if (preloader) preloader.remove();
+                var loader = document.getElementById('loader');
+                if (loader) loader.remove();
+                document.querySelectorAll('dialog[open]').forEach(function(dlg) {
+                    try { dlg.close(); } catch(e) {}
+                    dlg.remove();
+                });
+                var polyOverlay = document.querySelector('._poly_dialog_overlay');
+                if (polyOverlay) polyOverlay.remove();
+                var banner = document.createElement('div');
+                banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#b00;color:#fff;padding:8px 12px;z-index:9999999;font:14px/1.4 system-ui;text-align:center;';
+                banner.textContent = 'Startup timed out after ' + (FAILSAFE_MS / 1000) + 's. Some features may not have loaded.';
+                document.body.appendChild(banner);
+                setTimeout(function() { banner.remove(); }, 15000);
+            }, FAILSAFE_MS);
+            window.__clearStartupFailsafe = function() { clearTimeout(tid); };
+        })();
+    </script>
 </body>
 
 </html>
