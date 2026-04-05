@@ -3,9 +3,119 @@
    ============================================================================= */
 
 :root {
-    --sb-topbar-stack-gap: 6px;
-    --sb-chatbar-height: 46px;
-    --sb-topbar-stack-height: calc(var(--topBarBlockSize) + var(--sb-chatbar-height) + var(--sb-topbar-stack-gap));
+    --sb-topbar-scale-desktop: 1;
+    --sb-topbar-scale-mobile: 1;
+    --sb-topbar-scale-active: var(--sb-topbar-scale-desktop);
+    --sb-topbar-primary-height-base: var(--topBarBlockSize);
+    --sb-topbar-padding-x-base: 10px;
+    --sb-topbar-stack-gap-base: 4px;
+    --sb-topbar-bottom-padding-base: 4px;
+    --sb-topbar-inline-gap-base: 10px;
+    --sb-topbar-group-gap-base: 8px;
+    --sb-chatbar-height-base: 40px;
+    --sb-chatbar-gap-base: 6px;
+    --sb-chatbar-cluster-gap-base: 4px;
+    --sb-chatbar-padding-y-base: 4px;
+    --sb-chatbar-padding-x-base: 6px;
+    --sb-chatbar-radius-base: 14px;
+    --sb-chatbar-button-size-base: 30px;
+    --sb-chatbar-button-radius-base: 9px;
+    --sb-chatbar-field-gap-base: 6px;
+    --sb-chatbar-field-height-base: 30px;
+    --sb-chatbar-field-padding-x-base: 9px;
+    --sb-chatbar-field-radius-base: 999px;
+    --sb-chatbar-field-icon-scale-base: 0.66;
+    --sb-chatbar-input-height-base: 18px;
+    --sb-chatbar-input-font-scale-base: 0.72;
+    --sb-chatbar-status-font-scale-base: 0.58;
+    --sb-connection-strip-gap-base: 10px;
+    --sb-connection-strip-padding-y-base: 8px;
+    --sb-connection-strip-padding-x-base: 10px;
+    --sb-connection-strip-radius-base: 14px;
+    --sb-proxy-button-padding-x-base: 15px;
+    --sb-proxy-button-height-base: 40px;
+    --sb-proxy-button-min-width-base: 104px;
+    --sb-proxy-button-gap-base: 8px;
+    --sb-proxy-icon-scale-base: 0.92;
+    --sb-proxy-label-scale-base: 0.76;
+    --sb-proxy-underline-inset-base: 12px;
+    --sb-proxy-underline-bottom-base: 5px;
+    --sb-mobile-toggle-size-base: 40px;
+    --sb-home-toggle-min-width-base: 92px;
+    --sb-topbar-compact-icon-scale-base: 0.84;
+    --sb-mobile-tools-padding-top-base: 10px;
+    --sb-mobile-tools-padding-x-base: 10px;
+    --sb-mobile-tools-padding-bottom-base: 12px;
+    --sb-mobile-tools-radius-base: 16px;
+    --sb-mobile-tools-gap-base: 8px;
+    --sb-mobile-tools-header-gap-base: 8px;
+    --sb-mobile-tools-actions-gap-base: 6px;
+    --sb-mobile-tools-button-size-base: 30px;
+    --sb-mobile-tools-button-radius-base: 9px;
+    --sb-mobile-tools-field-height-base: 30px;
+    --sb-mobile-tools-field-padding-x-base: 9px;
+    --sb-mobile-tools-field-icon-scale-base: 0.66;
+    --sb-mobile-tools-input-height-base: 18px;
+    --sb-mobile-tools-input-font-scale-base: 0.70;
+    --sb-mobile-tools-section-gap-base: 6px;
+    --sb-mobile-tools-section-title-scale-base: 0.64;
+    --sb-mobile-tools-status-scale-base: 0.66;
+    --sb-topbar-padding-x: calc(var(--sb-topbar-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-stack-gap: calc(var(--sb-topbar-stack-gap-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-bottom-padding: calc(var(--sb-topbar-bottom-padding-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-inline-gap: calc(var(--sb-topbar-inline-gap-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-group-gap: calc(var(--sb-topbar-group-gap-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-height: calc(var(--sb-chatbar-height-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-gap: calc(var(--sb-chatbar-gap-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-cluster-gap: calc(var(--sb-chatbar-cluster-gap-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-padding-y: calc(var(--sb-chatbar-padding-y-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-padding-x: calc(var(--sb-chatbar-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-radius: calc(var(--sb-chatbar-radius-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-button-size: calc(var(--sb-chatbar-button-size-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-button-radius: calc(var(--sb-chatbar-button-radius-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-field-gap: calc(var(--sb-chatbar-field-gap-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-field-height: calc(var(--sb-chatbar-field-height-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-field-padding-x: calc(var(--sb-chatbar-field-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-field-radius: calc(var(--sb-chatbar-field-radius-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-field-icon-size: calc(var(--mainFontSize) * var(--sb-chatbar-field-icon-scale-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-input-height: calc(var(--sb-chatbar-input-height-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-input-font-size: calc(var(--mainFontSize) * var(--sb-chatbar-input-font-scale-base) * var(--sb-topbar-scale-active));
+    --sb-chatbar-status-font-size: calc(var(--mainFontSize) * var(--sb-chatbar-status-font-scale-base) * var(--sb-topbar-scale-active));
+    --sb-connection-strip-gap: calc(var(--sb-connection-strip-gap-base) * var(--sb-topbar-scale-active));
+    --sb-connection-strip-padding-y: calc(var(--sb-connection-strip-padding-y-base) * var(--sb-topbar-scale-active));
+    --sb-connection-strip-padding-x: calc(var(--sb-connection-strip-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-connection-strip-radius: calc(var(--sb-connection-strip-radius-base) * var(--sb-topbar-scale-active));
+    --sb-proxy-button-padding-x: var(--sb-proxy-button-padding-x-base);
+    --sb-proxy-button-height: var(--sb-proxy-button-height-base);
+    --sb-proxy-button-min-width: var(--sb-proxy-button-min-width-base);
+    --sb-proxy-button-gap: var(--sb-proxy-button-gap-base);
+    --sb-proxy-icon-size: calc(var(--mainFontSize) * var(--sb-proxy-icon-scale-base));
+    --sb-proxy-label-size: calc(var(--mainFontSize) * var(--sb-proxy-label-scale-base));
+    --sb-proxy-underline-inset: var(--sb-proxy-underline-inset-base);
+    --sb-proxy-underline-bottom: var(--sb-proxy-underline-bottom-base);
+    --sb-mobile-toggle-size: var(--sb-mobile-toggle-size-base);
+    --sb-home-toggle-min-width: var(--sb-home-toggle-min-width-base);
+    --sb-topbar-compact-icon-size: calc(var(--mainFontSize) * var(--sb-topbar-compact-icon-scale-base));
+    --sb-topbar-primary-min-height: max(var(--sb-proxy-button-height), var(--sb-mobile-toggle-size));
+    --sb-topbar-primary-height: max(calc(var(--sb-topbar-primary-height-base) * var(--sb-topbar-scale-active)), var(--sb-topbar-primary-min-height));
+    --sb-mobile-tools-padding-top: calc(var(--sb-mobile-tools-padding-top-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-padding-x: calc(var(--sb-mobile-tools-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-padding-bottom: calc(var(--sb-mobile-tools-padding-bottom-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-radius: calc(var(--sb-mobile-tools-radius-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-gap: calc(var(--sb-mobile-tools-gap-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-header-gap: calc(var(--sb-mobile-tools-header-gap-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-actions-gap: calc(var(--sb-mobile-tools-actions-gap-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-button-size: calc(var(--sb-mobile-tools-button-size-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-button-radius: calc(var(--sb-mobile-tools-button-radius-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-field-height: calc(var(--sb-mobile-tools-field-height-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-field-padding-x: calc(var(--sb-mobile-tools-field-padding-x-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-field-icon-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-field-icon-scale-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-input-height: calc(var(--sb-mobile-tools-input-height-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-input-font-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-input-font-scale-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-section-gap: calc(var(--sb-mobile-tools-section-gap-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-section-title-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-section-title-scale-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-status-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-status-scale-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-stack-height: calc(var(--sb-topbar-primary-height) + var(--sb-chatbar-height) + var(--sb-topbar-stack-gap));
     --sb-topbar-max-width: min(calc(var(--sheldWidth) + 220px), calc(100vw - 20px));
 }
 
@@ -34,7 +144,7 @@
     align-items: flex-start;
     justify-content: center;
     height: var(--sb-topbar-stack-height);
-    padding: 0 10px 6px;
+    padding: 0 var(--sb-topbar-padding-x) var(--sb-topbar-bottom-padding);
     overflow: visible;
 }
 
@@ -46,12 +156,12 @@
 #sb-topbar-stack {
     width: min(100%, var(--sb-topbar-max-width));
     display: grid;
-    grid-template-rows: var(--topBarBlockSize) minmax(var(--sb-chatbar-height), auto);
+    grid-template-rows: var(--sb-topbar-primary-height) minmax(var(--sb-chatbar-height), auto);
     gap: var(--sb-topbar-stack-gap);
 }
 
 #sb-topbar-primary {
-    min-height: var(--topBarBlockSize);
+    min-height: var(--sb-topbar-primary-height);
     display: flex;
     align-items: center;
     width: 100%;
@@ -59,18 +169,22 @@
 
 #sb-topbar-inner {
     width: 100%;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: var(--sb-topbar-inline-gap);
     min-width: 0;
 }
 
 .sb-topbar-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sb-topbar-group-gap);
     min-width: 0;
+}
+
+.sb-topbar-group-left {
+    justify-content: flex-start;
 }
 
 .sb-topbar-group-right {
@@ -79,9 +193,9 @@
 
 .sb-topbar-brand {
     display: flex;
-    flex: 1 1 auto;
     align-items: center;
     justify-content: center;
+    justify-self: center;
     min-width: 0;
     overflow: hidden;
     text-align: center;
@@ -93,12 +207,12 @@
     display: grid;
     grid-template-columns: auto minmax(150px, 0.95fr) minmax(170px, 1.05fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: var(--sb-chatbar-gap);
     min-height: var(--sb-chatbar-height);
-    padding: 5px 8px;
+    padding: var(--sb-chatbar-padding-y) var(--sb-chatbar-padding-x);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 90%, transparent);
-    border-radius: 16px;
-    box-shadow: 0 12px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
+    border-radius: var(--sb-chatbar-radius);
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
 }
 
 #sb-chatbar::before,
@@ -119,7 +233,7 @@
 .sb-chatbar-cluster {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sb-chatbar-cluster-gap);
     min-width: 0;
 }
 
@@ -134,11 +248,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
+    width: var(--sb-chatbar-button-size);
+    min-width: var(--sb-chatbar-button-size);
+    height: var(--sb-chatbar-button-size);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 90%, transparent);
-    border-radius: 10px;
+    border-radius: var(--sb-chatbar-button-radius);
     background: transparent;
     color: var(--SmartThemeBodyColor);
     cursor: pointer;
@@ -186,19 +300,19 @@
     isolation: isolate;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sb-chatbar-field-gap);
     min-width: 0;
-    min-height: 34px;
+    min-height: var(--sb-chatbar-field-height);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 88%, transparent);
-    border-radius: 999px;
-    padding: 0 10px;
+    border-radius: var(--sb-chatbar-field-radius);
+    padding: 0 var(--sb-chatbar-field-padding-x);
     color: var(--SmartThemeBodyColor);
 }
 
 .sb-chatbar-field > i {
     opacity: 0.72;
     flex: 0 0 auto;
-    font-size: calc(var(--mainFontSize) * 0.72);
+    font-size: var(--sb-chatbar-field-icon-size);
 }
 
 .sb-chatbar-field select,
@@ -213,8 +327,8 @@
     color: inherit;
     margin: 0;
     min-height: 0 !important;
-    height: 22px !important;
-    font-size: calc(var(--mainFontSize) * 0.76);
+    height: var(--sb-chatbar-input-height) !important;
+    font-size: var(--sb-chatbar-input-font-size);
     line-height: 1.1;
 }
 
@@ -227,22 +341,22 @@
     align-items: center;
     white-space: nowrap;
     opacity: 0.65;
-    font-size: calc(var(--mainFontSize) * 0.62);
+    font-size: var(--sb-chatbar-status-font-size);
 }
 
 #sb-connection-strip {
     position: absolute;
-    top: calc(var(--sb-topbar-stack-height) + 4px);
+    top: calc(var(--sb-topbar-stack-height) + var(--sb-topbar-bottom-padding));
     left: 50%;
-    transform: translate(-50%, -8px);
+    transform: translate(-50%, calc(var(--sb-topbar-bottom-padding) * -2));
     width: min(100%, var(--sb-topbar-max-width));
     max-width: calc(100vw - 24px);
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
+    gap: var(--sb-connection-strip-gap);
+    padding: var(--sb-connection-strip-padding-y) var(--sb-connection-strip-padding-x);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 90%, transparent);
-    border-radius: 14px;
+    border-radius: var(--sb-connection-strip-radius);
     box-shadow: 0 18px 42px color-mix(in srgb, var(--SmartThemeShadowColor) 20%, transparent);
     opacity: 0;
     visibility: hidden;
@@ -427,66 +541,65 @@ body:not(.movingUI) .drawer-content.maximized {
     isolation: isolate;
     width: min(100%, 380px);
     margin: 0 auto;
-    padding: 12px 12px 14px;
-    border-radius: 18px;
+    padding: var(--sb-mobile-tools-padding-top) var(--sb-mobile-tools-padding-x) var(--sb-mobile-tools-padding-bottom);
+    border-radius: var(--sb-mobile-tools-radius);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 88%, transparent);
     box-shadow: 0 22px 56px color-mix(in srgb, var(--SmartThemeShadowColor) 24%, transparent);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--sb-mobile-tools-gap);
     overflow: hidden;
 }
 
 .sb-mobile-chat-header {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    align-items: center;
+    gap: var(--sb-mobile-tools-header-gap);
 }
 
-.sb-mobile-chat-title {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.sb-mobile-chat-title small {
-    opacity: 0.72;
-    font-size: calc(var(--mainFontSize) * 0.7);
-    line-height: 1.35;
+.sb-mobile-chat-header > .sb-chatbar-field {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .sb-mobile-chat-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sb-mobile-tools-actions-gap);
 }
 
-.sb-chatbar-button.is-mobile-wide {
-    width: 100%;
-    min-width: 0;
-    height: auto;
-    min-height: 42px;
-    justify-content: flex-start;
-    padding: 0 12px;
-    gap: 10px;
-    border-radius: 14px;
+.sb-chatbar-button.is-mobile-compact,
+.sb-mobile-chat-close {
+    width: var(--sb-mobile-tools-button-size);
+    min-width: var(--sb-mobile-tools-button-size);
+    height: var(--sb-mobile-tools-button-size);
+    min-height: var(--sb-mobile-tools-button-size);
+    border-radius: var(--sb-mobile-tools-button-radius);
 }
 
-.sb-chatbar-button.is-mobile-wide span {
-    display: inline;
-    font-size: calc(var(--mainFontSize) * 0.74);
-    font-weight: 600;
+#sb-mobile-chat-tools-panel .sb-chatbar-field {
+    min-height: var(--sb-mobile-tools-field-height);
+    padding: 0 var(--sb-mobile-tools-field-padding-x);
+}
+
+#sb-mobile-chat-tools-panel .sb-chatbar-field > i {
+    font-size: var(--sb-mobile-tools-field-icon-size);
+}
+
+#sb-mobile-chat-tools-panel .sb-chatbar-field select,
+#sb-mobile-chat-tools-panel .sb-chatbar-field input {
+    height: var(--sb-mobile-tools-input-height) !important;
+    font-size: var(--sb-mobile-tools-input-font-size);
 }
 
 .sb-mobile-chat-section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--sb-mobile-tools-section-gap);
 }
 
 .sb-mobile-chat-section-title {
-    font-size: calc(var(--mainFontSize) * 0.68);
+    font-size: var(--sb-mobile-tools-section-title-size);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     opacity: 0.66;
@@ -494,7 +607,7 @@ body:not(.movingUI) .drawer-content.maximized {
 
 .sb-mobile-chat-connection-status {
     opacity: 0.72;
-    font-size: calc(var(--mainFontSize) * 0.7);
+    font-size: var(--sb-mobile-tools-status-size);
 }
 
 .sb-brand-title {
@@ -532,14 +645,14 @@ body:not(.movingUI) .drawer-content.maximized {
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 999px;
-    padding: 0 18px;
-    min-height: 46px;
-    height: 46px;
-    min-width: 118px;
+    padding: 0 var(--sb-proxy-button-padding-x);
+    min-height: var(--sb-proxy-button-height);
+    height: var(--sb-proxy-button-height);
+    min-width: var(--sb-proxy-button-min-width);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--sb-proxy-button-gap);
     font: inherit;
     color: var(--SmartThemeBodyColor);
     background: transparent;
@@ -549,12 +662,12 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .sb-proxy-button i {
-    font-size: calc(var(--mainFontSize) * 1.05);
+    font-size: var(--sb-proxy-icon-size);
     transition: transform 180ms ease, color 180ms ease;
 }
 
 .sb-proxy-button span {
-    font-size: calc(var(--mainFontSize) * 0.82);
+    font-size: var(--sb-proxy-label-size);
     font-weight: 600;
     white-space: nowrap;
     transition: transform 180ms ease, opacity 180ms ease;
@@ -563,9 +676,9 @@ body:not(.movingUI) .drawer-content.maximized {
 .sb-proxy-button::after {
     content: '';
     position: absolute;
-    left: 14px;
-    right: 14px;
-    bottom: 6px;
+    left: var(--sb-proxy-underline-inset);
+    right: var(--sb-proxy-underline-inset);
+    bottom: var(--sb-proxy-underline-bottom);
     height: 2px;
     border-radius: 999px;
     background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary, #f1b285) 86%, transparent), color-mix(in srgb, var(--color-accent, #df8e70) 86%, transparent));
@@ -610,14 +723,14 @@ body:not(.movingUI) .drawer-content.maximized {
 .sb-mobile-toggle {
     display: none;
     padding: 0;
-    width: 46px;
-    height: 46px;
-    min-width: 46px;
-    min-height: 46px;
+    width: var(--sb-mobile-toggle-size);
+    height: var(--sb-mobile-toggle-size);
+    min-width: var(--sb-mobile-toggle-size);
+    min-height: var(--sb-mobile-toggle-size);
 }
 
 #sb-home-toggle {
-    min-width: 102px;
+    min-width: var(--sb-home-toggle-min-width);
 }
 
 #top-settings-holder > .sb-drawer-host {
@@ -1534,7 +1647,7 @@ body:not(.movingUI) .drawer-content.maximized {
 
     #sb-chatbar {
         grid-template-columns: auto minmax(150px, 1fr) minmax(180px, 1fr) auto;
-        gap: 10px;
+        gap: var(--sb-chatbar-gap);
     }
 
     #sb-chatbar,
@@ -1557,9 +1670,22 @@ body:not(.movingUI) .drawer-content.maximized {
 
 @media screen and (max-width: 768px) {
     :root {
-        --sb-topbar-stack-gap: 6px;
-        --sb-chatbar-height: 76px;
-        --sb-topbar-stack-height: calc(var(--topBarBlockSize) + var(--sb-chatbar-height) + var(--sb-topbar-stack-gap));
+        --sb-topbar-scale-active: var(--sb-topbar-scale-mobile);
+        --sb-topbar-padding-x-base: 8px;
+        --sb-topbar-inline-gap-base: 6px;
+        --sb-topbar-group-gap-base: 4px;
+        --sb-chatbar-height-base: 38px;
+        --sb-chatbar-button-size-base: 26px;
+        --sb-chatbar-button-radius-base: 8px;
+        --sb-chatbar-field-height-base: 28px;
+        --sb-chatbar-field-padding-x-base: 8px;
+        --sb-chatbar-field-radius-base: 12px;
+        --sb-chatbar-field-icon-scale-base: 0.60;
+        --sb-chatbar-input-font-scale-base: 0.66;
+        --sb-mobile-toggle-size-base: 34px;
+        --sb-home-toggle-min-width-base: 34px;
+        --sb-proxy-underline-inset-base: 8px;
+        --sb-proxy-underline-bottom-base: 4px;
     }
 
     #top-bar,
@@ -1591,11 +1717,11 @@ body:not(.movingUI) .drawer-content.maximized {
 
     #top-bar {
         height: var(--sb-topbar-stack-height);
-        padding: 0 10px 8px;
+        padding: 0 var(--sb-topbar-padding-x) var(--sb-topbar-bottom-padding);
     }
 
     #sb-topbar-stack {
-        grid-template-rows: var(--topBarBlockSize) minmax(var(--sb-chatbar-height), auto);
+        grid-template-rows: var(--sb-topbar-primary-height) minmax(var(--sb-chatbar-height), auto);
         gap: var(--sb-topbar-stack-gap);
         width: 100%;
     }
@@ -1606,15 +1732,13 @@ body:not(.movingUI) .drawer-content.maximized {
 
     #sb-chatbar {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        grid-template-areas:
-            'leading select'
-            'search actions';
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas: 'leading search actions';
         align-items: center;
-        gap: 6px 8px;
+        gap: var(--sb-chatbar-gap);
         min-height: var(--sb-chatbar-height);
-        padding: 6px 8px;
-        border-radius: 16px;
+        padding: var(--sb-chatbar-padding-y) var(--sb-chatbar-padding-x);
+        border-radius: var(--sb-chatbar-radius);
     }
 
     .sb-chatbar-leading {
@@ -1623,8 +1747,7 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     #sb-chatbar-select-field {
-        grid-area: select;
-        min-width: 0;
+        display: none;
     }
 
     #sb-chatbar-search-field {
@@ -1635,11 +1758,11 @@ body:not(.movingUI) .drawer-content.maximized {
     .sb-chatbar-actions {
         grid-area: actions;
         justify-self: end;
-        max-width: 100%;
+        max-width: none;
         flex-wrap: nowrap;
         overflow-x: auto;
         overflow-y: hidden;
-        padding-bottom: 2px;
+        padding-bottom: 0;
         scrollbar-width: none;
     }
 
@@ -1648,27 +1771,27 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     #sb-chatbar .sb-chatbar-button {
-        width: 28px;
-        min-width: 28px;
-        height: 28px;
-        border-radius: 9px;
+        width: var(--sb-chatbar-button-size);
+        min-width: var(--sb-chatbar-button-size);
+        height: var(--sb-chatbar-button-size);
+        border-radius: var(--sb-chatbar-button-radius);
     }
 
     #sb-chatbar .sb-chatbar-field {
-        min-height: 30px;
-        gap: 6px;
-        padding: 0 8px;
-        border-radius: 12px;
+        min-height: var(--sb-chatbar-field-height);
+        gap: var(--sb-chatbar-field-gap);
+        padding: 0 var(--sb-chatbar-field-padding-x);
+        border-radius: var(--sb-chatbar-field-radius);
     }
 
     #sb-chatbar .sb-chatbar-field > i {
-        font-size: calc(var(--mainFontSize) * 0.64);
+        font-size: var(--sb-chatbar-field-icon-size);
     }
 
     #sb-chatbar .sb-chatbar-field select,
     #sb-chatbar .sb-chatbar-field input {
-        height: 18px !important;
-        font-size: calc(var(--mainFontSize) * 0.68);
+        height: var(--sb-chatbar-input-height) !important;
+        font-size: var(--sb-chatbar-input-font-size);
     }
 
     #sb-chatbar .sb-chatbar-search-status {
@@ -1686,11 +1809,11 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-topbar-inner {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
-        gap: 8px;
+        gap: var(--sb-topbar-inline-gap);
     }
 
     .sb-topbar-group {
-        gap: 6px;
+        gap: var(--sb-topbar-group-gap);
     }
 
     .sb-topbar-group-left {
@@ -1712,9 +1835,10 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-home-toggle,
     #sb-right-shell-toggle,
     #sb-character-toggle {
-        min-width: 40px;
-        width: 40px;
-        min-height: 40px;
+        min-width: var(--sb-mobile-toggle-size);
+        width: var(--sb-mobile-toggle-size);
+        height: var(--sb-mobile-toggle-size);
+        min-height: var(--sb-mobile-toggle-size);
         padding: 0;
         gap: 0;
     }
@@ -1730,9 +1854,16 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-home-toggle::after,
     #sb-right-shell-toggle::after,
     #sb-character-toggle::after {
-        left: 10px;
-        right: 10px;
-        bottom: 5px;
+        left: var(--sb-proxy-underline-inset);
+        right: var(--sb-proxy-underline-inset);
+        bottom: var(--sb-proxy-underline-bottom);
+    }
+
+    #sb-hamburger i,
+    #sb-home-toggle i,
+    #sb-right-shell-toggle i,
+    #sb-character-toggle i {
+        font-size: var(--sb-topbar-compact-icon-size);
     }
 
     .sb-shell-root.openDrawer,
@@ -2048,9 +2179,10 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-home-toggle,
     #sb-right-shell-toggle,
     #sb-character-toggle {
-        min-width: 38px;
-        width: 38px;
-        min-height: 38px;
+        min-width: var(--sb-mobile-toggle-size);
+        width: var(--sb-mobile-toggle-size);
+        height: var(--sb-mobile-toggle-size);
+        min-height: var(--sb-mobile-toggle-size);
     }
 
     .sb-shell-nav {

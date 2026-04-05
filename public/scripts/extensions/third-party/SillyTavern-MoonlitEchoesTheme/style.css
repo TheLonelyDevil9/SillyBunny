@@ -2384,9 +2384,11 @@ body.ripplestyle {
     left: 0;
 
     #options_button {
-        font-size: calc(var(--mainFontSize));
-        width: calc(var(--mainFontSize)* 0.9) !important;
-        height: calc(var(--mainFontSize)* 0.9) !important;
+        font-size: var(--bottomFormIconSize);
+        width: 42px !important;
+        height: 42px !important;
+        min-width: 42px !important;
+        min-height: 42px !important;
     }
 }
 #leftSendForm {
@@ -2395,8 +2397,8 @@ body.ripplestyle {
     justify-content: center;
 
     > * {
-        min-width: calc(var(--mainFontSize));
-        min-height: calc(var(--mainFontSize)) !important;
+        min-width: 42px;
+        min-height: 42px !important;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3402,7 +3404,7 @@ body:not(.charListGrid).big-avatars {
     padding-top: 0 !important;
 }
 #CharListButtonAndHotSwaps {
-    margin: 10px 0;
+    margin: 0 0 10px !important;
 }
 
 #rm_print_characters_block {

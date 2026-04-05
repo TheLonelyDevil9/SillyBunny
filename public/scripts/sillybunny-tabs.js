@@ -3,6 +3,8 @@ const SB_STORAGE_KEYS = Object.freeze({
     rightTab: 'sb-right-tab',
     theme: 'sb-theme',
     surfaceTransparency: 'sb-surface-transparency',
+    topbarScaleDesktop: 'sb-topbar-scale-desktop',
+    topbarScaleMobile: 'sb-topbar-scale-mobile',
 });
 
 function safeGetItem(key) {
@@ -20,6 +22,12 @@ const SB_SURFACE_TRANSPARENCY = Object.freeze({
     max: 55,
     step: 5,
     defaultValue: 0,
+});
+const SB_TOPBAR_SCALE = Object.freeze({
+    min: 70,
+    max: 150,
+    step: 5,
+    defaultValue: 100,
 });
 const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
 const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
@@ -177,6 +185,10 @@ const sbState = {
     initialized: false,
     theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
     surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
+    topbarScale: {
+        desktop: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop)),
+        mobile: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile)),
+    },
     shells: {},
     chatbar: {
         desktop: null,
@@ -213,6 +225,49 @@ function normalizeSurfaceTransparency(value) {
 
 function formatSurfaceTransparency(value) {
     return `${normalizeSurfaceTransparency(value)}%`;
+}
+
+function normalizeTopbarScale(value) {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+        return SB_TOPBAR_SCALE.defaultValue;
+    }
+
+    const snappedValue = Math.round(numericValue / SB_TOPBAR_SCALE.step) * SB_TOPBAR_SCALE.step;
+    return Math.min(SB_TOPBAR_SCALE.max, Math.max(SB_TOPBAR_SCALE.min, snappedValue));
+}
+
+function formatTopbarScale(value) {
+    return `${normalizeTopbarScale(value)}%`;
+}
+
+function setTopbarScale(mode, value, { persist = true } = {}) {
+    const storageKey = mode === 'mobile'
+        ? SB_STORAGE_KEYS.topbarScaleMobile
+        : mode === 'desktop'
+            ? SB_STORAGE_KEYS.topbarScaleDesktop
+            : '';
+
+    if (!storageKey) {
+        return;
+    }
+
+    const nextScale = normalizeTopbarScale(value);
+    const scaleFactor = Number((nextScale / 100).toFixed(2)).toString();
+
+    sbState.topbarScale[mode] = nextScale;
+    document.documentElement.style.setProperty(`--sb-topbar-scale-${mode}`, scaleFactor);
+
+    if (persist) {
+        safeSetItem(storageKey, String(nextScale));
+    }
+
+    if (getChatDesktopRefs()) {
+        scheduleChatbarRefresh(0);
+    }
+
+    updateThemePickerUi();
 }
 
 function createElement(tagName, { id = '', className = '', text = '', html = '', attrs = {} } = {}) {
@@ -1087,8 +1142,7 @@ function buildMobileChatTools() {
     const overlay = createElement('div', { id: 'sb-mobile-chat-tools' });
     const panel = createElement('div', { id: 'sb-mobile-chat-tools-panel' });
     const header = createElement('div', { className: 'sb-mobile-chat-header' });
-    const title = createElement('div', { className: 'sb-mobile-chat-title' });
-    const closeButton = createTopBarIconButton(
+    const dismissButton = createTopBarIconButton(
         {
             id: 'sb-mobile-chat-close',
             icon: 'fa-xmark',
@@ -1157,20 +1211,18 @@ function buildMobileChatTools() {
         overlay.inert = true;
     }
 
-    title.innerHTML = '<strong>Chat Tools</strong><small>Switch, search, and manage chats without leaving the page.</small>';
-    header.append(title, closeButton);
-
     chatSelectField.appendChild(chatSelect);
     searchField.append(searchInput, searchStatus);
     connectionField.appendChild(connectionSelect);
     connectionSection.append(connectionTitle, connectionField, connectionStatus);
+    header.append(searchField, dismissButton);
 
     const buttons = {
-        managerButton: createTopBarIconButton({ icon: 'fa-address-book', title: 'View chat files', label: 'Files', className: 'is-mobile-wide' }, handleChatManagerClick),
-        newButton: createTopBarIconButton({ icon: 'fa-comments', title: 'Start a new chat', label: 'New', className: 'is-mobile-wide' }, handleNewChat),
-        renameButton: createTopBarIconButton({ icon: 'fa-pen', title: 'Rename this chat', label: 'Rename', className: 'is-mobile-wide' }, () => { void handleRenameChat(); }),
-        deleteButton: createTopBarIconButton({ icon: 'fa-trash', title: 'Delete this chat', label: 'Delete', className: 'is-mobile-wide' }, () => { void handleDeleteChat(); }),
-        closeButton: createTopBarIconButton({ icon: 'fa-xmark', title: 'Close this chat', label: 'Close', className: 'is-mobile-wide' }, () => { void handleCloseChat(); }),
+        managerButton: createTopBarIconButton({ icon: 'fa-address-book', title: 'View chat files', className: 'is-mobile-compact' }, handleChatManagerClick),
+        newButton: createTopBarIconButton({ icon: 'fa-comments', title: 'Start a new chat', className: 'is-mobile-compact' }, handleNewChat),
+        renameButton: createTopBarIconButton({ icon: 'fa-pen', title: 'Rename this chat', className: 'is-mobile-compact' }, () => { void handleRenameChat(); }),
+        deleteButton: createTopBarIconButton({ icon: 'fa-trash', title: 'Delete this chat', className: 'is-mobile-compact' }, () => { void handleDeleteChat(); }),
+        closeButton: createTopBarIconButton({ icon: 'fa-xmark', title: 'Close this chat', className: 'is-mobile-compact' }, () => { void handleCloseChat(); }),
     };
 
     actions.append(
@@ -1182,7 +1234,7 @@ function buildMobileChatTools() {
     );
 
     recentSection.append(recentTitle, recentList);
-    panel.append(header, chatSelectField, searchField, actions, connectionSection, recentSection);
+    panel.append(header, chatSelectField, actions, connectionSection, recentSection);
     overlay.appendChild(panel);
 
     overlay.addEventListener('click', event => {
@@ -2264,6 +2316,35 @@ function buildAgentsPanel() {
     };
 }
 
+function createThemeSliderGroup({ title, valueId, inputId, value, min, max, step, ariaLabel, caption, onInput }) {
+    const sliderGroup = createElement('div', { className: 'sb-theme-slider-group' });
+    const sliderHeader = createElement('div', { className: 'sb-theme-slider-header' });
+    const sliderTitle = createElement('strong', { text: title });
+    const sliderValue = createElement('span', { id: valueId, className: 'sb-theme-slider-value' });
+    const sliderInput = createElement('input', {
+        id: inputId,
+        className: 'sb-theme-slider-input',
+        attrs: {
+            type: 'range',
+            min: String(min),
+            max: String(max),
+            step: String(step),
+            value: String(value),
+            'aria-label': ariaLabel,
+        },
+    });
+    const sliderCaption = createElement('p', {
+        className: 'sb-theme-slider-caption',
+        text: caption,
+    });
+
+    sliderHeader.append(sliderTitle, sliderValue);
+    sliderGroup.append(sliderHeader, sliderInput, sliderCaption);
+    sliderInput.addEventListener('input', event => onInput(event.currentTarget?.value));
+
+    return sliderGroup;
+}
+
 function injectThemePicker() {
     if (document.getElementById('sb-theme-card')) {
         updateThemePickerUi();
@@ -2280,29 +2361,43 @@ function injectThemePicker() {
     const title = createElement('strong', { text: 'Shell Style' });
     const description = createElement('p', { text: 'Switch the navigation shell between three built-in visual directions.' });
     const optionRow = createElement('div', { className: 'sb-theme-option-row' });
-    const sliderGroup = createElement('div', { className: 'sb-theme-slider-group' });
-    const sliderHeader = createElement('div', { className: 'sb-theme-slider-header' });
-    const sliderTitle = createElement('strong', { text: 'Background Visibility' });
-    const sliderValue = createElement('span', { id: 'sb-surface-transparency-value', className: 'sb-theme-slider-value' });
-    const sliderInput = createElement('input', {
-        id: 'sb-surface-transparency-input',
-        className: 'sb-theme-slider-input',
-        attrs: {
-            type: 'range',
-            min: String(SB_SURFACE_TRANSPARENCY.min),
-            max: String(SB_SURFACE_TRANSPARENCY.max),
-            step: String(SB_SURFACE_TRANSPARENCY.step),
-            value: String(sbState.surfaceTransparency),
-            'aria-label': 'Background visibility',
-        },
+    const surfaceSliderGroup = createThemeSliderGroup({
+        title: 'Background Visibility',
+        valueId: 'sb-surface-transparency-value',
+        inputId: 'sb-surface-transparency-input',
+        value: sbState.surfaceTransparency,
+        min: SB_SURFACE_TRANSPARENCY.min,
+        max: SB_SURFACE_TRANSPARENCY.max,
+        step: SB_SURFACE_TRANSPARENCY.step,
+        ariaLabel: 'Background visibility',
+        caption: 'Higher values make the home and chat surfaces more transparent so your selected background picture shows through.',
+        onInput: nextValue => setSurfaceTransparency(nextValue),
     });
-    const sliderCaption = createElement('p', {
-        className: 'sb-theme-slider-caption',
-        text: 'Higher values make the home and chat surfaces more transparent so your selected background picture shows through.',
+    const desktopTopbarSliderGroup = createThemeSliderGroup({
+        title: 'Desktop Top Bar Size',
+        valueId: 'sb-topbar-scale-desktop-value',
+        inputId: 'sb-topbar-scale-desktop-input',
+        value: sbState.topbarScale.desktop,
+        min: SB_TOPBAR_SCALE.min,
+        max: SB_TOPBAR_SCALE.max,
+        step: SB_TOPBAR_SCALE.step,
+        ariaLabel: 'Desktop top bar size',
+        caption: 'Resize the desktop navigation row, search bar, and header controls without editing CSS.',
+        onInput: nextValue => setTopbarScale('desktop', nextValue),
+    });
+    const mobileTopbarSliderGroup = createThemeSliderGroup({
+        title: 'Mobile Top Bar Size',
+        valueId: 'sb-topbar-scale-mobile-value',
+        inputId: 'sb-topbar-scale-mobile-input',
+        value: sbState.topbarScale.mobile,
+        min: SB_TOPBAR_SCALE.min,
+        max: SB_TOPBAR_SCALE.max,
+        step: SB_TOPBAR_SCALE.step,
+        ariaLabel: 'Mobile top bar size',
+        caption: 'Resize the mobile one-line header and compact chat-tools panel for phones and narrow screens.',
+        onInput: nextValue => setTopbarScale('mobile', nextValue),
     });
     header.append(title, description);
-    sliderHeader.append(sliderTitle, sliderValue);
-    sliderGroup.append(sliderHeader, sliderInput, sliderCaption);
 
     for (const theme of SB_THEMES) {
         const button = createElement('button', {
@@ -2322,11 +2417,10 @@ function injectThemePicker() {
         optionRow.appendChild(button);
     }
 
-    sliderInput.addEventListener('input', event => setSurfaceTransparency(event.currentTarget?.value));
     getMessageStyleSelect()?.addEventListener('change', updateThemePickerUi);
     document.addEventListener('sb:chat-style-updated', updateThemePickerUi);
 
-    card.append(header, optionRow, sliderGroup);
+    card.append(header, optionRow, surfaceSliderGroup, desktopTopbarSliderGroup, mobileTopbarSliderGroup);
     themeBlock.prepend(card);
     updateThemePickerUi();
 }
@@ -2334,6 +2428,10 @@ function injectThemePicker() {
 function updateThemePickerUi() {
     const sliderInput = document.getElementById('sb-surface-transparency-input');
     const sliderValue = document.getElementById('sb-surface-transparency-value');
+    const desktopTopbarScaleInput = document.getElementById('sb-topbar-scale-desktop-input');
+    const desktopTopbarScaleValue = document.getElementById('sb-topbar-scale-desktop-value');
+    const mobileTopbarScaleInput = document.getElementById('sb-topbar-scale-mobile-input');
+    const mobileTopbarScaleValue = document.getElementById('sb-topbar-scale-mobile-value');
 
     for (const button of document.querySelectorAll('[data-sb-theme-option]')) {
         const themeId = button.getAttribute('data-sb-theme-option');
@@ -2348,6 +2446,22 @@ function updateThemePickerUi() {
 
     if (sliderValue instanceof HTMLElement) {
         sliderValue.textContent = formatSurfaceTransparency(sbState.surfaceTransparency);
+    }
+
+    if (desktopTopbarScaleInput instanceof HTMLInputElement) {
+        desktopTopbarScaleInput.value = String(sbState.topbarScale.desktop);
+    }
+
+    if (desktopTopbarScaleValue instanceof HTMLElement) {
+        desktopTopbarScaleValue.textContent = formatTopbarScale(sbState.topbarScale.desktop);
+    }
+
+    if (mobileTopbarScaleInput instanceof HTMLInputElement) {
+        mobileTopbarScaleInput.value = String(sbState.topbarScale.mobile);
+    }
+
+    if (mobileTopbarScaleValue instanceof HTMLElement) {
+        mobileTopbarScaleValue.textContent = formatTopbarScale(sbState.topbarScale.mobile);
     }
 
     for (const button of document.querySelectorAll('[data-sb-message-style]')) {
@@ -3304,6 +3418,10 @@ function initAll() {
     buildMobileNav();
     buildMobileChatTools();
     injectCharacterCloseButton();
+    setShellTheme(sbState.theme, { persist: false });
+    setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
+    setTopbarScale('desktop', sbState.topbarScale.desktop, { persist: false });
+    setTopbarScale('mobile', sbState.topbarScale.mobile, { persist: false });
     buildTopBar();
     bindChatbarEvents();
     interceptDrawerOpeners();
@@ -3311,8 +3429,6 @@ function initAll() {
     initAgentOverview();
     applyDefaultDrawerStates();
     syncMobileViewportState();
-    setShellTheme(sbState.theme, { persist: false });
-    setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
 
     window.addEventListener('resize', syncMobileViewportState, { passive: true });
     window.addEventListener('orientationchange', syncMobileViewportState);
@@ -3333,6 +3449,9 @@ function initAll() {
         setSurfaceTransparency(value) {
             setSurfaceTransparency(value);
         },
+        setTopbarScale(mode, value) {
+            setTopbarScale(mode, value);
+        },
         openChatTools() {
             if (isMobileViewport()) {
                 openMobileChatTools();
@@ -3349,6 +3468,11 @@ function initAll() {
         },
         getSurfaceTransparency() {
             return sbState.surfaceTransparency;
+        },
+        getTopbarScale(mode) {
+            return mode === 'mobile'
+                ? sbState.topbarScale.mobile
+                : sbState.topbarScale.desktop;
         },
     };
 }

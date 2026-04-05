@@ -347,9 +347,24 @@ select.text_pole {
 }
 
 #leftSendForm > div,
-#rightSendForm > div:not(.mes_stop),
-#send_form .mes_stop,
 #options_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    margin: 0;
+    padding: 0;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
+    box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
+    font-size: calc(var(--bottomFormIconSize) * 0.78);
+}
+
+#rightSendForm > div:not(.mes_stop),
+#send_form .mes_stop {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -362,10 +377,11 @@ select.text_pole {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
-    font-size: calc(var(--bottomFormIconSize) * 0.58);
+    font-size: calc(var(--bottomFormIconSize) * 0.72);
 }
 
 #send_form .mes_stop {
+    display: none;
     width: 44px;
     min-width: 44px;
     height: 44px;
@@ -405,7 +421,7 @@ select.text_pole {
 #leftSendForm > div i,
 #rightSendForm > div i,
 #options_button i {
-    font-size: calc(var(--bottomFormIconSize) * 0.54);
+    font-size: calc(var(--bottomFormIconSize) * 0.68);
 }
 
 #send_form .mes_stop i,
@@ -422,6 +438,30 @@ select.text_pole {
 
 #send_but {
     box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #f1b285) 22%, transparent);
+}
+
+/*
+ * The character-list drawer can render an empty sticky header block with a tinted
+ * background before any character is selected. Collapse that placeholder so the
+ * list controls sit flush under the favorites strip again.
+ */
+#right-nav-panel:not([data-menu-type]) #right-nav-panel-tabs:has(#rm_button_selected_ch h2:empty):has(#result_info[style*="display: none"]) {
+    display: none !important;
+}
+
+@media screen and (min-width: 761px) {
+    #options_button::before {
+        width: 1.32em !important;
+        height: 1.32em !important;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2.5' y='4.5' width='19' height='2.9' rx='1.45' fill='%23000'/%3E%3Crect x='2.5' y='10.55' width='19' height='2.9' rx='1.45' fill='%23000' opacity='0.85'/%3E%3Crect x='2.5' y='16.6' width='19' height='2.9' rx='1.45' fill='%23000'/%3E%3C/svg%3E") !important;
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2.5' y='4.5' width='19' height='2.9' rx='1.45' fill='%23000'/%3E%3Crect x='2.5' y='10.55' width='19' height='2.9' rx='1.45' fill='%23000' opacity='0.85'/%3E%3Crect x='2.5' y='16.6' width='19' height='2.9' rx='1.45' fill='%23000'/%3E%3C/svg%3E") !important;
+        -webkit-mask-size: contain !important;
+        mask-size: contain !important;
+        -webkit-mask-repeat: no-repeat !important;
+        mask-repeat: no-repeat !important;
+        -webkit-mask-position: center !important;
+        mask-position: center !important;
+    }
 }
 
 @media screen and (max-width: 760px) {

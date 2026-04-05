@@ -187,16 +187,16 @@
 
     /* Ensure consistent hamburger button sizing */
     #sb-hamburger {
-        width: 46px !important;
-        min-width: 46px !important;
-        max-width: 46px !important;
-        height: 46px !important;
-        min-height: 46px !important;
+        width: var(--sb-mobile-toggle-size) !important;
+        min-width: var(--sb-mobile-toggle-size) !important;
+        max-width: var(--sb-mobile-toggle-size) !important;
+        height: var(--sb-mobile-toggle-size) !important;
+        min-height: var(--sb-mobile-toggle-size) !important;
         padding: 0 !important;
     }
 
     #sb-hamburger i {
-        font-size: calc(var(--mainFontSize) * 1.1);
+        font-size: var(--sb-topbar-compact-icon-size);
     }
 
     .bg_folder_tile .jg-button {
