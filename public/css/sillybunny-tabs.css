@@ -189,7 +189,12 @@
 }
 
 #top-settings-holder .drawer-content,
-#top-settings-holder .drawer-content *,
+#top-settings-holder .drawer-content * {
+    pointer-events: none;
+}
+
+#top-settings-holder > .drawer > .drawer-content.openDrawer,
+#top-settings-holder > .drawer > .drawer-content.openDrawer *,
 #top-settings-holder .popup,
 #top-settings-holder .popup * {
     pointer-events: auto;
@@ -200,8 +205,10 @@
  * This prevents theme/layout overrides from leaving invisible shells
  * sitting on the left/right edges and stealing the first tap/click.
  */
-#top-settings-holder > .drawer > .drawer-content.closedDrawer:not(.openDrawer) {
+#top-settings-holder > .drawer > .drawer-content:not(.openDrawer),
+#top-settings-holder > .drawer > .drawer-content[data-sb-drawer-state='closed'] {
     display: none !important;
+    visibility: hidden !important;
     width: 0 !important;
     min-width: 0 !important;
     min-height: 0 !important;
@@ -1523,7 +1530,7 @@
         height: 0 !important;
         max-height: 0 !important;
         overflow: visible !important;
-        pointer-events: auto !important;
+        pointer-events: none !important;
         z-index: 4005 !important;
     }
 

@@ -171,6 +171,12 @@ const sbState = {
     shells: {},
 };
 
+const SB_TOP_DRAWER_IDS = Object.freeze([
+    SB_SHELLS.left.rootPanelId,
+    SB_SHELLS.right.rootPanelId,
+    'right-nav-panel',
+]);
+
 function normalizeTheme(themeId) {
     return SB_THEMES.some(theme => theme.id === themeId) ? themeId : 'modern-glass';
 }
@@ -294,6 +300,133 @@ function clearShellSearch(shellKey) {
     if (shellState.searchResults instanceof HTMLElement) {
         shellState.searchResults.replaceChildren();
         shellState.searchResults.classList.remove('is-visible');
+    }
+}
+
+function getDrawerElements(drawerRootOrId) {
+    const drawerRoot = typeof drawerRootOrId === 'string'
+        ? document.getElementById(drawerRootOrId)
+        : drawerRootOrId;
+
+    if (!(drawerRoot instanceof HTMLElement)) {
+        return {
+            drawerRoot: null,
+            hostDrawer: null,
+            hostToggle: null,
+            hostIcon: null,
+        };
+    }
+
+    const hostDrawer = drawerRoot.closest('.drawer');
+    const hostToggle = hostDrawer?.querySelector(':scope > .drawer-toggle') ?? null;
+    const hostIcon = hostToggle?.querySelector('.drawer-icon') ?? null;
+
+    return {
+        drawerRoot,
+        hostDrawer,
+        hostToggle,
+        hostIcon,
+    };
+}
+
+function syncDrawerMetadata(drawerRoot, isOpen = drawerRoot?.classList.contains('openDrawer')) {
+    if (!(drawerRoot instanceof HTMLElement)) {
+        return;
+    }
+
+    drawerRoot.dataset.sbDrawerState = isOpen ? 'open' : 'closed';
+    drawerRoot.setAttribute('aria-hidden', String(!isOpen));
+}
+
+function forceDrawerState(drawerRootOrId, shouldOpen) {
+    const { drawerRoot, hostIcon } = getDrawerElements(drawerRootOrId);
+
+    if (!(drawerRoot instanceof HTMLElement)) {
+        return;
+    }
+
+    const isOpen = Boolean(shouldOpen);
+
+    drawerRoot.classList.toggle('openDrawer', isOpen);
+    drawerRoot.classList.toggle('closedDrawer', !isOpen);
+
+    if (!isOpen) {
+        drawerRoot.classList.remove('pinnedOpen');
+
+        for (const [shellKey, shellConfig] of Object.entries(SB_SHELLS)) {
+            if (shellConfig.rootPanelId === drawerRoot.id) {
+                clearShellSearch(shellKey);
+            }
+        }
+    }
+
+    syncDrawerMetadata(drawerRoot, isOpen);
+
+    if (hostIcon instanceof HTMLElement) {
+        hostIcon.classList.toggle('openIcon', isOpen);
+        hostIcon.classList.toggle('closedIcon', !isOpen);
+
+        if (!isOpen) {
+            hostIcon.classList.remove('drawerPinnedOpen');
+        }
+    }
+}
+
+function normalizeTopDrawerState({ reason = 'startup', keepOpen = [] } = {}) {
+    const keepOpenSet = new Set(
+        keepOpen.filter(drawerId => typeof drawerId === 'string' && drawerId.length > 0),
+    );
+
+    for (const drawerId of SB_TOP_DRAWER_IDS) {
+        forceDrawerState(drawerId, keepOpenSet.has(drawerId));
+    }
+
+    if (reason) {
+        document.body.dataset.sbDrawerNormalizeReason = reason;
+    }
+}
+
+function runStartupDrawerSanityCheck() {
+    const openDrawers = SB_TOP_DRAWER_IDS
+        .map(drawerId => document.getElementById(drawerId))
+        .filter(drawerRoot => drawerRoot instanceof HTMLElement && drawerRoot.classList.contains('openDrawer'))
+        .map(drawerRoot => drawerRoot.id);
+
+    const shouldReset = openDrawers.length > 1 || (isLandingPageVisible() && openDrawers.length > 0);
+
+    if (shouldReset) {
+        normalizeTopDrawerState({ reason: 'sanity-check' });
+        return;
+    }
+
+    for (const drawerId of SB_TOP_DRAWER_IDS) {
+        const drawerRoot = document.getElementById(drawerId);
+
+        if (!(drawerRoot instanceof HTMLElement)) {
+            continue;
+        }
+
+        syncDrawerMetadata(drawerRoot);
+        forceDrawerState(drawerRoot, drawerRoot.classList.contains('openDrawer'));
+    }
+}
+
+function bindStartupDrawerSanityCheck() {
+    const deferredCheck = () => {
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(runStartupDrawerSanityCheck);
+        });
+    };
+
+    window.addEventListener('pageshow', deferredCheck, { passive: true });
+    window.addEventListener('load', deferredCheck, { once: true });
+
+    const context = getSillyTavernContext();
+    const eventSource = context?.eventSource;
+    const eventTypes = context?.eventTypes ?? context?.event_types;
+
+    if (eventSource && eventTypes?.APP_READY) {
+        eventSource.on(eventTypes.APP_READY, deferredCheck);
     }
 }
 
@@ -513,7 +646,15 @@ function isCharacterPanelOpen() {
 function closeCharacterPanel() {
     if (isCharacterPanelOpen()) {
         triggerDrawerToggle('#rightNavHolder > .drawer-toggle');
+        window.requestAnimationFrame(() => {
+            if (isCharacterPanelOpen()) {
+                forceDrawerState('right-nav-panel', false);
+            }
+        });
+        return;
     }
+
+    forceDrawerState('right-nav-panel', false);
 }
 
 function toggleCharacterPanel() {
@@ -1108,7 +1249,15 @@ function openShell(shellKey, tabId = null) {
 
     if (!shellRoot.classList.contains('openDrawer')) {
         triggerDrawerToggle(shellConfig.hostToggleSelector);
+        window.requestAnimationFrame(() => {
+            if (!shellRoot.classList.contains('openDrawer')) {
+                forceDrawerState(shellRoot, true);
+            }
+        });
+        return;
     }
+
+    forceDrawerState(shellRoot, true);
 }
 
 function closeShell(shellKey) {
@@ -1118,7 +1267,15 @@ function closeShell(shellKey) {
     if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
         clearShellSearch(shellKey);
         triggerDrawerToggle(shellConfig.hostToggleSelector);
+        window.requestAnimationFrame(() => {
+            if (shellRoot.classList.contains('openDrawer')) {
+                forceDrawerState(shellRoot, false);
+            }
+        });
+        return;
     }
+
+    forceDrawerState(shellRoot, false);
 }
 
 function buildShell(shellKey) {
@@ -1196,10 +1353,12 @@ function buildShell(shellKey) {
     };
 
     sbState.shells[shellKey] = shellState;
+    syncDrawerMetadata(shellRoot);
 
     let wasOpen = shellRoot.classList.contains('openDrawer');
     new MutationObserver(() => {
         const isOpen = shellRoot.classList.contains('openDrawer');
+        syncDrawerMetadata(shellRoot, isOpen);
 
         if (isOpen === wasOpen) {
             return;
@@ -1871,6 +2030,7 @@ function initAll() {
         return;
     }
 
+    normalizeTopDrawerState({ reason: 'init-start' });
     sbState.initialized = true;
 
     // Safari-compatible: Use requestAnimationFrame to ensure class changes apply after paint
@@ -1890,6 +2050,7 @@ function initAll() {
     injectCharacterCloseButton();
     interceptDrawerOpeners();
     bindWorldInfoRoute();
+    bindStartupDrawerSanityCheck();
     initAgentOverview();
     applyDefaultDrawerStates();
     syncMobileViewportState();
@@ -1918,6 +2079,10 @@ function initAll() {
             return sbState.surfaceTransparency;
         },
     };
+
+    window.requestAnimationFrame(() => {
+        normalizeTopDrawerState({ reason: 'post-init-frame' });
+    });
 }
 
 if (document.readyState === 'loading') {
