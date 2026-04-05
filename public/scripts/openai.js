@@ -7340,6 +7340,13 @@ export function initOpenAI() {
             templateResult: getNanoGptModelTemplate,
             matcher: textValueMatcher,
         });
+        $('#model_custom_select').select2({
+            placeholder: t`Select a model`,
+            searchInputPlaceholder: t`Search models...`,
+            searchInputCssClass: 'text_pole',
+            width: '100%',
+            matcher: textValueMatcher,
+        });
         $('#completion_prompt_manager_popup_entry_form_injection_trigger').select2({
             placeholder: t`All types (default)`,
             width: '100%',

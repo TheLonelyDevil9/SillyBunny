@@ -16,6 +16,25 @@
 
 /*will apply to anything 1000px or less. this catches ipads, horizontal phones, and vertical phones)*/
 @media screen and (max-width: 1000px) {
+    :root {
+        --fontScale: 0.94;
+        --topBarIconSize: calc(var(--mainFontSize) * 1.82);
+        --topBarBlockPadding: calc(var(--mainFontSize) / 4.2);
+        --topBarBlockSize: max(calc(var(--topBarIconSize) + var(--topBarBlockPadding)), 50px);
+        --bottomFormIconSize: calc(var(--mainFontSize) * 1.72);
+    }
+
+    input[type='text'],
+    input[type='search'],
+    input[type='password'],
+    input[type='email'],
+    input[type='number'],
+    input[type='url'],
+    textarea,
+    .text_pole:not(select),
+    .select2-search__field {
+        font-size: max(16px, var(--mainFontSize)) !important;
+    }
 
     #UI-Theme-Block,
     #UI-Customization,
@@ -99,27 +118,98 @@
         backdrop-filter: blur(2px);
     }
 
+    .menu_button {
+        padding: 5px 14px;
+        gap: 5px;
+        margin: 4px 0;
+        min-height: 28px;
+    }
+
+    .menu_button_icon {
+        gap: 4px;
+    }
+
+    .menu_button_icon span,
+    .checkbox_label,
+    .range-block-title,
+    .range-block-header {
+        font-size: calc(var(--mainFontSize) * 0.88);
+    }
+
+    .drawer-content h3 {
+        font-size: calc(var(--mainFontSize) * 1.04);
+    }
+
+    .drawer-content h4 {
+        font-size: calc(var(--mainFontSize) * 0.9);
+    }
+
+    .drawer-icon {
+        width: 40px;
+        height: 40px;
+        padding: 3px;
+    }
+
+    .custom-drawer-icon,
+    .inline-drawer-icon {
+        font-size: calc(var(--mainFontSize) * 1.35);
+    }
+
+    .note-link-span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        font-size: 16px;
+        margin: 0 3px;
+    }
+
+    .sb-proxy-button {
+        min-height: 42px;
+        height: 42px;
+        min-width: 104px;
+        padding: 0 14px;
+        gap: 8px;
+    }
+
+    .sb-proxy-button i {
+        font-size: calc(var(--mainFontSize) * 1);
+    }
+
+    .sb-proxy-button span {
+        font-size: calc(var(--mainFontSize) * 0.78);
+    }
+
     /* Reduce mobile nav spacing */
     #sb-mobile-nav {
-        padding: 12px;
+        padding: 10px;
     }
 
     #sb-mobile-nav-content {
-        padding: 14px 12px 18px;
-        gap: 12px;
+        padding: 12px 10px 16px;
+        gap: 10px;
     }
 
     .sb-mobile-section {
-        gap: 10px;
+        gap: 8px;
     }
 
     .sb-mobile-section-list {
-        gap: 10px;
+        gap: 8px;
     }
 
     .sb-nav-item {
-        padding: 14px 16px;
-        gap: 12px;
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .sb-nav-item i {
+        font-size: calc(var(--mainFontSize) * 0.92);
+    }
+
+    .sb-nav-item span {
+        font-size: calc(var(--mainFontSize) * 0.84);
     }
 
     /* Settings panel spacing */
@@ -139,13 +229,13 @@
     /* Input area mobile optimization */
     #send_textarea {
         min-height: calc(var(--bottomFormBlockSize) * 1.58);
-        padding: 12px 14px;
+        padding: 11px 12px;
     }
 
     #send_form .mes_stop {
-        min-width: 52px;
-        min-height: 52px;
-        font-size: calc(var(--mainFontSize) * 1.55);
+        min-width: 48px;
+        min-height: 48px;
+        font-size: calc(var(--mainFontSize) * 1.45);
         padding: 0;
         align-self: center;
         display: inline-flex;
@@ -169,18 +259,18 @@
     #rightSendForm {
         width: auto !important;
         min-width: max-content;
-        min-height: calc(var(--bottomFormBlockSize) * 1.2);
+        min-height: calc(var(--bottomFormBlockSize) * 1.12);
         flex-wrap: nowrap !important;
         align-items: center;
     }
 
     /* Ensure consistent hamburger button sizing */
     #sb-hamburger {
-        width: 46px !important;
-        min-width: 46px !important;
-        max-width: 46px !important;
-        height: 46px !important;
-        min-height: 46px !important;
+        width: 44px !important;
+        min-width: 44px !important;
+        max-width: 44px !important;
+        height: 44px !important;
+        min-height: 44px !important;
         padding: 0 !important;
     }
 
@@ -801,15 +891,6 @@
         margin-left: 10px;
     }
 
-    .note-link-span {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        font-size: 18px;
-    }
-
     /* Model filter input for mobile (replaces Select2 which doesn't work on iOS) */
     .sb-model-filter {
         width: 100%;
@@ -872,29 +953,29 @@
 @media screen and (max-width: 620px) {
     /* Tighter mobile nav spacing for small phones */
     #sb-mobile-nav {
-        padding: 10px;
+        padding: 8px;
     }
 
     #sb-mobile-nav-content {
-        padding: 12px 10px 16px;
-        gap: 10px;
+        padding: 10px 8px 14px;
+        gap: 8px;
     }
 
     .sb-nav-item {
-        padding: 12px 14px;
-        gap: 10px;
+        padding: 11px 13px;
+        gap: 9px;
     }
 
     /* Input area optimization for small phones */
     #send_textarea {
         min-height: calc(var(--bottomFormBlockSize) * 1.62);
-        padding: 12px;
+        padding: 11px;
         font-size: calc(var(--mainFontSize) * 1.05);
     }
 
     #send_form .mes_stop {
-        min-width: 52px;
-        min-height: 52px;
-        font-size: calc(var(--mainFontSize) * 1.6);
+        min-width: 46px;
+        min-height: 46px;
+        font-size: calc(var(--mainFontSize) * 1.4);
     }
 }

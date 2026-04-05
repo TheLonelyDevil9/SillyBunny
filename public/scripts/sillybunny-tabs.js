@@ -165,6 +165,7 @@ const SB_SEARCH_TARGET_SELECTOR = [
 
 const sbState = {
     initialized: false,
+    isMobileViewport: null,
     theme: normalizeTheme(localStorage.getItem(SB_STORAGE_KEYS.theme)),
     surfaceTransparency: normalizeSurfaceTransparency(localStorage.getItem(SB_STORAGE_KEYS.surfaceTransparency)),
     shells: {},
@@ -1669,9 +1670,121 @@ function applyDefaultDrawerStates() {
 }
 
 function syncMobileViewportState() {
-    if (!isMobileViewport()) {
+    const mobileViewport = isMobileViewport();
+
+    if (!mobileViewport) {
         closeMobileNav();
     }
+
+    if (sbState.isMobileViewport === mobileViewport) {
+        return;
+    }
+
+    sbState.isMobileViewport = mobileViewport;
+    reinitSelect2AfterShell();
+}
+
+function readModelFilterOptions(select) {
+    return Array.from(select.options).map(opt => ({
+        value: opt.value,
+        text: opt.textContent,
+        disabled: opt.disabled,
+        selected: opt.selected,
+    }));
+}
+
+function renderModelFilterOptions(select, options, query) {
+    const normalizedQuery = query.toLowerCase().trim();
+    const currentValue = select.value;
+
+    select.__sbModelFilterApplying = true;
+
+    try {
+        select.innerHTML = '';
+
+        for (const opt of options) {
+            const matchesQuery = !normalizedQuery
+                || opt.value === currentValue
+                || opt.text.toLowerCase().includes(normalizedQuery)
+                || opt.value.toLowerCase().includes(normalizedQuery);
+
+            if (!matchesQuery) {
+                continue;
+            }
+
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            option.disabled = opt.disabled;
+            option.selected = opt.value === currentValue;
+            select.appendChild(option);
+        }
+    } finally {
+        select.__sbModelFilterApplying = false;
+    }
+}
+
+function observeModelFilterInput(select) {
+    if (select.__sbModelFilterObserver) {
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        if (select.__sbModelFilterApplying) {
+            return;
+        }
+
+        syncModelFilterInput($(select));
+    });
+
+    observer.observe(select, { childList: true, subtree: true, characterData: true });
+    select.__sbModelFilterObserver = observer;
+}
+
+function syncModelFilterInput($select, { preserveQuery = true } = {}) {
+    const select = $select[0];
+
+    if (!(select instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const input = select.__sbModelFilterInput;
+
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+
+    if (!preserveQuery) {
+        input.value = '';
+    }
+
+    select.__sbModelFilterOptions = readModelFilterOptions(select);
+    renderModelFilterOptions(select, select.__sbModelFilterOptions, input.value);
+}
+
+function removeModelFilterInput($select) {
+    const select = $select[0];
+
+    if (!(select instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    if (Array.isArray(select.__sbModelFilterOptions)) {
+        renderModelFilterOptions(select, select.__sbModelFilterOptions, '');
+    }
+
+    if (select.__sbModelFilterObserver) {
+        select.__sbModelFilterObserver.disconnect();
+        delete select.__sbModelFilterObserver;
+    }
+
+    if (select.__sbModelFilterInput instanceof HTMLInputElement) {
+        select.__sbModelFilterInput.remove();
+        delete select.__sbModelFilterInput;
+    }
+
+    delete select.__sbModelFilterOptions;
+    delete select.__sbModelFilterApplying;
 }
 
 function reinitSelect2AfterShell() {
@@ -1686,6 +1799,7 @@ function reinitSelect2AfterShell() {
         '#openrouter_model',
         '#vllm_model',
         '#aphrodite_model',
+        '#model_custom_select',
     ];
 
     if (isMobileViewport()) {
@@ -1707,6 +1821,7 @@ function reinitSelect2AfterShell() {
         const allSelectors = [...modelSelectors, '.openrouter_quantizations', '.openrouter_providers'];
         for (const selector of allSelectors) {
             const $el = $(selector);
+            removeModelFilterInput($el);
             if ($el.length && $el.data('select2')) {
                 try {
                     const config = $el.data('select2').options.options;
@@ -1721,41 +1836,27 @@ function reinitSelect2AfterShell() {
 }
 
 function injectModelFilterInput($select) {
-    if (!$select.length || $select.prev('.sb-model-filter').length) {
+    const select = $select[0];
+
+    if (!(select instanceof HTMLSelectElement)) {
         return;
     }
 
-    const input = document.createElement('input');
-    input.type = 'search';
-    input.className = 'sb-model-filter text_pole';
-    input.placeholder = 'Filter models...';
+    if (!(select.__sbModelFilterInput instanceof HTMLInputElement)) {
+        const input = document.createElement('input');
+        input.type = 'search';
+        input.className = 'sb-model-filter text_pole';
+        input.placeholder = 'Search models...';
+        input.addEventListener('input', () => {
+            renderModelFilterOptions(select, select.__sbModelFilterOptions || readModelFilterOptions(select), input.value);
+        });
 
-    // Store all options for filtering
-    const allOptions = Array.from($select[0].options).map(opt => ({
-        value: opt.value,
-        text: opt.textContent,
-        selected: opt.selected,
-    }));
+        select.__sbModelFilterInput = input;
+        $select.before(input);
+    }
 
-    input.addEventListener('input', () => {
-        const query = input.value.toLowerCase().trim();
-        const select = $select[0];
-        const currentValue = select.value;
-
-        // Rebuild options filtered by query
-        select.innerHTML = '';
-        for (const opt of allOptions) {
-            if (!query || opt.text.toLowerCase().includes(query) || opt.value.toLowerCase().includes(query)) {
-                const option = document.createElement('option');
-                option.value = opt.value;
-                option.textContent = opt.text;
-                option.selected = opt.value === currentValue;
-                select.appendChild(option);
-            }
-        }
-    });
-
-    $select.before(input);
+    observeModelFilterInput(select);
+    syncModelFilterInput($select);
 }
 
 function initAll() {
@@ -1788,10 +1889,6 @@ function initAll() {
 
     window.addEventListener('resize', syncMobileViewportState, { passive: true });
     window.addEventListener('orientationchange', syncMobileViewportState);
-
-    // Reinitialize Select2 widgets after shell reparents DOM elements.
-    // Select2 bindings break when elements are moved in the DOM.
-    reinitSelect2AfterShell();
 
     window.SillyBunnyShell = {
         openTab(shellKey, tabId) {
