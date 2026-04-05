@@ -770,6 +770,23 @@ async function firstLoadInit() {
         toastMode: loader.ToastMode.NONE,
         overlayContent: initLoaderOverlay,
     });
+    let startupLoaderReleased = false;
+
+    const releaseStartupLoader = async (reason) => {
+        if (startupLoaderReleased) {
+            return;
+        }
+
+        startupLoaderReleased = true;
+
+        if (initLoaderHandle.isActive) {
+            await initLoaderHandle.hide().catch((error) => {
+                console.error('Failed to hide startup loader.', error);
+            });
+        }
+
+        scheduleStartupLoaderCleanup(reason);
+    };
 
     try {
         const tokenResponse = await fetch('/csrf-token');
@@ -806,6 +823,7 @@ async function firstLoadInit() {
         initKeyboard();
         initTags();
         initBookmarks();
+        await releaseStartupLoader('startup loader release');
         await getUserAvatars(true, user_avatar);
         await getCharacters();
         await getBackgrounds();
@@ -830,8 +848,6 @@ async function firstLoadInit() {
         initSwipePicker();
         addDebugFunctions();
         await eventSource.emit(event_types.APP_INITIALIZED);
-        await initLoaderHandle.hide();
-        scheduleStartupLoaderCleanup('startup loader hide');
         await fixViewport();
         await eventSource.emit(event_types.APP_READY);
         scheduleStartupLoaderCleanup('app ready');
@@ -855,12 +871,7 @@ async function firstLoadInit() {
         toastr.error(t`SillyBunny couldn't finish starting. Please refresh the page.`, t`Startup Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
         throw error;
     } finally {
-        if (initLoaderHandle.isActive) {
-            await initLoaderHandle.hide().catch((error) => {
-                console.error('Failed to hide startup loader.', error);
-            });
-        }
-        scheduleStartupLoaderCleanup('startup finally');
+        await releaseStartupLoader('startup finally');
     }
 }
 
