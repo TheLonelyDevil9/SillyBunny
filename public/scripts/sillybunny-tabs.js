@@ -6,6 +6,7 @@ const SB_STORAGE_KEYS = Object.freeze({
 });
 
 const SB_IDLE_BRAND_LABEL = 'SillyBunny';
+const SB_MOBILE_MEDIA_QUERY = '(max-width: 768px)';
 const SB_SURFACE_TRANSPARENCY = Object.freeze({
     min: 0,
     max: 55,
@@ -275,6 +276,26 @@ function getShellConfig(shellKey) {
     return SB_SHELLS[shellKey];
 }
 
+function isMobileViewport() {
+    return window.matchMedia(SB_MOBILE_MEDIA_QUERY).matches;
+}
+
+function clearShellSearch(shellKey) {
+    const shellState = getShellState(shellKey);
+    if (!shellState) {
+        return;
+    }
+
+    if (shellState.searchInput instanceof HTMLInputElement) {
+        shellState.searchInput.value = '';
+    }
+
+    if (shellState.searchResults instanceof HTMLElement) {
+        shellState.searchResults.replaceChildren();
+        shellState.searchResults.classList.remove('is-visible');
+    }
+}
+
 function getThemeOption(themeId) {
     return SB_THEMES.find(theme => theme.id === themeId) ?? SB_THEMES[0];
 }
@@ -495,6 +516,8 @@ function closeCharacterPanel() {
 }
 
 function toggleCharacterPanel() {
+    closeMobileNav();
+
     if (isCharacterPanelOpen()) {
         closeCharacterPanel();
         return;
@@ -917,6 +940,11 @@ function renderSearchResults(shellKey, query) {
     const normalizedQuery = normalizeText(query);
     shellState.searchResults.replaceChildren();
 
+    if (!(shellState.root instanceof HTMLElement) || !shellState.root.classList.contains('openDrawer')) {
+        shellState.searchResults.classList.remove('is-visible');
+        return;
+    }
+
     if (!normalizedQuery) {
         shellState.searchResults.classList.remove('is-visible');
         return;
@@ -1081,6 +1109,7 @@ function closeShell(shellKey) {
     const shellRoot = document.getElementById(shellConfig.rootPanelId);
 
     if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
+        clearShellSearch(shellKey);
         triggerDrawerToggle(shellConfig.hostToggleSelector);
     }
 }
@@ -1160,6 +1189,24 @@ function buildShell(shellKey) {
     };
 
     sbState.shells[shellKey] = shellState;
+
+    let wasOpen = shellRoot.classList.contains('openDrawer');
+    new MutationObserver(() => {
+        const isOpen = shellRoot.classList.contains('openDrawer');
+
+        if (isOpen === wasOpen) {
+            return;
+        }
+
+        wasOpen = isOpen;
+
+        if (isOpen) {
+            closeMobileNav();
+            return;
+        }
+
+        clearShellSearch(shellKey);
+    }).observe(shellRoot, { attributes: true, attributeFilter: ['class'] });
 
     const basePanel = createShellPanel(shellConfig.baseTab);
     basePanel.scroller.appendChild(originalContent);
@@ -1489,22 +1536,23 @@ function buildMobileNav() {
 function setMobileNavOpenState(isOpen) {
     const overlay = document.getElementById('sb-mobile-nav');
     const button = document.getElementById('sb-hamburger');
+    const shouldOpen = Boolean(isOpen) && isMobileViewport();
 
     if (!(overlay instanceof HTMLElement) || !(button instanceof HTMLElement)) {
         return;
     }
 
-    overlay.hidden = !isOpen;
-    overlay.classList.toggle('sb-nav-open', isOpen);
-    overlay.setAttribute('aria-hidden', String(!isOpen));
+    overlay.hidden = !shouldOpen;
+    overlay.classList.toggle('sb-nav-open', shouldOpen);
+    overlay.setAttribute('aria-hidden', String(!shouldOpen));
 
     if ('inert' in overlay) {
-        overlay.inert = !isOpen;
+        overlay.inert = !shouldOpen;
     }
 
-    button.classList.toggle('is-open', isOpen);
-    button.setAttribute('aria-expanded', String(isOpen));
-    button.innerHTML = isOpen
+    button.classList.toggle('is-open', shouldOpen);
+    button.setAttribute('aria-expanded', String(shouldOpen));
+    button.innerHTML = shouldOpen
         ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>'
         : '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
 }
@@ -1516,7 +1564,8 @@ function toggleMobileNav() {
         return;
     }
 
-    setMobileNavOpenState(!overlay.classList.contains('sb-nav-open'));
+    const isOpen = !overlay.hidden && overlay.getAttribute('aria-hidden') === 'false';
+    setMobileNavOpenState(!isOpen);
 }
 
 function closeMobileNav() {
@@ -1567,6 +1616,12 @@ function applyDefaultDrawerStates() {
     setInlineDrawerExpanded(document.querySelector('#UI-Customization > .inline-drawer'), false);
 }
 
+function syncMobileViewportState() {
+    if (!isMobileViewport()) {
+        closeMobileNav();
+    }
+}
+
 function initAll() {
     if (sbState.initialized) {
         return;
@@ -1591,8 +1646,12 @@ function initAll() {
     bindWorldInfoRoute();
     initAgentOverview();
     applyDefaultDrawerStates();
+    syncMobileViewportState();
     setShellTheme(sbState.theme, { persist: false });
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
+
+    window.addEventListener('resize', syncMobileViewportState, { passive: true });
+    window.addEventListener('orientationchange', syncMobileViewportState);
 
     window.SillyBunnyShell = {
         openTab(shellKey, tabId) {

@@ -287,45 +287,19 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
 
     const trigger = row.querySelector('.nemo-sb-section-trigger');
     let lastToggleAt = 0;
-    const canToggleAgain = () => {
+    const activateTrigger = event => {
+        event.preventDefault();
+        event.stopPropagation();
+
         const now = Date.now();
         if (now - lastToggleAt < 180) {
-            return false;
+            return;
         }
 
         lastToggleAt = now;
-        return true;
-    };
-    const stopTriggerPropagation = event => {
-        event.stopImmediatePropagation();
-        event.stopPropagation();
-    };
-    const activateTrigger = event => {
-        event.preventDefault();
-        stopTriggerPropagation(event);
-
-        if (!canToggleAgain()) {
-            return;
-        }
-
         toggleSection();
     };
-
-    ['pointerdown', 'mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(eventName => {
-        trigger.addEventListener(eventName, stopTriggerPropagation);
-    });
-
-    ['pointerup', 'mouseup', 'touchend', 'click'].forEach(eventName => {
-        trigger.addEventListener(eventName, activateTrigger);
-    });
-
-    trigger.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-            return;
-        }
-
-        activateTrigger(event);
-    });
+    trigger.addEventListener('click', activateTrigger);
     return row;
 }
 

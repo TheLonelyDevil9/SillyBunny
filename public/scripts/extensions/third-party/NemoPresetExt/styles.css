@@ -21,6 +21,10 @@
 .nemo-sb-section-row {
     display: block;
     margin: 8px 0 4px;
+    list-style: none;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent);
     border-radius: 14px;
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
@@ -46,6 +50,10 @@
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;
+}
+
+.nemo-sb-section-trigger > * {
+    pointer-events: none;
 }
 
 .nemo-sb-section-trigger:focus-visible {

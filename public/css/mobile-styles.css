@@ -137,19 +137,25 @@
 
     /* Input area mobile optimization */
     #send_textarea {
-        min-height: calc(var(--bottomFormBlockSize) * 1.45);
-        padding: 10px 12px;
+        min-height: calc(var(--bottomFormBlockSize) * 1.58);
+        padding: 12px 14px;
     }
 
     #send_form .mes_stop {
-        min-width: 50px;
-        min-height: 50px;
+        min-width: 52px;
+        min-height: 52px;
         font-size: calc(var(--mainFontSize) * 1.55);
-        padding-right: 0;
+        padding: 0;
+        align-self: center;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     #send_form .mes_stop i {
-        font-size: 1.28em;
+        font-size: 1.2em;
+        line-height: 1;
+        margin: 0;
     }
 
     /* Ensure stop button is properly sized */
@@ -159,6 +165,7 @@
         min-width: max-content;
         min-height: calc(var(--bottomFormBlockSize) * 1.2);
         flex-wrap: nowrap !important;
+        align-items: center;
     }
 
     .bg_folder_tile .jg-button {
@@ -768,14 +775,14 @@
 
     /* Input area optimization for small phones */
     #send_textarea {
-        min-height: calc(var(--bottomFormBlockSize) * 1.5);
+        min-height: calc(var(--bottomFormBlockSize) * 1.62);
         padding: 12px;
         font-size: calc(var(--mainFontSize) * 1.05);
     }
 
     #send_form .mes_stop {
-        min-width: 52px;
-        min-height: 52px;
+        min-width: 54px;
+        min-height: 54px;
         font-size: calc(var(--mainFontSize) * 1.6);
     }
 }
