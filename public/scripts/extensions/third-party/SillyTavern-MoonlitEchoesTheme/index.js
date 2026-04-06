@@ -903,6 +903,23 @@ export function applyThemeSetting(varId, value) {
         detail: { varId, value }
     }));
 }
+
+function normalizeMoonlitFontFamilyDeclarations(cssText) {
+    return String(cssText || '').replace(/font-family\s*:\s*([^;]+);/gi, (fullMatch, rawValue) => {
+        const normalizedValue = String(rawValue || '').toLowerCase();
+
+        if (
+            normalizedValue.includes('font awesome')
+            || normalizedValue.includes('var(--monofontfamily)')
+            || normalizedValue.includes('monospace')
+        ) {
+            return fullMatch;
+        }
+
+        return 'font-family: var(--mainFontFamily) !important;';
+    });
+}
+
 // Inject raw CSS (unfiltered) into the page via a dedicated <style> tag
 function applyRawCustomCss(cssText) {
     let rawStyle = document.getElementById('moonlit-raw-css');
@@ -914,10 +931,13 @@ function applyRawCustomCss(cssText) {
     }
 
     const normalizedCss = String(cssText || '')
-        .replace(/font-family:\s*var\(--mainFont\)\s*;/g, 'font-family: var(--mainFontFamily);')
-        .replace(/font-family:\s*var\(--headerFont\)\s*;/g, 'font-family: var(--mainFontFamily);');
+        .replace(/@import\s+url\((['"])?https?:\/\/fonts\.(?:googleapis|gstatic)\.com[\s\S]*?\)\s*;?/gi, '')
+        .replace(/font-family:\s*var\(--mainFont\)\s*!important\s*;/gi, 'font-family: var(--mainFontFamily) !important;')
+        .replace(/font-family:\s*var\(--mainFont\)\s*;/gi, 'font-family: var(--mainFontFamily);')
+        .replace(/font-family:\s*var\(--headerFont\)\s*!important\s*;/gi, 'font-family: var(--mainFontFamily) !important;')
+        .replace(/font-family:\s*var\(--headerFont\)\s*;/gi, 'font-family: var(--mainFontFamily);');
 
-    rawStyle.textContent = normalizedCss;
+    rawStyle.textContent = normalizeMoonlitFontFamilyDeclarations(normalizedCss);
 }
 // Re-apply when the setting changes (optional safety net)
 document.addEventListener('themeSettingChanged', (ev) => {
