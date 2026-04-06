@@ -35,6 +35,12 @@ import {
 const AGENT_METADATA_KEY = 'agent_mode';
 const AGENT_CONTEXT_PROMPT_KEY = 'agent_mode_context';
 const AGENT_BLACKLIST_FIELD = 'agentBlacklisted';
+const AGENT_DIRECTOR_LABEL = 'Director';
+
+const agent_director_phases = {
+    PRE_GENERATION: 'pre_generation',
+    POST_GENERATION: 'post_generation',
+};
 
 export const agent_service_ids = {
     RETRIEVAL: 'retrieval',
@@ -114,10 +120,14 @@ const DEFAULT_CHAT_AGENT_STATE = Object.freeze({
         updated_at: null,
     },
     last_runs: {},
+    director: {
+        last_turn: null,
+    },
 });
 
 let currentAgentAbortController = null;
 let currentAgentRun = null;
+let currentDirectorTurn = null;
 
 const renderAgentPanelDebounced = debounce(() => renderAgentPanel(), 50);
 
@@ -180,6 +190,10 @@ function ensureAgentChatState() {
         last_runs: {
             ...(chat_metadata[AGENT_METADATA_KEY].last_runs ?? {}),
         },
+        director: {
+            ...defaults.director,
+            ...(chat_metadata[AGENT_METADATA_KEY].director ?? {}),
+        },
     };
 
     for (const serviceId of Object.values(agent_service_ids)) {
@@ -194,6 +208,10 @@ function ensureAgentChatState() {
 
 function getAgentChatState() {
     return ensureAgentChatState();
+}
+
+function getAgentDirectorState() {
+    return getAgentChatState().director;
 }
 
 function getGlobalAgentSettings() {
@@ -252,9 +270,192 @@ function isAgentModeAvailable() {
     return Boolean(getCurrentChatId()) && main_api === 'openai';
 }
 
-function shouldRunService(serviceId) {
+function getServiceSkipReason(serviceId, { phase, dryRun = false, depth = 0 } = {}) {
+    if (dryRun) {
+        return 'Skipped during dry run';
+    }
+
+    if (depth > 0) {
+        return 'Skipped on nested generation';
+    }
+
+    if (!getCurrentChatId()) {
+        return 'No active chat';
+    }
+
+    if (main_api !== 'openai') {
+        return 'Requires chat-completions mode';
+    }
+
     const state = getAgentChatState();
-    return Boolean(state.enabled && state.services[serviceId]?.enabled && isAgentModeAvailable());
+    if (!state.enabled) {
+        return 'Agent Mode is disabled for this chat';
+    }
+
+    if (!state.services[serviceId]?.enabled) {
+        return `${SERVICE_LABELS[serviceId]} is disabled`;
+    }
+
+    if (phase === agent_director_phases.PRE_GENERATION && serviceId !== agent_service_ids.RETRIEVAL) {
+        return 'Not scheduled for pre-generation';
+    }
+
+    return null;
+}
+
+function getServiceRunReason(serviceId, phase) {
+    if (phase === agent_director_phases.PRE_GENERATION && serviceId === agent_service_ids.RETRIEVAL) {
+        return 'Inject relevant context before the next reply';
+    }
+
+    if (phase === agent_director_phases.POST_GENERATION && serviceId === agent_service_ids.MEMORY) {
+        return 'Capture durable memory after the reply';
+    }
+
+    if (phase === agent_director_phases.POST_GENERATION && serviceId === agent_service_ids.LOREBOOK) {
+        return 'Sync durable lore after the reply';
+    }
+
+    return 'Scheduled by the turn director';
+}
+
+function cloneDirectorTurn(turn) {
+    return turn ? structuredClone(turn) : null;
+}
+
+function setCurrentDirectorTurn(turn) {
+    currentDirectorTurn = cloneDirectorTurn(turn);
+    renderAgentPanelDebounced();
+}
+
+function finalizeDirectorTurn(turn) {
+    const directorState = getAgentDirectorState();
+    directorState.last_turn = cloneDirectorTurn(turn);
+    currentDirectorTurn = null;
+    saveMetadataDebounced();
+    renderAgentPanelDebounced();
+}
+
+function getLatestDirectorTurn() {
+    return currentDirectorTurn ?? getAgentDirectorState().last_turn ?? null;
+}
+
+function createDirectorServiceRun(serviceId, phase, status, reason) {
+    const timestamp = new Date().toISOString();
+    return {
+        serviceId,
+        label: SERVICE_LABELS[serviceId],
+        phase,
+        status,
+        reason,
+        summary: '',
+        steps: 0,
+        error: null,
+        started_at: timestamp,
+        completed_at: status === 'running' ? null : timestamp,
+    };
+}
+
+function createDirectorTurn(phase, { dryRun = false, depth = 0 } = {}) {
+    return {
+        id: uuidv4(),
+        phase,
+        status: 'running',
+        dry_run: Boolean(dryRun),
+        depth: Number(depth || 0),
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        summary: '',
+        services: [],
+    };
+}
+
+function getDirectorPhaseLabel(phase) {
+    if (phase === agent_director_phases.PRE_GENERATION) {
+        return 'Pre-generation';
+    }
+
+    if (phase === agent_director_phases.POST_GENERATION) {
+        return 'Post-generation';
+    }
+
+    return 'Agent turn';
+}
+
+function buildDirectorSummary(turn) {
+    return turn.services
+        .map(service => `${service.label} ${service.status}`)
+        .join('; ');
+}
+
+async function runDirectedService(turn, serviceId, handler, { phase } = {}) {
+    const serviceRun = createDirectorServiceRun(serviceId, phase, 'running', getServiceRunReason(serviceId, phase));
+    turn.services.push(serviceRun);
+    setCurrentDirectorTurn(turn);
+
+    try {
+        const result = await handler();
+        serviceRun.status = String(result?.status ?? 'completed');
+        serviceRun.summary = truncateText(result?.summary ?? '', 200);
+        serviceRun.steps = Number(result?.steps ?? 0);
+        serviceRun.error = result?.error ? summarizeError(result.error) : null;
+        serviceRun.completed_at = new Date().toISOString();
+        setCurrentDirectorTurn(turn);
+        return result;
+    } catch (error) {
+        const errorMessage = summarizeError(error);
+        console.error(`[AgentMode] ${serviceId} failed`, error);
+        toastr.warning(`${SERVICE_LABELS[serviceId]} agent failed: ${errorMessage}`, t`Agent Mode`);
+        serviceRun.status = 'failed';
+        serviceRun.error = errorMessage;
+        serviceRun.completed_at = new Date().toISOString();
+        setCurrentDirectorTurn(turn);
+        return null;
+    }
+}
+
+async function runAgentDirectorTurn(phase, services, { dryRun = false, depth = 0 } = {}) {
+    const turn = createDirectorTurn(phase, { dryRun, depth });
+    const results = {};
+
+    setCurrentDirectorTurn(turn);
+
+    for (const serviceId of services) {
+        const skipReason = getServiceSkipReason(serviceId, { phase, dryRun, depth });
+        if (skipReason) {
+            turn.services.push(createDirectorServiceRun(serviceId, phase, 'skipped', skipReason));
+            setCurrentDirectorTurn(turn);
+            continue;
+        }
+
+        results[serviceId] = await runDirectedService(turn, serviceId, () => {
+            switch (serviceId) {
+                case agent_service_ids.RETRIEVAL:
+                    return runRetrievalAgent();
+                case agent_service_ids.MEMORY:
+                    return runMemoryAgent();
+                case agent_service_ids.LOREBOOK:
+                    return runLorebookAgent();
+                default:
+                    throw new Error(`Unknown directed service "${serviceId}"`);
+            }
+        }, { phase });
+    }
+
+    turn.completed_at = new Date().toISOString();
+
+    if (turn.services.every(service => service.status === 'skipped')) {
+        turn.status = 'skipped';
+    } else if (turn.services.some(service => service.status === 'failed')) {
+        turn.status = 'failed';
+    } else {
+        turn.status = 'completed';
+    }
+
+    turn.summary = buildDirectorSummary(turn);
+    finalizeDirectorTurn(turn);
+
+    return { turn, results };
 }
 
 function createPromptExtension(value, role = extension_prompt_roles.SYSTEM) {
@@ -736,6 +937,7 @@ async function runRetrievalAgent() {
     };
 
     return {
+        status: 'completed',
         steps: result.steps,
         summary: terminalResult.summary,
         promptSection: terminalResult.promptSection,
@@ -799,6 +1001,7 @@ async function runMemoryAgent() {
     await eventSource.emit(event_types.AGENT_MEMORY_UPDATED, { memory: getCurrentMemoryState() });
 
     return {
+        status: 'completed',
         steps: result.steps,
         summary: terminalResult.summary,
     };
@@ -809,7 +1012,12 @@ async function runLorebookAgent() {
 
     if (!bookNames.length) {
         recordAgentRun(agent_service_ids.LOREBOOK, { status: 'skipped', summary: 'No active lorebooks', steps: 0, error: null });
-        return null;
+        return {
+            status: 'skipped',
+            steps: 0,
+            summary: 'No active lorebooks',
+            changes: [],
+        };
     }
 
     const workingBooks = new Map();
@@ -1024,6 +1232,7 @@ async function runLorebookAgent() {
     }
 
     return {
+        status: 'completed',
         steps: result.steps,
         summary: terminalResult.summary,
         changes: pendingChanges,
@@ -1045,11 +1254,17 @@ async function runServiceSafely(serviceId, handler, { saveAfter = false } = {}) 
 }
 
 export async function runPreGenerationAgents({ dryRun, depth } = {}) {
-    if (dryRun || depth > 0 || !shouldRunService(agent_service_ids.RETRIEVAL)) {
+    if (dryRun || depth > 0) {
         return {};
     }
 
-    const retrievalResult = await runServiceSafely(agent_service_ids.RETRIEVAL, () => runRetrievalAgent());
+    const { results } = await runAgentDirectorTurn(
+        agent_director_phases.PRE_GENERATION,
+        [agent_service_ids.RETRIEVAL],
+        { dryRun, depth },
+    );
+
+    const retrievalResult = results[agent_service_ids.RETRIEVAL];
     if (!retrievalResult?.promptSection) {
         return {};
     }
@@ -1060,23 +1275,17 @@ export async function runPreGenerationAgents({ dryRun, depth } = {}) {
 }
 
 export async function runPostGenerationAgents({ depth } = {}) {
-    if (depth > 0 || !isAgentModeAvailable() || !getAgentChatState().enabled) {
+    if (depth > 0) {
         return;
     }
 
-    let attempted = false;
+    const { turn } = await runAgentDirectorTurn(
+        agent_director_phases.POST_GENERATION,
+        [agent_service_ids.MEMORY, agent_service_ids.LOREBOOK],
+        { depth },
+    );
 
-    if (shouldRunService(agent_service_ids.MEMORY)) {
-        attempted = true;
-        await runServiceSafely(agent_service_ids.MEMORY, () => runMemoryAgent());
-    }
-
-    if (shouldRunService(agent_service_ids.LOREBOOK)) {
-        attempted = true;
-        await runServiceSafely(agent_service_ids.LOREBOOK, () => runLorebookAgent());
-    }
-
-    if (attempted) {
+    if (turn.status !== 'skipped') {
         await saveChatConditional();
     }
 }
@@ -1145,19 +1354,39 @@ function renderStatusList() {
 
     $container.empty();
     const lastRuns = getAgentChatState().last_runs ?? {};
+    const directorTurn = getLatestDirectorTurn();
 
-    for (const serviceId of Object.values(agent_service_ids)) {
-        const run = lastRuns[serviceId];
+    if (directorTurn) {
         const row = $('<div class="flex-container flexFlowColumn marginBot5"></div>');
-        const headline = $('<strong></strong>').text(SERVICE_LABELS[serviceId]);
-        const status = $('<small></small>').text(run
-            ? `${run.status || 'idle'}${run.steps ? `, ${run.steps} step${run.steps === 1 ? '' : 's'}` : ''}${run.summary ? `, ${truncateText(run.summary, 120)}` : ''}${run.error ? `, ${run.error}` : ''}`
-            : 'idle');
+        const headline = $('<strong></strong>').text(AGENT_DIRECTOR_LABEL);
+        const detailParts = [
+            getDirectorPhaseLabel(directorTurn.phase),
+            directorTurn.status,
+        ];
+
+        if (directorTurn.summary) {
+            detailParts.push(truncateText(directorTurn.summary, 180));
+        }
+
+        const status = $('<small></small>').text(detailParts.filter(Boolean).join(', '));
         row.append(headline, status);
         $container.append(row);
     }
 
-    if (currentAgentRun) {
+    for (const serviceId of Object.values(agent_service_ids)) {
+        const directedRun = directorTurn?.services?.find(service => service.serviceId === serviceId);
+        const run = directedRun ?? lastRuns[serviceId];
+        const row = $('<div class="flex-container flexFlowColumn marginBot5"></div>');
+        const headline = $('<strong></strong>').text(SERVICE_LABELS[serviceId]);
+        const statusText = run
+            ? `${run.status || 'idle'}${run.reason ? `, ${run.reason}` : ''}${run.steps ? `, ${run.steps} step${run.steps === 1 ? '' : 's'}` : ''}${run.summary ? `, ${truncateText(run.summary, 120)}` : ''}${run.error ? `, ${run.error}` : ''}`
+            : 'idle';
+        const status = $('<small></small>').text(statusText);
+        row.append(headline, status);
+        $container.append(row);
+    }
+
+    if (currentAgentRun && !currentDirectorTurn) {
         $container.prepend($('<div class="menu_button marginBot5"></div>').text('Agent service running...'));
     }
 }
@@ -1184,7 +1413,7 @@ function renderAgentPanel() {
         ? t`Open a chat to configure per-chat agent mode.`
         : !available
             ? t`Agent mode currently runs only through chat-completions providers.`
-            : t`Retrieval runs before the next reply. Memory and lorebook agents run after the reply is saved.`;
+            : t`The turn director runs retrieval before the next reply, then memory and lorebook after the reply is saved.`;
     $('#agent_mode_status_hint').text(availabilityText);
 
     for (const serviceId of Object.values(agent_service_ids)) {
@@ -1283,6 +1512,7 @@ export function initAgents() {
         currentAgentAbortController?.abort('Generation stopped');
     });
     eventSource.on(event_types.AGENT_SERVICE_STARTED, renderAgentPanelDebounced);
+    eventSource.on(event_types.AGENT_STEP_UPDATED, renderAgentPanelDebounced);
     eventSource.on(event_types.AGENT_SERVICE_FINISHED, renderAgentPanelDebounced);
     eventSource.on(event_types.AGENT_SERVICE_FAILED, renderAgentPanelDebounced);
     eventSource.on(event_types.AGENT_MEMORY_UPDATED, renderAgentPanelDebounced);
