@@ -48,6 +48,8 @@ const MAX_STORY_STATE_FIELD_LENGTH = 220;
 const MAX_LORE_REVIEW_CHANGES = 16;
 const MAX_LORE_CHANGE_CONTENT_LENGTH = 2400;
 const LORE_MATCH_SCORE_THRESHOLD = 0.14;
+const MAX_TURN_UX_SUGGESTIONS = 5;
+const MAX_TURN_UX_RECAP_SECTIONS = 4;
 
 const agent_director_phases = {
     PRE_GENERATION: 'pre_generation',
@@ -148,6 +150,14 @@ const DEFAULT_CHAT_AGENT_STATE = Object.freeze({
         last_applied_changes: [],
         updated_at: null,
     },
+    turn_ux: {
+        enabled: true,
+        headline: '',
+        suggestions: [],
+        recap_sections: [],
+        source_turn_id: null,
+        updated_at: null,
+    },
     last_runs: {},
     director: {
         last_turn: null,
@@ -224,6 +234,10 @@ function ensureAgentChatState() {
             ...defaults.lorebook,
             ...(chat_metadata[AGENT_METADATA_KEY].lorebook ?? {}),
         },
+        turn_ux: {
+            ...defaults.turn_ux,
+            ...(chat_metadata[AGENT_METADATA_KEY].turn_ux ?? {}),
+        },
         last_runs: {
             ...(chat_metadata[AGENT_METADATA_KEY].last_runs ?? {}),
         },
@@ -247,6 +261,7 @@ function ensureAgentChatState() {
     chat_metadata[AGENT_METADATA_KEY].memory.updated_at = normalizeMemoryTimestamp(chat_metadata[AGENT_METADATA_KEY].memory.updated_at);
     chat_metadata[AGENT_METADATA_KEY].story_state = normalizeStoryState(chat_metadata[AGENT_METADATA_KEY].story_state);
     chat_metadata[AGENT_METADATA_KEY].lorebook = normalizeLorebookState(chat_metadata[AGENT_METADATA_KEY].lorebook);
+    chat_metadata[AGENT_METADATA_KEY].turn_ux = normalizeTurnUxState(chat_metadata[AGENT_METADATA_KEY].turn_ux);
 
     return chat_metadata[AGENT_METADATA_KEY];
 }
@@ -309,6 +324,15 @@ function setAgentLorebookState(lorebookPatch) {
         ...lorebookPatch,
     };
     state.lorebook = normalizeLorebookState(nextLorebookState);
+}
+
+function setAgentTurnUxState(turnUxPatch) {
+    const state = getAgentChatState();
+    const nextTurnUxState = {
+        ...state.turn_ux,
+        ...turnUxPatch,
+    };
+    state.turn_ux = normalizeTurnUxState(nextTurnUxState);
 }
 
 function recordAgentRun(serviceId, patch) {
@@ -930,6 +954,184 @@ function buildLorebookRunSummary({ proposedChanges = [], appliedChanges = [], pe
     return parts.join(', ');
 }
 
+function normalizeTurnUxText(value, maxLength = 220) {
+    return truncateText(value, maxLength);
+}
+
+function normalizeTurnUxSuggestions(value) {
+    return toArray(value)
+        .map(item => normalizeTurnUxText(item, 200))
+        .filter(Boolean)
+        .filter(onlyUnique)
+        .slice(0, MAX_TURN_UX_SUGGESTIONS);
+}
+
+function normalizeTurnUxRecapSection(value) {
+    const section = value && typeof value === 'object' ? value : {};
+
+    return {
+        title: normalizeTurnUxText(section.title, 80),
+        detail: normalizeTurnUxText(section.detail, 260),
+    };
+}
+
+function normalizeTurnUxRecapSections(value) {
+    const seen = new Set();
+
+    return toArray(value)
+        .map(item => normalizeTurnUxRecapSection(item))
+        .filter(section => section.title && section.detail)
+        .filter(section => {
+            const dedupeKey = `${section.title.toLowerCase()}::${section.detail.toLowerCase()}`;
+            if (seen.has(dedupeKey)) {
+                return false;
+            }
+
+            seen.add(dedupeKey);
+            return true;
+        })
+        .slice(0, MAX_TURN_UX_RECAP_SECTIONS);
+}
+
+function normalizeTurnUxState(value) {
+    const turnUxState = value && typeof value === 'object' ? value : {};
+
+    return {
+        enabled: turnUxState.enabled !== false,
+        headline: normalizeTurnUxText(turnUxState.headline, 180),
+        suggestions: normalizeTurnUxSuggestions(turnUxState.suggestions),
+        recap_sections: normalizeTurnUxRecapSections(turnUxState.recap_sections),
+        source_turn_id: typeof turnUxState.source_turn_id === 'string' && turnUxState.source_turn_id.trim().length > 0 ? turnUxState.source_turn_id : null,
+        updated_at: normalizeMemoryTimestamp(turnUxState.updated_at),
+    };
+}
+
+function isClosedPlotThreadStatus(status) {
+    const normalizedStatus = String(status ?? '').trim().toLowerCase();
+    if (!normalizedStatus) {
+        return false;
+    }
+
+    return ['closed', 'complete', 'completed', 'resolved', 'finished', 'done'].some(keyword => normalizedStatus.includes(keyword));
+}
+
+function buildTurnUxSuggestions({ memory, storyState }) {
+    const suggestions = [];
+
+    for (const thread of normalizeStringArray(memory.unresolved_threads)) {
+        suggestions.push(`Follow up on ${thread}.`);
+    }
+
+    for (const plotThread of normalizeStoryStatePlotThreads(storyState.plot_threads).filter(thread => !isClosedPlotThreadStatus(thread.status))) {
+        suggestions.push(`Advance "${plotThread.title}".`);
+    }
+
+    for (const character of normalizeStoryStateCharacters(storyState.characters)) {
+        if (character.goal) {
+            suggestions.push(`Ask ${character.name} about ${character.goal}.`);
+            continue;
+        }
+
+        if (character.status) {
+            suggestions.push(`Check in with ${character.name}.`);
+        }
+    }
+
+    if (storyState.current_location) {
+        suggestions.push(`Explore ${storyState.current_location}.`);
+    }
+
+    for (const inventoryItem of normalizeStoryStateInventory(storyState.inventory)) {
+        const locationSuffix = storyState.current_location ? ` in ${storyState.current_location}` : '';
+        suggestions.push(`Use ${inventoryItem.name}${locationSuffix}.`);
+    }
+
+    return normalizeTurnUxSuggestions(suggestions);
+}
+
+function buildTurnUxRecapSections({ memory, storyState, lorebookState, lastRuns }) {
+    const sections = [];
+    const memoryRun = lastRuns[agent_service_ids.MEMORY];
+    const loreRun = lastRuns[agent_service_ids.LOREBOOK];
+
+    if (memory.summary || memoryRun?.summary) {
+        sections.push({
+            title: 'Memory',
+            detail: memory.summary || memoryRun.summary,
+        });
+    }
+
+    const worldParts = [
+        storyState.current_location ? `Location: ${storyState.current_location}` : '',
+        storyState.current_time ? `Time: ${storyState.current_time}` : '',
+        storyState.characters.length ? `${storyState.characters.length} tracked characters` : '',
+        storyState.plot_threads.length ? `${storyState.plot_threads.length} plot threads` : '',
+    ].filter(Boolean);
+    if (worldParts.length > 0) {
+        sections.push({
+            title: 'World State',
+            detail: worldParts.join(' | '),
+        });
+    }
+
+    const loreParts = [
+        loreRun?.applied_count ? `${loreRun.applied_count} lore change${loreRun.applied_count === 1 ? '' : 's'} applied` : '',
+        loreRun?.pending_count ? `${loreRun.pending_count} lore change${loreRun.pending_count === 1 ? '' : 's'} pending review` : '',
+        lorebookState.review_mode ? 'Review mode enabled' : '',
+    ].filter(Boolean);
+    if (loreParts.length > 0 || loreRun?.summary) {
+        sections.push({
+            title: 'Lore',
+            detail: loreParts.length > 0 ? loreParts.join(' | ') : loreRun.summary,
+        });
+    }
+
+    const promptingParts = [
+        memory.unresolved_threads.length ? `${memory.unresolved_threads.length} unresolved thread${memory.unresolved_threads.length === 1 ? '' : 's'}` : '',
+        storyState.inventory.length ? `${storyState.inventory.length} notable item${storyState.inventory.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean);
+    if (promptingParts.length > 0) {
+        sections.push({
+            title: 'Adventure Assist',
+            detail: promptingParts.join(' | '),
+        });
+    }
+
+    return normalizeTurnUxRecapSections(sections);
+}
+
+function buildTurnUxHeadline({ suggestions, lorebookState }) {
+    const parts = [];
+
+    if (suggestions.length > 0) {
+        parts.push(`${suggestions.length} suggested next action${suggestions.length === 1 ? '' : 's'} ready`);
+    }
+
+    if (lorebookState.pending_changes.length > 0) {
+        parts.push(`${lorebookState.pending_changes.length} lore change${lorebookState.pending_changes.length === 1 ? '' : 's'} waiting for review`);
+    }
+
+    return parts.length > 0 ? parts.join('; ') : 'Adventure assist is ready for the next turn.';
+}
+
+function refreshAgentTurnUxState({ sourceTurnId = null } = {}) {
+    const memory = getCurrentMemoryState();
+    const storyState = normalizeStoryState(getCurrentStoryState());
+    const lorebookState = normalizeLorebookState(getCurrentLorebookState());
+    const currentTurnUxState = normalizeTurnUxState(getCurrentTurnUxState());
+    const lastRuns = getAgentChatState().last_runs ?? {};
+    const suggestions = buildTurnUxSuggestions({ memory, storyState });
+    const recapSections = buildTurnUxRecapSections({ memory, storyState, lorebookState, lastRuns });
+
+    setAgentTurnUxState({
+        headline: buildTurnUxHeadline({ suggestions, lorebookState }),
+        suggestions,
+        recap_sections: recapSections,
+        source_turn_id: sourceTurnId ?? currentTurnUxState.source_turn_id,
+        updated_at: new Date().toISOString(),
+    });
+}
+
 function getProfileModelSettingKey(source) {
     return MODEL_SETTING_KEYS[source] ?? MODEL_SETTING_KEYS[chat_completion_sources.OPENAI];
 }
@@ -973,6 +1175,10 @@ function getCurrentStoryState() {
 
 function getCurrentLorebookState() {
     return getAgentChatState().lorebook;
+}
+
+function getCurrentTurnUxState() {
+    return getAgentChatState().turn_ux;
 }
 
 function buildChatSearchCorpus() {
@@ -2134,6 +2340,7 @@ export async function runPostGenerationAgents({ depth } = {}) {
     );
 
     if (turn.status !== 'skipped') {
+        refreshAgentTurnUxState({ sourceTurnId: turn.id });
         await saveChatConditional();
     }
 }
@@ -2149,7 +2356,11 @@ async function runLorebookSyncFromUi() {
         return;
     }
 
-    await runServiceSafely(agent_service_ids.LOREBOOK, () => runLorebookAgent(), { saveAfter: true });
+    const result = await runServiceSafely(agent_service_ids.LOREBOOK, () => runLorebookAgent(), { saveAfter: false });
+    if (result) {
+        refreshAgentTurnUxState();
+        await saveChatConditional();
+    }
 }
 
 async function applyPendingLoreReviewFromUi() {
@@ -2219,6 +2430,7 @@ async function applyPendingLoreReviewFromUi() {
         pending_changes: remainingPending,
     });
 
+    refreshAgentTurnUxState();
     await saveChatConditional();
     renderAgentPanelDebounced();
 }
@@ -2260,6 +2472,7 @@ async function discardPendingLoreReviewFromUi() {
         pending_changes: [],
     });
 
+    refreshAgentTurnUxState();
     await saveChatConditional();
     renderAgentPanelDebounced();
 }
@@ -2284,6 +2497,13 @@ async function clearAgentMemoryFromUi() {
         locations: [],
         inventory: [],
         plot_threads: [],
+        updated_at: null,
+    });
+    setAgentTurnUxState({
+        headline: '',
+        suggestions: [],
+        recap_sections: [],
+        source_turn_id: null,
         updated_at: null,
     });
     recordAgentRun(agent_service_ids.MEMORY, { status: 'cleared', summary: '', steps: 0, error: null });
@@ -2479,6 +2699,61 @@ function renderLorebookReviewPanel(lorebookState) {
     renderLoreChangeList('#agent_lore_applied_list', normalizeLoreChangeList(normalizedLorebookState.last_applied_changes), '(no applied changes yet)');
 }
 
+function insertTurnUxSuggestionIntoChatInput(suggestion) {
+    const $textarea = $('#send_textarea');
+    if ($textarea.length === 0) {
+        return;
+    }
+
+    const currentValue = String($textarea.val() ?? '').trim();
+    const nextValue = currentValue.length > 0
+        ? `${currentValue}\n${suggestion}`
+        : suggestion;
+
+    $textarea.val(nextValue)[0].dispatchEvent(new Event('input', { bubbles: true }));
+    $textarea.trigger('focus');
+}
+
+function renderTurnUxPanel(turnUxState) {
+    const normalizedTurnUxState = normalizeTurnUxState(turnUxState);
+    const $suggestions = $('#agent_turn_ux_suggestions');
+    const $recap = $('#agent_turn_ux_recap');
+
+    $('#agent_turn_ux_enabled').prop('checked', Boolean(normalizedTurnUxState.enabled));
+    renderStoryStateValue('#agent_turn_ux_headline', normalizedTurnUxState.headline, normalizedTurnUxState.enabled ? '(no recap yet)' : 'Adventure helpers are disabled for this chat.');
+
+    if ($recap.length > 0) {
+        $recap.empty();
+        if (!normalizedTurnUxState.enabled) {
+            $recap.append($('<small class="sb-agent-state-empty"></small>').text('Enable turn helpers to surface recaps and guided next actions.'));
+        } else if (!normalizedTurnUxState.recap_sections.length) {
+            $recap.append($('<small class="sb-agent-state-empty"></small>').text('(no recap yet)'));
+        } else {
+            for (const section of normalizedTurnUxState.recap_sections) {
+                const row = $('<div class="sb-agent-state-entry"></div>');
+                row.append($('<strong class="sb-agent-state-entry-title"></strong>').text(section.title));
+                row.append($('<small class="sb-agent-state-entry-detail"></small>').text(section.detail));
+                $recap.append(row);
+            }
+        }
+    }
+
+    if ($suggestions.length > 0) {
+        $suggestions.empty();
+        if (!normalizedTurnUxState.enabled) {
+            $suggestions.append($('<small class="sb-agent-state-empty"></small>').text('Turn helpers are currently off.'));
+        } else if (!normalizedTurnUxState.suggestions.length) {
+            $suggestions.append($('<small class="sb-agent-state-empty"></small>').text('(no suggestions yet)'));
+        } else {
+            for (const suggestion of normalizedTurnUxState.suggestions) {
+                const button = $('<button type="button" class="menu_button sb-agent-action-button"></button>').text(suggestion);
+                button.on('click', () => insertTurnUxSuggestionIntoChatInput(suggestion));
+                $suggestions.append(button);
+            }
+        }
+    }
+}
+
 function renderAgentPanel() {
     if ($('#agent_mode_panel').length === 0) {
         return;
@@ -2498,6 +2773,7 @@ function renderAgentPanel() {
     $('#agent_memory_summary').val(state.memory.summary || '');
     renderStoryStatePanel(state.story_state);
     renderLorebookReviewPanel(state.lorebook);
+    renderTurnUxPanel(state.turn_ux);
 
     const loreReviewText = state.lorebook?.review_mode
         ? t` Lore updates will stay in review until you apply them.`
@@ -2572,6 +2848,18 @@ function bindAgentPanel() {
             review_mode: $(this).prop('checked'),
             updated_at: new Date().toISOString(),
         });
+        refreshAgentTurnUxState();
+        saveMetadataDebounced();
+        renderAgentPanelDebounced();
+    });
+    $('#agent_turn_ux_enabled').on('input', function () {
+        setAgentTurnUxState({
+            enabled: $(this).prop('checked'),
+            updated_at: new Date().toISOString(),
+        });
+        if ($(this).prop('checked')) {
+            refreshAgentTurnUxState({ sourceTurnId: getCurrentTurnUxState().source_turn_id });
+        }
         saveMetadataDebounced();
         renderAgentPanelDebounced();
     });

@@ -4996,6 +4996,24 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="flex-container flexFlowColumn flexNoGap gap10">
+                                    <strong data-i18n="Adventure Assist">Adventure Assist</strong>
+                                    <label class="checkbox_label flex1" for="agent_turn_ux_enabled">
+                                        <input id="agent_turn_ux_enabled" type="checkbox" />
+                                        <small data-i18n="Show Adventure Turn Helpers">Show Adventure Turn Helpers</small>
+                                    </label>
+                                    <div class="sb-agent-state-grid">
+                                        <div class="sb-agent-state-card">
+                                            <small class="sb-agent-state-label" data-i18n="Turn Recap">Turn Recap</small>
+                                            <div id="agent_turn_ux_headline" class="sb-agent-state-value"></div>
+                                            <div id="agent_turn_ux_recap" class="sb-agent-state-list"></div>
+                                        </div>
+                                        <div class="sb-agent-state-card">
+                                            <small class="sb-agent-state-label" data-i18n="Suggested Next Actions">Suggested Next Actions</small>
+                                            <div id="agent_turn_ux_suggestions" class="sb-agent-action-list"></div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="flex-container flexFlowColumn flexNoGap">
                                     <strong data-i18n="Recent Agent Runs">Recent Agent Runs</strong>
                                     <div id="agent_status_list" class="flex-container flexFlowColumn flexNoGap"></div>

@@ -1138,6 +1138,18 @@ body:not(.movingUI) .drawer-content.maximized {
     gap: 8px;
 }
 
+.sb-agent-action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sb-agent-action-button {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+}
+
 .sb-agent-state-entry {
     display: flex;
     flex-direction: column;

@@ -51,3 +51,4 @@ See:
 - [experiments/002-durable-memory.md](/run/media/platinum/HDD/SillyBunny/docs/agentic/experiments/002-durable-memory.md)
 - [experiments/003-structured-story-state.md](/run/media/platinum/HDD/SillyBunny/docs/agentic/experiments/003-structured-story-state.md)
 - [experiments/004-safer-lore-autonomy.md](/run/media/platinum/HDD/SillyBunny/docs/agentic/experiments/004-safer-lore-autonomy.md)
+- [experiments/005-agentic-turn-ux.md](/run/media/platinum/HDD/SillyBunny/docs/agentic/experiments/005-agentic-turn-ux.md)
