@@ -64,7 +64,11 @@ if (( auto_update_enabled )) && [[ -d "$SCRIPT_DIR/.git" ]]; then
     prereq_args+=(--require-git)
 fi
 
-bash "$SCRIPT_DIR/scripts/install-prerequisites.sh" "${prereq_args[@]}"
+if (( ${#prereq_args[@]} )); then
+    bash "$SCRIPT_DIR/scripts/install-prerequisites.sh" "${prereq_args[@]}"
+else
+    bash "$SCRIPT_DIR/scripts/install-prerequisites.sh"
+fi
 
 if (( self_update_requested )); then
     bash "$SCRIPT_DIR/scripts/self-update.sh"
@@ -87,4 +91,8 @@ bun install --frozen-lockfile --production
 
 echo "Entering SillyBunny..."
 export NODE_NO_WARNINGS=1
-bun server.js "${server_args[@]}"
+if (( ${#server_args[@]} )); then
+    bun server.js "${server_args[@]}"
+else
+    bun server.js
+fi
