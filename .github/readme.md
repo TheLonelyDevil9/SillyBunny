@@ -2,6 +2,8 @@
 
 # SillyBunny
 
+Current release: **v1.1.0**.
+
 Currently based on **SillyTavern 1.17.0 stable**.
 
 SillyBunny is a fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern) with a better UI and a Bun-first runtime.
@@ -10,6 +12,18 @@ The goal is to keep the familiar SillyTavern workflow, data habits, and compatib
 
 > [!WARNING]
 > SillyBunny is an active fork. Expect ongoing UI iteration, Bun compatibility work, and occasional upstream sync churn.
+
+## Changelog
+
+### v1.1.0 - 2026-04-06
+
+- Added a new Launchpad onboarding flow with a first-launch tour, switchable guide views, responsive card-based layout, and persisted open/close state so new users can revisit it without getting buried in one long page.
+- Added the built-in Bunny Guide starter assistant and bundled guide assets to explain LLM basics, providers, models, presets, personas, lorebooks/world info, and everyday SillyBunny workflow questions in plain English.
+- Bundled an opt-in starter pack that includes `Pura's Director Preset 11.5`, `sillytavern-character-colors`, and `sillytavern-image-gen`, with extension metadata wired so the Manage Extensions updater can see their GitHub sources.
+- Fixed preset slider persistence so saved sampling changes like temperature and Top P actually stick when you save and reload presets.
+- Fixed the character drawer layout bug where an opened character view could remain visible behind the drawer when reopening Characters on desktop and mobile.
+- Polished homepage and shell UI details, including responsive button sizing, launchpad cleanup, World Info separator alignment, homepage creator/site links, and the refreshed SillyBunny guide art.
+- Merged the current staging branch work into `main`, including the latest built-in Agent Mode improvements and the new agentic docs in [`docs/agentic`](docs/agentic/).
 
 ## What makes it different
 
