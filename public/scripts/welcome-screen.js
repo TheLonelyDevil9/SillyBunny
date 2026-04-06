@@ -47,6 +47,9 @@ const MAX_DISPLAYED = 15;
 const STARTER_PACK_PRESET_NAME = `Pura's Director Preset 11.5`;
 const STARTER_PACK_CREATOR_NAME = 'purachina';
 const STARTER_PACK_SITE_URL = 'https://platberlitz.github.io/';
+const GEECHAN_SITE_URL = 'https://rentry.org/geechan';
+const TLD_CHUB_URL = 'https://chub.ai/users/thelonelydevil';
+const TLD_DISCORD_PALS_URL = 'https://github.com/TheLonelyDevil9/discord-pals/';
 const STARTER_PACK_EXTENSION_IDS = Object.freeze({
     dialogueColors: 'third-party/sillytavern-character-colors',
     quickImageGen: 'third-party/sillytavern-image-gen',
@@ -168,7 +171,7 @@ const WELCOME_DECK_VIEWS = Object.freeze([
     {
         id: 'starter',
         title: 'Starter Pack',
-        summary: 'Optional bundled extras and Pura\'s preset.',
+        summary: 'Optional bundled extras, presets, and creator picks.',
         icon: 'fa-gift',
     },
 ]);
@@ -424,6 +427,7 @@ function buildTutorialSteps() {
 
 function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName }) {
     const extension = findExtension(extensionName);
+    const chipColumnCount = Math.max(2, Math.min(chips.length || 1, 4));
 
     if (!extension) {
         return {
@@ -431,6 +435,7 @@ function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName
             body,
             icon,
             chips: [...chips],
+            chipColumnCount,
             statusLabel: 'Bundled',
             statusTone: 'warm',
             actionIcon: 'fa-arrow-up-right-from-square',
@@ -446,6 +451,7 @@ function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName
             body,
             icon,
             chips: [...chips],
+            chipColumnCount,
             statusLabel: 'Enabled',
             statusTone: 'good',
             actionIcon: 'fa-arrow-up-right-from-square',
@@ -460,6 +466,7 @@ function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName
         body,
         icon,
         chips: [...chips],
+        chipColumnCount,
         statusLabel: 'Opt-in',
         statusTone: 'warm',
         actionLabel: 'Enable and reload',
@@ -474,13 +481,16 @@ function buildPresetStarterPackItem() {
     const presetValue = presetManager?.findPreset(STARTER_PACK_PRESET_NAME);
     const isOpenAiStyleApi = main_api === 'openai';
     const isSelected = isOpenAiStyleApi && presetManager?.getSelectedPresetName() === STARTER_PACK_PRESET_NAME;
+    const chips = ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME];
+    const chipColumnCount = Math.max(2, Math.min(chips.length, 4));
 
     if (isSelected) {
         return {
             title: STARTER_PACK_PRESET_NAME,
             body: `${STARTER_PACK_CREATOR_NAME}'s bundled OpenAI-style preset is already selected, so you are using the included director-style response tuning right now.`,
             icon: 'fa-sliders',
-            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            chips,
+            chipColumnCount,
             statusLabel: 'Selected',
             statusTone: 'good',
             actionIcon: 'fa-arrow-up-right-from-square',
@@ -495,7 +505,8 @@ function buildPresetStarterPackItem() {
             title: STARTER_PACK_PRESET_NAME,
             body: `${STARTER_PACK_CREATOR_NAME}'s bundled OpenAI-style preset is ready to apply when you want that director-style response tuning without importing files by hand.`,
             icon: 'fa-sliders',
-            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            chips,
+            chipColumnCount,
             statusLabel: 'Ready',
             statusTone: 'warm',
             actionIcon: 'fa-wand-magic-sparkles',
@@ -510,7 +521,8 @@ function buildPresetStarterPackItem() {
             title: STARTER_PACK_PRESET_NAME,
             body: `${STARTER_PACK_CREATOR_NAME}'s bundled preset is for OpenAI-compatible chat-completions style setups. Switch APIs first, then you can apply it in one click.`,
             icon: 'fa-sliders',
-            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            chips,
+            chipColumnCount,
             statusLabel: 'OpenAI-style only',
             statusTone: 'neutral',
             actionIcon: 'fa-arrow-up-right-from-square',
@@ -524,7 +536,8 @@ function buildPresetStarterPackItem() {
         title: STARTER_PACK_PRESET_NAME,
         body: `${STARTER_PACK_CREATOR_NAME}'s bundled preset is included with SillyBunny and ready for OpenAI-style use, but it has not been selected yet.`,
         icon: 'fa-sliders',
-        chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+        chips,
+        chipColumnCount,
         statusLabel: 'Bundled',
         statusTone: 'warm',
         actionIcon: 'fa-arrow-up-right-from-square',
@@ -534,8 +547,39 @@ function buildPresetStarterPackItem() {
     };
 }
 
-function buildSiteStarterPackItem() {
+function buildLinkStarterPackItem({
+    title,
+    body,
+    icon,
+    chips,
+    actionLabel,
+    actionValue,
+    secondaryActionLabel = '',
+    secondaryActionValue = '',
+    statusLabel = 'Bundled',
+    statusTone = 'warm',
+}) {
     return {
+        title,
+        body,
+        icon,
+        chips: [...chips],
+        chipColumnCount: Math.max(2, Math.min(chips.length || 1, 4)),
+        statusLabel,
+        statusTone,
+        actionLabel,
+        actionIcon: 'fa-arrow-up-right-from-square',
+        actionType: 'open-link',
+        actionValue,
+        secondaryActionLabel,
+        secondaryActionIcon: 'fa-arrow-up-right-from-square',
+        secondaryActionType: 'open-link',
+        secondaryActionValue,
+    };
+}
+
+function buildSiteStarterPackItem() {
+    return buildLinkStarterPackItem({
         title: `${STARTER_PACK_CREATOR_NAME}'s site`,
         body: `${STARTER_PACK_CREATOR_NAME}'s main site collects the preset, extensions, themes, cards, and other SillyBunny-adjacent tools in one easy place.`,
         icon: 'fa-globe',
@@ -543,10 +587,36 @@ function buildSiteStarterPackItem() {
         statusLabel: 'Creator hub',
         statusTone: 'warm',
         actionLabel: 'Visit site',
-        actionIcon: 'fa-arrow-up-right-from-square',
-        actionType: 'open-link',
         actionValue: STARTER_PACK_SITE_URL,
-    };
+    });
+}
+
+function buildGeechanStarterPackItem() {
+    return buildLinkStarterPackItem({
+        title: 'Geechan',
+        body: 'Geechan\'s Rentry highlights his well-written Genshin character cards, and SillyBunny now bundles his Universal Roleplay v5.0 set across Chat Completions plus the matching Text Completions context, system prompt, and instruct pieces.',
+        icon: 'fa-leaf',
+        chips: ['Genshin cards', 'Chat preset', 'Text templates', 'Rentry'],
+        statusLabel: 'Preset pack',
+        statusTone: 'warm',
+        actionLabel: 'Visit Geechan',
+        actionValue: GEECHAN_SITE_URL,
+    });
+}
+
+function buildTldStarterPackItem() {
+    return buildLinkStarterPackItem({
+        title: 'TheLonelyDevil',
+        body: 'TheLonelyDevil\'s Chub profile is linked here, SillyBunny bundles the standalone TLD Card Conversion Preset for card-maker and conversion-focused OpenAI-style workflows, and Discord Pals is included as a GitHub link for running LLM character roleplay inside Discord.',
+        icon: 'fa-shoe-prints',
+        chips: ['Card maker', 'Chub.ai', 'Discord RP', 'Preset'],
+        statusLabel: 'Bundled',
+        statusTone: 'warm',
+        actionLabel: 'Open Chub profile',
+        actionValue: TLD_CHUB_URL,
+        secondaryActionLabel: 'View Discord Pals',
+        secondaryActionValue: TLD_DISCORD_PALS_URL,
+    });
 }
 
 function buildStarterPackItems() {
@@ -567,6 +637,8 @@ function buildStarterPackItems() {
         }),
         buildPresetStarterPackItem(),
         buildSiteStarterPackItem(),
+        buildGeechanStarterPackItem(),
+        buildTldStarterPackItem(),
     ];
 }
 
@@ -864,7 +936,7 @@ async function sendWelcomePanel(chats, expand = false) {
             return;
         }
         const templateData = buildWelcomeTemplateData(chats);
-        const template = await renderTemplateAsync('/scripts/templates/welcomePanelOnboarding.html?v=20260406d', templateData, true, true, true);
+        const template = await renderTemplateAsync('/scripts/templates/welcomePanelOnboarding.html?v=20260407a', templateData, true, true, true);
         const fragment = document.createRange().createContextualFragment(template);
         fragment.querySelectorAll('.welcomePanel').forEach((root) => {
             const recentHiddenClass = 'recentHidden';

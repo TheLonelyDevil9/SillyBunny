@@ -282,17 +282,27 @@ function addTabStyles() {
 
         .moonlit-tab-buttons {
             display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 18px;
+            padding: 0 6px;
             border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
             margin-bottom: 15px;
         }
 
         .moonlit-tab-button {
-            padding: 8px 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 8px 6px 12px;
             background: none;
             border: none;
             border-bottom: 1px solid transparent;
             cursor: pointer;
             color: var(--SmartThemeBodyColor);
+            font: inherit;
+            text-align: center;
             opacity: 0.7;
             transition: all 0.5s ease;
         }

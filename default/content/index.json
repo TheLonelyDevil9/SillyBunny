@@ -296,6 +296,14 @@
         "type": "openai_preset"
     },
     {
+        "filename": "presets/openai/Geechan - Universal Roleplay (Chat Completions) (v5.0).json",
+        "type": "openai_preset"
+    },
+    {
+        "filename": "presets/openai/TLD Card Conversion Preset (Standalone).json",
+        "type": "openai_preset"
+    },
+    {
         "filename": "presets/context/Adventure.json",
         "type": "context"
     },
@@ -369,6 +377,10 @@
     },
     {
         "filename": "presets/context/Phi.json",
+        "type": "context"
+    },
+    {
+        "filename": "presets/context/Geechan - Universal Roleplay (V5.0).json",
         "type": "context"
     },
     {
@@ -500,6 +512,10 @@
         "type": "instruct"
     },
     {
+        "filename": "presets/instruct/Kimi K2.json",
+        "type": "instruct"
+    },
+    {
         "filename": "presets/sysprompt/Actor.json",
         "type": "sysprompt"
     },
@@ -509,6 +525,22 @@
     },
     {
         "filename": "presets/sysprompt/Assistant - Simple.json",
+        "type": "sysprompt"
+    },
+    {
+        "filename": "presets/sysprompt/Geechan - Universal Roleplay (V5.0).json",
+        "type": "sysprompt"
+    },
+    {
+        "filename": "presets/sysprompt/Geechan - Universal Roleplay (NSFW) (V5.0).json",
+        "type": "sysprompt"
+    },
+    {
+        "filename": "presets/sysprompt/Geechan - Universal Roleplay (Simplified) (V5.0).json",
+        "type": "sysprompt"
+    },
+    {
+        "filename": "presets/sysprompt/Geechan - Universal Roleplay (NSFW Simplified) (V5.0).json",
         "type": "sysprompt"
     },
     {

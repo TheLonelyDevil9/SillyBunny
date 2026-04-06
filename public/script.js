@@ -420,7 +420,7 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.0.0';
+const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.2.0';
 
 export let displayVersion = SILLYBUNNY_UI_VERSION;
 
@@ -437,7 +437,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/sillybunny-pixel-logo.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyBunny:1.0.0:platberlitz'; // For Horde header
+export let CLIENT_VERSION = 'SillyBunny:1.2.0:platberlitz'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -550,6 +550,7 @@ export const depth_prompt_role_default = 'system';
 const per_page_default = 50;
 
 var is_advanced_char_open = false;
+let previousAdvancedCharacterFocus = null;
 
 /**
  * The type of the right menu
@@ -8623,6 +8624,175 @@ export function selectRightMenuWithAnimation(selectedMenuId) {
     });
 }
 
+function focusUiSurface(target) {
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && activeElement.closest('#send_form')) {
+        activeElement.blur();
+    }
+
+    window.requestAnimationFrame(() => {
+        if (document.body.contains(target)) {
+            target.focus({ preventScroll: true });
+        }
+    });
+}
+
+function scheduleUiSurfaceFocus(target, delay = 0) {
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    window.setTimeout(() => {
+        focusUiSurface(target);
+    }, delay);
+}
+
+function getAlternateGreetingsEditorChid() {
+    const value = $('#character_greetings_editor').data('chid');
+    if (value === undefined || value === null || value === '') {
+        return undefined;
+    }
+
+    const numericValue = Number(value);
+    return Number.isNaN(numericValue) ? value : numericValue;
+}
+
+function getEditableAlternateGreetings() {
+    if (menu_type === 'create') {
+        if (!Array.isArray(create_save.alternate_greetings)) {
+            create_save.alternate_greetings = [];
+        }
+        return create_save.alternate_greetings;
+    }
+
+    const chid = getAlternateGreetingsEditorChid();
+    if (chid === undefined || !characters[chid]) {
+        return null;
+    }
+
+    characters[chid].data ??= {};
+    if (!Array.isArray(characters[chid].data.alternate_greetings)) {
+        characters[chid].data.alternate_greetings = [];
+    }
+
+    return characters[chid].data.alternate_greetings;
+}
+
+function syncAlternateGreetingsEditor() {
+    const editor = $('#character_greetings_editor');
+    if (!editor.length) {
+        return;
+    }
+
+    const list = editor.find('.alternate_greetings_list');
+    list.children('.alternate_greeting').remove();
+
+    const greetings = getEditableAlternateGreetings() ?? [];
+    greetings.forEach((greeting, index) => {
+        const greetingBlock = $('#alternate_greeting_form_template .alternate_greeting').clone();
+        const textareaId = `alternate_greeting_inline_${index}`;
+
+        greetingBlock.attr('data-index', index);
+        greetingBlock.find('.alternate_greeting_text')
+            .attr('id', textareaId)
+            .val(greeting)
+            .on('input', function () {
+                greetings[index] = String($(this).val());
+                if (menu_type !== 'create') {
+                    saveCharacterDebounced();
+                }
+            });
+        greetingBlock.find('.editor_maximize').attr('data-for', textareaId);
+        greetingBlock.find('.greeting_index').text(index + 1);
+
+        greetingBlock.find('.delete_alternate_greeting').on('click', async function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const confirm = await callGenericPopup(t`Are you sure you want to delete this alternate greeting?`, POPUP_TYPE.CONFIRM);
+            if (!confirm) {
+                return;
+            }
+
+            greetings.splice(index, 1);
+            syncAlternateGreetingsEditor();
+
+            if (menu_type !== 'create') {
+                saveCharacterDebounced();
+            }
+        });
+
+        greetingBlock.find('.move_up_alternate_greeting').on('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (index <= 0) {
+                return;
+            }
+
+            [greetings[index - 1], greetings[index]] = [greetings[index], greetings[index - 1]];
+            syncAlternateGreetingsEditor();
+
+            if (menu_type !== 'create') {
+                saveCharacterDebounced();
+            }
+
+            document.getElementById(`alternate_greeting_inline_${index - 1}`)?.focus({ preventScroll: true });
+        });
+
+        greetingBlock.find('.move_down_alternate_greeting').on('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (index >= greetings.length - 1) {
+                return;
+            }
+
+            [greetings[index], greetings[index + 1]] = [greetings[index + 1], greetings[index]];
+            syncAlternateGreetingsEditor();
+
+            if (menu_type !== 'create') {
+                saveCharacterDebounced();
+            }
+
+            document.getElementById(`alternate_greeting_inline_${index + 1}`)?.focus({ preventScroll: true });
+        });
+
+        list.append(greetingBlock);
+    });
+
+    updateAlternateGreetingsHintVisibility(editor);
+}
+
+function closeAdvancedCharacterPopup({ restoreFocus = true } = {}) {
+    is_advanced_char_open = false;
+
+    const popup = $('#character_popup');
+    popup.stop(true, true);
+    popup.transition({
+        opacity: 0,
+        duration: animation_duration,
+        easing: animation_easing,
+    });
+
+    window.setTimeout(() => {
+        popup.css('display', 'none').removeClass('open');
+    }, animation_duration);
+
+    if (restoreFocus) {
+        const fallbackTarget = previousAdvancedCharacterFocus instanceof HTMLElement && document.body.contains(previousAdvancedCharacterFocus)
+            ? previousAdvancedCharacterFocus
+            : document.getElementById('advanced_div') ?? document.getElementById('right-nav-panel');
+        focusUiSurface(fallbackTarget);
+    }
+
+    previousAdvancedCharacterFocus = null;
+}
+
 export function select_rm_info(type, charId, previousCharId = null) {
     if (!type) {
         toastr.error(t`Invalid process (no 'type')`);
@@ -8787,9 +8957,12 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     const avatarUrl = characters[chid].avatar != 'none' ? getThumbnailUrl('avatar', characters[chid].avatar) : default_avatar;
     $('#avatar_load_preview').attr('src', avatarUrl);
     $('.open_alternate_greetings').data('chid', chid);
+    $('#character_greetings_editor').data('chid', chid);
     $('#set_character_world').data('chid', chid);
     setWorldInfoButtonClass(chid);
     checkEmbeddedWorld(chid);
+    syncAlternateGreetingsEditor();
+    focusUiSurface(document.getElementById('right-nav-panel'));
 
     $('#name_div').removeClass('displayBlock');
     $('#name_div').addClass('displayNone');
@@ -8866,10 +9039,13 @@ function select_rm_create({ switchMenu = true } = {}) {
     $('#name_div').removeClass('displayNone');
     $('#name_div').addClass('displayBlock');
     $('.open_alternate_greetings').data('chid', -1);
+    $('#character_greetings_editor').data('chid', -1);
     $('#set_character_world').data('chid', -1);
     setWorldInfoButtonClass(undefined, !!create_save.world);
     updateFavButtonState(false);
     checkEmbeddedWorld();
+    syncAlternateGreetingsEditor();
+    focusUiSurface(document.getElementById('right-nav-panel'));
 
     $('#form_create').attr('actiontype', 'createcharacter');
     $('.form_create_bottom_buttons_block .chat_lorebook_button').hide();
@@ -8881,6 +9057,7 @@ function select_rm_characters() {
     setMenuType('characters');
     selectRightMenuWithAnimation('rm_characters_block');
     printCharacters(doFullRefresh);
+    focusUiSurface(document.getElementById('right-nav-panel'));
 }
 
 /**
@@ -9590,125 +9767,30 @@ async function openCharacterWorldPopup() {
 }
 
 function openAlternateGreetings() {
-    const chid = $('.open_alternate_greetings').data('chid');
+    const greetings = getEditableAlternateGreetings();
 
-    if (menu_type != 'create' && chid === undefined) {
+    if (!greetings) {
         toastr.error('Does not have an Id for this character in editor menu.');
         return;
-    } else {
-        // If the character does not have alternate greetings, create an empty array
-        if (characters[chid] && !Array.isArray(characters[chid].data.alternate_greetings)) {
-            characters[chid].data.alternate_greetings = [];
-        }
     }
 
-    const template = $('#alternate_greetings_template .alternate_grettings').clone();
-    const getArray = () => menu_type == 'create' ? create_save.alternate_greetings : characters[chid].data.alternate_greetings;
-    const popup = new Popup(template, POPUP_TYPE.TEXT, '', {
-        wide: true,
-        large: true,
-        allowVerticalScrolling: true,
-        onClose: async () => {
-            if (menu_type !== 'create') {
-                await createOrEditCharacter();
-            }
-        },
-    });
+    const newIndex = greetings.length;
+    greetings.push('');
+    syncAlternateGreetingsEditor();
 
-    for (let index = 0; index < getArray().length; index++) {
-        addAlternateGreeting(template, getArray()[index], index, getArray, popup);
+    if (menu_type !== 'create') {
+        saveCharacterDebounced();
     }
 
-    template.find('.add_alternate_greeting').on('click', function () {
-        const array = getArray();
-        const index = array.length;
-        array.push('');
-        addAlternateGreeting(template, '', index, getArray, popup);
-        updateAlternateGreetingsHintVisibility(template);
-        const list = template.find('.alternate_greetings_list');
-        list.scrollTop(list.prop('scrollHeight'));
-    });
-
-    popup.show();
-    updateAlternateGreetingsHintVisibility(template);
-}
-
-/**
- * Adds an alternate greeting to the template.
- * @param {JQuery<HTMLElement>} template
- * @param {string} greeting
- * @param {number} index
- * @param {() => any[]} getArray
- * @param {Popup} popup
- */
-function addAlternateGreeting(template, greeting, index, getArray, popup) {
-    const greetingBlock = $('#alternate_greeting_form_template .alternate_greeting').clone();
-    greetingBlock.attr('data-index', index);
-    greetingBlock.find('.alternate_greeting_text')
-        .attr('id', `alternate_greeting_${index}`)
-        .on('input', async function () {
-            const value = $(this).val();
-            const array = getArray();
-            array[index] = value;
-        }).val(greeting);
-    greetingBlock.find('.editor_maximize').attr('data-for', `alternate_greeting_${index}`);
-    greetingBlock.find('.greeting_index').text(index + 1);
-    greetingBlock.find('.delete_alternate_greeting').on('click', async function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const confirm = await callGenericPopup(t`Are you sure you want to delete this alternate greeting?`, POPUP_TYPE.CONFIRM);
-        if (!confirm) {
+    window.requestAnimationFrame(() => {
+        const field = document.getElementById(`alternate_greeting_inline_${newIndex}`);
+        if (!(field instanceof HTMLElement)) {
             return;
         }
 
-        const array = getArray();
-        array.splice(index, 1);
-
-        // We need to reopen the popup to update the index numbers
-        await popup.complete(POPUP_RESULT.AFFIRMATIVE);
-        openAlternateGreetings();
+        field.focus({ preventScroll: true });
+        field.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
-    greetingBlock.find('.move_up_alternate_greeting').on('click', function (event) {
-        handleMoveAlternateGreeting(event, -1);
-    });
-    greetingBlock.find('.move_down_alternate_greeting').on('click', function (event) {
-        handleMoveAlternateGreeting(event, 1);
-    });
-
-    /**
-     * Handles moving an alternate greeting up or down in the list.
-     * @param {JQuery.ClickEvent} event - The click event
-     * @param {number} direction - Direction to move: -1 for up, 1 for down
-     */
-    function handleMoveAlternateGreeting(event, direction) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const array = getArray();
-        const index = Number(greetingBlock.attr('data-index'));
-        const newIndex = index + direction;
-
-        // Check bounds
-        if (direction === -1 && index <= 0) {
-            return;
-        }
-        if (direction === 1 && index >= array.length - 1) {
-            return;
-        }
-
-        // Swap the greetings
-        [array[index], array[newIndex]] = [array[newIndex], array[index]];
-
-        // Update current greeting
-        greetingBlock.find('.alternate_greeting_text').val(array[index]);
-
-        // Update adjacent greeting
-        const adjacentGreetingBlock = template.find(`.alternate_greeting[data-index="${newIndex}"]`);
-        adjacentGreetingBlock.find('.alternate_greeting_text').val(array[newIndex]);
-    }
-
-    template.find('.alternate_greetings_list').append(greetingBlock);
 }
 
 /**
@@ -10921,6 +11003,7 @@ export async function doNavbarIconClick() {
     const drawer = $(this).parent().find('.drawer-content');
     const drawerWasOpenAlready = $(this).parent().find('.drawer-content').hasClass('openDrawer');
     const targetDrawerID = $(this).parent().find('.drawer-content').attr('id');
+    const drawerElement = drawer.get(0);
 
     if (!drawerWasOpenAlready) {
         const $openDrawers = $('.openDrawer:not(.pinnedOpen)');
@@ -10938,6 +11021,7 @@ export async function doNavbarIconClick() {
         drawer.toggleClass('openDrawer closedDrawer');
 
         if (targetDrawerID === 'right-nav-panel') {
+            focusUiSurface(drawerElement);
             favsToHotswap();
             $('#rm_print_characters_block').trigger('scroll');
         }
@@ -10950,6 +11034,9 @@ export async function doNavbarIconClick() {
             }
         }
     } else if (drawerWasOpenAlready) {
+        if (targetDrawerID === 'right-nav-panel' && document.activeElement instanceof HTMLElement && drawerElement?.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
         icon.toggleClass('closedIcon openIcon');
         drawer.toggleClass('closedDrawer openDrawer');
     }
@@ -11137,6 +11224,23 @@ jQuery(async function () {
         selected_button = 'characters';
         select_rm_characters();
     });
+    $('#rightNavDrawerIcon').on('click', function () {
+        const rightNavPanel = document.getElementById('right-nav-panel');
+        window.setTimeout(() => {
+            if (!(rightNavPanel instanceof HTMLElement)) {
+                return;
+            }
+
+            if (rightNavPanel.classList.contains('openDrawer')) {
+                focusUiSurface(rightNavPanel);
+                return;
+            }
+
+            if (document.activeElement instanceof HTMLElement && rightNavPanel.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+        }, 0);
+    });
     $('#rm_button_back').on('click', function () {
         selected_button = 'characters';
         select_rm_characters();
@@ -11153,11 +11257,13 @@ jQuery(async function () {
             select_selected_character(this_chid);
         }
         $('#character_search_bar').val('').trigger('input');
+        scheduleUiSurfaceFocus(document.getElementById('right-nav-panel'));
     });
 
     $(document).on('click', '.character_select', async function () {
         const id = Number($(this).attr('data-chid'));
         await selectCharacterById(id);
+        scheduleUiSurfaceFocus(document.getElementById('right-nav-panel'));
     });
 
     $(document).on('click', '.bogus_folder_select', function () {
@@ -11293,31 +11399,30 @@ jQuery(async function () {
     $('#advanced_div').on('click', function () {
         if (!is_advanced_char_open) {
             is_advanced_char_open = true;
-            $('#character_popup').css({ 'display': 'flex', 'opacity': 0.0 }).addClass('open');
-            $('#character_popup').transition({
+            previousAdvancedCharacterFocus = document.activeElement instanceof HTMLElement && !document.activeElement.closest('#send_form')
+                ? document.activeElement
+                : document.getElementById('advanced_div');
+
+            const popup = $('#character_popup');
+            popup.stop(true, true);
+            popup.css({ 'display': 'flex', 'opacity': 0.0 }).addClass('open');
+            popup.transition({
                 opacity: 1.0,
                 duration: animation_duration,
                 easing: animation_easing,
             });
+            focusUiSurface(document.getElementById('character_cross') ?? document.getElementById('character_popup'));
         } else {
-            is_advanced_char_open = false;
-            $('#character_popup').css('display', 'none').removeClass('open');
+            closeAdvancedCharacterPopup();
         }
     });
 
     $('#character_cross').on('click', function () {
-        is_advanced_char_open = false;
-        $('#character_popup').transition({
-            opacity: 0,
-            duration: animation_duration,
-            easing: animation_easing,
-        });
-        setTimeout(function () { $('#character_popup').css('display', 'none'); }, animation_duration);
+        closeAdvancedCharacterPopup();
     });
 
     $('#character_popup_ok').on('click', function () {
-        is_advanced_char_open = false;
-        $('#character_popup').css('display', 'none');
+        closeAdvancedCharacterPopup();
     });
 
     $('#dialogue_popup_ok').on('click', async function (_e) {
@@ -12291,6 +12396,12 @@ jQuery(async function () {
 
     $(document).on('keydown', function (e) {
         if (e.key === 'Escape' && !e.originalEvent.isComposing) {
+            if (is_advanced_char_open) {
+                e.preventDefault();
+                closeAdvancedCharacterPopup();
+                return;
+            }
+
             const isEditVisible = $('#curEditTextarea').is(':visible') || $('.reasoning_edit_textarea').length > 0;
             if (isEditVisible && power_user.auto_save_msg_edits === false) {
                 closeMessageEditor('all');

@@ -6,7 +6,7 @@ import { themeCustomSettings } from './theme-settings.js';
  */
 function generateDefaultSettings() {
     const settings = {
-        enabled: true,
+        enabled: false,
         useOriginalAvatarImages: false,
         presets: {
             "Moonlit Echoes - by Rivelle": {}

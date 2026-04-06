@@ -1948,6 +1948,21 @@ class PromptManager {
             .slideDown(200, 'swing')
             .addClass('openDrawer');
 
+        window.setTimeout(() => {
+            const focusTarget = area === 'edit'
+                ? document.getElementById(this.configuration.prefix + 'prompt_manager_popup_entry_form_prompt')
+                : document.getElementById(this.configuration.prefix + 'prompt_manager_popup_close_button');
+
+            if (focusTarget instanceof HTMLElement) {
+                focusTarget.focus({ preventScroll: true });
+
+                if (focusTarget instanceof HTMLTextAreaElement) {
+                    const length = focusTarget.value.length;
+                    focusTarget.setSelectionRange(length, length);
+                }
+            }
+        }, 240);
+
         // Scroll to top of edit form on mobile
         if (window.matchMedia('(max-width: 768px)').matches) {
             setTimeout(() => {

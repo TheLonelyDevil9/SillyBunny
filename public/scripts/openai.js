@@ -120,6 +120,26 @@ const default_bias_presets = {
         { id: 'e63037c7-c9d1-4724-ab2d-7756008b433b', text: ' connection', value: -25 },
     ],
 };
+const SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS = Object.freeze({
+    claude: Object.freeze({
+        enableSystemPromptCache: false,
+        cachingAtDepth: -1,
+        extendedTTL: false,
+        enableAdaptiveThinking: true,
+    }),
+    gemini: Object.freeze({
+        apiVersion: 'v1beta',
+        thoughtSignatures: true,
+        enableSystemPromptCache: false,
+    }),
+});
+const serverChatCompletionConfigState = {
+    loaded: false,
+    busy: false,
+    restarting: false,
+    lastModifiedMs: 0,
+    originalSettings: null,
+};
 
 const max_2k = 2047;
 const max_4k = 4095;
@@ -2112,6 +2132,7 @@ function groupOpenAISettingsIntoDrawers() {
                 '#openai_settings > div > .flex-container:has(#openai_verbosity)',
                 '#openai_settings > div > .range-block:has(#claude_assistant_prefill)',
                 '#openai_settings > .range-block:has(#openai_logit_bias_preset)',
+                '#openai_settings > div > #completion_prompt_manager',
             ],
         },
     ];
@@ -2154,15 +2175,439 @@ function updateOpenAISettingsGroupVisibility() {
     });
 }
 
+function updateServerChatCompletionConfigSourceVisibility() {
+    const currentSource = oai_settings.chat_completion_source;
+
+    $('#sb-chat-completion-server-config-drawer, #sb-chat-completion-server-config, #sb-chat-completion-server-config-drawer [data-source], #sb-chat-completion-server-config [data-source]').each(function () {
+        const mode = $(this).data('source-mode');
+        const sourceValue = $(this).data('source');
+
+        if (!sourceValue) {
+            return;
+        }
+
+        const validSources = String(sourceValue).split(',');
+        const matchesSource = validSources.includes(currentSource);
+        $(this).toggle(mode !== 'except' ? matchesSource : !matchesSource);
+    });
+}
+
+function cloneServerChatCompletionConfig(settings) {
+    return JSON.parse(JSON.stringify(settings));
+}
+
+function normalizeServerChatCompletionConfig(settings) {
+    const normalizedClaudeCachingDepth = Number.parseInt(String(settings?.claude?.cachingAtDepth ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.cachingAtDepth), 10);
+
+    return {
+        claude: {
+            enableSystemPromptCache: Boolean(settings?.claude?.enableSystemPromptCache ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.enableSystemPromptCache),
+            cachingAtDepth: Number.isFinite(normalizedClaudeCachingDepth) ? normalizedClaudeCachingDepth : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.cachingAtDepth,
+            extendedTTL: Boolean(settings?.claude?.extendedTTL ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.extendedTTL),
+            enableAdaptiveThinking: Boolean(settings?.claude?.enableAdaptiveThinking ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.enableAdaptiveThinking),
+        },
+        gemini: {
+            apiVersion: String(settings?.gemini?.apiVersion || SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.apiVersion).trim() || SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.apiVersion,
+            thoughtSignatures: Boolean(settings?.gemini?.thoughtSignatures ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.thoughtSignatures),
+            enableSystemPromptCache: Boolean(settings?.gemini?.enableSystemPromptCache ?? SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.enableSystemPromptCache),
+        },
+    };
+}
+
+function getServerChatCompletionConfigRefs() {
+    return {
+        root: document.getElementById('sb-chat-completion-server-config'),
+        state: document.getElementById('sb-chat-completion-config-state'),
+        status: document.getElementById('sb-chat-completion-config-status'),
+        reloadButton: document.getElementById('sb-chat-completion-config-reload'),
+        saveButton: document.getElementById('sb-chat-completion-config-save'),
+        saveRestartButton: document.getElementById('sb-chat-completion-config-save-restart'),
+        claudeSystemPromptCache: document.getElementById('sb-config-claude-system-prompt-cache'),
+        claudeCachingDepth: document.getElementById('sb-config-claude-caching-depth'),
+        claudeExtendedTtl: document.getElementById('sb-config-claude-extended-ttl'),
+        claudeAdaptiveThinking: document.getElementById('sb-config-claude-adaptive-thinking'),
+        geminiApiVersion: document.getElementById('sb-config-gemini-api-version'),
+        geminiThoughtSignatures: document.getElementById('sb-config-gemini-thought-signatures'),
+        geminiSystemPromptCache: document.getElementById('sb-config-gemini-system-prompt-cache'),
+    };
+}
+
+async function requestServerChatCompletionConfig(endpoint, body = {}) {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let data = {};
+
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = { message: text };
+    }
+
+    if (!response.ok) {
+        throw new Error(data?.error || data?.message || text || `Request failed with status ${response.status}.`);
+    }
+
+    return data;
+}
+
+function setServerChatCompletionConfigMessage(message = '') {
+    const refs = getServerChatCompletionConfigRefs();
+
+    if (!(refs.status instanceof HTMLElement)) {
+        return;
+    }
+
+    refs.status.textContent = String(message ?? '').trim();
+    refs.status.hidden = !refs.status.textContent;
+}
+
+function collectServerChatCompletionConfigForm() {
+    const refs = getServerChatCompletionConfigRefs();
+
+    return normalizeServerChatCompletionConfig({
+        claude: {
+            enableSystemPromptCache: refs.claudeSystemPromptCache instanceof HTMLInputElement ? refs.claudeSystemPromptCache.checked : false,
+            cachingAtDepth: refs.claudeCachingDepth instanceof HTMLInputElement ? refs.claudeCachingDepth.value : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.cachingAtDepth,
+            extendedTTL: refs.claudeExtendedTtl instanceof HTMLInputElement ? refs.claudeExtendedTtl.checked : false,
+            enableAdaptiveThinking: refs.claudeAdaptiveThinking instanceof HTMLInputElement ? refs.claudeAdaptiveThinking.checked : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.claude.enableAdaptiveThinking,
+        },
+        gemini: {
+            apiVersion: refs.geminiApiVersion instanceof HTMLInputElement ? refs.geminiApiVersion.value : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.apiVersion,
+            thoughtSignatures: refs.geminiThoughtSignatures instanceof HTMLInputElement ? refs.geminiThoughtSignatures.checked : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.thoughtSignatures,
+            enableSystemPromptCache: refs.geminiSystemPromptCache instanceof HTMLInputElement ? refs.geminiSystemPromptCache.checked : SERVER_CHAT_COMPLETION_CONFIG_DEFAULTS.gemini.enableSystemPromptCache,
+        },
+    });
+}
+
+function fillServerChatCompletionConfigForm(settings) {
+    const refs = getServerChatCompletionConfigRefs();
+    const normalizedSettings = normalizeServerChatCompletionConfig(settings);
+
+    if (refs.claudeSystemPromptCache instanceof HTMLInputElement) {
+        refs.claudeSystemPromptCache.checked = normalizedSettings.claude.enableSystemPromptCache;
+    }
+
+    if (refs.claudeCachingDepth instanceof HTMLInputElement) {
+        refs.claudeCachingDepth.value = String(normalizedSettings.claude.cachingAtDepth);
+    }
+
+    if (refs.claudeExtendedTtl instanceof HTMLInputElement) {
+        refs.claudeExtendedTtl.checked = normalizedSettings.claude.extendedTTL;
+    }
+
+    if (refs.claudeAdaptiveThinking instanceof HTMLInputElement) {
+        refs.claudeAdaptiveThinking.checked = normalizedSettings.claude.enableAdaptiveThinking;
+    }
+
+    if (refs.geminiApiVersion instanceof HTMLInputElement) {
+        refs.geminiApiVersion.value = normalizedSettings.gemini.apiVersion;
+    }
+
+    if (refs.geminiThoughtSignatures instanceof HTMLInputElement) {
+        refs.geminiThoughtSignatures.checked = normalizedSettings.gemini.thoughtSignatures;
+    }
+
+    if (refs.geminiSystemPromptCache instanceof HTMLInputElement) {
+        refs.geminiSystemPromptCache.checked = normalizedSettings.gemini.enableSystemPromptCache;
+    }
+
+    serverChatCompletionConfigState.originalSettings = cloneServerChatCompletionConfig(normalizedSettings);
+    updateServerChatCompletionConfigDirtyState();
+}
+
+function updateServerChatCompletionConfigDirtyState() {
+    const refs = getServerChatCompletionConfigRefs();
+
+    if (!(refs.state instanceof HTMLElement)) {
+        return false;
+    }
+
+    const isDirty = JSON.stringify(collectServerChatCompletionConfigForm()) !== JSON.stringify(serverChatCompletionConfigState.originalSettings);
+    refs.state.textContent = isDirty ? 'Unsaved changes' : 'Saved';
+    refs.state.dataset.state = isDirty ? 'dirty' : 'saved';
+    return isDirty;
+}
+
+function updateServerChatCompletionConfigInteractivity() {
+    const refs = getServerChatCompletionConfigRefs();
+    const locked = serverChatCompletionConfigState.busy || serverChatCompletionConfigState.restarting;
+
+    [
+        refs.claudeSystemPromptCache,
+        refs.claudeCachingDepth,
+        refs.claudeExtendedTtl,
+        refs.claudeAdaptiveThinking,
+        refs.geminiApiVersion,
+        refs.geminiThoughtSignatures,
+        refs.geminiSystemPromptCache,
+        refs.reloadButton,
+        refs.saveButton,
+        refs.saveRestartButton,
+    ].forEach(element => {
+        if (element instanceof HTMLInputElement || element instanceof HTMLButtonElement) {
+            element.disabled = locked;
+        }
+    });
+}
+
+async function waitForServerChatCompletionConfigRestart() {
+    let sawOffline = false;
+    const timeoutAt = Date.now() + 180000;
+
+    while (Date.now() < timeoutAt) {
+        try {
+            const response = await fetch('/version', { cache: 'no-store' });
+
+            if (!response.ok) {
+                throw new Error('Server is not ready yet.');
+            }
+
+            if (sawOffline) {
+                location.reload();
+                return true;
+            }
+        } catch {
+            sawOffline = true;
+        }
+
+        await delay(1500);
+    }
+
+    return false;
+}
+
+async function loadServerChatCompletionConfig({ force = false } = {}) {
+    const refs = getServerChatCompletionConfigRefs();
+
+    if (!(refs.root instanceof HTMLElement) || serverChatCompletionConfigState.busy || serverChatCompletionConfigState.restarting) {
+        return;
+    }
+
+    serverChatCompletionConfigState.busy = true;
+    updateServerChatCompletionConfigInteractivity();
+    setServerChatCompletionConfigMessage('Loading server config values…');
+
+    try {
+        const result = await requestServerChatCompletionConfig('/api/server-admin/config/chat-completions/get');
+        const nextSettings = normalizeServerChatCompletionConfig(result?.settings);
+        const hasDraft = serverChatCompletionConfigState.loaded && updateServerChatCompletionConfigDirtyState();
+
+        if (!hasDraft || force) {
+            fillServerChatCompletionConfigForm(nextSettings);
+            setServerChatCompletionConfigMessage('Restart required after saving these server-side settings.');
+        } else {
+            serverChatCompletionConfigState.lastModifiedMs = Number(result?.lastModifiedMs ?? serverChatCompletionConfigState.lastModifiedMs) || 0;
+            setServerChatCompletionConfigMessage('config.yaml changed on disk, but your unsaved Presets draft was kept.');
+        }
+
+        serverChatCompletionConfigState.lastModifiedMs = Number(result?.lastModifiedMs ?? 0) || 0;
+        serverChatCompletionConfigState.loaded = true;
+    } catch (error) {
+        console.error('Failed to load chat completion server config.', error);
+        setServerChatCompletionConfigMessage(error.message || 'Failed to load chat completion server config.');
+    } finally {
+        serverChatCompletionConfigState.busy = false;
+        updateServerChatCompletionConfigInteractivity();
+    }
+}
+
+async function saveServerChatCompletionConfig({ restart = false } = {}) {
+    if (serverChatCompletionConfigState.busy || serverChatCompletionConfigState.restarting) {
+        return;
+    }
+
+    serverChatCompletionConfigState.busy = true;
+    updateServerChatCompletionConfigInteractivity();
+    setServerChatCompletionConfigMessage(restart ? 'Saving server config and preparing restart…' : 'Saving server config…');
+
+    try {
+        const result = await requestServerChatCompletionConfig('/api/server-admin/config/chat-completions/save', {
+            expectedLastModifiedMs: serverChatCompletionConfigState.lastModifiedMs,
+            restart,
+            settings: collectServerChatCompletionConfigForm(),
+        });
+
+        fillServerChatCompletionConfigForm(result?.settings);
+        serverChatCompletionConfigState.lastModifiedMs = Number(result?.lastModifiedMs ?? 0) || serverChatCompletionConfigState.lastModifiedMs;
+        setServerChatCompletionConfigMessage(result?.message || 'Chat completion server config saved.');
+        toastr.success(result?.message || 'Chat completion server config saved.', 'Server config');
+
+        if (restart) {
+            serverChatCompletionConfigState.busy = false;
+            serverChatCompletionConfigState.restarting = true;
+            updateServerChatCompletionConfigInteractivity();
+
+            const restarted = await waitForServerChatCompletionConfigRestart();
+            if (!restarted) {
+                serverChatCompletionConfigState.restarting = false;
+                setServerChatCompletionConfigMessage('Restart is taking longer than expected. Refresh the page once the server is back.');
+                toastr.warning('Restart is taking longer than expected. Refresh manually once the server is back.', 'Restart pending');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to save chat completion server config.', error);
+        setServerChatCompletionConfigMessage(error.message || 'Failed to save chat completion server config.');
+        toastr.error(error.message || 'Failed to save chat completion server config.', 'Server config');
+    } finally {
+        if (!serverChatCompletionConfigState.restarting) {
+            serverChatCompletionConfigState.busy = false;
+            updateServerChatCompletionConfigInteractivity();
+        }
+    }
+}
+
+function buildServerChatCompletionConfigCard({ nested = false } = {}) {
+    const headerLead = nested
+        ? `
+            <div class="sb-chat-completion-config-inline-copy">
+                <strong>Claude & Gemini flags</strong>
+                <small>These values are saved into <code>config.yaml</code> and need a restart after saving.</small>
+            </div>
+        `
+        : '<div class="range-block-title">Server Config (config.yaml)</div>';
+
+    return $(`
+        <div id="sb-chat-completion-server-config" class="range-block sb-chat-completion-server-config${nested ? ' is-nested' : ''}" data-source="claude,makersuite,vertexai">
+            <div class="sb-chat-completion-config-header">
+                ${headerLead}
+                <span id="sb-chat-completion-config-state" class="sb-chat-completion-config-state">Loading…</span>
+            </div>
+            <div class="toggle-description justifyLeft">
+                Mirror the Claude and Gemini <code>config.yaml</code> flags here so you can tweak them from Presets. These are server-side settings, so a restart is required after saving.
+            </div>
+            <div class="sb-chat-completion-config-grid">
+                <section class="sb-chat-completion-config-section" data-source="claude">
+                    <strong class="sb-chat-completion-config-title">Claude</strong>
+                    <label class="checkbox_label widthFreeExpand" for="sb-config-claude-system-prompt-cache">
+                        <input id="sb-config-claude-system-prompt-cache" type="checkbox">
+                        <span>System prompt cache</span>
+                    </label>
+                    <label class="checkbox_label widthFreeExpand" for="sb-config-claude-extended-ttl">
+                        <input id="sb-config-claude-extended-ttl" type="checkbox">
+                        <span>Extended cache TTL</span>
+                    </label>
+                    <label class="checkbox_label widthFreeExpand" for="sb-config-claude-adaptive-thinking">
+                        <input id="sb-config-claude-adaptive-thinking" type="checkbox">
+                        <span>Adaptive thinking</span>
+                    </label>
+                    <label class="sb-chat-completion-config-field" for="sb-config-claude-caching-depth">
+                        <span>Caching at depth</span>
+                        <input id="sb-config-claude-caching-depth" class="text_pole" type="number" step="1" min="-1">
+                    </label>
+                    <div class="toggle-description justifyLeft">
+                        Use <code>-1</code> to disable depth-based cache insertion.
+                    </div>
+                </section>
+                <section class="sb-chat-completion-config-section" data-source="makersuite,vertexai">
+                    <strong class="sb-chat-completion-config-title">Gemini</strong>
+                    <label class="sb-chat-completion-config-field" for="sb-config-gemini-api-version">
+                        <span>API version</span>
+                        <input id="sb-config-gemini-api-version" class="text_pole" type="text" placeholder="v1beta">
+                    </label>
+                    <label class="checkbox_label widthFreeExpand" for="sb-config-gemini-thought-signatures">
+                        <input id="sb-config-gemini-thought-signatures" type="checkbox">
+                        <span>Thought signatures</span>
+                    </label>
+                    <label class="checkbox_label widthFreeExpand" for="sb-config-gemini-system-prompt-cache">
+                        <input id="sb-config-gemini-system-prompt-cache" type="checkbox">
+                        <span>System prompt cache</span>
+                    </label>
+                </section>
+            </div>
+            <div class="sb-chat-completion-config-actions">
+                <button id="sb-chat-completion-config-reload" class="menu_button menu_button_icon" type="button">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Reload</span>
+                </button>
+                <button id="sb-chat-completion-config-save" class="menu_button menu_button_icon" type="button">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>Save server config</span>
+                </button>
+                <button id="sb-chat-completion-config-save-restart" class="menu_button menu_button_icon menu_button_primary" type="button">
+                    <i class="fa-solid fa-power-off"></i>
+                    <span>Save & Restart</span>
+                </button>
+            </div>
+            <div id="sb-chat-completion-config-status" class="toggle-description justifyLeft sb-chat-completion-config-status">
+                Restart required after saving these server-side settings.
+            </div>
+        </div>
+    `);
+}
+
+function buildServerChatCompletionConfigDrawer() {
+    const $drawer = createOpenAISettingsDrawer(
+        'sb-chat-completion-server-config-drawer',
+        'Server Config (config.yaml)',
+        'Claude and Gemini server-side flags mirrored from config.yaml.',
+    );
+
+    $drawer
+        .attr('data-source', 'claude,makersuite,vertexai')
+        .addClass('sb-settings-subdrawer sb-openai-settings-subdrawer');
+
+    $drawer.children('.inline-drawer-content')
+        .addClass('sb-settings-subdrawer-body')
+        .append(buildServerChatCompletionConfigCard({ nested: true }));
+
+    return $drawer;
+}
+
+function injectServerChatCompletionConfigCard() {
+    const $advancedDrawerContent = $('#sb-openai-advanced > .inline-drawer-content');
+
+    if ($advancedDrawerContent.length === 0 || $('#sb-chat-completion-server-config, #sb-chat-completion-server-config-drawer').length) {
+        return;
+    }
+
+    $advancedDrawerContent.append(buildServerChatCompletionConfigDrawer());
+
+    document.getElementById('sb-chat-completion-config-reload')?.addEventListener('click', async () => {
+        if (serverChatCompletionConfigState.loaded && updateServerChatCompletionConfigDirtyState()
+            && !window.confirm('Discard your unsaved server config edits and reload from config.yaml?')) {
+            return;
+        }
+
+        await loadServerChatCompletionConfig({ force: true });
+    });
+    document.getElementById('sb-chat-completion-config-save')?.addEventListener('click', () => void saveServerChatCompletionConfig({ restart: false }));
+    document.getElementById('sb-chat-completion-config-save-restart')?.addEventListener('click', () => void saveServerChatCompletionConfig({ restart: true }));
+
+    [
+        'sb-config-claude-system-prompt-cache',
+        'sb-config-claude-caching-depth',
+        'sb-config-claude-extended-ttl',
+        'sb-config-claude-adaptive-thinking',
+        'sb-config-gemini-api-version',
+        'sb-config-gemini-thought-signatures',
+        'sb-config-gemini-system-prompt-cache',
+    ].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', () => {
+            updateServerChatCompletionConfigDirtyState();
+        });
+    });
+
+    updateServerChatCompletionConfigInteractivity();
+    updateServerChatCompletionConfigSourceVisibility();
+    void loadServerChatCompletionConfig({ force: true });
+}
+
 function scheduleOpenAIUiRefresh() {
     window.requestAnimationFrame(() => {
         updateAdvancedFormattingVisibility();
+        updateServerChatCompletionConfigSourceVisibility();
         updateOpenAISettingsGroupVisibility();
         updateOpenAIModelFavoriteButton();
     });
 
     window.setTimeout(() => {
         updateAdvancedFormattingVisibility();
+        updateServerChatCompletionConfigSourceVisibility();
         updateOpenAISettingsGroupVisibility();
         updateOpenAIModelFavoriteButton();
     }, 200);
@@ -7389,6 +7834,7 @@ export function initOpenAI() {
     });
 
     groupOpenAISettingsIntoDrawers();
+    injectServerChatCompletionConfigCard();
     cacheOpenAIStaticModelGroups();
     rebuildOpenAIModelSelect();
     updateAdvancedFormattingVisibility();

@@ -1112,6 +1112,16 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     flex-direction: row;
     align-items: stretch;
     justify-content: space-between;
+    flex-wrap: wrap;
+    row-gap: 18px;
+}
+
+.welcomeTourHeader > .welcomeGuideTitleBlock {
+    flex: 999 1 560px;
+}
+
+.welcomeTourHeader > .welcomeGuideMascot {
+    flex: 1 1 280px;
 }
 
 .welcomeGuideMascot {
@@ -1160,6 +1170,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     position: relative;
     min-width: 0;
     max-width: min(100%, 28ch);
+    overflow-wrap: anywhere;
     padding: 11px 12px;
     border-radius: 18px;
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, white 4%);
@@ -1352,6 +1363,45 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     gap: 12px;
 }
 
+.welcomeStarterPackCard .welcomeChipRow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.welcomeStarterPackCard .welcomeChipRow[data-chip-columns='2'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.welcomeStarterPackCard .welcomeChipRow[data-chip-columns='3'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.welcomeStarterPackCard .welcomeChipRow[data-chip-columns='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.welcomeStarterPackCard .welcomeChip {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+    padding: 0 8px;
+}
+
+.welcomeStarterPackActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
+    align-items: center;
+    margin-top: auto;
+}
+
+.welcomeStarterPackActions .welcomeActionButton {
+    align-self: auto;
+}
+
 .welcomeStarterPackHeader {
     gap: 10px;
 }
@@ -1368,6 +1418,12 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     letter-spacing: 0.08em;
     text-transform: uppercase;
     border: 1px solid transparent;
+}
+
+@media screen and (max-width: 900px) {
+    .welcomeStarterPackCard .welcomeChipRow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .welcomeStatusBadge--good {
@@ -1412,7 +1468,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     }
 }
 
-@media screen and (max-width: 1100px) {
+@media screen and (max-width: 1100px), screen and (max-height: 780px) {
     .welcomeDeckIntroHeader {
         flex-wrap: wrap;
         align-items: flex-start;
@@ -1429,7 +1485,13 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     .welcomeTourHeader,
     .welcomeAssistantGuidePanel {
         flex-direction: column;
+        justify-content: flex-start;
         align-items: flex-start;
+    }
+
+    .welcomeTourHeader > .welcomeGuideTitleBlock,
+    .welcomeTourHeader > .welcomeGuideMascot {
+        flex: 0 1 auto;
     }
 
     .welcomeGuideMascot {

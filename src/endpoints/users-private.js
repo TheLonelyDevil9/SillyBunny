@@ -1,18 +1,304 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 import crypto from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
 
 import storage from 'node-persist';
 import express from 'express';
+import yauzl from 'yauzl';
 
 import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey } from '../users.js';
-import { SETTINGS_FILE } from '../constants.js';
+import { SETTINGS_FILE, USER_DIRECTORY_TEMPLATE } from '../constants.js';
 import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
-import { color, Cache, getConfigValue } from '../util.js';
+import { SECRETS_FILE } from './secrets.js';
+import { color, Cache, getConfigValue, ensureDirectory, normalizeZipEntryPath } from '../util.js';
 
 const RESET_CACHE = new Cache(5 * 60 * 1000);
+const IMPORTABLE_ROOT_FILES = [SETTINGS_FILE, SECRETS_FILE];
+const IMPORTABLE_TOP_LEVEL_DIRECTORIES = [...new Set(
+    Object.values(USER_DIRECTORY_TEMPLATE)
+        .filter(Boolean)
+        .map(relativePath => String(relativePath).split('/')[0])
+        .filter(Boolean),
+)];
+const IMPORTABLE_RELATIVE_PATHS = [...new Set([...IMPORTABLE_ROOT_FILES, ...IMPORTABLE_TOP_LEVEL_DIRECTORIES])];
+const LIKELY_IMPORT_MARKERS = [
+    SETTINGS_FILE,
+    'characters',
+    'chats',
+    'group chats',
+    'groups',
+    'OpenAI Settings',
+    'themes',
+    'extensions',
+];
 
 export const router = express.Router();
+
+function isImportableRelativePath(relativePath) {
+    const normalizedPath = normalizeZipEntryPath(relativePath);
+    if (!normalizedPath || normalizedPath.startsWith('__MACOSX/')) {
+        return false;
+    }
+
+    return IMPORTABLE_RELATIVE_PATHS.some(basePath => (
+        normalizedPath === basePath || normalizedPath.startsWith(`${basePath}/`)
+    ));
+}
+
+async function pathExists(targetPath) {
+    try {
+        await fsPromises.access(targetPath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function isLikelyUserImportDirectory(directoryPath) {
+    for (const marker of LIKELY_IMPORT_MARKERS) {
+        if (await pathExists(path.join(directoryPath, marker))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+async function findUserImportRootsInDataDirectory(dataDirectory) {
+    const dirents = await fsPromises.readdir(dataDirectory, { withFileTypes: true });
+    const candidates = [];
+
+    for (const dirent of dirents) {
+        if (!dirent.isDirectory()) {
+            continue;
+        }
+
+        const candidatePath = path.join(dataDirectory, dirent.name);
+        if (await isLikelyUserImportDirectory(candidatePath)) {
+            candidates.push(candidatePath);
+        }
+    }
+
+    return candidates;
+}
+
+async function resolveSillyTavernFolderImportRoot(inputPath) {
+    const normalizedInput = String(inputPath ?? '').trim();
+    if (!normalizedInput) {
+        throw new Error('A SillyTavern folder path is required.');
+    }
+
+    const resolvedPath = path.resolve(normalizedInput);
+    const stats = await fsPromises.stat(resolvedPath).catch(() => null);
+
+    if (!stats?.isDirectory()) {
+        throw new Error('That SillyTavern path does not exist or is not a folder.');
+    }
+
+    if (await isLikelyUserImportDirectory(resolvedPath)) {
+        return resolvedPath;
+    }
+
+    const dataDirectory = path.basename(resolvedPath) === 'data'
+        ? resolvedPath
+        : path.join(resolvedPath, 'data');
+
+    if (!(await pathExists(dataDirectory))) {
+        throw new Error('No SillyTavern user data was found there. Point to the app folder, its data folder, or a specific user folder.');
+    }
+
+    const candidates = await findUserImportRootsInDataDirectory(dataDirectory);
+    if (candidates.length === 0) {
+        throw new Error('No importable SillyTavern user folder was found there.');
+    }
+
+    if (candidates.length === 1) {
+        return candidates[0];
+    }
+
+    const defaultUserCandidate = candidates.find(candidate => path.basename(candidate) === 'default-user');
+    if (defaultUserCandidate) {
+        return defaultUserCandidate;
+    }
+
+    throw new Error('Multiple SillyTavern user folders were found. Please point to the exact user folder you want to import.');
+}
+
+async function copyAllowedFolderContents(sourceRoot, targetRoot) {
+    let copiedEntries = 0;
+
+    for (const relativePath of IMPORTABLE_RELATIVE_PATHS) {
+        const sourcePath = path.join(sourceRoot, relativePath);
+        if (!(await pathExists(sourcePath))) {
+            continue;
+        }
+
+        const destinationPath = path.join(targetRoot, relativePath);
+        const stats = await fsPromises.stat(sourcePath);
+
+        if (stats.isDirectory()) {
+            await fsPromises.cp(sourcePath, destinationPath, { recursive: true, force: true });
+            copiedEntries++;
+            continue;
+        }
+
+        ensureDirectory(path.dirname(destinationPath));
+        await fsPromises.cp(sourcePath, destinationPath, { force: true });
+        copiedEntries++;
+    }
+
+    if (copiedEntries === 0) {
+        throw new Error('Nothing importable was found in that folder.');
+    }
+
+    return copiedEntries;
+}
+
+function isDefaultUserImportBase(basePath) {
+    return String(basePath ?? '') === 'default-user' || String(basePath ?? '').endsWith('/default-user');
+}
+
+async function detectZipImportBase(zipFilePath) {
+    return await new Promise((resolve, reject) => {
+        yauzl.open(zipFilePath, { lazyEntries: true }, (error, zipfile) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            const baseScores = new Map();
+
+            zipfile.readEntry();
+            zipfile.on('entry', entry => {
+                const normalizedEntry = normalizeZipEntryPath(entry.fileName);
+                if (!normalizedEntry || normalizedEntry.startsWith('__MACOSX/')) {
+                    zipfile.readEntry();
+                    return;
+                }
+
+                const segments = normalizedEntry.split('/').filter(Boolean);
+                for (let index = 0; index < segments.length; index++) {
+                    const basePath = segments.slice(0, index).join('/');
+                    const relativePath = segments.slice(index).join('/');
+
+                    if (!isImportableRelativePath(relativePath)) {
+                        continue;
+                    }
+
+                    baseScores.set(basePath, (baseScores.get(basePath) ?? 0) + 1);
+                }
+
+                zipfile.readEntry();
+            });
+
+            zipfile.once('end', () => {
+                const rankedBases = [...baseScores.entries()]
+                    .filter(([, score]) => score > 0)
+                    .sort((left, right) => {
+                        if (right[1] !== left[1]) {
+                            return right[1] - left[1];
+                        }
+
+                        if (isDefaultUserImportBase(right[0]) !== isDefaultUserImportBase(left[0])) {
+                            return Number(isDefaultUserImportBase(right[0])) - Number(isDefaultUserImportBase(left[0]));
+                        }
+
+                        return right[0].length - left[0].length;
+                    });
+
+                if (!rankedBases.length) {
+                    reject(new Error('That ZIP does not contain an importable SillyTavern backup.'));
+                    return;
+                }
+
+                resolve(rankedBases[0][0]);
+            });
+
+            zipfile.once('error', reject);
+        });
+    });
+}
+
+async function importZipContents(zipFilePath, targetRoot) {
+    const basePath = await detectZipImportBase(zipFilePath);
+
+    return await new Promise((resolve, reject) => {
+        yauzl.open(zipFilePath, { lazyEntries: true }, (error, zipfile) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+
+            let importedFiles = 0;
+            let completed = false;
+
+            const finalize = (finalError = null) => {
+                if (completed) {
+                    return;
+                }
+
+                completed = true;
+
+                if (finalError) {
+                    reject(finalError);
+                } else if (importedFiles === 0) {
+                    reject(new Error('That ZIP did not contain any importable SillyTavern files.'));
+                } else {
+                    resolve(importedFiles);
+                }
+            };
+
+            zipfile.readEntry();
+            zipfile.on('entry', entry => {
+                const normalizedEntry = normalizeZipEntryPath(entry.fileName);
+                if (!normalizedEntry || normalizedEntry.startsWith('__MACOSX/')) {
+                    zipfile.readEntry();
+                    return;
+                }
+
+                const relativePath = basePath
+                    ? normalizedEntry.startsWith(`${basePath}/`)
+                        ? normalizedEntry.slice(basePath.length + 1)
+                        : ''
+                    : normalizedEntry;
+
+                if (!relativePath || !isImportableRelativePath(relativePath)) {
+                    zipfile.readEntry();
+                    return;
+                }
+
+                if (entry.fileName.endsWith('/')) {
+                    ensureDirectory(path.join(targetRoot, relativePath));
+                    zipfile.readEntry();
+                    return;
+                }
+
+                zipfile.openReadStream(entry, (streamError, readStream) => {
+                    if (streamError || !readStream) {
+                        finalize(streamError || new Error('Failed to read the backup ZIP.'));
+                        return;
+                    }
+
+                    const destinationPath = path.join(targetRoot, relativePath);
+                    ensureDirectory(path.dirname(destinationPath));
+
+                    pipeline(readStream, fs.createWriteStream(destinationPath))
+                        .then(() => {
+                            importedFiles++;
+                            zipfile.readEntry();
+                        })
+                        .catch(finalize);
+                });
+            });
+
+            zipfile.once('end', () => finalize());
+            zipfile.once('close', () => finalize());
+            zipfile.once('error', finalize);
+        });
+    });
+}
 
 router.post('/logout', async (request, response) => {
     try {
@@ -161,6 +447,54 @@ router.post('/backup', async (request, response) => {
     } catch (error) {
         console.error('Backup failed', error);
         return response.sendStatus(500);
+    }
+});
+
+router.post('/import-sillytavern/folder', async (request, response) => {
+    try {
+        const sourceRoot = await resolveSillyTavernFolderImportRoot(request.body?.sourcePath);
+        const targetRoot = path.resolve(request.user.directories.root);
+
+        if (path.resolve(sourceRoot) === targetRoot) {
+            return response.status(400).json({ error: 'That folder is already the current SillyBunny account.' });
+        }
+
+        const copiedEntries = await copyAllowedFolderContents(sourceRoot, targetRoot);
+        await checkForNewContent([request.user.directories]);
+
+        return response.json({
+            message: `Imported ${copiedEntries} data sections from ${sourceRoot}. Reloading is recommended.`,
+            sourceRoot,
+            copiedEntries,
+        });
+    } catch (error) {
+        console.error('SillyTavern folder import failed:', error);
+        return response.status(400).json({ error: error.message || 'Failed to import that SillyTavern folder.' });
+    }
+});
+
+router.post('/import-sillytavern/zip', async (request, response) => {
+    const uploadedZipPath = request.file?.path;
+
+    try {
+        if (!uploadedZipPath) {
+            return response.status(400).json({ error: 'A SillyTavern backup ZIP is required.' });
+        }
+
+        const importedFiles = await importZipContents(uploadedZipPath, request.user.directories.root);
+        await checkForNewContent([request.user.directories]);
+
+        return response.json({
+            message: `Imported ${importedFiles} files from the SillyTavern backup ZIP. Reloading is recommended.`,
+            importedFiles,
+        });
+    } catch (error) {
+        console.error('SillyTavern ZIP import failed:', error);
+        return response.status(400).json({ error: error.message || 'Failed to import that SillyTavern backup ZIP.' });
+    } finally {
+        if (uploadedZipPath) {
+            await fsPromises.rm(uploadedZipPath, { force: true }).catch(() => { });
+        }
     }
 });
 

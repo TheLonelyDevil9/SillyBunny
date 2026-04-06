@@ -225,7 +225,7 @@ export const power_user = {
     avatar_style: avatar_styles.ROUND,
     chat_display: chat_styles.DEFAULT,
     toastr_position: defaultToastPosition,
-    chat_width: 50,
+    chat_width: 100,
     never_resize_avatars: false,
     show_card_avatar_urls: false,
     play_message_sound: false,
@@ -1459,9 +1459,9 @@ function applyTheme(name) {
         {
             key: 'chat_width',
             action: () => {
-                // If chat width is not set, set it to 50
+                // If chat width is not set, use the full-width default.
                 if (!power_user.chat_width) {
-                    power_user.chat_width = 50;
+                    power_user.chat_width = 100;
                 }
                 applyChatWidth('forced');
             },
@@ -1778,7 +1778,7 @@ export async function loadPowerUserSettings(settings, data) {
     }
 
     if (typeof power_user.chat_width !== 'number') {
-        power_user.chat_width = 50;
+        power_user.chat_width = 100;
     }
 
     if (power_user.tokenizer === tokenizers.LEGACY) {

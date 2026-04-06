@@ -169,11 +169,6 @@ async function checkIfRepoIsUpToDate(extensionPath) {
     const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
     await git.fetch('origin');
     const currentBranch = await git.branch();
-    const currentCommitHash = await git.revparse(['HEAD']);
-    const log = await git.log({
-        from: currentCommitHash,
-        to: `origin/${currentBranch.current}`,
-    });
 
     // Fetch remote repository information
     const remotes = await git.getRemotes(true);
@@ -184,8 +179,24 @@ async function checkIfRepoIsUpToDate(extensionPath) {
         };
     }
 
+    const trackingBranch = currentBranch.tracking || (currentBranch.current ? `origin/${currentBranch.current}` : '');
+    if (!trackingBranch) {
+        return {
+            isUpToDate: true,
+            remoteUrl: remotes[0].refs.fetch,
+        };
+    }
+
+    // Only treat the repo as outdated when the remote has commits we do not have yet.
+    // Bundled extensions can legitimately be ahead of upstream because SillyBunny patches them locally.
+    const [, behindRaw = '0'] = (await git.raw(['rev-list', '--left-right', '--count', `HEAD...${trackingBranch}`]))
+        .trim()
+        .split(/\s+/);
+    const behindCount = Number(behindRaw);
+    const isUpToDate = !Number.isFinite(behindCount) || behindCount === 0;
+
     return {
-        isUpToDate: log.total === 0,
+        isUpToDate,
         remoteUrl: remotes[0].refs.fetch, // URL of the remote repository
     };
 }

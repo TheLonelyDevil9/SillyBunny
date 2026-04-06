@@ -3,8 +3,8 @@ import { getSettings as getExtensionSettings } from './settings-service.js';
 
 function setHintContent(hintElement, usePresetTheme) {
     const supportMessage = usePresetTheme
-        ? '<span>This SillyBunny-patched build is based on Moonlit Echoes Theme by</span> <a href="https://github.com/RivelleDays" target="_blank">Rivelle</a>'
-        : '<span data-i18n="customThemeIssue">This bundled SillyBunny-patched build may not work with all custom themes. Please troubleshoot first; if confirmed, contact</span> <a href="https://github.com/RivelleDays" target="_blank">Rivelle</a>';
+        ? '<span>This SillyBunny fork is based on Moonlit Echoes Theme by</span> <a href="https://github.com/RivelleDays" target="_blank" rel="noopener noreferrer">Rivelle</a><span>. For this fork, contact</span> <a href="https://github.com/platberlitz" target="_blank" rel="noopener noreferrer">purachina</a><span>. As this is a fork, please don\'t contact Rivelle, who is the creator of the original Moonlit Echoes.</span>'
+        : '<span data-i18n="customThemeIssue">This bundled SillyBunny fork may not work with all custom themes. Please troubleshoot first; if confirmed, contact</span> <a href="https://github.com/platberlitz" target="_blank" rel="noopener noreferrer">purachina</a><span>. As this is a fork, please don\'t contact Rivelle, who is the creator of the original Moonlit Echoes.</span>';
 
     hintElement.innerHTML = `<i class="fa-solid fa-info-circle"></i>  <b><span>You are currently using the bundled theme extension</span> ${EXTENSION_NAME} <a href="https://github.com/RivelleDays/SillyTavern-MoonlitEchoesTheme" target="_blank">${THEME_VERSION}</a></b><br>
         <small>${supportMessage}</small>`;

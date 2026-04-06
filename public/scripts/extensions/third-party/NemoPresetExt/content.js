@@ -16,8 +16,14 @@ const BACKGROUND_LOCK_KEY = 'custom_background';
 
 let promptListElement = null;
 let promptListObserver = null;
+let promptContainerElement = null;
+let promptContainerObserver = null;
 let promptRefreshTimer = null;
+let promptRefreshFrame = null;
 let isRefreshingPromptSections = false;
+
+let settingsContainerElement = null;
+let settingsContainerObserver = null;
 
 let backgroundLayerElement = null;
 let backgroundMutationObserver = null;
@@ -42,6 +48,9 @@ function ensureSettings() {
     }
     if (!settings.openSectionStates || typeof settings.openSectionStates !== 'object') {
         settings.openSectionStates = {};
+    }
+    if (typeof settings.settingsPanelExpanded !== 'boolean') {
+        settings.settingsPanelExpanded = false;
     }
     if (typeof settings.enableAnimatedBackgrounds !== 'boolean') {
         settings.enableAnimatedBackgrounds = true;
@@ -75,7 +84,60 @@ function bootstrap() {
     attachBackgroundEnhancer();
 }
 
+function watchSettingsContainer() {
+    const nextSettingsContainer = document.getElementById('extensions_settings');
+    if (!nextSettingsContainer || nextSettingsContainer === settingsContainerElement) {
+        return;
+    }
+
+    settingsContainerElement = nextSettingsContainer;
+
+    if (settingsContainerObserver) {
+        settingsContainerObserver.disconnect();
+    }
+
+    settingsContainerObserver = new MutationObserver(() => {
+        if (!document.getElementById('nemo-presetext-settings')) {
+            injectSettingsPanel();
+        }
+    });
+
+    settingsContainerObserver.observe(settingsContainerElement, {
+        childList: true,
+        subtree: true,
+    });
+}
+
+function watchPromptContainer() {
+    const nextPromptContainer = document.getElementById(promptManager?.configuration?.containerIdentifier || 'completion_prompt_manager');
+    if (!nextPromptContainer || nextPromptContainer === promptContainerElement) {
+        return;
+    }
+
+    promptContainerElement = nextPromptContainer;
+
+    if (promptContainerObserver) {
+        promptContainerObserver.disconnect();
+    }
+
+    promptContainerObserver = new MutationObserver(() => {
+        const currentPromptList = document.querySelector('#completion_prompt_manager_list');
+        if (!currentPromptList || currentPromptList === promptListElement) {
+            return;
+        }
+
+        attachPromptEnhancer();
+    });
+
+    promptContainerObserver.observe(promptContainerElement, {
+        childList: true,
+        subtree: true,
+    });
+}
+
 function attachPromptEnhancer() {
+    watchPromptContainer();
+
     const nextPromptList = document.querySelector('#completion_prompt_manager_list');
     if (!nextPromptList || nextPromptList === promptListElement) {
         return;
@@ -119,8 +181,21 @@ function schedulePromptRefresh() {
         return;
     }
 
-    clearTimeout(promptRefreshTimer);
-    promptRefreshTimer = setTimeout(refreshPromptSections, 40);
+    if (promptRefreshTimer !== null) {
+        clearTimeout(promptRefreshTimer);
+        promptRefreshTimer = null;
+    }
+
+    if (promptRefreshFrame !== null) {
+        cancelAnimationFrame(promptRefreshFrame);
+    }
+
+    // Refresh on the next frame so Prompt Manager can finish its DOM rebuild
+    // without letting the raw divider prompt flash on screen.
+    promptRefreshFrame = requestAnimationFrame(() => {
+        promptRefreshFrame = null;
+        refreshPromptSections();
+    });
 }
 
 function injectPromptToolbar(promptList) {
@@ -235,19 +310,25 @@ function escapeRegex(value) {
 }
 
 function getPromptSectionOpenState(settings, sectionId, sectionName) {
-    if (typeof settings.promptSectionStates?.[sectionId] === 'boolean') {
-        return settings.promptSectionStates[sectionId];
-    }
+    const stateById = settings.promptSectionStates?.[sectionId];
+    const stateByName = settings.openSectionStates?.[sectionName];
+    const legacyStateByName = settings.promptSectionStates?.[sectionName];
 
-    if (typeof settings.promptSectionStates?.[sectionName] === 'boolean') {
-        return settings.promptSectionStates[sectionName];
-    }
+    // Prefer the section id when available, then the dedicated name-based store.
+    // This prevents stale legacy name entries from snapping a section shut after re-renders.
+    const resolvedState = typeof stateById === 'boolean'
+        ? stateById
+        : typeof stateByName === 'boolean'
+            ? stateByName
+            : typeof legacyStateByName === 'boolean'
+                ? legacyStateByName
+                : true;
 
-    if (typeof settings.openSectionStates?.[sectionName] === 'boolean') {
-        return settings.openSectionStates[sectionName];
-    }
+    settings.promptSectionStates[sectionId] = resolvedState;
+    settings.promptSectionStates[sectionName] = resolvedState;
+    settings.openSectionStates[sectionName] = resolvedState;
 
-    return true;
+    return resolvedState;
 }
 
 function setPromptSectionOpenState(settings, sectionId, sectionName, isOpen) {
@@ -899,10 +980,15 @@ function setSettingsPanelExpanded(expand) {
         return;
     }
 
+    const header = panel.querySelector(':scope > .inline-drawer-header');
     const icon = panel.querySelector(':scope > .inline-drawer-header .inline-drawer-icon');
     const content = panel.querySelector(':scope > .inline-drawer-content');
     if (!(icon instanceof HTMLElement) || !(content instanceof HTMLElement)) {
         return;
+    }
+
+    if (header instanceof HTMLElement) {
+        header.setAttribute('aria-expanded', String(expand));
     }
 
     icon.classList.toggle('down', !expand);
@@ -910,9 +996,35 @@ function setSettingsPanelExpanded(expand) {
     icon.classList.toggle('up', expand);
     icon.classList.toggle('fa-circle-chevron-up', expand);
     content.style.display = expand ? 'block' : 'none';
+    panel.dataset.expanded = String(expand);
+}
+
+function isSettingsPanelExpanded(panel = document.getElementById('nemo-presetext-settings')) {
+    if (!(panel instanceof HTMLElement)) {
+        return false;
+    }
+
+    const content = panel.querySelector(':scope > .inline-drawer-content');
+    if (!(content instanceof HTMLElement)) {
+        return false;
+    }
+
+    return getComputedStyle(content).display !== 'none';
+}
+
+function persistSettingsPanelExpanded(expand) {
+    const settings = ensureSettings();
+    if (settings.settingsPanelExpanded === expand) {
+        return;
+    }
+
+    settings.settingsPanelExpanded = expand;
+    saveSettingsDebounced();
 }
 
 function injectSettingsPanel() {
+    watchSettingsContainer();
+
     const settingsContainer = document.getElementById('extensions_settings');
     if (!settingsContainer || document.getElementById('nemo-presetext-settings')) {
         syncSettingsPanel();
@@ -923,7 +1035,7 @@ function injectSettingsPanel() {
     panel.id = 'nemo-presetext-settings';
     panel.className = 'inline-drawer wide100p flexFlowColumn';
     panel.innerHTML = `
-        <div class="inline-drawer-toggle inline-drawer-header">
+        <div class="inline-drawer-header" role="button" tabindex="0" aria-expanded="false">
             <div class="nemo-presetext-settings-heading">
                 <strong>Bunny Preset Tools</strong>
                 <div class="nemo-presetext-settings-subtitle">Prompt sections and animated backgrounds</div>
@@ -957,6 +1069,24 @@ function injectSettingsPanel() {
 
     settingsContainer.appendChild(panel);
 
+    const header = panel.querySelector(':scope > .inline-drawer-header');
+    if (header instanceof HTMLElement) {
+        const togglePanel = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nextExpanded = !isSettingsPanelExpanded(panel);
+            setSettingsPanelExpanded(nextExpanded);
+            persistSettingsPanelExpanded(nextExpanded);
+        };
+
+        header.addEventListener('click', togglePanel);
+        header.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                togglePanel(event);
+            }
+        });
+    }
+
     panel.querySelector('#nemo-presetext-enable-sections').addEventListener('change', event => {
         ensureSettings().enablePromptSections = event.target.checked;
         saveSettingsDebounced();
@@ -977,8 +1107,6 @@ function injectSettingsPanel() {
     });
 
     syncSettingsPanel();
-    requestAnimationFrame(() => setSettingsPanelExpanded(false));
-    setTimeout(() => setSettingsPanelExpanded(false), 120);
 }
 
 function syncSettingsPanel() {
@@ -991,6 +1119,7 @@ function syncSettingsPanel() {
     panel.querySelector('#nemo-presetext-enable-sections').checked = settings.enablePromptSections;
     panel.querySelector('#nemo-presetext-enable-animated').checked = settings.enableAnimatedBackgrounds;
     panel.querySelector('#nemo-presetext-divider-patterns').value = settings.dividerRegexPattern;
+    setSettingsPanelExpanded(settings.settingsPanelExpanded);
 }
 
 bootstrap();

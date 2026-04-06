@@ -442,7 +442,7 @@ export function toggleCss(shouldLoad) {
 
         // Load theme style
         if (!existingLinkStyle) {
-            const cssUrl = baseUrl + '/style.css';
+            const cssUrl = baseUrl + '/style.css?v=20260407b';
             const linkStyle = document.createElement('link');
             linkStyle.id = 'MoonlitEchosTheme-style';
             linkStyle.rel = 'stylesheet';
@@ -753,10 +753,11 @@ function addThemeCreatorInfo(container) {
     // Set HTML content
     creatorContainer.innerHTML = `
         <small id="moonlit-echoes-creator">
-            <span>Created with Heartfelt Passion by</span>
+            <span>Original Moonlit Echoes theme by</span>
             <a href="https://github.com/RivelleDays" target="_blank" rel="noopener noreferrer">Rivelle</a><br>
-            <span>Dedicated to All 可愛 (Kind & Wonderful) People</span><br>
-            <span>Bundled with SillyBunny as a compatibility-patched build</span>
+            <span>This SillyBunny fork is maintained by</span>
+            <a href="https://github.com/platberlitz" target="_blank" rel="noopener noreferrer">purachina</a><br>
+            <span>As this is a fork, please don't contact Rivelle, who is the creator of the original Moonlit Echoes.</span>
         </small>
     `;
 

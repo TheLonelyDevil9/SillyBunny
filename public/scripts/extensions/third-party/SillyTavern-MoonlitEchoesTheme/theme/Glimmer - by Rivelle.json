@@ -18,7 +18,7 @@
     "avatar_style": 0,
     "chat_display": 3,
     "noShadows": false,
-    "chat_width": 50,
+    "chat_width": 100,
     "timer_enabled": true,
     "timestamps_enabled": true,
     "timestamp_model_icon": true,

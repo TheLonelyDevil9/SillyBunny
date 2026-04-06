@@ -5,6 +5,8 @@ const SB_STORAGE_KEYS = Object.freeze({
     surfaceTransparency: 'sb-surface-transparency',
     topbarScaleDesktop: 'sb-topbar-scale-desktop',
     topbarScaleMobile: 'sb-topbar-scale-mobile',
+    chatbarVisible: 'sb-chatbar-visible',
+    topbarOffset: 'sb-topbar-offset',
 });
 
 function safeGetItem(key) {
@@ -29,8 +31,22 @@ const SB_TOPBAR_SCALE = Object.freeze({
     step: 5,
     defaultValue: 100,
 });
+const SB_TOPBAR_DRAG_X_RATIO = 0.36;
+const SB_TOPBAR_DRAG_Y_RATIO = 0.24;
 const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
 const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
+const SB_DESKTOP_SHELL_LAYOUT = Object.freeze({
+    minWidth: 920,
+    maxWidth: 1680,
+    ratio: 0.78,
+    compactMaxWidth: 620,
+    compactViewportWidth: 1100,
+    compactGap: 28,
+    gutterMin: 28,
+    gutterRatio: 0.08,
+    gutterMax: 160,
+    fullWidthMaxHeight: 860,
+});
 
 const SB_THEMES = Object.freeze([
     {
@@ -150,7 +166,14 @@ const SB_SHELLS = Object.freeze({
                 description: 'Set the mood with backgrounds, fitting modes, and quick filtering.',
             },
         ],
-        customTabs: [],
+        customTabs: [
+            {
+                id: 'server',
+                label: 'Server',
+                icon: 'fa-server',
+                description: 'Edit config.yaml, check Git updates, and restart SillyBunny without leaving Customize.',
+            },
+        ],
     },
 });
 
@@ -194,6 +217,7 @@ const sbState = {
         desktop: null,
         sidebar: null,
         mobileTools: null,
+        visible: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.chatbarVisible), true),
         searchQuery: '',
         searchTimer: 0,
         refreshTimer: 0,
@@ -205,11 +229,52 @@ const sbState = {
         connectionStripOpen: false,
         sidebarOpen: false,
         mobileToolsOpen: false,
+        topbarOffset: normalizeTopbarOffset(safeGetItem(SB_STORAGE_KEYS.topbarOffset)),
+        renderedTopbarOffset: { x: 0, y: 0 },
+        dragging: null,
+        dragListenersBound: false,
+        chatbarToggleButton: null,
+        dragHandleButton: null,
+    },
+    serverAdmin: {
+        refs: null,
+        originalConfig: '',
+        lastModifiedMs: 0,
+        lastStatusData: null,
+        busy: false,
+        restarting: false,
+        configLoaded: false,
+    },
+    importer: {
+        refs: null,
+        busy: false,
     },
 };
 
 function normalizeTheme(themeId) {
     return SB_THEMES.some(theme => theme.id === themeId) ? themeId : 'modern-glass';
+}
+
+function normalizeStoredBoolean(value, fallback = false) {
+    if (value === null || value === undefined) {
+        return fallback;
+    }
+
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    const normalizedValue = String(value).trim().toLowerCase();
+
+    if (['true', '1', 'yes', 'on'].includes(normalizedValue)) {
+        return true;
+    }
+
+    if (['false', '0', 'no', 'off'].includes(normalizedValue)) {
+        return false;
+    }
+
+    return fallback;
 }
 
 function normalizeSurfaceTransparency(value) {
@@ -227,6 +292,30 @@ function formatSurfaceTransparency(value) {
     return `${normalizeSurfaceTransparency(value)}%`;
 }
 
+function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function normalizeTopbarOffset(value) {
+    let source = value;
+
+    if (typeof source === 'string' && source.trim()) {
+        try {
+            source = JSON.parse(source);
+        } catch {
+            source = null;
+        }
+    }
+
+    const x = Number(source?.x);
+    const y = Number(source?.y);
+
+    return {
+        x: Number.isFinite(x) ? Math.round(x) : 0,
+        y: Number.isFinite(y) ? Math.round(y) : 0,
+    };
+}
+
 function normalizeTopbarScale(value) {
     const numericValue = Number(value);
 
@@ -240,6 +329,50 @@ function normalizeTopbarScale(value) {
 
 function formatTopbarScale(value) {
     return `${normalizeTopbarScale(value)}%`;
+}
+
+function clampTopbarOffset(offset) {
+    const maxX = Math.max(0, Math.round(window.innerWidth * SB_TOPBAR_DRAG_X_RATIO));
+    const maxY = Math.max(0, Math.round(window.innerHeight * SB_TOPBAR_DRAG_Y_RATIO));
+    const normalizedOffset = normalizeTopbarOffset(offset);
+
+    return {
+        x: clampNumber(normalizedOffset.x, -maxX, maxX),
+        y: clampNumber(normalizedOffset.y, 0, maxY),
+    };
+}
+
+function getRenderedTopbarOffset() {
+    if (isMobileViewport()) {
+        return { x: 0, y: 0 };
+    }
+
+    return clampTopbarOffset(getChatbarState().topbarOffset);
+}
+
+function applyTopbarOffset() {
+    const dragSurface = document.getElementById('sb-chatbar-layer');
+    const renderedOffset = getRenderedTopbarOffset();
+
+    getChatbarState().renderedTopbarOffset = renderedOffset;
+
+    if (!(dragSurface instanceof HTMLElement)) {
+        return;
+    }
+
+    dragSurface.style.setProperty('--sb-topbar-offset-x', `${renderedOffset.x}px`);
+    dragSurface.style.setProperty('--sb-topbar-offset-y', `${renderedOffset.y}px`);
+}
+
+function setTopbarOffset(offset, { persist = true } = {}) {
+    const nextOffset = normalizeTopbarOffset(offset);
+    getChatbarState().topbarOffset = nextOffset;
+
+    if (persist) {
+        safeSetItem(SB_STORAGE_KEYS.topbarOffset, JSON.stringify(nextOffset));
+    }
+
+    applyTopbarOffset();
 }
 
 function setTopbarScale(mode, value, { persist = true } = {}) {
@@ -294,6 +427,10 @@ function createElement(tagName, { id = '', className = '', text = '', html = '',
     }
 
     return element;
+}
+
+function wait(ms) {
+    return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
 function normalizeText(value) {
@@ -359,6 +496,58 @@ function getShellConfig(shellKey) {
 
 function isMobileViewport() {
     return window.matchMedia(SB_MOBILE_MEDIA_QUERY).matches;
+}
+
+function getDesktopShellDimensions() {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    if (isMobileViewport() || viewportHeight <= SB_DESKTOP_SHELL_LAYOUT.fullWidthMaxHeight) {
+        return {
+            width: viewportWidth,
+            maxWidth: viewportWidth,
+        };
+    }
+
+    if (viewportWidth <= SB_DESKTOP_SHELL_LAYOUT.compactViewportWidth) {
+        const compactWidth = Math.max(0, Math.min(SB_DESKTOP_SHELL_LAYOUT.compactMaxWidth, viewportWidth - SB_DESKTOP_SHELL_LAYOUT.compactGap));
+        return {
+            width: compactWidth,
+            maxWidth: compactWidth,
+        };
+    }
+
+    const desiredWidth = clampNumber(
+        viewportWidth * SB_DESKTOP_SHELL_LAYOUT.ratio,
+        SB_DESKTOP_SHELL_LAYOUT.minWidth,
+        SB_DESKTOP_SHELL_LAYOUT.maxWidth,
+    );
+    const gutter = clampNumber(
+        viewportWidth * SB_DESKTOP_SHELL_LAYOUT.gutterRatio,
+        SB_DESKTOP_SHELL_LAYOUT.gutterMin,
+        SB_DESKTOP_SHELL_LAYOUT.gutterMax,
+    );
+    const maxWidth = Math.max(0, viewportWidth - gutter);
+    const resolvedWidth = Math.min(desiredWidth, maxWidth);
+
+    return {
+        width: resolvedWidth,
+        maxWidth: resolvedWidth,
+    };
+}
+
+function syncDesktopShellSizing() {
+    const { width, maxWidth } = getDesktopShellDimensions();
+
+    for (const rootId of [getShellConfig('left').rootPanelId, getShellConfig('right').rootPanelId]) {
+        const root = document.getElementById(rootId);
+        if (!(root instanceof HTMLElement)) {
+            continue;
+        }
+
+        root.style.setProperty('width', `${width}px`, 'important');
+        root.style.setProperty('max-width', `${maxWidth}px`, 'important');
+    }
 }
 
 function ensureShellReady(shellKey) {
@@ -564,6 +753,7 @@ function stopProxyPointerPropagation(element) {
     };
 
     element.addEventListener('mousedown', stop);
+    element.addEventListener('pointerdown', stop);
     element.addEventListener('touchstart', stop);
 }
 
@@ -611,6 +801,178 @@ function createTopBarIconButton({ id = '', icon, title, className = '', label = 
 
 function getChatbarState() {
     return sbState.chatbar;
+}
+
+function setTopbarUtilityButtonIcon(button, icon, title) {
+    if (!(button instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    button.title = title;
+    button.setAttribute('aria-label', title);
+
+    const iconElement = button.querySelector('i');
+    if (iconElement instanceof HTMLElement) {
+        iconElement.className = `fa-solid ${icon}`;
+    }
+}
+
+function updateTopbarUtilityButtons() {
+    const state = getChatbarState();
+    const toggleButton = state.chatbarToggleButton;
+    const dragHandleButton = state.dragHandleButton;
+    const isVisible = state.visible;
+
+    if (toggleButton instanceof HTMLButtonElement) {
+        setTopbarUtilityButtonIcon(
+            toggleButton,
+            isVisible ? 'fa-eye-slash' : 'fa-eye',
+            isVisible ? 'Hide top chat bar' : 'Show top chat bar',
+        );
+        setButtonPressed(toggleButton, isVisible);
+    }
+
+    if (dragHandleButton instanceof HTMLButtonElement) {
+        const dragTitle = isMobileViewport()
+            ? 'Top bar dragging is available on desktop'
+            : 'Drag to move the chat info bar. Double-click to reset.';
+        setTopbarUtilityButtonIcon(dragHandleButton, 'fa-grip-lines', dragTitle);
+        setButtonDisabled(dragHandleButton, isMobileViewport());
+    }
+}
+
+function setChatbarVisible(shouldShow, { persist = true } = {}) {
+    const nextVisible = Boolean(shouldShow);
+    const state = getChatbarState();
+    state.visible = nextVisible;
+
+    document.body.classList.toggle('sb-chatbar-hidden', !nextVisible);
+
+    if (!nextVisible) {
+        setConnectionStripOpenState(false);
+    }
+
+    if (persist) {
+        safeSetItem(SB_STORAGE_KEYS.chatbarVisible, String(nextVisible));
+    }
+
+    updateTopbarUtilityButtons();
+    scheduleChatbarRefresh(0);
+}
+
+function toggleChatbarVisibility() {
+    setChatbarVisible(!getChatbarState().visible);
+}
+
+function getTopbarDragKey(event) {
+    if (!event) {
+        return null;
+    }
+
+    if (typeof event.pointerType === 'string') {
+        if (event.pointerType === 'mouse') {
+            return 'mouse';
+        }
+
+        if (Number.isFinite(event.pointerId)) {
+            return `pointer:${event.pointerId}`;
+        }
+    }
+
+    if (Number.isFinite(event.pointerId)) {
+        return `pointer:${event.pointerId}`;
+    }
+
+    if (event.type?.startsWith?.('mouse')) {
+        return 'mouse';
+    }
+
+    return null;
+}
+
+function beginTopbarDrag(event) {
+    if (!(event.currentTarget instanceof HTMLElement) || isMobileViewport() || event.button !== 0) {
+        return;
+    }
+
+    const dragKey = getTopbarDragKey(event);
+    if (!dragKey) {
+        return;
+    }
+
+    const state = getChatbarState();
+    const dragSurface = document.getElementById('sb-chatbar-layer');
+
+    if (!(dragSurface instanceof HTMLElement)) {
+        return;
+    }
+
+    if (state.dragging?.key === dragKey) {
+        event.preventDefault();
+        return;
+    }
+
+    const startOffset = getRenderedTopbarOffset();
+    state.dragging = {
+        key: dragKey,
+        pointerId: event.pointerId,
+        originX: event.clientX,
+        originY: event.clientY,
+        startX: startOffset.x,
+        startY: startOffset.y,
+    };
+
+    dragSurface.classList.add('is-dragging');
+    document.body.classList.add('sb-topbar-dragging');
+
+    if (Number.isFinite(event.pointerId)) {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+
+    event.preventDefault();
+}
+
+function updateTopbarDrag(event) {
+    const state = getChatbarState();
+
+    if (!state.dragging || getTopbarDragKey(event) !== state.dragging.key) {
+        return;
+    }
+
+    setTopbarOffset({
+        x: state.dragging.startX + (event.clientX - state.dragging.originX),
+        y: state.dragging.startY + (event.clientY - state.dragging.originY),
+    }, { persist: false });
+}
+
+function endTopbarDrag(event) {
+    const state = getChatbarState();
+
+    if (!state.dragging || getTopbarDragKey(event) !== state.dragging.key) {
+        return;
+    }
+
+    document.getElementById('sb-chatbar-layer')?.classList.remove('is-dragging');
+    document.body.classList.remove('sb-topbar-dragging');
+
+    const finalOffset = clampTopbarOffset(getChatbarState().renderedTopbarOffset);
+    state.dragging = null;
+    setTopbarOffset(finalOffset, { persist: true });
+}
+
+function bindTopbarDragEvents() {
+    const state = getChatbarState();
+
+    if (state.dragListenersBound) {
+        return;
+    }
+
+    state.dragListenersBound = true;
+    window.addEventListener('pointermove', updateTopbarDrag);
+    window.addEventListener('pointerup', endTopbarDrag);
+    window.addEventListener('pointercancel', endTopbarDrag);
+    window.addEventListener('mousemove', updateTopbarDrag);
+    window.addEventListener('mouseup', endTopbarDrag);
 }
 
 function getChatDesktopRefs() {
@@ -1328,18 +1690,40 @@ function buildConnectionStrip() {
         },
     });
     const status = createElement('div', { id: 'sb-connection-strip-status', className: 'sb-connection-strip-status' });
+    const connectButton = createElement('button', {
+        id: 'sb-connection-strip-connect',
+        className: 'sb-connection-strip-connect',
+        attrs: {
+            type: 'button',
+            title: 'Connect the current API',
+            'aria-label': 'Connect the current API',
+        },
+        html: '<i class="fa-solid fa-plug" aria-hidden="true"></i><span>Connect</span>',
+    });
+
+    strip.style.setProperty('background-color', 'color-mix(in srgb, var(--sb-shell-main-bg) 98%, black 2%)', 'important');
+    strip.style.setProperty(
+        'background-image',
+        'linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent), transparent 24%), linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-main-bg) 99%, black 1%), color-mix(in srgb, var(--sb-shell-main-bg) 96%, black 4%))',
+        'important',
+    );
+    strip.style.setProperty('backdrop-filter', 'blur(20px) saturate(128%)', 'important');
+    strip.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(128%)', 'important');
 
     selectField.appendChild(select);
-    strip.append(selectField, status);
+    strip.append(selectField, status, connectButton);
 
     select.addEventListener('change', () => {
         syncConnectionProfileSelection(select.value);
     });
+    stopProxyPointerPropagation(connectButton);
+    connectButton.addEventListener('click', handleConnectionStripConnectClick);
 
-    return { strip, select, status };
+    return { strip, select, status, connectButton };
 }
 
 function buildChatBar() {
+    const layer = createElement('div', { id: 'sb-chatbar-layer' });
     const row = createElement('div', { id: 'sb-chatbar' });
     const leading = createElement('div', { className: 'sb-chatbar-cluster sb-chatbar-leading' });
     const chatSelectField = createChatField({
@@ -1389,6 +1773,14 @@ function buildChatBar() {
         },
         handleConnectionProfilesToggle,
     );
+    const dragHandleButton = createTopBarIconButton(
+        {
+            id: 'sb-topbar-drag-handle',
+            icon: 'fa-grip-lines',
+            title: 'Drag to move the chat info bar. Double-click to reset.',
+        },
+        () => { },
+    );
     const managerButton = createTopBarIconButton(
         {
             id: 'sb-chatbar-files',
@@ -1432,24 +1824,33 @@ function buildChatBar() {
 
     chatSelectField.appendChild(chatSelect);
     searchField.append(searchInput, searchStatus);
-    leading.append(toggleSidebarButton, toggleConnectionButton);
+    leading.append(toggleSidebarButton, toggleConnectionButton, dragHandleButton);
     trailing.append(managerButton, newButton, renameButton, deleteButton, closeButton);
     row.append(leading, chatSelectField, searchField, trailing);
 
     const connectionStrip = buildConnectionStrip();
+    layer.append(row, connectionStrip.strip);
 
     chatSelect.addEventListener('change', () => {
         void openChatById(chatSelect.value);
     });
     searchInput.addEventListener('input', () => setChatSearchQuery(searchInput.value, { source: searchInput }));
+    dragHandleButton.addEventListener('pointerdown', beginTopbarDrag);
+    dragHandleButton.addEventListener('mousedown', beginTopbarDrag);
+    dragHandleButton.addEventListener('dblclick', event => {
+        event.preventDefault();
+        setTopbarOffset({ x: 0, y: 0 });
+    });
 
     getChatbarState().desktop = {
-        root: row,
+        root: layer,
+        row,
         chatSelect,
         searchInput,
         searchStatus,
         toggleSidebarButton,
         toggleConnectionButton,
+        dragHandleButton,
         managerButton,
         newButton,
         renameButton,
@@ -1458,11 +1859,11 @@ function buildChatBar() {
         connectionStrip: connectionStrip.strip,
         connectionSelect: connectionStrip.select,
         connectionStatus: connectionStrip.status,
+        connectionConnectButton: connectionStrip.connectButton,
     };
 
     return {
-        row,
-        connectionStrip: connectionStrip.strip,
+        layer,
     };
 }
 
@@ -1509,6 +1910,47 @@ function toggleConnectionStrip() {
 
     setChatSidebarOpenState(false);
     setConnectionStripOpenState(!isConnectionStripOpen());
+}
+
+function getCurrentMainApiValue() {
+    const mainApiSelect = document.getElementById('main_api');
+
+    if (mainApiSelect instanceof HTMLSelectElement && mainApiSelect.value) {
+        return String(mainApiSelect.value).trim().toLowerCase();
+    }
+
+    const context = getSillyTavernContext();
+    return String(context?.mainApi ?? '').trim().toLowerCase();
+}
+
+function resolveActiveApiConnectButton() {
+    const selectorMap = {
+        kobold: '#api_button',
+        koboldhorde: '#api_button',
+        horde: '#api_button',
+        novel: '#api_button_novel',
+        openai: '#api_button_openai',
+        textgenerationwebui: '#api_button_textgenerationwebui',
+    };
+    const selector = selectorMap[getCurrentMainApiValue()];
+
+    if (!selector) {
+        return null;
+    }
+
+    const button = document.querySelector(selector);
+    return button instanceof HTMLElement ? button : null;
+}
+
+function handleConnectionStripConnectClick() {
+    const connectButton = resolveActiveApiConnectButton();
+
+    if (!connectButton) {
+        openShell('left', 'api');
+        return;
+    }
+
+    connectButton.click();
 }
 
 function handleConnectionProfilesToggle() {
@@ -1825,6 +2267,7 @@ async function refreshChatbarState() {
         setConnectionStripOpenState(false);
         desktopRefs.connectionSelect.replaceChildren();
         desktopRefs.connectionStatus.textContent = '';
+        setButtonDisabled(desktopRefs.connectionConnectButton, true);
 
         if (mobileRefs?.connectionSection instanceof HTMLElement) {
             mobileRefs.connectionSection.hidden = true;
@@ -1836,6 +2279,7 @@ async function refreshChatbarState() {
         desktopRefs.connectionSelect.innerHTML = optionsMarkup;
         desktopRefs.connectionSelect.value = connectionProfilesSource.value;
         desktopRefs.connectionStatus.textContent = connectionStatusText;
+        setButtonDisabled(desktopRefs.connectionConnectButton, !resolveActiveApiConnectButton());
 
         if (mobileRefs?.connectionSection instanceof HTMLElement) {
             mobileRefs.connectionSection.hidden = false;
@@ -2100,6 +2544,24 @@ function toggleShellPanel(shellKey, tabId = null) {
     openShell(shellKey, tabId);
 }
 
+function openApiShellTab() {
+    if (!ensureShellReady('left')) {
+        return;
+    }
+
+    if (isShellTabOpen('left', 'api')) {
+        closeShell('left');
+        return;
+    }
+
+    closeMobileNav();
+    closeMobileChatTools();
+    setConnectionStripOpenState(false);
+    closeShell('right');
+    closeCharacterPanel();
+    openShell('left', 'api');
+}
+
 function isLandingPageVisible() {
     return isActuallyVisible(document.querySelector('.welcomePanel'));
 }
@@ -2212,6 +2674,17 @@ function buildTopBar() {
         },
     );
 
+    const apiButton = createProxyButton(
+        {
+            id: 'sb-api-toggle',
+            icon: 'fa-plug',
+            label: 'API',
+            title: 'Open API settings',
+            className: 'sb-proxy-button-icon-only',
+        },
+        openApiShellTab,
+    );
+
     const rightButton = createProxyButton(
         {
             id: 'sb-right-shell-toggle',
@@ -2231,25 +2704,40 @@ function buildTopBar() {
         },
         () => toggleCharacterPanel(),
     );
+    const chatbarToggleButton = createTopBarIconButton(
+        {
+            id: 'sb-chatbar-visibility-toggle',
+            icon: 'fa-eye-slash',
+            title: 'Hide top chat bar',
+        },
+        toggleChatbarVisibility,
+    );
 
     centerGroup.innerHTML = `
         <div id="sb-topbar-title" class="sb-brand-title">${SB_IDLE_BRAND_LABEL}</div>
     `;
 
-    leftGroup.append(mobileButton, leftButton, homeButton);
-    rightGroup.append(charactersButton, rightButton);
+    leftGroup.append(mobileButton, leftButton, homeButton, apiButton);
+    rightGroup.append(chatbarToggleButton, charactersButton, rightButton);
     topBarInner.append(leftGroup, centerGroup, rightGroup);
     primaryRow.appendChild(topBarInner);
 
     const chatBar = buildChatBar();
-    stack.append(primaryRow, chatBar.row);
-    topBar.append(stack, chatBar.connectionStrip);
+    stack.append(primaryRow, chatBar.layer);
+    topBar.append(stack);
+
+    const chatbarState = getChatbarState();
+    chatbarState.chatbarToggleButton = chatbarToggleButton;
+    chatbarState.dragHandleButton = chatbarState.desktop?.dragHandleButton ?? null;
 
     observeProxyButton('sb-left-shell-toggle', getShellConfig('left').hostIconSelector);
     observeProxyButton('sb-right-shell-toggle', getShellConfig('right').hostIconSelector);
     observeProxyButton('sb-character-toggle', '#rightNavDrawerIcon');
     bindTopBarBrand();
     updateTopBarBrand();
+    setChatbarVisible(chatbarState.visible, { persist: false });
+    applyTopbarOffset();
+    updateTopbarUtilityButtons();
     scheduleChatbarRefresh(80);
 }
 
@@ -2354,6 +2842,835 @@ function buildAgentsPanel() {
         button: null,
         searchRoot: column,
     };
+}
+
+function getServerAdminState() {
+    return sbState.serverAdmin;
+}
+
+function getServerAdminRefs() {
+    return getServerAdminState().refs;
+}
+
+function getImporterState() {
+    return sbState.importer;
+}
+
+function getImporterRefs() {
+    return getImporterState().refs;
+}
+
+async function requestServerAdmin(endpoint, body = {}) {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: getRequestHeadersFromContext(),
+        body: JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let data = null;
+
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = { message: text };
+    }
+
+    if (!response.ok) {
+        throw new Error(data?.error || data?.message || text || `Request failed with status ${response.status}.`);
+    }
+
+    return data;
+}
+
+function getMultipartRequestHeaders(context = getSillyTavernContext()) {
+    const headers = { ...getRequestHeadersFromContext(context) };
+    delete headers['Content-Type'];
+    delete headers['content-type'];
+    return headers;
+}
+
+async function requestUserPrivateAction(endpoint, { body = {}, useFormData = false } = {}) {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: useFormData ? getMultipartRequestHeaders() : getRequestHeadersFromContext(),
+        body: useFormData ? body : JSON.stringify(body),
+    });
+
+    const text = await response.text();
+    let data = null;
+
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = { message: text };
+    }
+
+    if (!response.ok) {
+        throw new Error(data?.error || data?.message || text || `Request failed with status ${response.status}.`);
+    }
+
+    return data;
+}
+
+function setServerAdminPill(element, label, tone = 'neutral') {
+    if (!(element instanceof HTMLElement)) {
+        return;
+    }
+
+    element.textContent = label;
+    element.dataset.tone = tone;
+}
+
+function setServerAdminMessage(element, message, tone = 'neutral') {
+    if (!(element instanceof HTMLElement)) {
+        return;
+    }
+
+    element.textContent = String(message ?? '').trim();
+    element.dataset.tone = tone;
+    element.hidden = !element.textContent;
+}
+
+function setServerAdminButtonLabel(button, isBusy, busyLabel) {
+    if (!(button instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    if (!button.dataset.idleLabel) {
+        button.dataset.idleLabel = button.textContent || '';
+    }
+
+    button.textContent = isBusy ? busyLabel : button.dataset.idleLabel;
+}
+
+function appendServerAdminStat(target, label, value) {
+    if (!(target instanceof HTMLElement)) {
+        return;
+    }
+
+    const item = createElement('div', { className: 'sb-server-stat' });
+    const title = createElement('small', { className: 'sb-server-stat-label', text: label });
+    const content = createElement('strong', { className: 'sb-server-stat-value', text: value || '—' });
+    item.append(title, content);
+    target.appendChild(item);
+}
+
+function updateServerConfigDirtyState() {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs?.configEditor || !refs.configState) {
+        return false;
+    }
+
+    const isDirty = refs.configEditor.value !== state.originalConfig;
+    refs.configState.textContent = isDirty ? 'Unsaved changes' : 'Saved';
+    refs.configState.dataset.state = isDirty ? 'dirty' : 'saved';
+    return isDirty;
+}
+
+function updateServerAdminInteractivity() {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs) {
+        return;
+    }
+
+    const locked = state.busy || state.restarting;
+    const canUpdate = refs.updateButton?.dataset.sbCanUpdate === 'true';
+    const hasConfigContent = Boolean(refs.configEditor?.value.trim());
+
+    setButtonDisabled(refs.refreshButton, locked);
+    setButtonDisabled(refs.reloadConfigButton, locked);
+    setButtonDisabled(refs.updateButton, locked || !canUpdate);
+    setButtonDisabled(refs.restartButton, locked);
+    setButtonDisabled(refs.saveConfigButton, locked || !hasConfigContent);
+    setButtonDisabled(refs.saveConfigRestartButton, locked || !hasConfigContent);
+
+    if (refs.configEditor instanceof HTMLTextAreaElement) {
+        refs.configEditor.disabled = locked;
+    }
+}
+
+function renderServerAdminStatus(data) {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs) {
+        return;
+    }
+
+    const repository = data?.repository ?? {};
+    const version = data?.version ?? {};
+    const statusGrid = refs.statusGrid;
+    statusGrid.replaceChildren();
+
+    appendServerAdminStat(statusGrid, 'Runtime', data?.runtime || 'Unknown');
+    appendServerAdminStat(statusGrid, 'Version', version?.pkgVersion || 'Unknown');
+    appendServerAdminStat(statusGrid, 'Branch', repository?.branch || version?.gitBranch || 'Unknown');
+    appendServerAdminStat(statusGrid, 'Commit', repository?.currentCommit || version?.gitRevision || 'Unknown');
+    appendServerAdminStat(statusGrid, 'Tracking', repository?.trackingBranch || 'Not set');
+    appendServerAdminStat(statusGrid, 'Ahead', String(repository?.ahead ?? 0));
+    appendServerAdminStat(statusGrid, 'Behind', String(repository?.behind ?? 0));
+    appendServerAdminStat(statusGrid, 'Config', data?.configPath || 'Unknown');
+
+    state.lastStatusData = {
+        runtime: data?.runtime || '',
+        configPath: data?.configPath || '',
+        version,
+        repository,
+    };
+
+    let pillLabel = 'Unavailable';
+    let pillTone = 'neutral';
+
+    if (repository?.supported && repository?.isRepo) {
+        if (repository?.hasLocalChanges) {
+            pillLabel = 'Update Blocked';
+            pillTone = 'danger';
+        } else if ((repository?.behind ?? 0) > 0) {
+            pillLabel = 'Update Ready';
+            pillTone = 'warn';
+        } else if ((repository?.ahead ?? 0) > 0) {
+            pillLabel = 'Patched Local';
+            pillTone = 'neutral';
+        } else {
+            pillLabel = 'Up To Date';
+            pillTone = 'good';
+        }
+    }
+
+    setServerAdminPill(refs.statusPill, pillLabel, pillTone);
+    refs.updateButton.dataset.sbCanUpdate = String(Boolean(repository?.canUpdate));
+
+    const noteParts = [String(repository?.message ?? '').trim()].filter(Boolean);
+
+    if ((repository?.changedFilesCount ?? 0) > 0) {
+        const changedPreview = Array.isArray(repository?.changedFiles)
+            ? repository.changedFiles.map(file => file?.path).filter(Boolean).join(', ')
+            : '';
+        noteParts.push(`Changed files: ${repository.changedFilesCount}${changedPreview ? ` (${changedPreview})` : ''}`);
+    }
+
+    setServerAdminMessage(refs.statusNote, noteParts.join('\n'), pillTone);
+    updateServerAdminInteractivity();
+}
+
+function renderServerAdminConfig(data, { overwrite = true } = {}) {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs) {
+        return;
+    }
+
+    refs.configPath.textContent = data?.path || 'config.yaml';
+    state.configLoaded = true;
+
+    if (overwrite && refs.configEditor instanceof HTMLTextAreaElement) {
+        refs.configEditor.value = String(data?.content ?? '');
+        state.originalConfig = refs.configEditor.value;
+        state.lastModifiedMs = Number(data?.lastModifiedMs ?? 0) || 0;
+        updateServerConfigDirtyState();
+    }
+}
+
+async function waitForServerReturn(expectedRevision = '') {
+    let sawOffline = false;
+    const timeoutAt = Date.now() + 180000;
+
+    while (Date.now() < timeoutAt) {
+        try {
+            const response = await fetch('/version', { cache: 'no-store' });
+
+            if (!response.ok) {
+                throw new Error('Server is not ready yet.');
+            }
+
+            const version = await response.json().catch(() => ({}));
+            const revision = String(version?.gitRevision ?? '').trim();
+
+            if (expectedRevision && revision === expectedRevision) {
+                location.reload();
+                return true;
+            }
+
+            if (sawOffline) {
+                location.reload();
+                return true;
+            }
+        } catch {
+            sawOffline = true;
+        }
+
+        await wait(1500);
+    }
+
+    return false;
+}
+
+async function refreshServerAdminPanel({ includeConfig = false, forceConfig = false } = {}) {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+    const shouldLoadConfig = includeConfig || forceConfig || !state.configLoaded;
+
+    if (!refs || state.busy || state.restarting) {
+        return;
+    }
+
+    state.busy = true;
+    updateServerAdminInteractivity();
+    setServerAdminMessage(refs.statusNote, 'Loading server status…');
+    if (shouldLoadConfig) {
+        refs.configState.textContent = state.configLoaded ? 'Refreshing…' : 'Loading…';
+        refs.configState.dataset.state = 'loading';
+    }
+
+    const statusPromise = requestServerAdmin('/api/server-admin/status');
+    const configPromise = shouldLoadConfig ? requestServerAdmin('/api/server-admin/config/get') : null;
+
+    if (configPromise) {
+        try {
+            const configData = await configPromise;
+            const configIsDirty = refs.configEditor.value !== state.originalConfig;
+
+            if (forceConfig || !configIsDirty) {
+                renderServerAdminConfig(configData, { overwrite: true });
+            } else {
+                renderServerAdminConfig(configData, { overwrite: false });
+                state.lastModifiedMs = Number(configData?.lastModifiedMs ?? 0) || state.lastModifiedMs;
+                refs.configPath.textContent = configData?.path || refs.configPath.textContent;
+                setServerAdminMessage(refs.configNote, 'The file was refreshed on disk, but your unsaved draft was kept locally.', 'warn');
+            }
+        } catch (error) {
+            state.configLoaded = false;
+            refs.configState.textContent = 'Unavailable';
+            refs.configState.dataset.state = 'danger';
+            setServerAdminMessage(refs.configNote, error.message || 'Failed to load config.yaml.', 'danger');
+            console.error('Failed to load config.yaml.', error);
+        }
+    }
+
+    try {
+        const statusData = await statusPromise;
+        renderServerAdminStatus(statusData);
+    } catch (error) {
+        console.error('Failed to refresh server admin panel.', error);
+        getServerAdminRefs()?.statusGrid.replaceChildren();
+        setServerAdminPill(getServerAdminRefs()?.statusPill, 'Unavailable', 'danger');
+        setServerAdminMessage(getServerAdminRefs()?.statusNote, error.message || 'Failed to load server tools.', 'danger');
+    } finally {
+        state.busy = false;
+        updateServerAdminInteractivity();
+    }
+}
+
+async function handleServerAdminReloadConfig() {
+    const refs = getServerAdminRefs();
+
+    if (!refs) {
+        return;
+    }
+
+    if (updateServerConfigDirtyState() && !window.confirm('Discard your unsaved config edits and reload config.yaml from disk?')) {
+        return;
+    }
+
+    await refreshServerAdminPanel({ includeConfig: true, forceConfig: true });
+}
+
+async function handleServerAdminSaveConfig({ restart = false } = {}) {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs || state.busy || state.restarting) {
+        return;
+    }
+
+    state.busy = true;
+    updateServerAdminInteractivity();
+    setServerAdminMessage(refs.configNote, restart ? 'Saving config and preparing restart…' : 'Saving config…');
+
+    try {
+        const normalizedContent = refs.configEditor.value.endsWith('\n')
+            ? refs.configEditor.value
+            : `${refs.configEditor.value}\n`;
+        const result = await requestServerAdmin('/api/server-admin/config/save', {
+            content: normalizedContent,
+            expectedLastModifiedMs: state.lastModifiedMs,
+            restart,
+        });
+
+        refs.configEditor.value = normalizedContent;
+        state.originalConfig = normalizedContent;
+        state.lastModifiedMs = Number(result?.lastModifiedMs ?? 0) || state.lastModifiedMs;
+        updateServerConfigDirtyState();
+        setServerAdminMessage(refs.configNote, result?.message || 'Config saved.', restart ? 'warn' : 'good');
+        toastr.success(result?.message || 'Config saved.', 'Server config');
+
+        if (restart) {
+            state.busy = false;
+            state.restarting = true;
+            updateServerAdminInteractivity();
+            const restarted = await waitForServerReturn();
+
+            if (!restarted) {
+                state.restarting = false;
+                setServerAdminMessage(refs.configNote, 'Restart is taking longer than expected. Refresh the page once the server is back.', 'warn');
+                toastr.warning('Restart is taking longer than expected. Refresh manually once the server is back.', 'Restart pending');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to save config.yaml.', error);
+        setServerAdminMessage(refs.configNote, error.message || 'Failed to save config.yaml.', 'danger');
+        toastr.error(error.message || 'Failed to save config.yaml.', 'Server config');
+    } finally {
+        if (!state.restarting) {
+            state.busy = false;
+            updateServerAdminInteractivity();
+        }
+    }
+}
+
+async function handleServerAdminRestart() {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs || state.busy || state.restarting) {
+        return;
+    }
+
+    state.busy = true;
+    updateServerAdminInteractivity();
+    setServerAdminMessage(refs.updateNote, 'Restarting SillyBunny…');
+
+    try {
+        const result = await requestServerAdmin('/api/server-admin/restart');
+        state.busy = false;
+        state.restarting = true;
+        updateServerAdminInteractivity();
+        setServerAdminMessage(refs.updateNote, result?.message || 'Restarting SillyBunny…', 'warn');
+        toastr.info(result?.message || 'Restarting SillyBunny…', 'Server');
+
+        const restarted = await waitForServerReturn();
+        if (!restarted) {
+            state.restarting = false;
+            setServerAdminMessage(refs.updateNote, 'Restart is taking longer than expected. Refresh the page once the server is back.', 'warn');
+            toastr.warning('Restart is taking longer than expected. Refresh manually once the server is back.', 'Restart pending');
+        }
+    } catch (error) {
+        console.error('Failed to restart SillyBunny.', error);
+        state.busy = false;
+        updateServerAdminInteractivity();
+        setServerAdminMessage(refs.updateNote, error.message || 'Failed to restart SillyBunny.', 'danger');
+        toastr.error(error.message || 'Failed to restart SillyBunny.', 'Server');
+    }
+}
+
+async function handleServerAdminUpdate() {
+    const state = getServerAdminState();
+    const refs = getServerAdminRefs();
+
+    if (!refs || state.busy || state.restarting) {
+        return;
+    }
+
+    state.busy = true;
+    updateServerAdminInteractivity();
+    setServerAdminButtonLabel(refs.updateButton, true, 'Updating…');
+    setServerAdminMessage(refs.updateNote, 'Checking Git status and applying the latest update…');
+    refs.updateOutput.hidden = true;
+    refs.updateOutput.textContent = '';
+
+    try {
+        const result = await requestServerAdmin('/api/server-admin/update');
+        const nextStatus = {
+            ...(state.lastStatusData ?? {}),
+            configPath: refs.configPath?.textContent || state.lastStatusData?.configPath || '',
+            version: result?.version ?? state.lastStatusData?.version ?? {},
+            repository: result?.repository ?? state.lastStatusData?.repository ?? {},
+        };
+
+        if (!result?.updated) {
+            renderServerAdminStatus(nextStatus);
+            setServerAdminMessage(refs.updateNote, result?.message || 'Already up to date.', 'good');
+            toastr.success(result?.message || 'Already up to date.', 'Server update');
+            return;
+        }
+
+        renderServerAdminStatus(nextStatus);
+
+        if (result?.install?.stdout || result?.install?.stderr) {
+            refs.updateOutput.hidden = false;
+            refs.updateOutput.textContent = [result.install.command, result.install.stdout, result.install.stderr]
+                .filter(Boolean)
+                .join('\n\n');
+        }
+
+        state.busy = false;
+        state.restarting = true;
+        updateServerAdminInteractivity();
+        setServerAdminMessage(refs.updateNote, result?.message || 'Update applied. Restarting SillyBunny…', 'warn');
+        toastr.info(result?.message || 'Update applied. Restarting SillyBunny…', 'Server update');
+
+        const expectedRevision = String(result?.version?.gitRevision ?? result?.repository?.currentCommit ?? '').trim();
+        const restarted = await waitForServerReturn(expectedRevision);
+
+        if (!restarted) {
+            state.restarting = false;
+            setServerAdminMessage(refs.updateNote, 'Update completed, but restart is taking longer than expected. Refresh manually once the server is back.', 'warn');
+            toastr.warning('Update finished, but restart is taking longer than expected. Refresh manually once the server is back.', 'Restart pending');
+        }
+    } catch (error) {
+        console.error('Failed to update SillyBunny.', error);
+        state.busy = false;
+        setServerAdminMessage(refs.updateNote, error.message || 'Failed to update SillyBunny.', 'danger');
+        toastr.error(error.message || 'Failed to update SillyBunny.', 'Server update');
+    } finally {
+        setServerAdminButtonLabel(refs.updateButton, false, 'Updating…');
+
+        if (!state.restarting) {
+            state.busy = false;
+            updateServerAdminInteractivity();
+        }
+    }
+}
+
+function buildServerAdminPanel() {
+    const { panel, scroller } = createShellPanel({
+        id: 'server',
+    });
+
+    const column = createElement('div', { className: 'sb-shell-column sb-server-column' });
+    const callout = createElement('div', { className: 'sb-shell-callout' });
+    callout.innerHTML = `
+        <strong>Server Tools</strong>
+        <p>Edit <code>config.yaml</code>, check for Git updates, and restart the app from inside Customize. Auto-update only runs when the repository can fast-forward cleanly.</p>
+    `;
+
+    const statusCard = createElement('section', { className: 'sb-admin-card sb-server-card' });
+    const statusHeader = createElement('div', { className: 'sb-admin-card-header' });
+    const statusCopy = createElement('div', { className: 'sb-admin-card-copy' });
+    const statusTitle = createElement('strong', { text: 'App Status' });
+    const statusDescription = createElement('p', { text: 'Review the current runtime, branch, commit, and whether this workspace can update safely.' });
+    const statusPill = createElement('span', { className: 'sb-server-pill', text: 'Checking…' });
+    const statusGrid = createElement('div', { className: 'sb-server-grid' });
+    const statusNote = createElement('div', { className: 'sb-server-note' });
+    statusCopy.append(statusTitle, statusDescription);
+    statusHeader.append(statusCopy, statusPill);
+    statusCard.append(statusHeader, statusGrid, statusNote);
+
+    const updateCard = createElement('section', { className: 'sb-admin-card sb-server-card' });
+    const updateHeader = createElement('div', { className: 'sb-admin-card-header' });
+    const updateCopy = createElement('div', { className: 'sb-admin-card-copy' });
+    const updateTitle = createElement('strong', { text: 'Updates & Restart' });
+    const updateDescription = createElement('p', { text: 'Check upstream status, update the app, and relaunch automatically when it is safe to do so.' });
+    const updateActions = createElement('div', { className: 'sb-server-actions' });
+    const refreshButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action', text: 'Check for updates', attrs: { type: 'button' } });
+    const updateButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action menu_button_primary', text: 'Update & Restart', attrs: { type: 'button' } });
+    const restartButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action', text: 'Restart server', attrs: { type: 'button' } });
+    const updateNote = createElement('div', { className: 'sb-server-note', text: 'Fast-forward updates restart automatically after the pull finishes.' });
+    const updateOutput = createElement('pre', { className: 'sb-server-output' });
+    updateOutput.hidden = true;
+    updateCopy.append(updateTitle, updateDescription);
+    updateActions.append(refreshButton, updateButton, restartButton);
+    updateHeader.append(updateCopy);
+    updateCard.append(updateHeader, updateActions, updateNote, updateOutput);
+
+    const configCard = createElement('section', { className: 'sb-admin-card sb-server-card' });
+    const configHeader = createElement('div', { className: 'sb-admin-card-header' });
+    const configCopy = createElement('div', { className: 'sb-admin-card-copy' });
+    const configTitle = createElement('strong', { text: 'config.yaml Editor' });
+    const configDescription = createElement('p', { text: 'Edit the live config file directly here. Saves validate YAML before writing anything to disk.' });
+    const configState = createElement('span', { className: 'sb-server-inline-state', text: 'Loading…' });
+    const configPath = createElement('code', { className: 'sb-server-config-path', text: 'config.yaml' });
+    const configMeta = createElement('div', { className: 'sb-server-config-meta' });
+    const configEditor = createElement('textarea', {
+        className: 'text_pole sb-server-config-editor',
+        attrs: {
+            spellcheck: 'false',
+            rows: '22',
+            'aria-label': 'config.yaml editor',
+        },
+    });
+    const configActions = createElement('div', { className: 'sb-server-actions' });
+    const reloadConfigButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action', text: 'Reload file', attrs: { type: 'button' } });
+    const saveConfigButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action', text: 'Save config', attrs: { type: 'button' } });
+    const saveConfigRestartButton = createElement('button', { className: 'menu_button menu_button_icon sb-server-action menu_button_primary', text: 'Save & Restart', attrs: { type: 'button' } });
+    const configNote = createElement('div', { className: 'sb-server-note', text: 'Most config changes only take effect after a restart.' });
+    configCopy.append(configTitle, configDescription);
+    configHeader.append(configCopy, configState);
+    configMeta.append(configPath);
+    configActions.append(reloadConfigButton, saveConfigButton, saveConfigRestartButton);
+    configCard.append(configHeader, configMeta, configEditor, configActions, configNote);
+
+    column.append(callout, statusCard, updateCard, configCard);
+    scroller.appendChild(column);
+
+    const state = getServerAdminState();
+    state.refs = {
+        statusPill,
+        statusGrid,
+        statusNote,
+        refreshButton,
+        updateButton,
+        restartButton,
+        updateNote,
+        updateOutput,
+        configPath,
+        configState,
+        configEditor,
+        reloadConfigButton,
+        saveConfigButton,
+        saveConfigRestartButton,
+        configNote,
+    };
+
+    refreshButton.addEventListener('click', () => refreshServerAdminPanel({ includeConfig: false }));
+    updateButton.addEventListener('click', handleServerAdminUpdate);
+    restartButton.addEventListener('click', handleServerAdminRestart);
+    reloadConfigButton.addEventListener('click', handleServerAdminReloadConfig);
+    saveConfigButton.addEventListener('click', () => handleServerAdminSaveConfig({ restart: false }));
+    saveConfigRestartButton.addEventListener('click', () => handleServerAdminSaveConfig({ restart: true }));
+    configEditor.addEventListener('input', () => {
+        updateServerConfigDirtyState();
+        updateServerAdminInteractivity();
+    });
+
+    window.requestAnimationFrame(() => {
+        void refreshServerAdminPanel({ includeConfig: true, forceConfig: true });
+    });
+
+    return {
+        id: 'server',
+        panel,
+        button: null,
+        searchRoot: column,
+        onActivate: () => refreshServerAdminPanel({ includeConfig: !getServerAdminState().configLoaded }),
+    };
+}
+
+function updateSillyTavernImportInteractivity() {
+    const state = getImporterState();
+    const refs = getImporterRefs();
+
+    if (!refs) {
+        return;
+    }
+
+    setButtonDisabled(refs.folderButton, state.busy);
+    setButtonDisabled(refs.zipButton, state.busy);
+
+    if (refs.pathInput instanceof HTMLInputElement) {
+        refs.pathInput.disabled = state.busy;
+    }
+}
+
+function setSillyTavernImportBusy(isBusy) {
+    getImporterState().busy = Boolean(isBusy);
+    updateSillyTavernImportInteractivity();
+}
+
+async function handleSillyTavernFolderImport() {
+    const refs = getImporterRefs();
+
+    if (!refs?.pathInput || getImporterState().busy) {
+        return;
+    }
+
+    const sourcePath = refs.pathInput.value.trim();
+
+    if (!sourcePath) {
+        setServerAdminMessage(refs.note, 'Paste the path to your SillyTavern folder or user data folder first.', 'warn');
+        toastr.warning('Paste a SillyTavern folder path first.', 'Import SillyTavern');
+        refs.pathInput.focus();
+        return;
+    }
+
+    const confirmed = window.confirm(`Import data from this folder into the current SillyBunny account?\n\n${sourcePath}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`);
+    if (!confirmed) {
+        return;
+    }
+
+    setSillyTavernImportBusy(true);
+    setServerAdminMessage(refs.note, 'Importing folder data… This may take a moment for larger libraries.');
+
+    try {
+        const result = await requestUserPrivateAction('/api/users/import-sillytavern/folder', {
+            body: { sourcePath },
+        });
+
+        setServerAdminMessage(refs.note, result?.message || 'Folder import finished. Reloading…', 'good');
+        toastr.success(result?.message || 'Folder import finished. Reloading…', 'Import SillyTavern');
+        await wait(700);
+        location.reload();
+    } catch (error) {
+        console.error('Failed to import SillyTavern folder.', error);
+        setServerAdminMessage(refs.note, error.message || 'Failed to import from that folder path.', 'danger');
+        toastr.error(error.message || 'Failed to import from that folder path.', 'Import SillyTavern');
+    } finally {
+        setSillyTavernImportBusy(false);
+    }
+}
+
+async function handleSillyTavernZipImport(file) {
+    const refs = getImporterRefs();
+
+    if (!(file instanceof File) || getImporterState().busy || !refs) {
+        return;
+    }
+
+    const confirmed = window.confirm(`Import this SillyTavern backup ZIP into the current SillyBunny account?\n\n${file.name}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`);
+    if (!confirmed) {
+        if (refs.zipFileInput instanceof HTMLInputElement) {
+            refs.zipFileInput.value = '';
+        }
+
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('avatar', file, file.name);
+
+    setSillyTavernImportBusy(true);
+    setServerAdminMessage(refs.note, 'Importing backup ZIP… This may take a moment for larger libraries.');
+
+    try {
+        const result = await requestUserPrivateAction('/api/users/import-sillytavern/zip', {
+            body: formData,
+            useFormData: true,
+        });
+
+        setServerAdminMessage(refs.note, result?.message || 'Backup ZIP imported. Reloading…', 'good');
+        toastr.success(result?.message || 'Backup ZIP imported. Reloading…', 'Import SillyTavern');
+        await wait(700);
+        location.reload();
+    } catch (error) {
+        console.error('Failed to import SillyTavern backup ZIP.', error);
+        setServerAdminMessage(refs.note, error.message || 'Failed to import that backup ZIP.', 'danger');
+        toastr.error(error.message || 'Failed to import that backup ZIP.', 'Import SillyTavern');
+    } finally {
+        if (refs.zipFileInput instanceof HTMLInputElement) {
+            refs.zipFileInput.value = '';
+        }
+
+        setSillyTavernImportBusy(false);
+    }
+}
+
+function injectSillyTavernImportCard() {
+    const themeBlock = document.getElementById('UI-presets-block');
+    if (!(themeBlock instanceof HTMLElement)) {
+        return;
+    }
+
+    const existingCard = document.getElementById('sb-import-card');
+    if (existingCard instanceof HTMLElement) {
+        if (themeBlock.firstElementChild !== existingCard) {
+            themeBlock.prepend(existingCard);
+        }
+
+        return;
+    }
+
+    const card = createElement('section', { id: 'sb-import-card', className: 'sb-admin-card sb-import-card' });
+    const header = createElement('div', { className: 'sb-admin-card-header' });
+    const copy = createElement('div', { className: 'sb-admin-card-copy' });
+    const title = createElement('strong', { text: 'Import Your SillyTavern Setup' });
+    const description = createElement('p', { text: 'Bring over characters, chats, presets, themes, extensions, and account settings from an existing SillyTavern folder or backup ZIP without touching the filesystem manually.' });
+    const badge = createElement('span', { className: 'sb-server-pill', text: 'Easy Import' });
+    copy.append(title, description);
+    header.append(copy, badge);
+
+    const hintRow = createElement('div', { className: 'sb-import-hints' });
+    for (const label of ['Characters', 'Chats', 'Presets', 'Themes', 'Extensions']) {
+        hintRow.appendChild(createElement('span', { className: 'sb-import-chip', text: label }));
+    }
+
+    const grid = createElement('div', { className: 'sb-import-grid' });
+    const folderPane = createElement('div', { className: 'sb-import-pane' });
+    const folderTitle = createElement('strong', { text: 'Import From Folder Path' });
+    const folderBody = createElement('p', { text: 'Paste the path to your SillyTavern install, its `data` folder, or the specific user folder you want to import.' });
+    const pathRow = createElement('div', { className: 'sb-import-path-row' });
+    const pathInput = createElement('input', {
+        id: 'sb-import-path-input',
+        className: 'text_pole sb-import-path-input',
+        attrs: {
+            type: 'text',
+            placeholder: '/path/to/SillyTavern or /path/to/SillyTavern/data/default-user',
+            'aria-label': 'SillyTavern folder path',
+            autocomplete: 'off',
+            spellcheck: 'false',
+        },
+    });
+    const folderButton = createElement('button', {
+        className: 'menu_button menu_button_icon sb-server-action menu_button_primary',
+        attrs: { type: 'button' },
+        html: '<i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>Import Folder</span>',
+    });
+    pathRow.append(pathInput, folderButton);
+    folderPane.append(folderTitle, folderBody, pathRow);
+
+    const zipPane = createElement('div', { className: 'sb-import-pane' });
+    const zipTitle = createElement('strong', { text: 'Import From Backup ZIP' });
+    const zipBody = createElement('p', { text: 'Use the backup ZIP that SillyTavern exports. Pick the file here and SillyBunny will import it into this account.' });
+    const zipButton = createElement('button', {
+        className: 'menu_button menu_button_icon sb-server-action menu_button_primary',
+        attrs: { type: 'button' },
+        html: '<i class="fa-solid fa-file-zipper" aria-hidden="true"></i><span>Import Backup ZIP</span>',
+    });
+    const zipFileInput = createElement('input', {
+        id: 'sb-import-zip-input',
+        className: 'sb-import-file-input',
+        attrs: {
+            type: 'file',
+            accept: '.zip,application/zip,application/x-zip-compressed',
+            'aria-label': 'Choose a SillyTavern backup ZIP',
+        },
+    });
+    const zipFileName = createElement('small', { className: 'sb-import-file-name', text: 'No ZIP selected yet.' });
+    zipPane.append(zipTitle, zipBody, zipButton, zipFileInput, zipFileName);
+
+    const note = createElement('div', {
+        className: 'sb-server-note sb-import-note',
+        text: 'Import goes into the current account. Existing files with the same name will be replaced, and the page reloads automatically when the import finishes.',
+    });
+
+    grid.append(folderPane, zipPane);
+    card.append(header, hintRow, grid, note);
+    themeBlock.prepend(card);
+
+    getImporterState().refs = {
+        card,
+        pathInput,
+        folderButton,
+        zipButton,
+        zipFileInput,
+        zipFileName,
+        note,
+    };
+
+    folderButton.addEventListener('click', handleSillyTavernFolderImport);
+    pathInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            void handleSillyTavernFolderImport();
+        }
+    });
+
+    zipButton.addEventListener('click', () => zipFileInput.click());
+    zipFileInput.addEventListener('change', () => {
+        const [file] = Array.from(zipFileInput.files ?? []);
+        zipFileName.textContent = file?.name || 'No ZIP selected yet.';
+
+        if (file) {
+            void handleSillyTavernZipImport(file);
+        }
+    });
+
+    updateSillyTavernImportInteractivity();
 }
 
 function createThemeSliderGroup({ title, valueId, inputId, value, min, max, step, ariaLabel, caption, onInput }) {
@@ -2715,6 +4032,8 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     if (focusButton) {
         activeTab.button?.focus();
     }
+
+    activeTab.onActivate?.();
 }
 
 function openShell(shellKey, tabId = null) {
@@ -2889,6 +4208,12 @@ function buildShell(shellKey) {
         if (customTab.id === 'agents') {
             const agentPanel = buildAgentsPanel();
             registerShellTab(shellKey, customTab, agentPanel, agentPanel.searchRoot);
+            continue;
+        }
+
+        if (customTab.id === 'server') {
+            const serverPanel = buildServerAdminPanel();
+            registerShellTab(shellKey, customTab, serverPanel, serverPanel.searchRoot);
         }
     }
 
@@ -2916,6 +4241,7 @@ function buildShell(shellKey) {
 
     if (shellKey === 'right') {
         injectThemePicker();
+        injectSillyTavernImportCard();
     }
 }
 
@@ -2987,8 +4313,9 @@ function registerShellTab(shellKey, tabConfig, panelBundle, explicitSearchRoot =
         ...tabConfig,
         button,
         panel: panelBundle.panel,
-        searchRoot: explicitSearchRoot ?? panelBundle.scroller,
+        searchRoot: explicitSearchRoot ?? panelBundle.searchRoot ?? panelBundle.scroller,
         searchIndex: null,
+        onActivate: panelBundle.onActivate ?? tabConfig.onActivate ?? null,
     });
 }
 
@@ -3333,6 +4660,10 @@ function syncMobileViewportState() {
         closeMobileNav();
         closeMobileChatTools();
     }
+
+    syncDesktopShellSizing();
+    applyTopbarOffset();
+    updateTopbarUtilityButtons();
 }
 
 function reinitSelect2AfterShell() {
@@ -3445,7 +4776,9 @@ function initAll() {
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
     setTopbarScale('desktop', sbState.topbarScale.desktop, { persist: false });
     setTopbarScale('mobile', sbState.topbarScale.mobile, { persist: false });
+    syncDesktopShellSizing();
     buildTopBar();
+    bindTopbarDragEvents();
     bindChatbarEvents();
     interceptDrawerOpeners();
     bindWorldInfoRoute();
@@ -3485,6 +4818,12 @@ function initAll() {
         },
         toggleChatSidebar() {
             toggleChatSidebar();
+        },
+        toggleChatbarVisibility() {
+            toggleChatbarVisibility();
+        },
+        resetTopbarPosition() {
+            setTopbarOffset({ x: 0, y: 0 });
         },
         getTheme() {
             return sbState.theme;

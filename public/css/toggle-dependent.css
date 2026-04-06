@@ -555,7 +555,7 @@ label[for="bind_preset_to_connection"]:has(input:checked) {
     display: flex;
 }
 
-#AdvancedFormatting.sb-chat-completion-mode [data-cc-null] {
+#AdvancedFormatting.sb-chat-completion-mode [data-cc-null]:not([data-cc-chat-completion-visible]) {
     display: none !important;
 }
 

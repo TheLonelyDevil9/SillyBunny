@@ -130,7 +130,7 @@
                     {{#if hint}}
                         <div class="welcomeTourHint">{{hint}}</div>
                     {{/if}}
-                    <div class="welcomeChipRow">
+                    <div class="welcomeChipRow" data-chip-columns="{{chipColumnCount}}">
                         {{#each chips}}
                             <span class="welcomeChip">{{this}}</span>
                         {{/each}}
@@ -173,7 +173,7 @@
                         <strong>{{title}}</strong>
                     </div>
                     <p>{{body}}</p>
-                    <div class="welcomeChipRow">
+                    <div class="welcomeChipRow" style="--welcome-chip-columns: {{chipColumnCount}};">
                         {{#each chips}}
                             <span class="welcomeChip">{{this}}</span>
                         {{/each}}
@@ -232,15 +232,23 @@
                         <span class="welcomeStatusBadge welcomeStatusBadge--{{statusTone}}">{{statusLabel}}</span>
                     </div>
                     <p>{{body}}</p>
-                    <div class="welcomeChipRow">
+                    <div class="welcomeChipRow" data-chip-columns="{{chipColumnCount}}">
                         {{#each chips}}
                             <span class="welcomeChip">{{this}}</span>
                         {{/each}}
                     </div>
-                    <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{actionType}}" data-action-value="{{actionValue}}">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                        <span>{{actionLabel}}</span>
-                    </button>
+                    <div class="welcomeStarterPackActions">
+                        <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{actionType}}" data-action-value="{{actionValue}}">
+                            <i class="fa-solid {{#if actionIcon}}{{actionIcon}}{{else}}fa-wand-magic-sparkles{{/if}}"></i>
+                            <span>{{actionLabel}}</span>
+                        </button>
+                        {{#if secondaryActionLabel}}
+                            <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{secondaryActionType}}" data-action-value="{{secondaryActionValue}}">
+                                <i class="fa-solid {{#if secondaryActionIcon}}{{secondaryActionIcon}}{{else}}fa-arrow-up-right-from-square{{/if}}"></i>
+                                <span>{{secondaryActionLabel}}</span>
+                            </button>
+                        {{/if}}
+                    </div>
                 </article>
             {{/each}}
         </div>

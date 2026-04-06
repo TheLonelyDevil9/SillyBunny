@@ -223,14 +223,27 @@ function fixDrawerHeaderLayout(settingsKey) {
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
+            min-height: 50px !important;
+            gap: 12px !important;
+            padding-top: 12px !important;
+            padding-bottom: 11px !important;
         }
 
         #${settingsKey}-drawer .inline-drawer-header b {
-            flex: 0 1 auto !important;
-            white-space: nowrap !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex: 1 1 auto !important;
+            white-space: normal !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
-            margin-right: 10px !important;
+            min-width: 0 !important;
+            min-height: 100% !important;
+            margin-right: 0 !important;
+            padding-left: 18px !important;
+            padding-right: 10px !important;
+            text-align: center !important;
+            line-height: 1.3 !important;
         }
 
         #moonlit_settings_popout_button {
@@ -247,6 +260,8 @@ function fixDrawerHeaderLayout(settingsKey) {
 
         #${settingsKey}-drawer .inline-drawer-icon {
             margin-left: auto !important;
+            align-self: center !important;
+            flex: 0 0 auto !important;
         }
     `;
 

@@ -10,7 +10,7 @@
 @import url(css/accounts.css);
 @import url(css/tags.css);
 @import url(css/scrollable-button.css);
-@import url(css/welcome.css);
+@import url(css/welcome.css?v=20260406b);
 @import url(css/data-maid.css);
 @import url(css/secrets.css);
 @import url(css/backgrounds.css);
@@ -2703,14 +2703,15 @@ textarea::placeholder {
 }
 
 #character_cross {
-    position: absolute;
-    right: 5px;
-    top: 5px;
-    /* width: 20px;
-    height: 20px; */
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
     cursor: pointer;
     opacity: 0.6;
     font-size: 24px;
+    padding: 0;
+    margin: 0;
 }
 
 
@@ -3666,9 +3667,17 @@ grammarly-extension {
     height: 100%;
     width: 100%;
     flex-grow: 1;
-    justify-content: flex-end;
-    flex-flow: column;
+    align-items: flex-start;
+    flex-flow: row wrap;
+    gap: 8px;
     padding: 5px 5px 10px 0;
+}
+
+#avatar_controls>label {
+    flex: 0 1 220px;
+    min-width: min(220px, 100%);
+    height: auto !important;
+    margin: 0;
 }
 
 #description_div,
@@ -3765,6 +3774,30 @@ grammarly-extension {
     border: 1px solid var(--color-border, var(--SmartThemeBorderColor));
 }
 
+.char-button-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.char-button-group-icons {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.char-button-group-utility {
+    align-self: flex-start;
+}
+
+.char-button-group-icons .menu_button,
+.char-button-group-utility .menu_button {
+    flex: 0 0 auto;
+}
+
 /* Labels on primary character buttons */
 .char-button-group-primary .menu_button[data-label]::after {
     content: attr(data-label);
@@ -3775,10 +3808,58 @@ grammarly-extension {
 
 .form_create_bottom_buttons_block {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
+    align-items: stretch;
+    justify-content: flex-start;
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.greetings-editor-shell {
+    gap: 10px;
+}
+
+.character-greetings-summary {
+    color: var(--SmartThemeEmColor);
+    line-height: 1.45;
+}
+
+.character-greetings-primary,
+.character-greetings-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--color-surface, var(--SmartThemeBlurTintColor)) 65%, transparent);
+}
+
+.character-greeting-label-row,
+.character-greetings-editor-title {
+    display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.character-greeting-label-row {
+    font-weight: 600;
+}
+
+#character_greetings_editor .alternate_greetings_list {
+    overflow-y: auto;
+    max-height: 45dvh;
+    padding-right: 4px;
+}
+
+#character_greetings_editor .alternate_greeting {
+    width: 100%;
+}
+
+#character_greetings_editor .alternate_greeting summary {
+    margin-left: 0;
 }
 
 .red_button,
@@ -4838,26 +4919,33 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
     backdrop-filter: blur(calc(var(--SmartThemeBlurStrength)*2));
     -webkit-backdrop-filter: blur(calc(var(--SmartThemeBlurStrength)*2));
 
-    min-width: 100px;
-    max-width: var(--sheldWidth);
-    height: calc(100vh - 84px);
-    height: calc(100dvh - 84px);
-    min-height: calc(100vh - 84px);
-    min-height: calc(100dvh - 84px);
-    max-height: calc(100vh - 84px);
-    max-height: calc(100dvh - 84px);
-    position: absolute;
+    width: min(var(--sheldWidth), calc(100dvw - 24px));
+    max-width: calc(100dvw - 24px);
+    height: calc(100dvh - var(--topBarBlockSize) - 16px);
+    min-height: min(520px, calc(100dvh - var(--topBarBlockSize) - 16px));
+    max-height: calc(100dvh - var(--topBarBlockSize) - 16px);
+    position: fixed;
     z-index: 4001;
-    margin-left: auto;
-    margin-right: auto;
-    left: 0;
-    right: 0;
-    top: var(--topBarBlockSize);
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(var(--topBarBlockSize) + 8px);
     box-shadow: 0 0 20px var(--black70a);
     padding: 10px;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 0 0 10px 10px;
     overflow-y: auto;
+}
+
+#character_popup_header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    background: inherit;
+    padding-bottom: 10px;
 }
 
 #character_popup h3 {
@@ -4881,7 +4969,10 @@ h5 {
 
 
 #character_popup_text {
+    display: flex;
     align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
 #personality_textarea {
@@ -6622,6 +6713,122 @@ body:not(.movingUI) .drawer-content.maximized {
 .oneline-dropdown select {
     min-width: fit-content;
     width: 40%;
+}
+
+.sb-setting-inline-help {
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sb-setting-inline-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sb-setting-inline-copy .toggle-description,
+.sb-setting-inline-copy strong.toggle-description {
+    margin-bottom: 0;
+}
+
+.sb-setting-inline-help select {
+    flex: 0 0 clamp(160px, 32%, 220px);
+}
+
+.sb-chat-completion-server-config {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sb-chat-completion-config-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sb-chat-completion-config-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.7);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.sb-chat-completion-config-state[data-state='saved'] {
+    color: color-mix(in srgb, var(--color-success, #22c55e) 86%, white);
+    background: color-mix(in srgb, var(--color-success, #22c55e) 18%, transparent);
+}
+
+.sb-chat-completion-config-state[data-state='dirty'] {
+    color: color-mix(in srgb, var(--warning, #ef4444) 90%, white);
+    background: color-mix(in srgb, var(--warning, #ef4444) 16%, transparent);
+}
+
+.sb-chat-completion-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.sb-chat-completion-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+}
+
+.sb-chat-completion-config-title {
+    font-size: calc(var(--mainFontSize) * 0.88);
+}
+
+.sb-chat-completion-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+}
+
+.sb-chat-completion-config-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.sb-chat-completion-config-actions .menu_button {
+    min-height: 38px;
+}
+
+.sb-chat-completion-config-status {
+    margin-bottom: 0;
+}
+
+@media screen and (max-width: 850px) {
+    .sb-setting-inline-help,
+    .sb-chat-completion-config-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .sb-setting-inline-help select {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .sb-chat-completion-config-state {
+        align-self: flex-start;
+    }
 }
 
 .multiline {
