@@ -4969,6 +4969,33 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="flex-container flexFlowColumn flexNoGap gap10">
+                                    <strong data-i18n="Lore Review">Lore Review</strong>
+                                    <label class="checkbox_label flex1" for="agent_lore_review_mode">
+                                        <input id="agent_lore_review_mode" type="checkbox" />
+                                        <small data-i18n="Require Review Before Lore Writes">Require Review Before Lore Writes</small>
+                                    </label>
+                                    <div class="flex-container gap10">
+                                        <div id="agent_apply_lore_review" class="menu_button menu_button_icon">
+                                            <i class="fa-solid fa-check"></i>
+                                            <span data-i18n="Apply Pending Lore Changes">Apply Pending Lore Changes</span>
+                                        </div>
+                                        <div id="agent_discard_lore_review" class="menu_button menu_button_icon">
+                                            <i class="fa-solid fa-ban"></i>
+                                            <span data-i18n="Discard Pending Lore Changes">Discard Pending Lore Changes</span>
+                                        </div>
+                                    </div>
+                                    <div class="sb-agent-state-grid">
+                                        <div class="sb-agent-state-card">
+                                            <small class="sb-agent-state-label" data-i18n="Pending Review">Pending Review</small>
+                                            <div id="agent_lore_pending_list" class="sb-agent-state-list"></div>
+                                        </div>
+                                        <div class="sb-agent-state-card">
+                                            <small class="sb-agent-state-label" data-i18n="Last Applied">Last Applied</small>
+                                            <div id="agent_lore_applied_list" class="sb-agent-state-list"></div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="flex-container flexFlowColumn flexNoGap">
                                     <strong data-i18n="Recent Agent Runs">Recent Agent Runs</strong>
                                     <div id="agent_status_list" class="flex-container flexFlowColumn flexNoGap"></div>

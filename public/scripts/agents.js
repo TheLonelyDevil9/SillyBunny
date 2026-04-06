@@ -45,6 +45,9 @@ const MAX_STORY_STATE_LOCATIONS = 8;
 const MAX_STORY_STATE_INVENTORY = 12;
 const MAX_STORY_STATE_PLOT_THREADS = 10;
 const MAX_STORY_STATE_FIELD_LENGTH = 220;
+const MAX_LORE_REVIEW_CHANGES = 16;
+const MAX_LORE_CHANGE_CONTENT_LENGTH = 2400;
+const LORE_MATCH_SCORE_THRESHOLD = 0.14;
 
 const agent_director_phases = {
     PRE_GENERATION: 'pre_generation',
@@ -138,6 +141,13 @@ const DEFAULT_CHAT_AGENT_STATE = Object.freeze({
         plot_threads: [],
         updated_at: null,
     },
+    lorebook: {
+        review_mode: false,
+        pending_changes: [],
+        last_proposed_changes: [],
+        last_applied_changes: [],
+        updated_at: null,
+    },
     last_runs: {},
     director: {
         last_turn: null,
@@ -210,6 +220,10 @@ function ensureAgentChatState() {
             ...defaults.story_state,
             ...(chat_metadata[AGENT_METADATA_KEY].story_state ?? {}),
         },
+        lorebook: {
+            ...defaults.lorebook,
+            ...(chat_metadata[AGENT_METADATA_KEY].lorebook ?? {}),
+        },
         last_runs: {
             ...(chat_metadata[AGENT_METADATA_KEY].last_runs ?? {}),
         },
@@ -232,6 +246,7 @@ function ensureAgentChatState() {
     chat_metadata[AGENT_METADATA_KEY].memory.chapters = normalizeMemoryChapters(chat_metadata[AGENT_METADATA_KEY].memory.chapters);
     chat_metadata[AGENT_METADATA_KEY].memory.updated_at = normalizeMemoryTimestamp(chat_metadata[AGENT_METADATA_KEY].memory.updated_at);
     chat_metadata[AGENT_METADATA_KEY].story_state = normalizeStoryState(chat_metadata[AGENT_METADATA_KEY].story_state);
+    chat_metadata[AGENT_METADATA_KEY].lorebook = normalizeLorebookState(chat_metadata[AGENT_METADATA_KEY].lorebook);
 
     return chat_metadata[AGENT_METADATA_KEY];
 }
@@ -285,6 +300,15 @@ function setAgentStoryState(storyStatePatch) {
         ...storyStatePatch,
     };
     state.story_state = normalizeStoryState(nextStoryState);
+}
+
+function setAgentLorebookState(lorebookPatch) {
+    const state = getAgentChatState();
+    const nextLorebookState = {
+        ...state.lorebook,
+        ...lorebookPatch,
+    };
+    state.lorebook = normalizeLorebookState(nextLorebookState);
 }
 
 function recordAgentRun(serviceId, patch) {
@@ -398,6 +422,10 @@ function createDirectorServiceRun(serviceId, phase, status, reason) {
         summary: '',
         steps: 0,
         error: null,
+        proposed_count: 0,
+        applied_count: 0,
+        pending_count: 0,
+        skipped_count: 0,
         started_at: timestamp,
         completed_at: status === 'running' ? null : timestamp,
     };
@@ -446,6 +474,10 @@ async function runDirectedService(turn, serviceId, handler, { phase } = {}) {
         serviceRun.summary = truncateText(result?.summary ?? '', 200);
         serviceRun.steps = Number(result?.steps ?? 0);
         serviceRun.error = result?.error ? summarizeError(result.error) : null;
+        serviceRun.proposed_count = Number(result?.proposedChanges?.length ?? result?.proposed_count ?? 0);
+        serviceRun.applied_count = Number(result?.appliedChanges?.length ?? result?.applied_count ?? 0);
+        serviceRun.pending_count = Number(result?.pendingChanges?.length ?? result?.pending_count ?? 0);
+        serviceRun.skipped_count = Number(result?.skippedChanges?.length ?? result?.skipped_count ?? 0);
         serviceRun.completed_at = new Date().toISOString();
         setCurrentDirectorTurn(turn);
         return result;
@@ -792,6 +824,112 @@ function formatStoryStateForPrompt(storyState) {
     ].join('\n\n');
 }
 
+function normalizeLoreChangeAction(value, fallback = 'create') {
+    const action = String(value ?? '').trim().toLowerCase();
+    return action === 'update' ? 'update' : fallback;
+}
+
+function normalizeLoreChangeUid(value) {
+    const uid = Number(value);
+    return Number.isInteger(uid) && uid >= 0 ? uid : null;
+}
+
+function normalizeLoreChange(value) {
+    const change = value && typeof value === 'object' ? value : {};
+    const normalizedUid = normalizeLoreChangeUid(change.uid);
+    const explicitTitle = truncateText(change.title, 140);
+    const normalizedTitle = explicitTitle || (normalizedUid !== null ? `Entry ${normalizedUid}` : '');
+
+    return {
+        id: String(change.id ?? uuidv4()),
+        status: String(change.status ?? 'proposed').trim() || 'proposed',
+        requested_action: normalizeLoreChangeAction(change.requested_action ?? change.action ?? 'create'),
+        resolved_action: normalizeLoreChangeAction(change.resolved_action ?? change.requested_action ?? change.action ?? 'create'),
+        book: String(change.book ?? '').trim(),
+        uid: normalizedUid,
+        title: normalizedTitle,
+        has_explicit_title: Boolean(explicitTitle),
+        content: truncateText(change.content, MAX_LORE_CHANGE_CONTENT_LENGTH),
+        primary_keywords: normalizeStringArray(change.primary_keywords).slice(0, 12),
+        secondary_keywords: normalizeStringArray(change.secondary_keywords).slice(0, 12),
+        reason: truncateText(change.reason, 220),
+        resolution_note: truncateText(change.resolution_note, 220),
+        created_at: normalizeMemoryTimestamp(change.created_at) ?? new Date().toISOString(),
+    };
+}
+
+function normalizeLoreChangeList(value, maxLength = MAX_LORE_REVIEW_CHANGES) {
+    const seen = new Set();
+
+    return toArray(value)
+        .map(item => normalizeLoreChange(item))
+        .filter(change => change.book && (change.title || change.uid !== null) && change.content)
+        .filter(change => {
+            const dedupeKey = `${change.resolved_action}:${change.book.toLowerCase()}:${change.uid ?? change.title.toLowerCase()}:${change.content.toLowerCase()}`;
+            if (seen.has(dedupeKey)) {
+                return false;
+            }
+
+            seen.add(dedupeKey);
+            return true;
+        })
+        .slice(-maxLength);
+}
+
+function normalizeLorebookState(value) {
+    const lorebookState = value && typeof value === 'object' ? value : {};
+
+    return {
+        review_mode: Boolean(lorebookState.review_mode),
+        pending_changes: normalizeLoreChangeList(lorebookState.pending_changes, MAX_LORE_REVIEW_CHANGES),
+        last_proposed_changes: normalizeLoreChangeList(lorebookState.last_proposed_changes, MAX_LORE_REVIEW_CHANGES),
+        last_applied_changes: normalizeLoreChangeList(lorebookState.last_applied_changes, MAX_LORE_REVIEW_CHANGES),
+        updated_at: normalizeMemoryTimestamp(lorebookState.updated_at),
+    };
+}
+
+function getLoreChangeKey(change) {
+    const normalizedChange = normalizeLoreChange(change);
+    return `${normalizedChange.resolved_action}:${normalizedChange.book.toLowerCase()}:${normalizedChange.uid ?? normalizedChange.title.toLowerCase()}`;
+}
+
+function summarizeLoreChange(change) {
+    const normalizedChange = normalizeLoreChange(change);
+    const action = normalizedChange.resolved_action === 'update' ? 'Update' : 'Create';
+    return [
+        `${action} ${normalizedChange.book}:${normalizedChange.title}`,
+        normalizedChange.uid !== null ? `uid ${normalizedChange.uid}` : '',
+        normalizedChange.reason ? `Reason: ${normalizedChange.reason}` : '',
+        normalizedChange.resolution_note,
+    ].filter(Boolean).join(' | ');
+}
+
+function buildLorebookRunSummary({ proposedChanges = [], appliedChanges = [], pendingChanges = [], skippedChanges = [] } = {}) {
+    const parts = [];
+
+    if (proposedChanges.length > 0) {
+        parts.push(`${proposedChanges.length} proposed`);
+    }
+
+    if (appliedChanges.length > 0) {
+        parts.push(`${appliedChanges.length} applied`);
+    }
+
+    if (pendingChanges.length > 0) {
+        parts.push(`${pendingChanges.length} pending review`);
+    }
+
+    if (skippedChanges.length > 0) {
+        parts.push(`${skippedChanges.length} skipped`);
+    }
+
+    if (parts.length === 0) {
+        return 'No lore changes proposed';
+    }
+
+    return parts.join(', ');
+}
+
 function getProfileModelSettingKey(source) {
     return MODEL_SETTING_KEYS[source] ?? MODEL_SETTING_KEYS[chat_completion_sources.OPENAI];
 }
@@ -831,6 +969,10 @@ function getCurrentMemoryState() {
 
 function getCurrentStoryState() {
     return getAgentChatState().story_state;
+}
+
+function getCurrentLorebookState() {
+    return getAgentChatState().lorebook;
 }
 
 function buildChatSearchCorpus() {
@@ -900,6 +1042,238 @@ async function getAccessibleWorldEntries() {
     }
 
     return entries;
+}
+
+async function loadAccessibleLorebookWorkspace() {
+    const bookNames = await getAccessibleWorldBooks();
+    const workingBooks = new Map();
+
+    for (const bookName of bookNames) {
+        const data = await loadWorldInfo(bookName);
+        if (data) {
+            workingBooks.set(bookName, structuredClone(data));
+        }
+    }
+
+    const searchableEntries = [];
+    for (const [bookName, data] of workingBooks.entries()) {
+        for (const entry of Object.values(data.entries ?? {})) {
+            if (!entry || entry[AGENT_BLACKLIST_FIELD]) {
+                continue;
+            }
+
+            searchableEntries.push({
+                bookName,
+                uid: entry.uid,
+                comment: entry.comment || `Entry ${entry.uid}`,
+                content: String(entry.content ?? ''),
+                key: normalizeStringArray(entry.key),
+                keysecondary: normalizeStringArray(entry.keysecondary),
+            });
+        }
+    }
+
+    const entryFuse = new Fuse(searchableEntries, {
+        keys: ['comment', 'content', 'key', 'keysecondary', 'bookName'],
+        threshold: 0.3,
+        ignoreLocation: true,
+        includeScore: true,
+    });
+
+    return {
+        bookNames,
+        workingBooks,
+        searchableEntries,
+        entryFuse,
+    };
+}
+
+function findBestLoreEntryMatch(searchableEntries, entryFuse, proposal) {
+    const normalizedProposal = normalizeLoreChange(proposal);
+    const requestedBook = normalizedProposal.book.toLowerCase();
+    const requestedUid = normalizedProposal.uid;
+    const requestedTitle = normalizedProposal.title.toLowerCase();
+
+    if (requestedUid !== null) {
+        const directUidMatch = searchableEntries.find(entry => entry.bookName.toLowerCase() === requestedBook && Number(entry.uid) === requestedUid);
+        if (directUidMatch) {
+            return { entry: directUidMatch, resolutionNote: 'Matched the requested lore entry by UID.' };
+        }
+    }
+
+    if (requestedTitle) {
+        const exactTitleMatch = searchableEntries.find(entry => entry.bookName.toLowerCase() === requestedBook && String(entry.comment ?? '').trim().toLowerCase() === requestedTitle);
+        if (exactTitleMatch) {
+            return { entry: exactTitleMatch, resolutionNote: 'Matched an existing lore entry with the same title.' };
+        }
+
+        const exactTitleAnywhere = searchableEntries.find(entry => String(entry.comment ?? '').trim().toLowerCase() === requestedTitle);
+        if (exactTitleAnywhere) {
+            return { entry: exactTitleAnywhere, resolutionNote: `Matched an existing lore entry with the same title in "${exactTitleAnywhere.bookName}".` };
+        }
+    }
+
+    const query = [
+        normalizedProposal.title,
+        ...normalizedProposal.primary_keywords,
+        ...normalizedProposal.secondary_keywords,
+    ].filter(Boolean).join(' ');
+
+    if (!query) {
+        return { entry: null, resolutionNote: '' };
+    }
+
+    const fuseResults = entryFuse.search(query, { limit: 5 });
+    const sameBookResult = fuseResults.find(result => result.item.bookName.toLowerCase() === requestedBook && (result.score ?? 1) <= LORE_MATCH_SCORE_THRESHOLD);
+    if (sameBookResult) {
+        return {
+            entry: sameBookResult.item,
+            resolutionNote: `Matched a similar existing lore entry in "${sameBookResult.item.bookName}".`,
+        };
+    }
+
+    const anyBookResult = fuseResults.find(result => (result.score ?? 1) <= LORE_MATCH_SCORE_THRESHOLD);
+    if (anyBookResult) {
+        return {
+            entry: anyBookResult.item,
+            resolutionNote: `Matched a similar existing lore entry in "${anyBookResult.item.bookName}".`,
+        };
+    }
+
+    return { entry: null, resolutionNote: '' };
+}
+
+function resolveLoreChangeProposals(proposals, searchableEntries, entryFuse) {
+    const resolvedChanges = [];
+    const seen = new Set();
+
+    for (const proposal of normalizeLoreChangeList(proposals, MAX_LORE_REVIEW_CHANGES * 2)) {
+        const resolvedChange = normalizeLoreChange({
+            ...proposal,
+            status: 'proposed',
+        });
+
+        const { entry, resolutionNote } = findBestLoreEntryMatch(searchableEntries, entryFuse, resolvedChange);
+
+        if (resolvedChange.requested_action === 'create') {
+            if (entry) {
+                resolvedChange.resolved_action = 'update';
+                resolvedChange.book = entry.bookName;
+                resolvedChange.uid = Number(entry.uid);
+                resolvedChange.resolution_note = resolutionNote || 'Converted create request into an update for an existing entry.';
+            } else {
+                resolvedChange.resolved_action = 'create';
+                resolvedChange.resolution_note = 'No close existing entry matched, so this remains a create.';
+            }
+        } else {
+            if (entry) {
+                resolvedChange.resolved_action = 'update';
+                resolvedChange.book = entry.bookName;
+                resolvedChange.uid = Number(entry.uid);
+                if (!resolvedChange.title) {
+                    resolvedChange.title = entry.comment || `Entry ${entry.uid}`;
+                }
+                resolvedChange.resolution_note = resolutionNote || 'Update target confirmed.';
+            } else if (resolvedChange.has_explicit_title) {
+                resolvedChange.resolved_action = 'create';
+                resolvedChange.uid = null;
+                resolvedChange.resolution_note = 'Update target was not found, so this was converted into a new entry.';
+            } else {
+                resolvedChange.status = 'skipped';
+                resolvedChange.resolution_note = 'Update target was not found, and no replacement title was provided.';
+            }
+        }
+
+        const changeKey = getLoreChangeKey(resolvedChange);
+        if (seen.has(changeKey)) {
+            resolvedChange.status = 'skipped';
+            resolvedChange.resolution_note = 'Duplicate lore proposal skipped.';
+        } else {
+            seen.add(changeKey);
+        }
+
+        resolvedChanges.push(resolvedChange);
+    }
+
+    return resolvedChanges.slice(-MAX_LORE_REVIEW_CHANGES);
+}
+
+function applyLoreChangesToWorkspace(workingBooks, resolvedChanges) {
+    const appliedChanges = [];
+    const skippedChanges = [];
+    const changedBooks = new Set();
+
+    for (const resolvedChange of normalizeLoreChangeList(resolvedChanges, MAX_LORE_REVIEW_CHANGES * 2)) {
+        if (resolvedChange.status === 'skipped') {
+            skippedChanges.push(resolvedChange);
+            continue;
+        }
+
+        const data = workingBooks.get(resolvedChange.book);
+        if (!data) {
+            skippedChanges.push(normalizeLoreChange({
+                ...resolvedChange,
+                status: 'skipped',
+                resolution_note: `Lorebook "${resolvedChange.book}" is no longer available.`,
+            }));
+            continue;
+        }
+
+        if (resolvedChange.resolved_action === 'update') {
+            const entry = data.entries?.[resolvedChange.uid];
+            if (!entry || entry[AGENT_BLACKLIST_FIELD]) {
+                skippedChanges.push(normalizeLoreChange({
+                    ...resolvedChange,
+                    status: 'skipped',
+                    resolution_note: `Lore entry ${resolvedChange.uid} is not editable anymore.`,
+                }));
+                continue;
+            }
+
+            entry.comment = resolvedChange.title || entry.comment;
+            entry.content = resolvedChange.content || entry.content;
+            entry.key = normalizeStringArray(resolvedChange.primary_keywords);
+            entry.keysecondary = normalizeStringArray(resolvedChange.secondary_keywords);
+
+            appliedChanges.push(normalizeLoreChange({
+                ...resolvedChange,
+                status: 'applied',
+                uid: Number(entry.uid),
+            }));
+            changedBooks.add(resolvedChange.book);
+            continue;
+        }
+
+        const newEntry = createWorldInfoEntry(resolvedChange.book, data);
+        if (!newEntry) {
+            skippedChanges.push(normalizeLoreChange({
+                ...resolvedChange,
+                status: 'skipped',
+                resolution_note: `Could not create a new lore entry in "${resolvedChange.book}".`,
+            }));
+            continue;
+        }
+
+        newEntry.comment = resolvedChange.title;
+        newEntry.content = resolvedChange.content;
+        newEntry.key = normalizeStringArray(resolvedChange.primary_keywords);
+        newEntry.keysecondary = normalizeStringArray(resolvedChange.secondary_keywords);
+        newEntry[AGENT_BLACKLIST_FIELD] = false;
+
+        appliedChanges.push(normalizeLoreChange({
+            ...resolvedChange,
+            status: 'applied',
+            uid: Number(newEntry.uid),
+            resolved_action: 'create',
+        }));
+        changedBooks.add(resolvedChange.book);
+    }
+
+    return {
+        appliedChanges,
+        skippedChanges,
+        changedBooks,
+    };
 }
 
 function normalizeToolCalls(data) {
@@ -1438,7 +1812,13 @@ async function runMemoryAgent() {
 }
 
 async function runLorebookAgent() {
-    const bookNames = await getAccessibleWorldBooks();
+    const {
+        bookNames,
+        workingBooks,
+        searchableEntries,
+        entryFuse,
+    } = await loadAccessibleLorebookWorkspace();
+    const lorebookState = getCurrentLorebookState();
 
     if (!bookNames.length) {
         recordAgentRun(agent_service_ids.LOREBOOK, { status: 'skipped', summary: 'No active lorebooks', steps: 0, error: null });
@@ -1450,39 +1830,7 @@ async function runLorebookAgent() {
         };
     }
 
-    const workingBooks = new Map();
-    const pendingChanges = [];
-
-    for (const bookName of bookNames) {
-        const data = await loadWorldInfo(bookName);
-        if (data) {
-            workingBooks.set(bookName, structuredClone(data));
-        }
-    }
-
-    const searchableEntries = [];
-    for (const [bookName, data] of workingBooks.entries()) {
-        for (const entry of Object.values(data.entries ?? {})) {
-            if (!entry || entry[AGENT_BLACKLIST_FIELD]) {
-                continue;
-            }
-
-            searchableEntries.push({
-                bookName,
-                uid: entry.uid,
-                comment: entry.comment || `Entry ${entry.uid}`,
-                content: String(entry.content ?? ''),
-                key: normalizeStringArray(entry.key),
-                keysecondary: normalizeStringArray(entry.keysecondary),
-            });
-        }
-    }
-
-    const entryFuse = new Fuse(searchableEntries, {
-        keys: ['comment', 'content', 'key', 'keysecondary', 'bookName'],
-        threshold: 0.3,
-        ignoreLocation: true,
-    });
+    const proposedChanges = [];
 
     const tools = [
         createAgentTool(
@@ -1522,8 +1870,8 @@ async function runLorebookAgent() {
             },
         ),
         createAgentTool(
-            'create_lore_entry',
-            'Create a new editable lorebook entry in one of the active lorebooks.',
+            'queue_lore_create',
+            'Queue a proposed lorebook entry creation. The app will validate whether this should remain a create or become an update to an existing entry.',
             {
                 type: 'object',
                 properties: {
@@ -1532,40 +1880,39 @@ async function runLorebookAgent() {
                     content: { type: 'string' },
                     primary_keywords: { type: 'array', items: { type: 'string' } },
                     secondary_keywords: { type: 'array', items: { type: 'string' } },
+                    reason: { type: 'string' },
                 },
-                required: ['book', 'title', 'content', 'primary_keywords'],
+                required: ['book', 'title', 'content', 'primary_keywords', 'reason'],
             },
-            async ({ book, title, content, primary_keywords = [], secondary_keywords = [] }) => {
+            async ({ book, title, content, primary_keywords = [], secondary_keywords = [], reason }) => {
                 const bookName = String(book ?? '').trim();
-                const data = workingBooks.get(bookName);
-                if (!data) {
+                if (!workingBooks.has(bookName)) {
                     throw new Error(`Lorebook "${bookName}" is not available.`);
                 }
 
-                const entry = createWorldInfoEntry(bookName, data);
-                if (!entry) {
-                    throw new Error(`Could not create an entry in "${bookName}".`);
-                }
-
-                entry.comment = String(title ?? '').trim();
-                entry.content = String(content ?? '').trim();
-                entry.key = normalizeStringArray(primary_keywords);
-                entry.keysecondary = normalizeStringArray(secondary_keywords);
-                entry[AGENT_BLACKLIST_FIELD] = false;
-
-                pendingChanges.push({ type: 'create', book: bookName, uid: entry.uid, title: entry.comment });
+                const proposal = normalizeLoreChange({
+                    requested_action: 'create',
+                    resolved_action: 'create',
+                    book: bookName,
+                    title,
+                    content,
+                    primary_keywords,
+                    secondary_keywords,
+                    reason,
+                });
+                proposedChanges.push(proposal);
 
                 return {
-                    created: true,
+                    queued: true,
+                    action: 'create',
                     book: bookName,
-                    uid: entry.uid,
-                    title: entry.comment,
+                    title: proposal.title,
                 };
             },
         ),
         createAgentTool(
-            'update_lore_entry',
-            'Update an editable lorebook entry in one of the active lorebooks.',
+            'queue_lore_update',
+            'Queue a proposed lorebook entry update. The app will validate the target and may retarget or convert it if needed.',
             {
                 type: 'object',
                 properties: {
@@ -1575,45 +1922,35 @@ async function runLorebookAgent() {
                     content: { type: 'string' },
                     primary_keywords: { type: 'array', items: { type: 'string' } },
                     secondary_keywords: { type: 'array', items: { type: 'string' } },
+                    reason: { type: 'string' },
                 },
-                required: ['book', 'uid'],
+                required: ['book', 'uid', 'content', 'reason'],
             },
-            async ({ book, uid, title, content, primary_keywords, secondary_keywords }) => {
+            async ({ book, uid, title, content, primary_keywords, secondary_keywords, reason }) => {
                 const bookName = String(book ?? '').trim();
-                const data = workingBooks.get(bookName);
-                const entry = data?.entries?.[uid];
-
-                if (!entry) {
-                    throw new Error(`Entry ${uid} was not found in "${bookName}".`);
+                if (!workingBooks.has(bookName)) {
+                    throw new Error(`Lorebook "${bookName}" is not available.`);
                 }
 
-                if (entry[AGENT_BLACKLIST_FIELD]) {
-                    throw new Error(`Entry ${uid} in "${bookName}" is agent-blacklisted.`);
-                }
-
-                if (typeof title === 'string' && title.trim().length > 0) {
-                    entry.comment = title.trim();
-                }
-
-                if (typeof content === 'string' && content.trim().length > 0) {
-                    entry.content = content.trim();
-                }
-
-                if (primary_keywords !== undefined) {
-                    entry.key = normalizeStringArray(primary_keywords);
-                }
-
-                if (secondary_keywords !== undefined) {
-                    entry.keysecondary = normalizeStringArray(secondary_keywords);
-                }
-
-                pendingChanges.push({ type: 'update', book: bookName, uid: entry.uid, title: entry.comment });
+                const proposal = normalizeLoreChange({
+                    requested_action: 'update',
+                    resolved_action: 'update',
+                    book: bookName,
+                    uid,
+                    title,
+                    content,
+                    primary_keywords,
+                    secondary_keywords,
+                    reason,
+                });
+                proposedChanges.push(proposal);
 
                 return {
-                    updated: true,
+                    queued: true,
+                    action: 'update',
                     book: bookName,
-                    uid: entry.uid,
-                    title: entry.comment,
+                    uid: proposal.uid,
+                    title: proposal.title || `Entry ${proposal.uid}`,
                 };
             },
         ),
@@ -1636,36 +1973,117 @@ async function runLorebookAgent() {
 
     const recentMessages = buildChatSearchCorpus().slice(-10).map(item => `${item.name}: ${truncateText(item.content, 220)}`).join('\n');
     const memory = getCurrentMemoryState();
+    const storyState = getCurrentStoryState();
+    const pendingReviewSummary = normalizeLoreChangeList(lorebookState.pending_changes)
+        .map(change => summarizeLoreChange(change))
+        .join('\n');
 
     const systemPrompt = [
         'You are the Lorebook Agent for a roleplay/chat application.',
-        'Use tools to create or update only durable lore that should persist beyond the current scene.',
+        'Use tools to propose only durable lore updates that should persist beyond the current scene.',
+        'Search before proposing changes when possible.',
+        'Prefer updating an existing entry over creating a duplicate when the subject already exists.',
         'Do not store fleeting emotions or wording-only changes.',
         'Do not touch blacklisted entries.',
+        'Every queued change must include a brief reason.',
         'Finish by calling finish_lorebook_update.',
     ].join('\n');
 
     const userPrompt = [
         `Active lorebooks: ${bookNames.join(', ')}`,
         `Current durable memory:\n${memory.summary || '(none)'}`,
+        `Current story state:\n${formatStoryStateForPrompt(storyState)}`,
+        `Pending lore review items:\n${pendingReviewSummary || '(none)'}`,
+        `Review mode before writes: ${lorebookState.review_mode ? 'enabled' : 'disabled'}`,
         `Recent conversation:\n${recentMessages || '(no recent chat found)'}`,
         'Review whether the latest conversation creates or changes durable world knowledge.',
     ].join('\n\n');
 
     const result = await executeAgentLoop(agent_service_ids.LOREBOOK, systemPrompt, userPrompt, tools);
     const terminalResult = result.terminalResult ?? { summary: result.text || '' };
+    const resolvedChanges = resolveLoreChangeProposals(proposedChanges, searchableEntries, entryFuse);
+    const proposalSkips = resolvedChanges.filter(change => change.status === 'skipped');
+    const actionableChanges = resolvedChanges.filter(change => change.status !== 'skipped');
+    let appliedChanges = [];
+    let pendingReviewChanges = [];
+    let applySkips = [];
+    let status = 'completed';
 
-    if (pendingChanges.length > 0) {
-        for (const [bookName, data] of workingBooks.entries()) {
-            await saveWorldInfo(bookName, data, true);
+    if (lorebookState.review_mode && actionableChanges.length > 0) {
+        pendingReviewChanges = normalizeLoreChangeList([
+            ...lorebookState.pending_changes,
+            ...actionableChanges.map(change => ({
+                ...change,
+                status: 'pending_review',
+            })),
+        ]);
+        setAgentLorebookState({
+            pending_changes: pendingReviewChanges,
+            last_proposed_changes: resolvedChanges,
+            updated_at: new Date().toISOString(),
+        });
+        status = 'pending_review';
+    } else if (actionableChanges.length > 0) {
+        const applyResult = applyLoreChangesToWorkspace(workingBooks, actionableChanges);
+        appliedChanges = applyResult.appliedChanges;
+        applySkips = applyResult.skippedChanges;
+
+        if (applyResult.changedBooks.size > 0) {
+            for (const bookName of applyResult.changedBooks) {
+                const data = workingBooks.get(bookName);
+                if (data) {
+                    await saveWorldInfo(bookName, data, true);
+                }
+            }
         }
+
+        setAgentLorebookState({
+            pending_changes: [],
+            last_proposed_changes: resolvedChanges,
+            last_applied_changes: appliedChanges,
+            updated_at: new Date().toISOString(),
+        });
+    } else {
+        setAgentLorebookState({
+            last_proposed_changes: resolvedChanges,
+            updated_at: new Date().toISOString(),
+        });
     }
 
-    return {
-        status: 'completed',
+    const skippedChanges = normalizeLoreChangeList([...proposalSkips, ...applySkips], MAX_LORE_REVIEW_CHANGES * 2);
+    const countSummary = buildLorebookRunSummary({
+        proposedChanges: resolvedChanges,
+        appliedChanges,
+        pendingChanges: pendingReviewChanges,
+        skippedChanges,
+    });
+    const summary = [countSummary, terminalResult.summary]
+        .filter(Boolean)
+        .join('. ');
+
+    recordAgentRun(agent_service_ids.LOREBOOK, {
+        status,
+        summary,
         steps: result.steps,
-        summary: terminalResult.summary,
-        changes: pendingChanges,
+        error: null,
+        proposed_count: resolvedChanges.length,
+        applied_count: appliedChanges.length,
+        pending_count: pendingReviewChanges.length,
+        skipped_count: skippedChanges.length,
+        proposed_changes: resolvedChanges,
+        applied_changes: appliedChanges,
+        pending_changes: pendingReviewChanges,
+    });
+
+    return {
+        status,
+        steps: result.steps,
+        summary,
+        changes: appliedChanges,
+        proposedChanges: resolvedChanges,
+        appliedChanges,
+        pendingChanges: pendingReviewChanges,
+        skippedChanges,
     };
 }
 
@@ -1732,6 +2150,118 @@ async function runLorebookSyncFromUi() {
     }
 
     await runServiceSafely(agent_service_ids.LOREBOOK, () => runLorebookAgent(), { saveAfter: true });
+}
+
+async function applyPendingLoreReviewFromUi() {
+    if (!isAgentModeAvailable()) {
+        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent Mode`);
+        return;
+    }
+
+    const lorebookState = getCurrentLorebookState();
+    const pendingChanges = normalizeLoreChangeList(lorebookState.pending_changes);
+
+    if (!pendingChanges.length) {
+        toastr.info(t`There are no pending lore changes to review.`, t`Agent Mode`);
+        return;
+    }
+
+    const confirmation = await Popup.show.confirm(t`Apply pending lore changes for this chat?`, t`This will write the queued lore proposals into the active lorebooks.`);
+    if (!confirmation) {
+        return;
+    }
+
+    const { bookNames, workingBooks } = await loadAccessibleLorebookWorkspace();
+    if (!bookNames.length) {
+        toastr.info(t`No active lorebooks are available for review right now.`, t`Agent Mode`);
+        return;
+    }
+
+    const applyResult = applyLoreChangesToWorkspace(workingBooks, pendingChanges);
+
+    if (applyResult.changedBooks.size > 0) {
+        for (const bookName of applyResult.changedBooks) {
+            const data = workingBooks.get(bookName);
+            if (data) {
+                await saveWorldInfo(bookName, data, true);
+            }
+        }
+    }
+
+    const remainingPending = applyResult.skippedChanges.map(change => ({
+        ...change,
+        status: 'pending_review',
+    }));
+    const summary = buildLorebookRunSummary({
+        proposedChanges: pendingChanges,
+        appliedChanges: applyResult.appliedChanges,
+        skippedChanges: applyResult.skippedChanges,
+    });
+
+    setAgentLorebookState({
+        pending_changes: remainingPending,
+        last_proposed_changes: pendingChanges,
+        last_applied_changes: applyResult.appliedChanges.length > 0 ? applyResult.appliedChanges : lorebookState.last_applied_changes,
+        updated_at: new Date().toISOString(),
+    });
+
+    recordAgentRun(agent_service_ids.LOREBOOK, {
+        status: applyResult.appliedChanges.length > 0 ? 'reviewed' : 'skipped',
+        summary,
+        steps: 0,
+        error: null,
+        proposed_count: pendingChanges.length,
+        applied_count: applyResult.appliedChanges.length,
+        pending_count: remainingPending.length,
+        skipped_count: applyResult.skippedChanges.length,
+        proposed_changes: pendingChanges,
+        applied_changes: applyResult.appliedChanges,
+        pending_changes: remainingPending,
+    });
+
+    await saveChatConditional();
+    renderAgentPanelDebounced();
+}
+
+async function discardPendingLoreReviewFromUi() {
+    if (!getCurrentChatId()) {
+        toastr.info(t`Open a chat to review pending lore changes.`, t`Agent Mode`);
+        return;
+    }
+
+    const lorebookState = getCurrentLorebookState();
+    const pendingChanges = normalizeLoreChangeList(lorebookState.pending_changes);
+
+    if (!pendingChanges.length) {
+        toastr.info(t`There are no pending lore changes to discard.`, t`Agent Mode`);
+        return;
+    }
+
+    const confirmation = await Popup.show.confirm(t`Discard pending lore changes for this chat?`, t`This only removes queued review items. It does not touch already-applied lorebook entries.`);
+    if (!confirmation) {
+        return;
+    }
+
+    setAgentLorebookState({
+        pending_changes: [],
+        updated_at: new Date().toISOString(),
+    });
+    recordAgentRun(agent_service_ids.LOREBOOK, {
+        status: 'discarded',
+        summary: `${pendingChanges.length} pending lore change${pendingChanges.length === 1 ? '' : 's'} discarded`,
+        steps: 0,
+        error: null,
+        proposed_count: pendingChanges.length,
+        applied_count: 0,
+        pending_count: 0,
+        skipped_count: 0,
+        proposed_changes: pendingChanges,
+        applied_changes: [],
+        pending_changes: [],
+    });
+
+    await saveChatConditional();
+    renderAgentPanelDebounced();
 }
 
 async function clearAgentMemoryFromUi() {
@@ -1816,10 +2346,16 @@ function renderStatusList() {
     for (const serviceId of Object.values(agent_service_ids)) {
         const directedRun = directorTurn?.services?.find(service => service.serviceId === serviceId);
         const run = directedRun ?? lastRuns[serviceId];
+        const countParts = [
+            run?.proposed_count ? `${run.proposed_count} proposed` : '',
+            run?.applied_count ? `${run.applied_count} applied` : '',
+            run?.pending_count ? `${run.pending_count} pending` : '',
+            run?.skipped_count ? `${run.skipped_count} skipped` : '',
+        ].filter(Boolean);
         const row = $('<div class="flex-container flexFlowColumn marginBot5"></div>');
         const headline = $('<strong></strong>').text(SERVICE_LABELS[serviceId]);
         const statusText = run
-            ? `${run.status || 'idle'}${run.reason ? `, ${run.reason}` : ''}${run.steps ? `, ${run.steps} step${run.steps === 1 ? '' : 's'}` : ''}${run.summary ? `, ${truncateText(run.summary, 120)}` : ''}${run.error ? `, ${run.error}` : ''}`
+            ? `${run.status || 'idle'}${run.reason ? `, ${run.reason}` : ''}${run.steps ? `, ${run.steps} step${run.steps === 1 ? '' : 's'}` : ''}${countParts.length ? `, ${countParts.join(', ')}` : ''}${run.summary ? `, ${truncateText(run.summary, 120)}` : ''}${run.error ? `, ${run.error}` : ''}`
             : 'idle';
         const status = $('<small></small>').text(statusText);
         row.append(headline, status);
@@ -1899,6 +2435,50 @@ function renderStoryStatePanel(storyState) {
     }));
 }
 
+function renderLoreChangeList(selector, changes, emptyText = '(none)') {
+    const $container = $(selector);
+    if ($container.length === 0) {
+        return;
+    }
+
+    $container.empty();
+
+    if (!changes.length) {
+        $container.append($('<small class="sb-agent-state-empty"></small>').text(emptyText));
+        return;
+    }
+
+    for (const change of changes) {
+        const normalizedChange = normalizeLoreChange(change);
+        const actionLabel = normalizedChange.resolved_action === 'update' ? 'Update' : 'Create';
+        const title = `${actionLabel} · ${normalizedChange.book} · ${normalizedChange.title}`;
+        const detail = [
+            normalizedChange.uid !== null ? `UID ${normalizedChange.uid}` : '',
+            normalizedChange.reason ? `Reason: ${normalizedChange.reason}` : '',
+            normalizedChange.resolution_note,
+        ].filter(Boolean).join(' | ');
+
+        const row = $('<div class="sb-agent-state-entry"></div>');
+        row.append($('<strong class="sb-agent-state-entry-title"></strong>').text(title));
+        if (detail) {
+            row.append($('<small class="sb-agent-state-entry-detail"></small>').text(detail));
+        }
+        $container.append(row);
+    }
+}
+
+function renderLorebookReviewPanel(lorebookState) {
+    const normalizedLorebookState = normalizeLorebookState(lorebookState);
+    const pendingChanges = normalizeLoreChangeList(normalizedLorebookState.pending_changes);
+
+    $('#agent_lore_review_mode').prop('checked', Boolean(normalizedLorebookState.review_mode));
+    $('#agent_apply_lore_review').toggleClass('disabled', pendingChanges.length === 0);
+    $('#agent_discard_lore_review').toggleClass('disabled', pendingChanges.length === 0);
+
+    renderLoreChangeList('#agent_lore_pending_list', pendingChanges, '(no pending changes)');
+    renderLoreChangeList('#agent_lore_applied_list', normalizeLoreChangeList(normalizedLorebookState.last_applied_changes), '(no applied changes yet)');
+}
+
 function renderAgentPanel() {
     if ($('#agent_mode_panel').length === 0) {
         return;
@@ -1917,12 +2497,16 @@ function renderAgentPanel() {
     $('#agent_service_lorebook').prop('checked', Boolean(state.services[agent_service_ids.LOREBOOK]?.enabled));
     $('#agent_memory_summary').val(state.memory.summary || '');
     renderStoryStatePanel(state.story_state);
+    renderLorebookReviewPanel(state.lorebook);
 
+    const loreReviewText = state.lorebook?.review_mode
+        ? t` Lore updates will stay in review until you apply them.`
+        : t` Lore updates auto-apply after validation.`;
     const availabilityText = !hasChat
         ? t`Open a chat to configure per-chat agent mode.`
         : !available
             ? t`Agent mode currently runs only through chat-completions providers.`
-            : t`The turn director runs retrieval before the next reply, then updates durable memory, story state, and lorebook context after the reply is saved.`;
+            : `${t`The turn director runs retrieval before the next reply, then updates durable memory, story state, and lorebook context after the reply is saved.`}${loreReviewText}`;
     $('#agent_mode_status_hint').text(availabilityText);
 
     for (const serviceId of Object.values(agent_service_ids)) {
@@ -1983,10 +2567,20 @@ function bindAgentPanel() {
     $('#agent_service_lorebook').on('input', function () {
         setAgentServiceEnabled(agent_service_ids.LOREBOOK, $(this).prop('checked'));
     });
+    $('#agent_lore_review_mode').on('input', function () {
+        setAgentLorebookState({
+            review_mode: $(this).prop('checked'),
+            updated_at: new Date().toISOString(),
+        });
+        saveMetadataDebounced();
+        renderAgentPanelDebounced();
+    });
 
     $('#agent_copy_main_profile').on('click', copyMainProfileToAllAgents);
     $('#agent_clear_memory').on('click', () => void clearAgentMemoryFromUi());
     $('#agent_run_lorebook').on('click', () => void runLorebookSyncFromUi());
+    $('#agent_apply_lore_review').on('click', () => void applyPendingLoreReviewFromUi());
+    $('#agent_discard_lore_review').on('click', () => void discardPendingLoreReviewFromUi());
 
     for (const serviceId of Object.values(agent_service_ids)) {
         bindProfileField(serviceId, 'use_main', (profile, $input) => {
