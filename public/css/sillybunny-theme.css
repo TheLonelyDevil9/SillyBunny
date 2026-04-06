@@ -445,7 +445,8 @@ select.text_pole {
  * background before any character is selected. Collapse that placeholder so the
  * list controls sit flush under the favorites strip again.
  */
-#right-nav-panel:not([data-menu-type]) #right-nav-panel-tabs:has(#rm_button_selected_ch h2:empty):has(#result_info[style*="display: none"]) {
+#right-nav-panel:not([data-menu-type]) #rm_PinAndTabs:has(#rm_button_selected_ch h2:empty):has(#result_info[style*="display: none"]),
+#right-nav-panel[data-menu-type="characters"] #rm_PinAndTabs:has(#rm_button_selected_ch h2:empty):has(#result_info[style*="display: none"]) {
     display: none !important;
 }
 

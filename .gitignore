@@ -19,6 +19,10 @@ public/scripts/extensions/third-party/*
 !public/scripts/extensions/third-party/.gitkeep
 !public/scripts/extensions/third-party/SillyTavern-MoonlitEchoesTheme/
 !public/scripts/extensions/third-party/SillyTavern-MoonlitEchoesTheme/**
+!public/scripts/extensions/third-party/sillytavern-character-colors/
+!public/scripts/extensions/third-party/sillytavern-character-colors/**
+!public/scripts/extensions/third-party/sillytavern-image-gen/
+!public/scripts/extensions/third-party/sillytavern-image-gen/**
 public/stats.json
 /uploads/
 *.jsonl
@@ -60,3 +64,4 @@ public/error/
 yarn.lock
 *.code-workspace
 test-results/
+.playwright-cli/

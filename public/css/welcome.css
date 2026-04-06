@@ -953,12 +953,6 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     color: var(--welcome-muted-fg);
 }
 
-.welcomeGuideActions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
 .welcomeGuideLinks {
     display: flex;
     flex-wrap: wrap;
@@ -972,15 +966,490 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     color: var(--welcome-muted-fg);
 }
 
+.welcomeDeck {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.welcomeDeck.is-collapsed {
+    display: none;
+}
+
+.welcomeDeckIntro {
+    gap: 14px;
+}
+
+.welcomeDeckIntroHeader {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.welcomeDeckToggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.welcomeDeckTabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+}
+
+.welcomeDeckTab {
+    min-height: 82px;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    text-align: left;
+    border-radius: 20px;
+}
+
+.welcomeDeckTabs > .welcomeDeckTab {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 82px;
+    margin: 0;
+    box-sizing: border-box;
+    justify-self: stretch;
+    align-self: stretch;
+}
+
+.welcomeDeckTab i {
+    width: 18px;
+    margin-top: 2px;
+    font-size: calc(var(--mainFontSize) * 1);
+    text-align: center;
+    color: color-mix(in srgb, var(--color-primary, #f1b285) 64%, var(--SmartThemeBodyColor));
+}
+
+.welcomeDeckTab.is-active {
+    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 40%, transparent);
+    box-shadow: 0 16px 28px color-mix(in srgb, var(--color-primary, #f1b285) 14%, transparent);
+}
+
+.welcomeDeckTabMeta {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    white-space: normal;
+}
+
+.welcomeDeckTabMeta strong {
+    font-size: calc(var(--mainFontSize) * 0.88);
+}
+
+.welcomeDeckTabMeta span {
+    color: var(--welcome-muted-fg);
+    font-size: calc(var(--mainFontSize) * 0.72);
+    line-height: 1.45;
+}
+
+.welcomeDeckFrame {
+    min-width: 0;
+}
+
+.welcomeDeckPanel {
+    display: none;
+}
+
+.welcomeDeckPanel.is-active {
+    display: flex;
+    animation: welcomeDeckFadeIn 180ms ease;
+}
+
 .welcomeAssistantButton {
     background:
         linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #f1b285) 16%, transparent), transparent 86%),
         color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
 }
 
+.welcomeGuideHeader,
+.welcomeGuideTitleBlock,
+.welcomeAssistantGuideCopy,
+.welcomeTourStep {
+    display: flex;
+    flex-direction: column;
+}
+
+.welcomeGuideHeader,
+.welcomeStarterPackHeader,
+.welcomeTourStepHeader,
+.welcomeGuideCardHeader,
+.welcomeTourNav,
+.welcomeAssistantGuidePanel {
+    gap: 12px;
+}
+
+.welcomeGuideHeader {
+    align-items: flex-start;
+}
+
+.welcomeGuideTitleBlock {
+    gap: 6px;
+    min-width: 0;
+}
+
+.welcomeGuideTitleBlock h3,
+.welcomeTourStepHeader strong,
+.welcomeGuideCardHeader strong {
+    margin: 0;
+}
+
+.welcomeGuideTitleBlock p,
+.welcomeTourHint,
+.welcomeStarterPackCard p {
+    margin: 0;
+}
+
+.welcomeTourHeader {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-between;
+}
+
+.welcomeGuideMascot {
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, #17110e);
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    flex: 0 1 min(280px, 38%);
+    align-items: center;
+    gap: 12px;
+    width: min(100%, 320px);
+    max-width: 100%;
+    min-width: 0;
+    min-height: 116px;
+    padding: 14px;
+    border-radius: 20px;
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 82%, transparent);
+}
+
+.welcomeGuideMascot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-welcome-surface-bg);
+    opacity: var(--sb-page-control-opacity, 1);
+}
+
+.welcomeGuideMascotImage,
+.welcomeAssistantGuideImage {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    object-fit: contain;
+    flex: 0 0 auto;
+}
+
+.welcomeGuideMascotImage {
+    width: 88px;
+    height: 88px;
+}
+
+.welcomeGuideBubble {
+    position: relative;
+    min-width: 0;
+    max-width: min(100%, 28ch);
+    padding: 11px 12px;
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, white 4%);
+    color: var(--welcome-strong-fg);
+    font-size: calc(var(--mainFontSize) * 0.8);
+    line-height: 1.45;
+    text-wrap: balance;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 70%, transparent);
+}
+
+.welcomeGuideBubble::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 26px;
+    width: 16px;
+    height: 16px;
+    background: inherit;
+    transform: rotate(45deg);
+    border-left: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 70%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 70%, transparent);
+}
+
+.welcomeTourPanel.tutorialCollapsed .welcomeTourProgress,
+.welcomeTourPanel.tutorialCollapsed .welcomeTourSteps,
+.welcomeTourPanel.tutorialCollapsed .welcomeTourNav {
+    display: none;
+}
+
+.welcomeTourProgress {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.welcomeTourProgressButton {
+    min-height: 62px;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    text-align: left;
+    border-radius: 18px;
+}
+
+.welcomeTourProgressButton.is-active {
+    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 46%, transparent);
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--color-primary, #f1b285) 18%, transparent);
+}
+
+.welcomeTourProgressNumber {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 0.76);
+    font-weight: 800;
+    color: var(--welcome-strong-fg);
+    background: color-mix(in srgb, var(--color-primary, #f1b285) 26%, transparent);
+}
+
+.welcomeTourProgressLabel {
+    font-size: calc(var(--mainFontSize) * 0.78);
+    line-height: 1.35;
+    white-space: normal;
+}
+
+.welcomeTourSteps {
+    display: grid;
+}
+
+.welcomeTourStep {
+    display: none;
+    gap: 12px;
+}
+
+.welcomeTourStep.is-active {
+    display: flex;
+}
+
+.welcomeTourStepHeader {
+    align-items: flex-start;
+}
+
+.welcomeTourStepCount {
+    font-size: calc(var(--mainFontSize) * 0.74);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--welcome-muted-fg);
+}
+
+.welcomeTourHint {
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 82%, transparent);
+    color: var(--welcome-muted-fg);
+    font-size: calc(var(--mainFontSize) * 0.76);
+    line-height: 1.45;
+}
+
+.welcomeTourNav {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.welcomeTourNav .menu_button[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.welcomeGuideCardHeader {
+    display: inline-flex;
+    align-items: center;
+}
+
+.welcomeGuideCardHeader i,
+.welcomeStarterPackHeader .welcomeGuideCardHeader i {
+    color: color-mix(in srgb, var(--color-primary, #f1b285) 64%, var(--SmartThemeBodyColor));
+}
+
+.welcomeChipRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.welcomeChip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 74%, transparent);
+    color: var(--welcome-muted-fg);
+    font-size: calc(var(--mainFontSize) * 0.72);
+    line-height: 1.2;
+}
+
+.welcomeGuideCard .welcomeActionButton,
+.welcomeTourStep .welcomeActionButton,
+.welcomeStarterPackCard .welcomeActionButton {
+    align-self: flex-start;
+}
+
+.welcomeAssistantGuidePanel {
+    align-items: center;
+}
+
+.welcomeAssistantGuideMedia {
+    flex: 0 0 auto;
+}
+
+.welcomeAssistantGuideImage {
+    width: 138px;
+    height: 138px;
+}
+
+.welcomeAssistantGuideCopy {
+    gap: 10px;
+    min-width: 0;
+}
+
+.welcomeQuestionChip {
+    min-height: 38px;
+    gap: 8px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 0.76);
+}
+
+.welcomeQuestionChip span {
+    color: inherit;
+}
+
+.welcomeStarterPackGrid {
+    align-items: stretch;
+}
+
+.welcomeStarterPackCard,
+.welcomeStarterPackHeader {
+    display: flex;
+    flex-direction: column;
+}
+
+.welcomeStarterPackCard {
+    gap: 12px;
+}
+
+.welcomeStarterPackHeader {
+    gap: 10px;
+}
+
+.welcomeStatusBadge {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 0.74);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+}
+
+.welcomeStatusBadge--good {
+    color: #effff2;
+    background: rgba(28, 102, 63, 0.66);
+    border-color: rgba(170, 238, 193, 0.58);
+}
+
+.welcomeStatusBadge--warm {
+    color: #fff0d6;
+    background: rgba(130, 78, 24, 0.82);
+    border-color: rgba(255, 211, 160, 0.62);
+}
+
+.welcomeStatusBadge--neutral {
+    color: var(--welcome-muted-fg);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent);
+    border-color: color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 74%, transparent);
+}
+
+:root[data-sb-surface-tone='light'] .welcomeStatusBadge--good {
+    color: #1b5a37;
+    background: rgba(143, 225, 173, 0.32);
+    border-color: rgba(143, 225, 173, 0.46);
+}
+
+:root[data-sb-surface-tone='light'] .welcomeStatusBadge--warm {
+    color: #7a4a14;
+    background: rgba(255, 198, 138, 0.34);
+    border-color: rgba(255, 198, 138, 0.48);
+}
+
+@keyframes welcomeDeckFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media screen and (max-width: 1100px) {
+    .welcomeDeckIntroHeader {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .welcomeDeckTabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .welcomeGuideGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .welcomeTourHeader,
+    .welcomeAssistantGuidePanel {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .welcomeGuideMascot {
+        grid-template-columns: 1fr;
+        width: min(100%, 280px);
+        flex-basis: auto;
+        min-height: 0;
+    }
+
+    .welcomeGuideBubble {
+        max-width: none;
+    }
+
+    .welcomeGuideBubble::before {
+        top: -8px;
+        left: 24px;
+        border-left: 0;
+        border-bottom: 0;
+        border-top: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 70%, transparent);
+        border-right: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 70%, transparent);
     }
 }
 
@@ -1031,6 +1500,15 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 }
 
 @media screen and (max-width: 760px) {
+    .welcomeDeckToggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .welcomeDeckTabs {
+        grid-template-columns: 1fr;
+    }
+
     .welcomePanel,
     .welcomeGuidePanel,
     .welcomePromptPanel {
@@ -1089,6 +1567,10 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
         gap: 10px;
     }
 
+    .welcomeTourProgress {
+        grid-template-columns: 1fr;
+    }
+
     .welcomeActionCard {
         min-height: 72px;
         padding: 10px 12px;
@@ -1137,6 +1619,31 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     .welcomePromptPanel {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .welcomeGuideMascot {
+        grid-template-columns: 1fr;
+        min-height: 0;
+        padding: 12px;
+        width: min(100%, 280px);
+    }
+
+    .welcomeGuideMascotImage {
+        width: 72px;
+        height: 72px;
+    }
+
+    .welcomeAssistantGuideImage {
+        width: 112px;
+        height: 112px;
+    }
+
+    .welcomeTourNav {
+        justify-content: stretch;
+    }
+
+    .welcomeTourNav .menu_button {
+        flex: 1 1 0;
     }
 
     .welcomeRecentShell {

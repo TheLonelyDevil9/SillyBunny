@@ -1,0 +1,14 @@
+{
+  "display_name": "Quick Image Gen",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "platberlitz",
+  "version": "1.8.19",
+  "homePage": "https://github.com/platberlitz/sillytavern-image-gen",
+  "description": "Quick image generation helper for visual scene moments and inline image workflows.",
+  "auto_update": false,
+  "bundled_opt_in": true
+}

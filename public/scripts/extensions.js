@@ -130,6 +130,7 @@ export const extension_settings = {
     apiKey: '',
     autoConnect: false,
     notifyUpdates: false,
+    bundledOptInDefaultsApplied: false,
     disabledExtensions: [],
     expressionOverrides: [],
     memory: {},
@@ -212,6 +213,32 @@ export const extension_settings = {
     },
 };
 
+function applyBundledOptInDefaults() {
+    if (extension_settings.bundledOptInDefaultsApplied) {
+        return false;
+    }
+
+    const bundledOptInExtensions = Object.entries(manifests)
+        .filter(([, manifest]) => manifest?.bundled_opt_in === true)
+        .map(([name]) => name);
+
+    if (bundledOptInExtensions.length === 0) {
+        return false;
+    }
+
+    let changed = false;
+
+    for (const extensionName of bundledOptInExtensions) {
+        if (!extension_settings.disabledExtensions.includes(extensionName)) {
+            extension_settings.disabledExtensions.push(extensionName);
+            changed = true;
+        }
+    }
+
+    extension_settings.bundledOptInDefaultsApplied = true;
+    return true || changed;
+}
+
 function showHideExtensionsMenu() {
     // Get the number of menu items that are not hidden
     const hasMenuItems = $('#extensionsMenu').children().filter((_, child) => $(child).css('display') !== 'none').length > 0;
@@ -227,6 +254,25 @@ function showHideExtensionsMenu() {
 
 // Periodically check for new extensions
 const menuInterval = setInterval(showHideExtensionsMenu, 1000);
+
+function getExtensionHomePage(manifest) {
+    const candidate = manifest?.homepage || manifest?.homePage;
+
+    if (typeof candidate !== 'string' || !candidate) {
+        return '';
+    }
+
+    try {
+        const url = new URL(candidate);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return '';
+        }
+
+        return url.href;
+    } catch {
+        return '';
+    }
+}
 
 /**
  * Gets the type of an extension based on its external ID.
@@ -850,10 +896,13 @@ function generateExtensionHtml(name, manifest, isActive, isDisabled, isExternal,
     const extensionIcon = getExtensionIcon();
     const displayName = manifest.display_name;
     const displayVersion = manifest.version || '';
+    const extensionHomePage = getExtensionHomePage(manifest);
     const externalId = name.replace('third-party', '');
     let originHtml = '';
     if (isExternal) {
-        originHtml = '<a>';
+        originHtml = extensionHomePage
+            ? `<a href="${extensionHomePage}" target="_blank" rel="noopener noreferrer">`
+            : '<a>';
     }
 
     let toggleElement = isActive || isDisabled ?
@@ -1534,6 +1583,9 @@ export async function loadExtensionSettings(settings, versionChanged, enableAuto
     extensionNames = extensions.map(x => x.name);
     extensionTypes = Object.fromEntries(extensions.map(x => [x.name, x.type]));
     manifests = await getManifests(extensionNames);
+    if (applyBundledOptInDefaults()) {
+        saveSettingsDebounced();
+    }
 
     if (versionChanged && enableAutoUpdate) {
         await autoUpdateExtensions(false);
@@ -1603,7 +1655,7 @@ async function checkForUpdatesManual(sortFn, abortSignal) {
                     }
                     let branch = data.currentBranchName;
                     let commitHash = data.currentCommitHash;
-                    let origin = data.remoteUrl;
+                    let origin = data.remoteUrl || getExtensionHomePage(manifests[id]);
 
                     const originLink = extensionBlock.querySelector('a');
                     if (originLink) {

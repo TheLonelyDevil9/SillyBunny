@@ -2119,7 +2119,16 @@ function groupOpenAISettingsIntoDrawers() {
     const groupedBlocks = groupConfigs.map(config => ({
         ...config,
         blocks: config.selectors
-            .map(selector => $(selector).first())
+            .map(selector => {
+                const $block = $(selector).first();
+
+                if ($block.length > 0) {
+                    // Preserve direct event bindings while moving the settings blocks into drawers.
+                    $block.detach();
+                }
+
+                return $block;
+            })
             .filter($block => $block.length > 0),
     }));
 

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
@@ -31,6 +32,132 @@ async function getManifest(extensionPath) {
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     return manifest;
+}
+
+function getManifestRepoUrl(manifest) {
+    const candidate = manifest?.homepage || manifest?.homePage;
+
+    if (typeof candidate !== 'string' || !candidate) {
+        return '';
+    }
+
+    try {
+        const url = new URL(candidate);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return '';
+        }
+
+        return url.href;
+    } catch {
+        return '';
+    }
+}
+
+function clearDirectoryContents(directoryPath, keep = new Set()) {
+    for (const entry of fs.readdirSync(directoryPath)) {
+        if (keep.has(entry)) {
+            continue;
+        }
+
+        fs.rmSync(path.join(directoryPath, entry), { recursive: true, force: true });
+    }
+}
+
+function copyDirectoryContents(sourcePath, destinationPath) {
+    for (const entry of fs.readdirSync(sourcePath)) {
+        if (entry === '.git') {
+            continue;
+        }
+
+        fs.cpSync(path.join(sourcePath, entry), path.join(destinationPath, entry), { recursive: true, force: true });
+    }
+}
+
+async function getRemoteDefaultBranch(git) {
+    try {
+        await git.raw(['remote', 'set-head', 'origin', '-a']);
+    } catch {
+        // Fall through to the branch-list fallback below.
+    }
+
+    try {
+        const symbolicRef = (await git.raw(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])).trim();
+        if (symbolicRef.startsWith('origin/')) {
+            return symbolicRef.replace(/^origin\//, '');
+        }
+    } catch {
+        // Fall through to the branch-list fallback below.
+    }
+
+    const remoteBranches = await git.branch(['-r']);
+    const preferredBranch = ['main', 'master'].find(branch => remoteBranches.all.includes(`origin/${branch}`));
+    if (preferredBranch) {
+        return preferredBranch;
+    }
+
+    const firstRemoteBranch = remoteBranches.all.find(branch => branch.startsWith('origin/') && branch !== 'origin/HEAD');
+    if (!firstRemoteBranch) {
+        throw new Error('Could not determine the default remote branch.');
+    }
+
+    return firstRemoteBranch.replace(/^origin\//, '');
+}
+
+async function ensureExtensionRepo(extensionPath, isGlobal = false) {
+    const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
+    try {
+        const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
+        if (isRepo) {
+            return true;
+        }
+    } catch {
+        // Continue into the bootstrap path below.
+    }
+
+    if (!isGlobal) {
+        return false;
+    }
+
+    const manifest = await getManifest(extensionPath).catch(() => null);
+    const repoUrl = getManifestRepoUrl(manifest);
+    if (!repoUrl) {
+        return false;
+    }
+
+    const snapshotPath = fs.mkdtempSync(path.join(os.tmpdir(), 'sillybunny-ext-'));
+
+    try {
+        copyDirectoryContents(extensionPath, snapshotPath);
+
+        await git.init();
+        await git.addRemote('origin', repoUrl);
+        clearDirectoryContents(extensionPath, new Set(['.git']));
+        await git.raw(['fetch', '--depth', '1', 'origin']);
+
+        const defaultBranch = await getRemoteDefaultBranch(git);
+        await git.checkout(['-B', defaultBranch, `origin/${defaultBranch}`]);
+
+        copyDirectoryContents(snapshotPath, extensionPath);
+        await git.raw(['config', 'user.name', 'SillyBunny']);
+        await git.raw(['config', 'user.email', 'sillybunny@local']);
+        await git.add('.');
+
+        const status = await git.status();
+        if (status.files.length > 0) {
+            await git.commit('SillyBunny bundled adjustments');
+        }
+
+        console.info(`Bootstrapped bundled extension repo at ${extensionPath} from ${repoUrl}`);
+        return true;
+    } catch (error) {
+        clearDirectoryContents(extensionPath, new Set(['.git']));
+        copyDirectoryContents(snapshotPath, extensionPath);
+        fs.rmSync(path.join(extensionPath, '.git'), { recursive: true, force: true });
+        console.error(`Failed to bootstrap bundled extension repo at ${extensionPath}`, error);
+        return false;
+    } finally {
+        fs.rmSync(snapshotPath, { recursive: true, force: true });
+    }
 }
 
 /**
@@ -153,6 +280,8 @@ router.post('/update', async (request, response) => {
             return response.status(404).send(`Directory does not exist at ${extensionPath}`);
         }
 
+        await ensureExtensionRepo(extensionPath, global);
+
         const { isUpToDate, remoteUrl } = await checkIfRepoIsUpToDate(extensionPath);
         const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
         const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
@@ -196,6 +325,8 @@ router.post('/branches', async (request, response) => {
         if (!fs.existsSync(extensionPath)) {
             return response.status(404).send(`Directory does not exist at ${extensionPath}`);
         }
+
+        await ensureExtensionRepo(extensionPath, global);
 
         const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
         // Unshallow the repository if it is shallow
@@ -241,6 +372,8 @@ router.post('/switch', async (request, response) => {
         if (!fs.existsSync(extensionPath)) {
             return response.status(404).send(`Directory does not exist at ${extensionPath}`);
         }
+
+        await ensureExtensionRepo(extensionPath, global);
 
         const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
         const branches = await git.branchLocal();
@@ -348,6 +481,8 @@ router.post('/version', async (request, response) => {
         if (!fs.existsSync(extensionPath)) {
             return response.status(404).send(`Directory does not exist at ${extensionPath}`);
         }
+
+        await ensureExtensionRepo(extensionPath, global);
 
         const git = simpleGit({ baseDir: extensionPath, ...OPTIONS });
         let currentCommitHash;

@@ -23,7 +23,7 @@ import { t } from './i18n.js';
 import { instruct_presets } from './instruct-mode.js';
 import { kai_settings } from './kai-settings.js';
 import { convertNovelPreset } from './nai-settings.js';
-import { oai_settings, openai_setting_names, openai_settings } from './openai.js';
+import { getChatCompletionPreset, oai_settings, openai_setting_names, openai_settings } from './openai.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from './popup.js';
 import { context_presets, getContextSettings, power_user } from './power-user.js';
 import { reasoning_templates } from './reasoning.js';
@@ -648,6 +648,8 @@ class PresetManager {
                     return nai_settings;
                 case 'textgenerationwebui':
                     return textgen_settings;
+                case 'openai':
+                    return getChatCompletionPreset(oai_settings);
                 case 'context': {
                     const context_preset = getContextSettings();
                     context_preset.name = name || power_user.context.preset;

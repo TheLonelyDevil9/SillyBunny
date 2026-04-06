@@ -11,6 +11,7 @@ import {
     getRequestHeaders,
     getThumbnailUrl,
     is_send_press,
+    main_api,
     neutralCharacterName,
     newAssistantChat,
     openCharacterChat,
@@ -25,7 +26,9 @@ import {
     updateRemoteChatName,
 } from '../script.js';
 import { deleteGroupChatByName, getGroupAvatar, groups, is_group_generating, openGroupById, openGroupChat } from './group-chats.js';
+import { enableExtension, findExtension } from './extensions.js';
 import { t } from './i18n.js';
+import { getPresetManager } from './preset-manager.js';
 import { callGenericPopup, POPUP_TYPE } from './popup.js';
 import { renderTemplateAsync } from './templates.js';
 import { accountStorage } from './util/AccountStorage.js';
@@ -33,10 +36,142 @@ import { flashHighlight, isElementInViewport, sortMoments, timestampToMoment } f
 
 const assistantAvatarKey = 'assistant';
 const pinnedChatsKey = 'pinnedChats';
-const defaultAssistantAvatar = 'default_Assistant.png';
+const tutorialStatusKey = 'WelcomePage_TutorialStatus';
+const welcomeDeckViewKey = 'WelcomePage_DeckView';
+const welcomeDeckCollapsedKey = 'WelcomePage_DeckCollapsed';
+const defaultAssistantAvatar = 'default_SillyBunnyGuide.png';
+const defaultAssistantPortrait = 'img/sillybunny-guide-assistant-portrait.png';
 
 const DEFAULT_DISPLAYED = 3;
 const MAX_DISPLAYED = 15;
+const STARTER_PACK_PRESET_NAME = `Pura's Director Preset 11.5`;
+const STARTER_PACK_CREATOR_NAME = 'purachina';
+const STARTER_PACK_SITE_URL = 'https://platberlitz.github.io/';
+const STARTER_PACK_EXTENSION_IDS = Object.freeze({
+    dialogueColors: 'third-party/sillytavern-character-colors',
+    quickImageGen: 'third-party/sillytavern-image-gen',
+});
+
+const WELCOME_TUTORIAL_STEPS = Object.freeze([
+    {
+        title: 'Start on Home',
+        body: 'Home is your calm launchpad. You can start a Temporary Chat, open the built-in assistant, or pull in sample characters before touching the deeper controls.',
+        hint: 'If you just want to poke around safely, Temporary Chat is the fastest low-pressure starting point.',
+        chips: ['Home', 'Temporary Chat', 'Open Assistant', 'Sample Characters'],
+        actionLabel: 'Open Assistant',
+        actionType: 'open-assistant',
+        actionValue: '',
+    },
+    {
+        title: 'Connect a model',
+        body: 'The API tab is where you connect a provider and choose the model that will actually respond. If characters cannot send replies yet, this is usually the first place to check.',
+        hint: 'Providers host models. Models generate the text. SillyBunny needs one working connection before chat can begin.',
+        chips: ['API', 'Providers', 'Models', 'Connection'],
+        actionLabel: 'Open API',
+        actionType: 'open-tab',
+        actionValue: 'left:api',
+    },
+    {
+        title: 'Shape the replies',
+        body: 'Presets change the feel of responses. Advanced Formatting controls templates and prompt structure. World Info helps the model remember lore and setting details.',
+        hint: 'You do not need to master every knob at once. Start with a preset, then adjust deeper tools only when a chat needs them.',
+        chips: ['Presets', 'Advanced Formatting', 'World Info', 'Context'],
+        actionLabel: 'Open Presets',
+        actionType: 'open-tab',
+        actionValue: 'left:presets',
+    },
+    {
+        title: 'Personalize the workspace',
+        body: 'The right shell handles your atmosphere and extras. This is where you enable optional extensions, manage personas, and tune the look of the workspace.',
+        hint: 'Extensions are optional. SillyBunny ships a starter pack here, but nothing turns itself on without your permission.',
+        chips: ['Settings', 'Extensions', 'Persona', 'Background'],
+        actionLabel: 'Open Extensions',
+        actionType: 'open-tab',
+        actionValue: 'right:extensions',
+    },
+    {
+        title: 'Ask the bunny when stuck',
+        body: 'The default welcome assistant is a beginner-friendly bunny guide. It can explain LLM basics, SillyBunny concepts, and SillyTavern terms without assuming you already know the jargon.',
+        hint: 'A good first question is the difference between providers, models, presets, personas, and world info.',
+        chips: ['LLM basics', 'SillyBunny tips', 'SillyTavern terms', 'Replay tutorial anytime'],
+        actionLabel: 'Prefill a beginner question',
+        actionType: 'assistant-prompt',
+        actionValue: 'Explain the difference between providers, models, presets, personas, and world info in simple terms.',
+    },
+]);
+
+const WELCOME_GUIDE_CARDS = Object.freeze([
+    {
+        title: 'What the left shell is for',
+        body: 'Use the left shell when you want to change how the AI behaves: connect APIs, swap presets, tune formatting, or load lore and agent helpers.',
+        chips: ['Presets', 'API', 'Advanced Formatting', 'World Info', 'Agents'],
+        icon: 'fa-compass-drafting',
+        actionLabel: 'Open the left shell',
+        actionType: 'open-tab',
+        actionValue: 'left:presets',
+    },
+    {
+        title: 'What the right shell is for',
+        body: 'Use the right shell when you want to change your setup: app settings, extensions, personas, and the visual feel of the workspace live there.',
+        chips: ['Settings', 'Extensions', 'Persona', 'Background'],
+        icon: 'fa-sliders',
+        actionLabel: 'Open the right shell',
+        actionType: 'open-tab',
+        actionValue: 'right:settings',
+    },
+    {
+        title: 'What the big home buttons mean',
+        body: 'Temporary Chat is for low-stakes testing. Open Assistant brings up your guide character. Sample Characters and Import Characters are the easiest ways to start an actual conversation.',
+        chips: ['Temporary Chat', 'Open Assistant', 'Sample Characters', 'Import Characters'],
+        icon: 'fa-hand-pointer',
+        actionLabel: 'Browse sample characters',
+        actionType: 'open-sample-characters',
+        actionValue: '',
+    },
+    {
+        title: 'What to do when confused',
+        body: 'Replay the tour, ask the bunny guide a plain-English question, or open the docs. You should not need to memorize the whole interface to start using it.',
+        chips: ['Replay tutorial', 'Bunny guide', 'Docs', 'Start small'],
+        icon: 'fa-life-ring',
+        actionLabel: 'Replay the tutorial',
+        actionType: 'replay-tutorial',
+        actionValue: '',
+    },
+]);
+
+const WELCOME_ASSISTANT_QUESTIONS = Object.freeze([
+    'What is an LLM, in plain English?',
+    'Why can\'t I send messages yet?',
+    'What does a preset actually change?',
+    'How is SillyBunny different from base SillyTavern?',
+]);
+
+const WELCOME_DECK_VIEWS = Object.freeze([
+    {
+        id: 'tour',
+        title: 'First Steps',
+        summary: 'A guided five-step tour for brand-new users.',
+        icon: 'fa-route',
+    },
+    {
+        id: 'basics',
+        title: 'Core Buttons',
+        summary: 'A plain-English map of what the big controls do.',
+        icon: 'fa-compass-drafting',
+    },
+    {
+        id: 'guide',
+        title: 'Bunny Guide',
+        summary: 'Use the helper bunny instead of memorizing jargon.',
+        icon: 'fa-user-graduate',
+    },
+    {
+        id: 'starter',
+        title: 'Starter Pack',
+        summary: 'Optional bundled extras and Pura\'s preset.',
+        icon: 'fa-gift',
+    },
+]);
 
 /**
  * @typedef {Pick<RecentChat, 'group' | 'avatar' | 'file_name'>} PinnedChat
@@ -183,6 +318,510 @@ function findPermanentAssistantCharacterId(avatar = getPermanentAssistantAvatar(
 }
 
 /**
+ * Resolves the configured assistant to a loaded character, creating it on demand when needed.
+ * @param {object} [options]
+ * @param {boolean} [options.tryCreate=true] Whether a missing assistant should be created automatically.
+ * @param {boolean} [options.created=false] Whether the current resolution came from a fresh create flow.
+ * @returns {Promise<{avatar: string, characterId: number, created: boolean} | null>}
+ */
+async function ensurePermanentAssistantCharacter({ tryCreate = true, created = false } = {}) {
+    const avatar = getPermanentAssistantAvatar();
+    const characterId = findPermanentAssistantCharacterId(avatar);
+
+    if (characterId !== -1) {
+        return { avatar, characterId, created };
+    }
+
+    if (!tryCreate) {
+        console.error(`Character not found for avatar ID: ${avatar}. Cannot create.`);
+        return null;
+    }
+
+    try {
+        console.log(`Character not found for avatar ID: ${avatar}. Creating new assistant.`);
+        await createPermanentAssistant();
+        return ensurePermanentAssistantCharacter({ tryCreate: false, created: true });
+    } catch (error) {
+        console.error('Error creating permanent assistant:', error);
+        toastr.error(t`Failed to create ${neutralCharacterName}. See console for details.`);
+        return null;
+    }
+}
+
+function getTutorialStatus() {
+    return getWelcomeUiPreference(tutorialStatusKey) || '';
+}
+
+function isWelcomeDeckView(view) {
+    return WELCOME_DECK_VIEWS.some(item => item.id === view);
+}
+
+function getInitialDeckView() {
+    const storedView = getWelcomeUiPreference(welcomeDeckViewKey) || '';
+
+    if (isWelcomeDeckView(storedView)) {
+        return storedView;
+    }
+
+    return getTutorialStatus() ? 'basics' : 'tour';
+}
+
+function isWelcomeDeckCollapsed() {
+    return getWelcomeUiPreference(welcomeDeckCollapsedKey) === 'true';
+}
+
+function getWelcomeUiPreference(key) {
+    try {
+        const localValue = globalThis.localStorage?.getItem(key) ?? null;
+
+        if (localValue !== null) {
+            if (accountStorage.getItem(key) !== localValue) {
+                accountStorage.setItem(key, localValue);
+            }
+
+            return localValue;
+        }
+    } catch {
+        // Fall through to the account-backed preference.
+    }
+
+    return accountStorage.getItem(key);
+}
+
+function setWelcomeUiPreference(key, value) {
+    const stringValue = String(value);
+    accountStorage.setItem(key, stringValue);
+
+    try {
+        globalThis.localStorage?.setItem(key, stringValue);
+    } catch {
+        // Ignore storage access failures and keep the account-backed preference.
+    }
+}
+
+function buildDeckTabs(activeView) {
+    return WELCOME_DECK_VIEWS.map(item => ({
+        ...item,
+        active: item.id === activeView,
+    }));
+}
+
+function buildGuideCards() {
+    return WELCOME_GUIDE_CARDS.map(card => ({
+        ...card,
+        chips: [...card.chips],
+    }));
+}
+
+function buildTutorialSteps() {
+    return WELCOME_TUTORIAL_STEPS.map((step, index) => ({
+        ...step,
+        chips: [...step.chips],
+        stepNumber: index + 1,
+        active: index === 0,
+    }));
+}
+
+function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName }) {
+    const extension = findExtension(extensionName);
+
+    if (!extension) {
+        return {
+            title,
+            body,
+            icon,
+            chips: [...chips],
+            statusLabel: 'Bundled',
+            statusTone: 'warm',
+            actionIcon: 'fa-arrow-up-right-from-square',
+            actionLabel: 'Open Extensions',
+            actionType: 'open-tab',
+            actionValue: 'right:extensions',
+        };
+    }
+
+    if (extension.enabled) {
+        return {
+            title,
+            body,
+            icon,
+            chips: [...chips],
+            statusLabel: 'Enabled',
+            statusTone: 'good',
+            actionIcon: 'fa-arrow-up-right-from-square',
+            actionLabel: 'Manage in Extensions',
+            actionType: 'open-tab',
+            actionValue: 'right:extensions',
+        };
+    }
+
+    return {
+        title,
+        body,
+        icon,
+        chips: [...chips],
+        statusLabel: 'Opt-in',
+        statusTone: 'warm',
+        actionLabel: 'Enable and reload',
+        actionIcon: 'fa-wand-magic-sparkles',
+        actionType: 'enable-extension',
+        actionValue: extension.name,
+    };
+}
+
+function buildPresetStarterPackItem() {
+    const presetManager = getPresetManager('openai');
+    const presetValue = presetManager?.findPreset(STARTER_PACK_PRESET_NAME);
+    const isOpenAiStyleApi = main_api === 'openai';
+    const isSelected = isOpenAiStyleApi && presetManager?.getSelectedPresetName() === STARTER_PACK_PRESET_NAME;
+
+    if (isSelected) {
+        return {
+            title: STARTER_PACK_PRESET_NAME,
+            body: `${STARTER_PACK_CREATOR_NAME}'s bundled OpenAI-style preset is already selected, so you are using the included director-style response tuning right now.`,
+            icon: 'fa-sliders',
+            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            statusLabel: 'Selected',
+            statusTone: 'good',
+            actionIcon: 'fa-arrow-up-right-from-square',
+            actionLabel: 'Open Presets',
+            actionType: 'open-tab',
+            actionValue: 'left:presets',
+        };
+    }
+
+    if (isOpenAiStyleApi && presetValue) {
+        return {
+            title: STARTER_PACK_PRESET_NAME,
+            body: `${STARTER_PACK_CREATOR_NAME}'s bundled OpenAI-style preset is ready to apply when you want that director-style response tuning without importing files by hand.`,
+            icon: 'fa-sliders',
+            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            statusLabel: 'Ready',
+            statusTone: 'warm',
+            actionIcon: 'fa-wand-magic-sparkles',
+            actionLabel: 'Apply preset',
+            actionType: 'apply-preset',
+            actionValue: STARTER_PACK_PRESET_NAME,
+        };
+    }
+
+    if (!isOpenAiStyleApi) {
+        return {
+            title: STARTER_PACK_PRESET_NAME,
+            body: `${STARTER_PACK_CREATOR_NAME}'s bundled preset is for OpenAI-compatible chat-completions style setups. Switch APIs first, then you can apply it in one click.`,
+            icon: 'fa-sliders',
+            chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+            statusLabel: 'OpenAI-style only',
+            statusTone: 'neutral',
+            actionIcon: 'fa-arrow-up-right-from-square',
+            actionLabel: 'Open API',
+            actionType: 'open-tab',
+            actionValue: 'left:api',
+        };
+    }
+
+    return {
+        title: STARTER_PACK_PRESET_NAME,
+        body: `${STARTER_PACK_CREATOR_NAME}'s bundled preset is included with SillyBunny and ready for OpenAI-style use, but it has not been selected yet.`,
+        icon: 'fa-sliders',
+        chips: ['OpenAI-style', 'Preset', STARTER_PACK_CREATOR_NAME],
+        statusLabel: 'Bundled',
+        statusTone: 'warm',
+        actionIcon: 'fa-arrow-up-right-from-square',
+        actionLabel: 'Open Presets',
+        actionType: 'open-tab',
+        actionValue: 'left:presets',
+    };
+}
+
+function buildSiteStarterPackItem() {
+    return {
+        title: `${STARTER_PACK_CREATOR_NAME}'s site`,
+        body: `${STARTER_PACK_CREATOR_NAME}'s main site collects the preset, extensions, themes, cards, and other SillyBunny-adjacent tools in one easy place.`,
+        icon: 'fa-globe',
+        chips: ['Site', 'Cards', 'Themes', 'Extensions'],
+        statusLabel: 'Creator hub',
+        statusTone: 'warm',
+        actionLabel: 'Visit site',
+        actionIcon: 'fa-arrow-up-right-from-square',
+        actionType: 'open-link',
+        actionValue: STARTER_PACK_SITE_URL,
+    };
+}
+
+function buildStarterPackItems() {
+    return [
+        buildExtensionStarterPackItem({
+            title: 'Dialogue Colors',
+            body: `${STARTER_PACK_CREATOR_NAME}'s dialogue coloring add-on helps visually busy or emotionally dense chats stay readable, with optional regex setup if you want finer control.`,
+            icon: 'fa-palette',
+            chips: ['Extension', 'Readable chats', 'Opt-in'],
+            extensionName: STARTER_PACK_EXTENSION_IDS.dialogueColors,
+        }),
+        buildExtensionStarterPackItem({
+            title: 'Quick Image Gen',
+            body: `${STARTER_PACK_CREATOR_NAME}'s opt-in image generation companion makes visual moments easier to spin up without hunting through separate tools first.`,
+            icon: 'fa-image',
+            chips: ['Extension', 'Images', 'Opt-in'],
+            extensionName: STARTER_PACK_EXTENSION_IDS.quickImageGen,
+        }),
+        buildPresetStarterPackItem(),
+        buildSiteStarterPackItem(),
+    ];
+}
+
+function buildWelcomeTemplateData(chats) {
+    const activeDeckView = getInitialDeckView();
+    const deckCollapsed = isWelcomeDeckCollapsed();
+
+    return {
+        chats,
+        empty: !chats.length,
+        version: displayVersion,
+        more: chats.some(chat => chat.hidden),
+        activeDeckView,
+        deckCollapsed,
+        deckTabs: buildDeckTabs(activeDeckView),
+        deckTourActive: activeDeckView === 'tour',
+        deckBasicsActive: activeDeckView === 'basics',
+        deckGuideActive: activeDeckView === 'guide',
+        deckStarterActive: activeDeckView === 'starter',
+        tutorialExpanded: true,
+        tutorialIndex: 0,
+        tutorialSteps: buildTutorialSteps(),
+        guideCards: buildGuideCards(),
+        assistantQuestions: [...WELCOME_ASSISTANT_QUESTIONS],
+        starterPackItems: buildStarterPackItems(),
+    };
+}
+
+function openShellTab(route) {
+    const [shellKey, tabId] = String(route || '').split(':');
+
+    if (!shellKey || !tabId) {
+        return;
+    }
+
+    if (window.SillyBunnyShell?.openTab) {
+        window.SillyBunnyShell.openTab(shellKey, tabId);
+        return;
+    }
+
+    const fallbackSelector = {
+        'left:presets': '#ai-config-button > .drawer-toggle',
+        'left:api': '#sys-settings-button > .drawer-toggle',
+        'left:advanced-formatting': '#advanced-formatting-button > .drawer-toggle',
+        'left:world-info': '#WI-SP-button > .drawer-toggle',
+        'right:settings': '#user-settings-button > .drawer-toggle',
+        'right:extensions': '#extensions-settings-button > .drawer-toggle',
+        'right:persona': '#persona-management-button > .drawer-toggle',
+        'right:background': '#backgrounds-button > .drawer-toggle',
+    }[route];
+
+    if (!fallbackSelector) {
+        return;
+    }
+
+    document.querySelector(fallbackSelector)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
+function prefillSendTextarea(sendTextArea, value) {
+    if (!(sendTextArea instanceof HTMLTextAreaElement)) {
+        return;
+    }
+
+    sendTextArea.value = value;
+    sendTextArea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendTextArea.focus();
+}
+
+async function refreshCharacterAvatarCache(avatar) {
+    if (!avatar) {
+        return;
+    }
+
+    const thumbnailUrl = getThumbnailUrl('avatar', avatar);
+
+    try {
+        await fetch(thumbnailUrl, { method: 'GET', cache: 'reload' });
+        await fetch(`/characters/${encodeURIComponent(avatar)}`, { method: 'GET', cache: 'reload' });
+    } catch (error) {
+        console.warn(`Failed to refresh avatar cache for ${avatar}.`, error);
+    }
+
+    const cacheBustedThumbnailUrl = getThumbnailUrl('avatar', avatar, true);
+    const avatarImages = document.querySelectorAll(`img[src^="${thumbnailUrl}"]`);
+
+    for (const img of avatarImages) {
+        if (img instanceof HTMLImageElement) {
+            img.src = cacheBustedThumbnailUrl;
+        }
+    }
+}
+
+function setWelcomeDeckView(root, view, { persist = true } = {}) {
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
+
+    const safeView = isWelcomeDeckView(view) ? view : getInitialDeckView();
+
+    root.dataset.activeDeckView = safeView;
+
+    root.querySelectorAll('.welcomeDeckTab').forEach((button) => {
+        button.classList.toggle('is-active', button.getAttribute('data-deck-target') === safeView);
+    });
+
+    root.querySelectorAll('.welcomeDeckPanel').forEach((panel) => {
+        panel.classList.toggle('is-active', panel.getAttribute('data-deck-panel') === safeView);
+    });
+
+    if (persist) {
+        setWelcomeUiPreference(welcomeDeckViewKey, safeView);
+    }
+}
+
+function setWelcomeDeckCollapsed(root, collapsed, { persist = true } = {}) {
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
+
+    const deck = root.querySelector('.welcomeDeck');
+
+    if (!(deck instanceof HTMLElement)) {
+        return;
+    }
+
+    root.dataset.deckCollapsed = String(collapsed);
+    deck.dataset.collapsed = String(collapsed);
+    deck.classList.toggle('is-collapsed', collapsed);
+
+    const toggleButton = deck.querySelector('.welcomeDeckToggle');
+
+    if (toggleButton instanceof HTMLButtonElement) {
+        toggleButton.setAttribute('aria-expanded', String(!collapsed));
+        toggleButton.setAttribute('title', 'Close Launchpad');
+    }
+
+    if (persist) {
+        setWelcomeUiPreference(welcomeDeckCollapsedKey, collapsed ? 'true' : 'false');
+    }
+}
+
+async function applyOpenAiPreset(name) {
+    if (main_api !== 'openai') {
+        openShellTab('left:api');
+        return false;
+    }
+
+    const presetManager = getPresetManager('openai');
+    const presetValue = presetManager?.findPreset(name);
+
+    if (!presetManager || !presetValue) {
+        openShellTab('left:presets');
+        return false;
+    }
+
+    presetManager.selectPreset(presetValue);
+    saveSettingsDebounced();
+    return true;
+}
+
+function setTutorialUiState(panel, index, expanded) {
+    if (!(panel instanceof HTMLElement)) {
+        return;
+    }
+
+    const steps = Array.from(panel.querySelectorAll('.welcomeTourStep'));
+    const progressButtons = Array.from(panel.querySelectorAll('.welcomeTourProgressButton'));
+    const safeIndex = Math.max(0, Math.min(index, steps.length - 1));
+    const nextButton = panel.querySelector('.tutorialNext');
+    const previousButton = panel.querySelector('.tutorialPrev');
+    const nextLabel = nextButton?.querySelector('span');
+
+    panel.dataset.tutorialIndex = String(safeIndex);
+    panel.dataset.tutorialExpanded = String(expanded);
+    panel.classList.toggle('tutorialCollapsed', !expanded);
+
+    steps.forEach((step, stepIndex) => {
+        step.classList.toggle('is-active', stepIndex === safeIndex);
+    });
+
+    progressButtons.forEach((button, buttonIndex) => {
+        button.classList.toggle('is-active', buttonIndex === safeIndex);
+    });
+
+    if (previousButton instanceof HTMLButtonElement) {
+        previousButton.disabled = safeIndex === 0;
+    }
+
+    if (nextLabel) {
+        nextLabel.textContent = safeIndex >= steps.length - 1 ? 'Finish tour' : 'Next';
+    }
+}
+
+function dismissTutorial(panel, status) {
+    if (status) {
+        setWelcomeUiPreference(tutorialStatusKey, status);
+    }
+
+    setTutorialUiState(panel, 0, false);
+}
+
+async function handleWelcomeAction(button, sendTextArea) {
+    const action = button.dataset.action || '';
+    const value = button.dataset.actionValue || '';
+    const welcomePanel = button.closest('.welcomePanel') || document.querySelector('.welcomePanel');
+    const tutorialPanel = button.closest('.welcomeTourPanel') || document.querySelector('.welcomeTourPanel');
+
+    switch (action) {
+        case 'open-tab':
+            openShellTab(value);
+            break;
+        case 'enable-extension':
+            await enableExtension(value);
+            break;
+        case 'apply-preset':
+            if (await applyOpenAiPreset(value)) {
+                await refreshWelcomeScreen();
+            }
+            break;
+        case 'assistant-prompt':
+            await openPermanentAssistantCard();
+            prefillSendTextarea(sendTextArea, value);
+            break;
+        case 'open-assistant':
+            await openPermanentAssistantCard();
+            if (sendTextArea instanceof HTMLTextAreaElement) {
+                sendTextArea.focus();
+            }
+            break;
+        case 'open-sample-characters':
+            document.querySelector('.open_characters_library')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            break;
+        case 'replay-tutorial':
+            if (welcomePanel instanceof HTMLElement) {
+                setWelcomeDeckView(welcomePanel, 'tour');
+                setWelcomeDeckCollapsed(welcomePanel, false);
+            }
+            if (tutorialPanel instanceof HTMLElement) {
+                setTutorialUiState(tutorialPanel, 0, true);
+            }
+            break;
+        case 'close-guide':
+            if (welcomePanel instanceof HTMLElement) {
+                setWelcomeDeckCollapsed(welcomePanel, true);
+            }
+            break;
+        case 'open-link':
+            if (value) {
+                window.open(value, '_blank', 'noopener,noreferrer');
+            }
+            break;
+    }
+}
+
+/**
  * Opens a welcome screen if no chat is currently active.
  * @param {object} param Additional parameters
  * @param {boolean} [param.force] If true, forces clearing of the welcome screen.
@@ -224,31 +863,81 @@ async function sendWelcomePanel(chats, expand = false) {
             console.error('Chat element not found');
             return;
         }
-        const templateData = {
-            chats,
-            empty: !chats.length,
-            version: displayVersion,
-            more: chats.some(chat => chat.hidden),
-        };
-        const template = await renderTemplateAsync('welcomePanel', templateData);
+        const templateData = buildWelcomeTemplateData(chats);
+        const template = await renderTemplateAsync('/scripts/templates/welcomePanelOnboarding.html?v=20260406d', templateData, true, true, true);
         const fragment = document.createRange().createContextualFragment(template);
         fragment.querySelectorAll('.welcomePanel').forEach((root) => {
             const recentHiddenClass = 'recentHidden';
             const recentHiddenKey = 'WelcomePage_RecentChatsHidden';
-            if (accountStorage.getItem(recentHiddenKey) === 'true') {
+            const deck = root.querySelector('.welcomeDeck');
+            if (getWelcomeUiPreference(recentHiddenKey) === 'true') {
                 root.classList.add(recentHiddenClass);
             }
             root.querySelectorAll('.showRecentChats').forEach((button) => {
                 button.addEventListener('click', () => {
                     root.classList.remove(recentHiddenClass);
-                    accountStorage.setItem(recentHiddenKey, 'false');
+                    setWelcomeUiPreference(recentHiddenKey, 'false');
                 });
             });
             root.querySelectorAll('.hideRecentChats').forEach((button) => {
                 button.addEventListener('click', () => {
                     root.classList.add(recentHiddenClass);
-                    accountStorage.setItem(recentHiddenKey, 'true');
+                    setWelcomeUiPreference(recentHiddenKey, 'true');
                 });
+            });
+
+            const tutorialPanel = root.querySelector('.welcomeTourPanel');
+            setWelcomeDeckView(root, root.dataset.activeDeckView || getInitialDeckView(), { persist: false });
+            setWelcomeDeckCollapsed(root, deck instanceof HTMLElement ? deck.dataset.collapsed === 'true' : isWelcomeDeckCollapsed(), { persist: false });
+
+            root.querySelectorAll('.welcomeDeckTab').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const targetView = button.getAttribute('data-deck-target') || '';
+                    setWelcomeDeckView(root, targetView);
+
+                    if (targetView === 'tour' && tutorialPanel instanceof HTMLElement) {
+                        const currentIndex = Number.parseInt(tutorialPanel.dataset.tutorialIndex || '0', 10) || 0;
+                        setTutorialUiState(tutorialPanel, currentIndex, true);
+                    }
+                });
+            });
+
+            if (tutorialPanel instanceof HTMLElement) {
+                setTutorialUiState(
+                    tutorialPanel,
+                    Number.parseInt(tutorialPanel.dataset.tutorialIndex || '0', 10) || 0,
+                    tutorialPanel.dataset.tutorialExpanded !== 'false',
+                );
+
+                tutorialPanel.querySelectorAll('.welcomeTourProgressButton').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const targetIndex = Number.parseInt(button.getAttribute('data-step-target') || '0', 10) || 0;
+                        setTutorialUiState(tutorialPanel, targetIndex, true);
+                    });
+                });
+
+                tutorialPanel.querySelector('.tutorialPrev')?.addEventListener('click', () => {
+                    const currentIndex = Number.parseInt(tutorialPanel.dataset.tutorialIndex || '0', 10) || 0;
+                    setTutorialUiState(tutorialPanel, currentIndex - 1, true);
+                });
+
+                tutorialPanel.querySelector('.tutorialNext')?.addEventListener('click', () => {
+                    const currentIndex = Number.parseInt(tutorialPanel.dataset.tutorialIndex || '0', 10) || 0;
+                    const lastIndex = tutorialPanel.querySelectorAll('.welcomeTourStep').length - 1;
+
+                    if (currentIndex >= lastIndex) {
+                        dismissTutorial(tutorialPanel, 'completed');
+                        return;
+                    }
+
+                    setTutorialUiState(tutorialPanel, currentIndex + 1, true);
+                });
+            }
+        });
+        fragment.querySelectorAll('.welcomeActionButton').forEach((button) => {
+            button.addEventListener('click', async (event) => {
+                event.preventDefault();
+                await handleWelcomeAction(button, sendTextArea);
             });
         });
         fragment.querySelectorAll('.recentChat').forEach((item) => {
@@ -288,8 +977,9 @@ async function sendWelcomePanel(chats, expand = false) {
             });
         });
         fragment.querySelectorAll('button.welcomeAssistantButton').forEach((button) => {
-            button.addEventListener('click', async () => {
-                await openPermanentAssistantChat();
+            button.addEventListener('click', async (event) => {
+                event.preventDefault();
+                await openPermanentAssistantCard();
                 if (sendTextArea instanceof HTMLTextAreaElement) {
                     sendTextArea.focus();
                 }
@@ -667,28 +1357,15 @@ async function getRecentChats() {
 }
 
 export async function openPermanentAssistantChat({ tryCreate = true, created = false } = {}) {
-    const avatar = getPermanentAssistantAvatar();
-    const characterId = findPermanentAssistantCharacterId(avatar);
-    if (characterId === -1) {
-        if (!tryCreate) {
-            console.error(`Character not found for avatar ID: ${avatar}. Cannot create.`);
-            return;
-        }
-
-        try {
-            console.log(`Character not found for avatar ID: ${avatar}. Creating new assistant.`);
-            await createPermanentAssistant();
-            return openPermanentAssistantChat({ tryCreate: false, created: true });
-        } catch (error) {
-            console.error('Error creating permanent assistant:', error);
-            toastr.error(t`Failed to create ${neutralCharacterName}. See console for details.`);
-            return;
-        }
-    }
-
     try {
-        await selectCharacterById(characterId);
-        if (!created) {
+        const assistant = await ensurePermanentAssistantCharacter({ tryCreate, created });
+        if (!assistant) {
+            return;
+        }
+
+        await refreshCharacterAvatarCache(assistant.avatar);
+        await selectCharacterById(assistant.characterId);
+        if (!assistant.created) {
             await doNewChat({ deleteCurrentChat: false });
         }
         console.log(`Opened permanent assistant chat for ${neutralCharacterName}.`, getCurrentChatId());
@@ -709,11 +1386,11 @@ async function createPermanentAssistant() {
     formData.append('creator_notes', t`Automatically created character. Feel free to edit.`);
 
     try {
-        const avatarResponse = await fetch(system_avatar);
+        const avatarResponse = await fetch(defaultAssistantPortrait);
         const avatarBlob = await avatarResponse.blob();
         formData.append('avatar', avatarBlob, defaultAssistantAvatar);
     } catch (error) {
-        console.warn('Error fetching system avatar. Fallback image will be used.', error);
+        console.warn('Error fetching bundled assistant portrait. Fallback image will be used.', error);
     }
 
     const fetchResult = await fetch('/api/characters/create', {
@@ -744,14 +1421,13 @@ async function createPermanentAssistant() {
 }
 
 export async function openPermanentAssistantCard() {
-    const avatar = getPermanentAssistantAvatar();
-    const characterId = findPermanentAssistantCharacterId(avatar);
-    if (characterId === -1) {
-        toastr.info(t`Assistant not found. Try sending a chat message.`);
+    const assistant = await ensurePermanentAssistantCharacter();
+    if (!assistant) {
         return;
     }
 
-    await selectCharacterById(characterId);
+    await refreshCharacterAvatarCache(assistant.avatar);
+    await selectCharacterById(assistant.characterId);
 }
 
 /**

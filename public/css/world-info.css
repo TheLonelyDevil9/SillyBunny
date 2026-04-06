@@ -520,6 +520,12 @@ select.keyselect+span.select2-container .select2-selection--multiple {
 
 .world_popup_action_group--select > small {
     opacity: 0.7;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    min-height: 42px;
+    line-height: 1;
 }
 
 .world_popup_action_group--select > #world_create_button {

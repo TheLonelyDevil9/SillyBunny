@@ -5,9 +5,81 @@ import encode from './png/encode.js';
 import extract from 'png-chunks-extract';
 import PNGtext from 'png-chunk-text';
 
+const MIRRORED_FIELD_MAPPINGS = {
+    name: 'name',
+    description: 'description',
+    personality: 'personality',
+    scenario: 'scenario',
+    first_mes: 'first_mes',
+    mes_example: 'mes_example',
+    tags: 'tags',
+    talkativeness: 'extensions.talkativeness',
+    fav: 'extensions.fav',
+};
+
+/**
+ * @param {object} obj
+ * @param {string} path
+ * @returns {any}
+ */
+function getPath(obj, path) {
+    return path.split('.').reduce((value, key) => value?.[key], obj);
+}
+
+/**
+ * @param {object} obj
+ * @param {string} path
+ * @param {any} value
+ */
+function setPath(obj, path, value) {
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    let current = obj;
+
+    for (const key of keys) {
+        current[key] = current[key] ?? {};
+        current = current[key];
+    }
+
+    current[lastKey] = value;
+}
+
+/**
+ * Keeps root-level legacy fields synchronized with the V2/V3 data block.
+ * @param {object} card
+ * @returns {object}
+ */
+function normalizeCard(card) {
+    const normalized = JSON.parse(JSON.stringify(card));
+    normalized.data = normalized.data ?? {};
+    normalized.data.extensions = normalized.data.extensions ?? {};
+
+    for (const [legacyField, dataPath] of Object.entries(MIRRORED_FIELD_MAPPINGS)) {
+        const rootValue = normalized[legacyField];
+        const dataValue = getPath(normalized.data, dataPath);
+
+        if (typeof dataValue !== 'undefined') {
+            normalized[legacyField] = dataValue;
+            continue;
+        }
+
+        if (typeof rootValue !== 'undefined') {
+            setPath(normalized.data, dataPath, rootValue);
+        }
+    }
+
+    if (typeof normalized.data.creator_notes !== 'undefined') {
+        normalized.creatorcomment = normalized.data.creator_notes;
+    } else if (typeof normalized.creatorcomment !== 'undefined') {
+        normalized.data.creator_notes = normalized.creatorcomment;
+    }
+
+    return normalized;
+}
+
 /**
  * Writes Character metadata to a PNG image buffer.
- * Writes only 'chara', 'ccv3' is not supported and removed not to create a mismatch.
+ * Keeps the legacy root fields mirrored with the V2/V3 data block to avoid spec mismatches.
  * @param {Buffer} image PNG image buffer
  * @param {string} data Character data to write
  * @returns {Buffer} PNG image buffer with metadata
@@ -24,21 +96,33 @@ export const write = (image, data) => {
         }
     }
 
-    // Add new v2 chunk before the IEND chunk
-    const base64EncodedData = Buffer.from(data, 'utf8').toString('base64');
-    chunks.splice(-1, 0, PNGtext.encode('chara', base64EncodedData));
+    let v2Json = data;
+    let v3Json = null;
 
-    // Try adding v3 chunk before the IEND chunk
     try {
-        //change v2 format to v3
-        const v3Data = JSON.parse(data);
+        const normalizedCard = normalizeCard(JSON.parse(data));
+
+        const v2Data = JSON.parse(JSON.stringify(normalizedCard));
+        v2Data.spec = 'chara_card_v2';
+        v2Data.spec_version = '2.0';
+        v2Json = JSON.stringify(v2Data);
+
+        const v3Data = JSON.parse(JSON.stringify(normalizedCard));
         v3Data.spec = 'chara_card_v3';
         v3Data.spec_version = '3.0';
-
-        const base64EncodedData = Buffer.from(JSON.stringify(v3Data), 'utf8').toString('base64');
-        chunks.splice(-1, 0, PNGtext.encode('ccv3', base64EncodedData));
+        v3Json = JSON.stringify(v3Data);
     } catch (error) {
-        // Ignore errors when adding v3 chunk
+        // Ignore JSON errors and fall back to writing the raw metadata as-is.
+    }
+
+    // Add new v2 chunk before the IEND chunk
+    const base64EncodedV2Data = Buffer.from(v2Json, 'utf8').toString('base64');
+    chunks.splice(-1, 0, PNGtext.encode('chara', base64EncodedV2Data));
+
+    // Try adding v3 chunk before the IEND chunk
+    if (v3Json) {
+        const base64EncodedV3Data = Buffer.from(v3Json, 'utf8').toString('base64');
+        chunks.splice(-1, 0, PNGtext.encode('ccv3', base64EncodedV3Data));
     }
 
     const newBuffer = Buffer.from(encode(chunks));
@@ -95,4 +179,3 @@ export const parse = async (cardUrl, format) => {
 
     throw new Error('Unsupported format');
 };
-

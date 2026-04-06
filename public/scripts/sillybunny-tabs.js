@@ -1991,6 +1991,45 @@ function isCharacterPanelOpen() {
     return isDrawerActuallyOpen('right-nav-panel');
 }
 
+function resetCharacterPanelView() {
+    const panel = document.getElementById('right-nav-panel');
+    const listButton = document.getElementById('rm_button_characters');
+    const selectedTitle = document.querySelector('#rm_button_selected_ch h2');
+
+    if (selectedTitle instanceof HTMLElement) {
+        selectedTitle.textContent = '';
+    }
+
+    if (listButton instanceof HTMLElement) {
+        listButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return;
+    }
+
+    if (panel instanceof HTMLElement) {
+        panel.dataset.menuType = 'characters';
+    }
+
+    const infoPanel = document.getElementById('result_info');
+    const characterEditor = document.getElementById('rm_ch_create_block');
+    const characterList = document.getElementById('rm_characters_block');
+
+    if (infoPanel instanceof HTMLElement) {
+        infoPanel.style.display = 'none';
+    }
+
+    if (characterEditor instanceof HTMLElement) {
+        characterEditor.style.display = 'none';
+        characterEditor.style.visibility = 'hidden';
+        characterEditor.style.pointerEvents = 'none';
+    }
+
+    if (characterList instanceof HTMLElement) {
+        characterList.style.display = 'flex';
+        characterList.style.visibility = 'visible';
+        characterList.style.pointerEvents = 'auto';
+    }
+}
+
 function closeCharacterPanel() {
     const panel = document.getElementById('right-nav-panel');
 
@@ -2019,6 +2058,7 @@ function toggleCharacterPanel() {
         return;
     }
 
+    resetCharacterPanelView();
     closeShell('left');
     closeShell('right');
 
