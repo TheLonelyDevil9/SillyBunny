@@ -323,7 +323,7 @@
     "Custom model (optional)": "사용자 정의 모델 (선택 사항)",
     "vllm-project/vllm": "vllm-project/vllm(OpenAI API 래퍼 모드)",
     "vLLM API key": "vLLM API 키",
-    "Example: http://127.0.0.1:8000": "예: http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "예: http://127.0.0.1:4444",
     "vLLM Model": "vLLM 모델",
     "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite-engine (OpenAI API의 래퍼 모드)",
     "Aphrodite API key": "Aphrodite API 키",

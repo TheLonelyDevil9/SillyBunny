@@ -2021,15 +2021,15 @@
                                             <input id="openai_media_inlining" type="checkbox" />
                                             <span data-i18n="Send inline media">Send inline media</span>
                                             <div class="flex-container">
-                                                <div id="openai_image_inlining_supported">
+                                                <div id="openai_image_inlining_supported" data-cc-toggle="false">
                                                     <i class="icon-supported fa-solid fa-image" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-image" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
-                                                <div id="openai_video_inlining_supported" data-source="makersuite,vertexai,openrouter,zai">
+                                                <div id="openai_video_inlining_supported" data-cc-toggle="false" data-source="makersuite,vertexai,openrouter,zai">
                                                     <i class="icon-supported fa-solid fa-film" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-film" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
-                                                <div id="openai_audio_inlining_supported" data-source="makersuite,vertexai,openrouter,openai,custom">
+                                                <div id="openai_audio_inlining_supported" data-cc-toggle="false" data-source="makersuite,vertexai,openrouter,openai,custom">
                                                     <i class="icon-supported fa-solid fa-music" title="Supported by the current model" data-i18n="[title]Supported by the current model"></i>
                                                     <i class="icon-unsupported fa-solid fa-music" title="Unsupported by the current model" data-i18n="[title]Unsupported by the current model"></i>
                                                 </div>
@@ -2653,7 +2653,7 @@
                                 </div>
                                 <div class="flex1">
                                     <h4 data-i18n="API url">API URL</h4>
-                                    <small data-i18n="Example: http://127.0.0.1:8000">Example: http://127.0.0.1:8000</small>
+                                    <small data-i18n="Example: http://127.0.0.1:4444">Example: http://127.0.0.1:4444</small>
                                     <input id="vllm_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="vllm">
                                 </div>
                                 <div>
@@ -4844,6 +4844,15 @@
                         <textarea id="settingsSearch" class="textarea_compact flex1" rows="1" placeholder="Search Settings" data-i18n="[placeholder]Search Settings"></textarea>
                     </div>
                 </div>
+                <div id="user-settings-utility-actions" class="flex-container">
+                    <div class="sb-settings-utility-note">
+                        <small>Clear browser cache and temporary UI data without resetting your saved settings.</small>
+                    </div>
+                    <button id="clear_all_cache_button" type="button" class="menu_button menu_button_icon">
+                        <i class="fa-solid fa-broom"></i>
+                        <span>Clear all cache</span>
+                    </button>
+                </div>
                 <div id="user-settings-block-content" class="flex-container spaceEvenly">
                     <div name="UserSettingsFirstColumn" id="UI-Theme-Block" class="flex-container flexFlowColumn wide100p flex1">
                         <div class="inline-drawer wide100p flexFlowColumn">
@@ -5315,12 +5324,12 @@
                         </div><!-- end Appearance inline-drawer -->
                     </div>
                     <div name="UserSettingsSecondColumn" id="UI-Customization" class="flex-container flexFlowColumn wide100p flexNoGap flex1">
-                        <div class="inline-drawer wide100p flexFlowColumn">
-                            <div class="inline-drawer-toggle inline-drawer-header settings-section-header">
+                        <div class="inline-drawer wide100p flexFlowColumn sb-settings-subdrawer">
+                            <div class="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable">
                                 <b><i class="fa-solid fa-comments"></i> <span data-i18n="Chat & Characters">Chat & Characters</span></b>
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
-                            <div class="inline-drawer-content flex-container flexFlowColumn">
+                            <div class="inline-drawer-content flex-container flexFlowColumn sb-settings-subdrawer-body">
                         <div name="CharacterHandlingToggles">
                             <h4 data-i18n="Character Handling">
                                 Character Handling
@@ -5694,12 +5703,12 @@
                                 </div>
                             </div>
                             </div>
-                            <div name="AutoCompleteToggle" class="inline-drawer wide100p flexFlowColumn">
+                            <div name="AutoCompleteToggle" class="inline-drawer wide100p flexFlowColumn sb-settings-subdrawer">
                                 <div class="inline-drawer-toggle inline-drawer-header userSettingsInnerExpandable" title="Options for the various autocomplete input boxes.">
                                     <b><span data-i18n="AutoComplete Settings">AutoComplete Settings</span></b>
                                     <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                                 </div>
-                                <div class="inline-drawer-content">
+                                <div class="inline-drawer-content sb-settings-subdrawer-body">
                                     <div class="flex1" title="When to show the autocomplete for slash commands and macros." data-i18n="[title]When to show the autocomplete for slash commands and macros.">
                                         <label for="stscript_autocomplete_state">
                                             <small data-i18n="Visibility">Visibility</small>
@@ -7609,6 +7618,7 @@
                                 <div title="Create checkpoint" class="mes_button mes_create_bookmark fa-regular fa-solid fa-flag-checkered" data-i18n="[title]Create checkpoint"></div>
                                 <div title="Create branch" class="mes_button mes_create_branch fa-regular fa-code-branch" data-i18n="[title]Create Branch"></div>
                                 <div title="Copy" class="mes_button mes_copy fa-solid fa-copy " data-i18n="[title]Copy"></div>
+                                <div title="Screenshot message(s)" class="mes_button mes_screenshot fa-solid fa-camera" data-i18n="[title]Screenshot message(s)"></div>
                             </div>
                             <div data-tooltip="Click to open checkpoint chat&#10;Shift+Click to replace the existing checkpoint with a new one" class="mes_button mes_bookmark fa-solid fa-flag" data-i18n="[data-tooltip]Open checkpoint chat&#10;Shift+Click to replace the existing checkpoint with a new one"></div>
                             <div title="Edit" class="mes_button mes_edit fa-solid fa-pencil " data-i18n="[title]Edit"></div>

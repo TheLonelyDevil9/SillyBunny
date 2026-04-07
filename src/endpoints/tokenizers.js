@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Buffer } from 'node:buffer';
+import { createRequire } from 'node:module';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 
@@ -16,6 +17,9 @@ import { convertClaudePrompt } from '../prompt-converters.js';
 import { TEXTGEN_TYPES } from '../constants.js';
 import { setAdditionalHeaders } from '../additional-headers.js';
 import { getConfigValue, isValidUrl } from '../util.js';
+
+const require = createRequire(import.meta.url);
+const { getTokenizer: getClaudeTokenizer } = require('@anthropic-ai/tokenizer');
 
 /**
  * @typedef { (req: import('express').Request, res: import('express').Response) => Promise<any> } TokenizationHandler
@@ -249,6 +253,78 @@ class WebTokenizer {
     }
 }
 
+/**
+ * Normalizes token ids into a Uint32Array so Bun-safe Tiktoken decode can consume them.
+ * @param {ArrayLike<number> | number[]} ids
+ * @returns {Uint32Array}
+ */
+function toUint32Array(ids) {
+    if (ids instanceof Uint32Array) {
+        return ids;
+    }
+
+    return Uint32Array.from(Array.from(ids || []), Number);
+}
+
+/**
+ * Claude-compatible tokenizer wrapper backed by @anthropic-ai/tokenizer.
+ */
+class ClaudeTokenizerInstance {
+    /**
+     * @param {ReturnType<typeof getClaudeTokenizer>} tokenizer
+     */
+    constructor(tokenizer) {
+        this.tokenizer = tokenizer;
+        this.decoder = new TextDecoder();
+    }
+
+    /**
+     * @param {string} text
+     * @returns {Uint32Array}
+     */
+    encode(text) {
+        return this.tokenizer.encode(String(text).normalize('NFKC'), 'all');
+    }
+
+    /**
+     * @param {ArrayLike<number> | number[]} ids
+     * @returns {string}
+     */
+    decode(ids) {
+        const textBytes = this.tokenizer.decode(toUint32Array(ids));
+        return this.decoder.decode(textBytes);
+    }
+}
+
+/**
+ * Bun-safe Claude tokenizer.
+ */
+class ClaudeTokenizer {
+    /**
+     * @type {ClaudeTokenizerInstance | null}
+     */
+    #instance;
+
+    /**
+     * Gets the Claude tokenizer instance.
+     * @returns {Promise<ClaudeTokenizerInstance | null>}
+     */
+    async get() {
+        if (this.#instance) {
+            return this.#instance;
+        }
+
+        try {
+            this.#instance = new ClaudeTokenizerInstance(getClaudeTokenizer());
+            console.info('Instantiated the tokenizer for claude');
+            return this.#instance;
+        } catch (error) {
+            console.error('Claude tokenizer failed to load', error);
+            return null;
+        }
+    }
+}
+
 const spp_llama = new SentencePieceTokenizer('src/tokenizers/llama.model');
 const spp_nerd = new SentencePieceTokenizer('src/tokenizers/nerdstash.model');
 const spp_nerd_v2 = new SentencePieceTokenizer('src/tokenizers/nerdstash_v2.model');
@@ -256,7 +332,7 @@ const spp_mistral = new SentencePieceTokenizer('src/tokenizers/mistral.model');
 const spp_yi = new SentencePieceTokenizer('src/tokenizers/yi.model');
 const spp_gemma = new SentencePieceTokenizer('src/tokenizers/gemma.model');
 const spp_jamba = new SentencePieceTokenizer('src/tokenizers/jamba.model');
-const claude_tokenizer = new WebTokenizer('src/tokenizers/claude.json');
+const claude_tokenizer = new ClaudeTokenizer();
 const llama3_tokenizer = new WebTokenizer('src/tokenizers/llama3.json');
 const commandRTokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/command-r.json.gz', 'src/tokenizers/llama3.json');
 const commandATokenizer = new WebTokenizer('https://github.com/SillyTavern/SillyTavern-Tokenizers/raw/main/command-a.json.gz', 'src/tokenizers/llama3.json');

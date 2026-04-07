@@ -402,7 +402,7 @@
     "No model description": "[无描述]",
     "vllm-project/vllm": "vllm-project/vllm（OpenAI API 包装器模式）",
     "vLLM API key": "vLLM API 密钥",
-    "Example: http://127.0.0.1:8000": "示例：http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "示例：http://127.0.0.1:4444",
     "vLLM Model": "vLLM 模型",
     "HuggingFace Token": "HuggingFace 令牌",
     "Endpoint URL": "端点 URL",

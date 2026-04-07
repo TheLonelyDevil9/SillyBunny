@@ -325,7 +325,7 @@
   "Custom model (optional)": "โมเดลที่กำหนดเอง (ไม่บังคับ)",
   "vllm-project/vllm": "vllm-project/vllm",
   "vLLM API key": "คีย์ API ของ vLLM",
-  "Example: http://127.0.0.1:8000": "ตัวอย่าง: http://127.0.0.1:8000",
+  "Example: http://127.0.0.1:4444": "ตัวอย่าง: http://127.0.0.1:4444",
   "vLLM Model": "โมเดลของ vLLM",
   "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite-engine",
   "Aphrodite API key": "คีย์ API ของ Aphrodite",

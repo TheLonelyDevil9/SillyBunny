@@ -323,7 +323,7 @@
     "Custom model (optional)": "Modelo personalizado (opcional)",
     "vllm-project/vllm": "vllm-project/vllm (modo contenedor de API OpenAI)",
     "vLLM API key": "Clave API vLLM",
-    "Example: http://127.0.0.1:8000": "Ejemplo: http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "Ejemplo: http://127.0.0.1:4444",
     "vLLM Model": "Modelo vLLM",
     "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite-engine (Modo envolvente para API de OpenAI)",
     "Aphrodite API key": "Clave de API de Aphrodite",

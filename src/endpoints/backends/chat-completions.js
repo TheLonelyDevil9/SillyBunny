@@ -2019,7 +2019,7 @@ router.post('/generate', async function (request, response) {
 
         const postProcessingType = request.body.custom_prompt_post_processing;
         if (Array.isArray(request.body.messages) && postProcessingType) {
-            console.info('Applying custom prompt post-processing of type', postProcessingType);
+            console.debug('Applying custom prompt post-processing of type', postProcessingType);
             request.body.messages = postProcessPrompt(
                 request.body.messages,
                 postProcessingType,

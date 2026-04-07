@@ -161,7 +161,7 @@ export async function getVersion() {
         // suppress exception
     }
 
-    const agent = `SillyBunny:${pkgVersion}:fork`;
+    const agent = `SillyBunny:v${pkgVersion}:fork`;
     return { agent, pkgVersion, gitRevision, gitBranch, commitDate: commitDate?.trim() ?? null, isLatest };
 }
 
@@ -1099,7 +1099,7 @@ export function stringToBool(str) {
  * Setup the minimum log level
  */
 export function setupLogLevel() {
-    const logLevel = getConfigValue('logging.minLogLevel', LOG_LEVELS.DEBUG, 'number');
+    const logLevel = getConfigValue('logging.minLogLevel', LOG_LEVELS.INFO, 'number');
 
     globalThis.console.debug = logLevel <= LOG_LEVELS.DEBUG ? console.debug : () => { };
     globalThis.console.info = logLevel <= LOG_LEVELS.INFO ? console.info : () => { };
@@ -1477,12 +1477,37 @@ export function flattenSchema(schema, api) {
  * @param {string} data
  */
 export function tryWriteFileSync(filePath, data) {
+    const isRetryableWindowsWriteError = (error) => process.platform === 'win32' && ['EACCES', 'EBUSY', 'EPERM'].includes(error?.code);
+    const sleepSync = (delayMs) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
     const directory = path.dirname(filePath);
     //Ensure the directory exists.
     if (!fs.existsSync(directory)) {
         fs.mkdirSync(directory, { recursive: true });
     }
-    writeFileAtomicSync(filePath, data, 'utf8');
+
+    const retryDelaysMs = [50, 125, 250];
+    let lastError;
+
+    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+        try {
+            writeFileAtomicSync(filePath, data, 'utf8');
+            return;
+        } catch (error) {
+            if (!isRetryableWindowsWriteError(error)) {
+                throw error;
+            }
+
+            lastError = error;
+            if (attempt < retryDelaysMs.length) {
+                sleepSync(retryDelaysMs[attempt]);
+            }
+        }
+    }
+
+    if (lastError) {
+        console.warn(`Atomic write failed for ${filePath}. Falling back to a direct write.`, lastError);
+    }
+    fs.writeFileSync(filePath, data, 'utf8');
 }
 
 /**

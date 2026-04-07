@@ -483,6 +483,45 @@
         font-size: calc(var(--mainFontSize)*1.2);
     }
 
+    .mes .ch_name {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        row-gap: 6px;
+    }
+
+    .mes .ch_name > .flex-container.flex1.alignitemscenter {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .mes_buttons,
+    .extraMesButtons {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        align-items: center;
+        row-gap: 6px;
+        overflow: visible;
+    }
+
+    .mes_button,
+    .extraMesButtons > div {
+        flex: 0 0 auto;
+    }
+
+    :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .menu_button,
+    :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .menu_button_icon {
+        min-height: 36px;
+        min-width: 36px;
+        padding: 0 10px;
+    }
+
+    :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .flex-container.gap3px,
+    :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .flex-container.marginLeft5 {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
     .drag-grabber,
     .pull-tab {
         display: none !important;

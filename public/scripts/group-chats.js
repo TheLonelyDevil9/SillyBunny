@@ -2353,13 +2353,14 @@ export async function importGroupChat(formData, { refresh = true } = {}) {
  * @param {ChatMetadata?} metadata New metadata to save with the chat
  * @param {number|undefined} mesId Optional message ID to trim the chat up to
  * @param {ChatMessage[]|undefined} chatData Optional chat snapshot to save instead of the current in-memory chat
- * @returns {Promise<void>} Promise that resolves when the group chat is saved
+ * @param {{throwOnError?: boolean}} [options] Additional save options
+ * @returns {Promise<boolean>} Promise that resolves to whether the group chat was saved
  */
-export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chatData = undefined) {
+export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chatData = undefined, { throwOnError = false } = {}) {
     const group = groups.find(x => x.id === groupId);
 
     if (!group) {
-        return;
+        return false;
     }
 
     group.chats.push(name);
@@ -2378,18 +2379,28 @@ export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chat
             ? chat.slice(0, Number(mesId) + 1)
             : chat;
 
-    await editGroup(groupId, true, false);
+    try {
+        await editGroup(groupId, true, false);
 
-    const saveChatRequest = await compressRequest({
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ id: name, chat: [chatHeader, ...trimmedChat] }),
-    });
-    const response = await fetch('/api/chats/group/save', saveChatRequest);
+        const saveChatRequest = await compressRequest({
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ id: name, chat: [chatHeader, ...trimmedChat] }),
+        });
+        const response = await fetch('/api/chats/group/save', saveChatRequest);
 
-    if (!response.ok) {
+        if (!response.ok) {
+            throw new Error(response.statusText || 'Group chat could not be saved');
+        }
+
+        return true;
+    } catch (error) {
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Group chat could not be saved`);
-        console.error('Group chat could not be saved', response);
+        console.error('Group chat could not be saved', error);
+        if (throwOnError) {
+            throw error;
+        }
+        return false;
     }
 }
 

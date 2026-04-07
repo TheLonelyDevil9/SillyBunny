@@ -564,6 +564,11 @@ body.bubblechat .mes[is_user='true']::before {
     border-left: 2px solid color-mix(in srgb, var(--color-primary, #f1b285) 60%, transparent);
     padding-left: 10px;
 }
+
+body.bubblechat .mes[is_user='true'] .mes_block {
+    border-left: 0;
+}
+
 @media screen and (max-width: 1000px) {
     .mes .mes_media_wrapper,
     .mes .mes_img_container,
@@ -753,16 +758,18 @@ input[type='range']::-moz-range-thumb {
 
 .sb-chat-completion-server-config .sb-chat-completion-config-grid {
     width: 100%;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 340px));
-    justify-content: flex-start;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    justify-content: stretch;
     justify-items: stretch;
 }
 
 .sb-chat-completion-server-config .sb-chat-completion-config-actions {
-    justify-content: flex-start;
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+    justify-content: stretch;
     align-items: stretch;
-    flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .sb-chat-completion-server-config .sb-chat-completion-config-actions .menu_button {
@@ -770,15 +777,15 @@ input[type='range']::-moz-range-thumb {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    flex: 0 1 auto;
-    width: auto;
+    flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
-    min-height: 38px;
-    padding: 8px 12px;
+    min-height: 34px;
+    padding: 7px 10px;
     border-radius: 12px;
     font-size: calc(var(--mainFontSize) * 0.9);
     line-height: 1.2;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 #openai_model_picker {
@@ -808,6 +815,271 @@ input[type='range']::-moz-range-thumb {
 
 #openai_model_picker_hint {
     margin-top: 2px;
+}
+
+#main-API-selector-block,
+#main_api,
+#openai_api > select#chat_completion_source,
+#openai_api > .inline-drawer,
+#openai_api > form,
+#openai_api > div[data-source],
+#openai_settings > div,
+#openai_api-presets > div,
+#range_block_openai > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#openai_api .flex-container,
+#openai_settings .flex-container,
+#openai_api-presets .flex-container,
+#openai_api .range-block,
+#openai_settings .range-block,
+#range_block_openai .range-block {
+    min-width: 0;
+}
+
+#openai_api .flex-container,
+#openai_settings .flex-container,
+#openai_api-presets .flex-container {
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+}
+
+#openai_api .range-block,
+#openai_settings .range-block,
+#range_block_openai .range-block {
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+#openai_api .range-block > *,
+#openai_settings .range-block > *,
+#range_block_openai .range-block > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#openai_api .range-block-title,
+#openai_settings .range-block-title,
+#range_block_openai .range-block-title,
+#openai_api .toggle-description,
+#openai_settings .toggle-description,
+#range_block_openai .toggle-description,
+#openai_api .neutral_warning,
+#openai_settings .neutral_warning,
+#openai_api .checkbox_label,
+#openai_settings .checkbox_label,
+#openai_api .online_status,
+#openai_api .online_status_text,
+#openai_api a,
+#openai_settings a,
+#openai_api small,
+#openai_settings small {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+#openai_api .range-block-title,
+#openai_settings .range-block-title,
+#range_block_openai .range-block-title,
+#openai_api .toggle-description,
+#openai_settings .toggle-description,
+#range_block_openai .toggle-description {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    text-align: left;
+}
+
+#openai_api .toggle-description.justifyLeft,
+#openai_settings .toggle-description.justifyLeft,
+#range_block_openai .toggle-description.justifyLeft,
+#openai_api strong.toggle-description.justifyLeft,
+#openai_settings strong.toggle-description.justifyLeft,
+#range_block_openai strong.toggle-description.justifyLeft {
+    justify-content: flex-start;
+}
+
+#openai_api .checkbox_label,
+#openai_settings .checkbox_label {
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+#openai_api .checkbox_label > span,
+#openai_api .checkbox_label > small,
+#openai_settings .checkbox_label > span,
+#openai_settings .checkbox_label > small {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+#openai_api input.text_pole,
+#openai_api textarea.text_pole,
+#openai_api select:not(.select2-hidden-accessible),
+#openai_settings input.text_pole,
+#openai_settings textarea.text_pole,
+#openai_settings select:not(.select2-hidden-accessible),
+#openai_api .select2-container,
+#openai_settings .select2-container {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#openai_api .select2-container .select2-selection,
+#openai_settings .select2-container .select2-selection {
+    max-width: 100%;
+    min-width: 0;
+}
+
+#rm_api_block .flex-container:has(> .manage-api-keys),
+#rm_api_block .flex-container:has(> #openai_proxy_password_show),
+#openai_settings .flex-container:has(> .manage-api-keys),
+#openai_settings .flex-container:has(> #openai_proxy_password_show) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+}
+
+#rm_api_block .flex-container:has(> .manage-api-keys) > .menu_button,
+#rm_api_block .flex-container:has(> #openai_proxy_password_show) > .menu_button {
+    min-height: 44px;
+}
+
+#rm_api_block .manage-api-keys,
+#rm_api_block #openai_proxy_password_show {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+}
+
+#rm_api_block .flex-container:has(> .api_button),
+#rm_api_block .flex-container:has(> #test_api_button),
+#rm_api_block .flex-container:has(> .openrouter_authorize),
+#rm_api_block .flex-container:has(> #customize_additional_parameters) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+}
+
+#rm_api_block .flex-container:has(> .api_button) > .menu_button,
+#rm_api_block .flex-container:has(> #test_api_button) > .menu_button,
+#rm_api_block .flex-container:has(> .openrouter_authorize) > .menu_button,
+#rm_api_block .flex-container:has(> #customize_additional_parameters) > .menu_button {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 7px 10px;
+    white-space: normal;
+    line-height: 1.3;
+    justify-content: center;
+    text-align: center;
+}
+
+#rm_api_block .online_status {
+    display: flex;
+    max-width: 100%;
+    flex-wrap: wrap;
+}
+
+#rm_api_block .flex-container.alignitemscenter.spaceBetween.wide100p {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+#rm_api_block .flex-container.alignitemscenter.spaceBetween.wide100p > * {
+    min-width: 0;
+}
+
+#rm_api_block .flex-container.alignitemscenter.spaceBetween.wide100p .checkbox_label {
+    flex: 1 1 220px;
+}
+
+#viewSecrets {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+#openai_api .openai_logit_bias_preset_form,
+#openai_settings .openai_logit_bias_preset_form {
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+}
+
+#openai_api .openai_logit_bias_preset_form select,
+#openai_settings .openai_logit_bias_preset_form select {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+#openai_api-presets .title_restorable,
+#openai_api-presets .margin0.title_restorable.standoutHeader {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 8px;
+}
+
+#openai_api-presets .margin0.title_restorable.standoutHeader > strong,
+#openai_api-presets .margin0.title_restorable.standoutHeader > .flex-container,
+#openai_api-presets .flex-container.marginLeft5 {
+    min-width: 0;
+}
+
+#openai_api-presets .flex-container.flexNoGap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 8px;
+}
+
+#openai_api-presets .flex-container.flexNoGap > select {
+    min-width: 0;
+}
+
+#openai_api-presets .flex-container.marginLeft5 {
+    margin-left: 0;
+    justify-content: flex-start;
+}
+
+@media screen and (max-width: 760px) {
+    #openai_api-presets .flex-container.flexNoGap {
+        grid-template-columns: 1fr;
+    }
+
+    #openai_api-presets .flex-container.marginLeft5,
+    #openai_api-presets .flex-container.gap3px {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #rm_api_block .online_status,
+    #rm_api_block .flex-container.alignitemscenter.spaceBetween.wide100p {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #rm_api_block .flex-container.alignitemscenter.spaceBetween.wide100p {
+        align-items: stretch;
+    }
 }
 
 #AdvancedFormatting .textarea_compact.autoSetHeight {
@@ -1586,9 +1858,75 @@ input[type='range']::-moz-range-thumb {
     gap: 14px;
 }
 
+#user-settings-block [name="userSettingsRowOne"] {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+}
+
+#user-settings-block [name="userSettingsRowOne"] > .flex-container:first-child {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+#user-settings-block #UI-language-block {
+    flex: 1 1 240px;
+    min-width: min(100%, 220px);
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+}
+
+#user-settings-block #UI-language-block > span {
+    flex: 0 0 auto;
+}
+
+#user-settings-block #ui_language_select {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+#user-settings-block #version_display {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
 #user-settings-block [name='UserSettingsRowTwo'] {
     flex-wrap: wrap;
     gap: 12px;
+}
+
+#user-settings-utility-actions {
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
+}
+
+#user-settings-utility-actions .sb-settings-utility-note {
+    flex: 1 1 260px;
+    min-width: 0;
+    color: var(--sb-muted-fg);
+}
+
+#user-settings-utility-actions .sb-settings-utility-note small {
+    display: block;
+    line-height: 1.45;
+}
+
+#user-settings-utility-actions #clear_all_cache_button {
+    flex: 0 1 220px;
+    min-width: min(100%, 180px);
+    justify-content: center;
+    gap: 8px;
 }
 
 #user-settings-block #account_controls {
@@ -1596,9 +1934,56 @@ input[type='range']::-moz-range-thumb {
     gap: 8px;
 }
 
+#user-settings-block #account_controls > .menu_button {
+    flex: 1 1 120px;
+    min-width: 0;
+    justify-content: center;
+}
+
+#user-settings-block #settingsSearch {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
 #user-settings-block-content {
     width: 100%;
     min-width: 0;
+}
+
+#user-settings-block .title_restorable,
+#user-settings-block .title_restorable > .flex-container,
+#user-settings-block .inline-drawer-content > .flex-container {
+    min-width: 0;
+}
+
+#user-settings-block .title_restorable,
+#user-settings-block .title_restorable > .flex-container {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#user-settings-block .title_restorable > .flex-container {
+    margin-left: auto;
+    justify-content: flex-end;
+}
+
+#user-settings-block .title_restorable select,
+#user-settings-block .title_restorable input,
+#user-settings-block .title_restorable .select2-container,
+#user-settings-block .inline-drawer-content select,
+#user-settings-block .inline-drawer-content input.text_pole,
+#user-settings-block .inline-drawer-content textarea.text_pole,
+#user-settings-block .inline-drawer-content .select2-container {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+#user-settings-block .title_restorable .menu_button,
+#user-settings-block .inline-drawer-content .menu_button {
+    min-width: 0;
+    white-space: normal;
+    text-align: center;
 }
 
 #CustomCSS-block {
@@ -1916,6 +2301,14 @@ input[type='range']::-moz-range-thumb {
     #UI-presets-block .flex-container.flexnowrap.alignitemscenter,
     .sb-settings-subdrawer-toolbar {
         flex-wrap: wrap;
+    }
+
+    #user-settings-utility-actions {
+        align-items: stretch;
+    }
+
+    #user-settings-utility-actions #clear_all_cache_button {
+        width: 100%;
     }
 
     .sb-chat-completion-server-config .sb-chat-completion-config-actions {

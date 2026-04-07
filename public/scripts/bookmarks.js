@@ -225,11 +225,18 @@ export async function createBranch(mesId, { swipeId = null } = {}) {
         return;
     }
 
-    if (selected_group) {
-        await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId, branchChatSnapshot);
-    } else {
-        await saveChat({ chatName: name, withMetadata: newMetadata, mesId, chatData: branchChatSnapshot });
+    try {
+        const didSaveBranch = selected_group
+            ? await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId, branchChatSnapshot, { throwOnError: true })
+            : await saveChat({ chatName: name, withMetadata: newMetadata, mesId, chatData: branchChatSnapshot, throwOnError: true });
+
+        if (!didSaveBranch) {
+            return null;
+        }
+    } catch {
+        return null;
     }
+
     // append to branches list if it exists
     // otherwise create it
     if (typeof lastMes.extra !== 'object') {
@@ -279,14 +286,15 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
 
     const mainChat = selected_group ? groups?.find(x => x.id == selected_group)?.chat_id : characters[this_chid].chat;
     const newMetadata = { main_chat: mainChat };
-    await saveItemizedPrompts(name);
+    const didSaveBookmark = selected_group
+        ? await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId)
+        : await saveChat({ chatName: name, withMetadata: newMetadata, mesId });
 
-    if (selected_group) {
-        await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId);
-    } else {
-        await saveChat({ chatName: name, withMetadata: newMetadata, mesId });
+    if (!didSaveBookmark) {
+        return null;
     }
 
+    await saveItemizedPrompts(name);
     lastMes.extra.bookmark_link = name;
 
     const mes = $(`.mes[mesid="${mesId}"]`);
