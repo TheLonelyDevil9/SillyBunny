@@ -4,10 +4,9 @@ import webpack from 'webpack';
 import getPublicLibConfig from '../../webpack.config.js';
 import { isBunRuntime } from '../runtime.js';
 
-export default function getWebpackServeMiddleware() {
-    const publicLibConfig = getPublicLibConfig();
-    const outputPath = publicLibConfig.output?.path;
-    const outputFile = publicLibConfig.output?.filename;
+export default function getWebpackServeMiddleware({ forceDist = false } = {}) {
+    const resolvePublicLibConfig = ({ forceDist: overrideForceDist = forceDist, pruneCache = false } = {}) =>
+        getPublicLibConfig({ forceDist: overrideForceDist, pruneCache });
 
     /**
      * A very spartan recreation of webpack-dev-middleware.
@@ -17,6 +16,9 @@ export default function getWebpackServeMiddleware() {
      * @type {import('express').RequestHandler}
      */
     function devMiddleware(req, res, next) {
+        const publicLibConfig = resolvePublicLibConfig();
+        const outputPath = publicLibConfig.output?.path;
+        const outputFile = publicLibConfig.output?.filename;
         const parsedPath = path.parse(req.path);
 
         if (req.method === 'GET' && parsedPath.dir === '/' && parsedPath.base === outputFile) {
@@ -29,12 +31,12 @@ export default function getWebpackServeMiddleware() {
     /**
      * Wait until Webpack is done compiling.
      * @param {object} param Parameters.
-     * @param {boolean} [param.forceDist=false] Whether to force the use the /dist folder.
+     * @param {boolean} [param.forceDist=forceDist] Whether to force the use the /dist folder.
      * @param {boolean} [param.pruneCache=false] Whether to prune old cache directories before compiling.
      * @returns {Promise<void>}
      */
-    devMiddleware.runWebpackCompiler = ({ forceDist = false, pruneCache = false } = {}) => {
-        const publicLibConfig = getPublicLibConfig({ forceDist, pruneCache });
+    devMiddleware.runWebpackCompiler = ({ forceDist: overrideForceDist = forceDist, pruneCache = false } = {}) => {
+        const publicLibConfig = resolvePublicLibConfig({ forceDist: overrideForceDist, pruneCache });
         const outputPath = publicLibConfig.output?.path;
         const outputFile = publicLibConfig.output?.filename;
         const compiledOutputPath = typeof outputPath === 'string' && typeof outputFile === 'string'

@@ -57,7 +57,7 @@ export class CommandLineParser {
         return Object.freeze({
             configPath: configPath,
             dataRoot: dataPath,
-            port: 8000,
+            port: 4444,
             listen: false,
             listenAddressIPv6: '[::]',
             listenAddressIPv4: '0.0.0.0',

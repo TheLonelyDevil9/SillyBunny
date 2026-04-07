@@ -10,6 +10,26 @@ import { getVersion, color } from './src/util.js';
 
 const BUN_LIB_BUNDLE_SIGNATURE = 'bun-no-minify-v1';
 
+function hashFileIfPresent(hasher, filePath) {
+    if (!fs.existsSync(filePath)) {
+        hasher.update(`${filePath}:missing`);
+        return;
+    }
+
+    hasher.update(filePath);
+    hasher.update(fs.readFileSync(filePath));
+}
+
+function getPublicLibInputsSignature() {
+    const hasher = crypto.createHash('sha256');
+
+    hashFileIfPresent(hasher, path.join(serverDirectory, 'public', 'lib.js'));
+    hashFileIfPresent(hasher, path.join(serverDirectory, 'package.json'));
+    hashFileIfPresent(hasher, path.join(serverDirectory, 'bun.lock'));
+
+    return hasher.digest('hex');
+}
+
 /**
  * Generate a cache version string based on the application version, Git revision, and Webpack version.
  * @returns {string} The cache version string.
@@ -21,6 +41,7 @@ function getWebpackCacheVersion() {
             appVersion.gitRevision,
             webpack.version,
             isBunRuntime() ? BUN_LIB_BUNDLE_SIGNATURE : 'default',
+            getPublicLibInputsSignature(),
         ]))
         .digest('hex');
 }

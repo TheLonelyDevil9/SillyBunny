@@ -15,6 +15,41 @@ import { addMissingConfigValues } from './src/config-init.js';
 const color = chalk;
 
 /**
+ * Copies only missing files from one directory tree into another.
+ * This avoids platform-specific recursive copy edge cases when the
+ * destination directory structure already exists.
+ * @param {string} sourceDirectory
+ * @param {string} destinationDirectory
+ */
+function syncMissingDirectoryContents(sourceDirectory, destinationDirectory) {
+    if (!fs.existsSync(sourceDirectory)) {
+        throw new Error(`Default directory does not exist: ${sourceDirectory}`);
+    }
+
+    fs.mkdirSync(destinationDirectory, { recursive: true });
+
+    const dirents = fs.readdirSync(sourceDirectory, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+        const sourcePath = path.join(sourceDirectory, dirent.name);
+        const destinationPath = path.join(destinationDirectory, dirent.name);
+
+        if (dirent.isDirectory()) {
+            syncMissingDirectoryContents(sourcePath, destinationPath);
+            continue;
+        }
+
+        if (!dirent.isFile()) {
+            continue;
+        }
+
+        if (!fs.existsSync(destinationPath)) {
+            fs.copyFileSync(sourcePath, destinationPath);
+        }
+    }
+}
+
+/**
  * Converts the old config.conf file to the new config.yaml format.
  */
 function convertConfig() {
@@ -79,10 +114,7 @@ function createDefaultFiles() {
                     );
                 }
             } else if (defaultItem.type === 'directory') {
-                fs.cpSync(defaultItem.defaultPath, defaultItem.productionPath, {
-                    force: false, // Don't overwrite existing files!
-                    recursive: true,
-                });
+                syncMissingDirectoryContents(defaultItem.defaultPath, defaultItem.productionPath);
                 console.log(
                     color.green(`Synchronized missing files: ${defaultItem.productionPath}`),
                 );

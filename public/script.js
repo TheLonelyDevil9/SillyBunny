@@ -4,6 +4,7 @@ import {
     DOMPurify,
     hljs,
     Handlebars,
+    localforage,
     SVGInject,
     Popper,
     initLibraryShims,
@@ -184,6 +185,7 @@ import {
     clamp,
     shakeElement,
     createTimeout,
+    loadFileToDocument,
 } from './scripts/utils.js';
 import { debounce_timeout, GENERATION_TYPE_TRIGGERS, IGNORE_SYMBOL, inject_ids, MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, OVERSWIPE_BEHAVIOR, SCROLL_BEHAVIOR, SWIPE_DIRECTION, SWIPE_SOURCE, SWIPE_STATE } from './scripts/constants.js';
 
@@ -407,6 +409,16 @@ export const neutralCharacterName = 'Assistant';
 let default_user_name = 'User';
 export let name1 = default_user_name;
 export let name2 = systemUserName;
+const FRONTEND_CACHE_INSTANCE_NAMES = Object.freeze([
+    'SillyTavern_ChatCompletions',
+    'SillyTavern_Prompts',
+    'SillyTavern_Thumbnails',
+    'SillyTavern_TextCompletions',
+]);
+const MESSAGE_SCREENSHOT_INPUT_IDS = Object.freeze({
+    start: 'message_screenshot_start_id',
+    end: 'message_screenshot_end_id',
+});
 /** @type {ChatMessage[]} */
 export let chat = [];
 
@@ -420,7 +432,7 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.2.0';
+const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.2.5';
 
 export let displayVersion = SILLYBUNNY_UI_VERSION;
 
@@ -437,7 +449,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/sillybunny-pixel-logo.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyBunny:1.2.0:platberlitz'; // For Horde header
+export let CLIENT_VERSION = 'SillyBunny:v1.2.5:platberlitz'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -7332,10 +7344,11 @@ export function saveChatDebounced() {
  * @param {number} [options.mesId] The message ID to save the chat up to
  * @param {boolean} [options.force] Force the saving despite the integrity check result
  * @param {ChatMessage[]} [options.chatData] Chat snapshot to save instead of the current in-memory chat
+ * @param {boolean} [options.throwOnError] Rethrow save errors after notifying the user
  *
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
-export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
+export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined, throwOnError = false } = {}) {
     if (selected_group) {
         toastr.error(t`Operation was aborted to prevent data corruption.`, t`saveChat called for a group chat`);
         throw new Error('saveChat called for a group chat');
@@ -7343,7 +7356,7 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
 
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('saveChat called with positional arguments. Please use an object instead.');
-        [chatName, withMetadata, mesId, force] = arguments;
+        [chatName, withMetadata, mesId, force, throwOnError] = arguments;
     }
 
     const metadata = { ...chat_metadata, ...(withMetadata || {}) };
@@ -7351,12 +7364,12 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
 
     if (!fileName && name2 === neutralCharacterName) {
         // TODO: Do something for a temporary chat with no character.
-        return;
+        return false;
     }
 
     if (!fileName) {
         console.warn('saveChat called without chat_name and no chat file found');
-        return;
+        return false;
     }
 
     characters[this_chid].date_last_chat = Date.now();
@@ -7390,13 +7403,14 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         const result = await fetch('/api/chats/save', saveChatRequest);
 
         if (result.ok) {
-            return;
+            return true;
         }
 
         const errorData = await result.json();
         const isIntegrityError = errorData?.error === 'integrity' && !force;
         if (!isIntegrityError) {
-            throw new Error(result.statusText);
+            const errorMessage = typeof errorData?.error === 'string' ? errorData.error : result.statusText;
+            throw new Error(errorMessage || 'Chat save failed');
         }
 
         const popupResult = await Popup.show.input(
@@ -7412,13 +7426,17 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         if (!forceSaveConfirmed) {
             console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
             window.location.reload();
-            return;
+            return false;
         }
 
-        await saveChat({ chatName, withMetadata, mesId, force: true });
+        return await saveChat({ chatName, withMetadata, mesId, force: true, chatData, throwOnError });
     } catch (error) {
         console.error(error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
+        if (throwOnError) {
+            throw error;
+        }
+        return false;
     }
 }
 
@@ -8045,6 +8063,481 @@ export async function saveSettings(loopCounter = 0) {
     } catch (error) {
         console.error('Error saving settings:', error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`);
+    }
+}
+
+async function clearAllCacheAndReload() {
+    const confirmation = await Popup.show.confirm(
+        t`Clear all cache?`,
+        t`This removes browser cache, temporary session data, and IndexedDB cache stores for SillyBunny, then reloads the page. Saved settings and account data stay intact.`,
+        {
+            okButton: t`Clear cache`,
+            cancelButton: t`Cancel`,
+        },
+    );
+
+    if (confirmation !== POPUP_RESULT.AFFIRMATIVE) {
+        return false;
+    }
+
+    const cacheErrors = [];
+
+    try {
+        await saveChatConditional();
+    } catch (error) {
+        console.warn('Failed to save chat before clearing cache', error);
+    }
+
+    try {
+        await saveSettings();
+    } catch (error) {
+        console.warn('Failed to save settings before clearing cache', error);
+    }
+
+    if ('caches' in globalThis) {
+        try {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+        } catch (error) {
+            console.error('Failed to clear Cache Storage', error);
+            cacheErrors.push(error);
+        }
+    }
+
+    const droppedStores = await Promise.allSettled(
+        FRONTEND_CACHE_INSTANCE_NAMES.map(cacheName => localforage.dropInstance({ name: cacheName })),
+    );
+
+    droppedStores.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.error(`Failed to clear IndexedDB cache store: ${FRONTEND_CACHE_INSTANCE_NAMES[index]}`, result.reason);
+            cacheErrors.push(result.reason);
+        }
+    });
+
+    try {
+        sessionStorage.clear();
+    } catch (error) {
+        console.error('Failed to clear session storage', error);
+        cacheErrors.push(error);
+    }
+
+    if (cacheErrors.length > 0) {
+        toastr.error(t`Some cache data could not be cleared. Check the browser console for details.`, t`Cache clear incomplete`);
+        return false;
+    }
+
+    toastr.success(t`Cache cleared. Reloading SillyBunny...`, t`Cache cleared`);
+    window.setTimeout(() => window.location.reload(), 450);
+    return true;
+}
+
+async function handleClearAllCacheButtonClick(event) {
+    const button = /** @type {HTMLButtonElement?} */ (event.currentTarget);
+    if (!button || button.disabled) {
+        return;
+    }
+
+    button.disabled = true;
+    button.classList.add('disabled');
+    button.setAttribute('aria-busy', 'true');
+
+    try {
+        const didStartReload = await clearAllCacheAndReload();
+        if (!didStartReload) {
+            button.disabled = false;
+            button.classList.remove('disabled');
+            button.removeAttribute('aria-busy');
+        }
+    } catch (error) {
+        console.error('Failed to clear cache', error);
+        toastr.error(t`Cache could not be cleared. Check the browser console for details.`, t`Cache clear failed`);
+        button.disabled = false;
+        button.classList.remove('disabled');
+        button.removeAttribute('aria-busy');
+    }
+}
+
+function normalizeMessageScreenshotRange(startId, endId) {
+    if (!Number.isInteger(startId) || !Number.isInteger(endId)) {
+        return null;
+    }
+
+    const normalizedStart = Math.min(startId, endId);
+    const normalizedEnd = Math.max(startId, endId);
+
+    if (normalizedStart < 0 || normalizedEnd >= chat.length) {
+        return null;
+    }
+
+    return {
+        startId: normalizedStart,
+        endId: normalizedEnd,
+    };
+}
+
+function buildMessageScreenshotFilename(startId, endId) {
+    const activeGroupName = selected_group ? groups.find(group => group.id == selected_group)?.name : null;
+    const baseName = activeGroupName ?? getCharaFilename(this_chid) ?? neutralCharacterName ?? 'chat';
+    const safeBaseName = String(baseName)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'chat';
+    const rangeLabel = startId === endId ? `message-${startId}` : `messages-${startId}-${endId}`;
+    return `${safeBaseName}-${rangeLabel}.png`;
+}
+
+function closeExpandedMessageActionMenus() {
+    if (power_user.expand_message_actions) {
+        return;
+    }
+
+    $('.extraMesButtons.visible')
+        .hide()
+        .removeClass('visible');
+
+    $('.extraMesButtonsHint:hidden')
+        .show()
+        .css('opacity', '');
+}
+
+function sanitizeMessageElementForScreenshot(messageElement) {
+    if (!(messageElement instanceof HTMLElement)) {
+        return;
+    }
+
+    const removableSelector = [
+        '.mes_button',
+        '.mes_buttons',
+        '.mes_edit_buttons',
+        '.mes_reasoning_actions',
+        '.for_checkbox',
+        '.del_checkbox',
+        '.swipe_left',
+        '.swipe_right',
+        '.swipes-counter',
+        '.right_menu_button',
+        '.code-copy',
+    ].join(', ');
+
+    messageElement.removeAttribute('id');
+    messageElement.classList.remove('selected', 'slide', 'fade');
+    messageElement.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+    messageElement.querySelectorAll(removableSelector).forEach(element => element.remove());
+}
+
+function buildMessageScreenshotElements(startId, endId) {
+    const liveMessages = new Map(
+        chatElement.children('.mes').toArray().map(element => [Number(element.getAttribute('mesid')), element]),
+    );
+    const screenshotElements = [];
+
+    for (let messageId = startId; messageId <= endId; messageId++) {
+        const liveMessage = liveMessages.get(messageId);
+        const messageElement = liveMessage instanceof HTMLElement
+            ? liveMessage.cloneNode(true)
+            : updateMessageElement(chat[messageId], { messageId })[0];
+
+        if (!(messageElement instanceof HTMLElement)) {
+            continue;
+        }
+
+        sanitizeMessageElementForScreenshot(messageElement);
+        screenshotElements.push(messageElement);
+    }
+
+    return screenshotElements;
+}
+
+async function waitForMessageScreenshotAssets(container) {
+    const assets = Array.from(container.querySelectorAll('img'));
+
+    if (assets.length === 0) {
+        return;
+    }
+
+    const assetLoads = assets.map(async (asset) => {
+        try {
+            if (asset.complete) {
+                await asset.decode?.().catch(() => undefined);
+                return;
+            }
+
+            await new Promise(resolve => {
+                const done = () => resolve(undefined);
+                asset.addEventListener('load', done, { once: true });
+                asset.addEventListener('error', done, { once: true });
+            });
+        } catch {
+            // Allow the screenshot to continue even if one asset fails to decode.
+        }
+    });
+
+    await Promise.race([
+        Promise.all(assetLoads),
+        delay(2000),
+    ]);
+}
+
+let messageScreenshotLibraryPromise = null;
+
+async function getMessageScreenshotLibrary() {
+    if (typeof window.html2canvas === 'function') {
+        return window.html2canvas;
+    }
+
+    if (!messageScreenshotLibraryPromise) {
+        messageScreenshotLibraryPromise = loadFileToDocument('/lib/html2canvas.min.js', 'js')
+            .then(() => {
+                if (typeof window.html2canvas !== 'function') {
+                    throw new Error('html2canvas failed to initialize');
+                }
+
+                return window.html2canvas;
+            })
+            .catch((error) => {
+                messageScreenshotLibraryPromise = null;
+                throw error;
+            });
+    }
+
+    return await messageScreenshotLibraryPromise;
+}
+
+function normalizeSrgbChannel(channel) {
+    const trimmedChannel = channel.trim();
+
+    if (trimmedChannel.endsWith('%')) {
+        const percent = Number.parseFloat(trimmedChannel.slice(0, -1));
+        return Number.isFinite(percent) ? Math.round(clamp(percent, 0, 100) * 2.55) : null;
+    }
+
+    const numericChannel = Number.parseFloat(trimmedChannel);
+    if (!Number.isFinite(numericChannel)) {
+        return null;
+    }
+
+    return Math.round(clamp(numericChannel, 0, 1) * 255);
+}
+
+function normalizeSrgbAlpha(alpha) {
+    const trimmedAlpha = alpha.trim();
+
+    if (trimmedAlpha.endsWith('%')) {
+        const percent = Number.parseFloat(trimmedAlpha.slice(0, -1));
+        return Number.isFinite(percent) ? clamp(percent / 100, 0, 1) : null;
+    }
+
+    const numericAlpha = Number.parseFloat(trimmedAlpha);
+    return Number.isFinite(numericAlpha) ? clamp(numericAlpha, 0, 1) : null;
+}
+
+function normalizeColorFunctionString(value) {
+    if (!/color\(srgb/i.test(value)) {
+        return value;
+    }
+
+    return value.replace(/color\(srgb\s+([^()]+?)\)/gi, (_match, contents) => {
+        const [channelSection, alphaSection] = contents.split('/').map(section => section.trim());
+        const channels = channelSection.split(/\s+/).filter(Boolean);
+
+        if (channels.length < 3) {
+            return _match;
+        }
+
+        const [red, green, blue] = channels.slice(0, 3).map(normalizeSrgbChannel);
+        if ([red, green, blue].some(channel => channel === null)) {
+            return _match;
+        }
+
+        if (!alphaSection) {
+            return `rgb(${red}, ${green}, ${blue})`;
+        }
+
+        const alpha = normalizeSrgbAlpha(alphaSection);
+        if (alpha === null) {
+            return _match;
+        }
+
+        return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    });
+}
+
+function normalizeMessageScreenshotStyles(container) {
+    const elements = [container, ...container.querySelectorAll('*')];
+
+    for (const element of elements) {
+        if (!(element instanceof HTMLElement)) {
+            continue;
+        }
+
+        const computedStyle = getComputedStyle(element);
+        for (const propertyName of computedStyle) {
+            if (propertyName.startsWith('--')) {
+                continue;
+            }
+
+            const propertyValue = computedStyle.getPropertyValue(propertyName);
+            if (!/color\(srgb/i.test(propertyValue)) {
+                continue;
+            }
+
+            const normalizedValue = normalizeColorFunctionString(propertyValue);
+            if (normalizedValue !== propertyValue) {
+                element.style.setProperty(propertyName, normalizedValue, computedStyle.getPropertyPriority(propertyName));
+            }
+        }
+    }
+}
+
+async function renderMessageScreenshotCanvas(startId, endId) {
+    const screenshotElements = buildMessageScreenshotElements(startId, endId);
+    if (screenshotElements.length === 0) {
+        throw new Error(`No screenshotable messages found for range ${startId}-${endId}`);
+    }
+
+    const shell = document.createElement('div');
+    shell.className = 'sb-message-screenshot-shell';
+
+    const surface = document.createElement('div');
+    surface.className = 'sb-message-screenshot-surface';
+
+    const chatWidth = chatElement[0]?.clientWidth || document.getElementById('chat')?.clientWidth || 720;
+    surface.style.width = `${Math.max(320, chatWidth)}px`;
+    surface.replaceChildren(...screenshotElements);
+    shell.appendChild(surface);
+    document.body.appendChild(shell);
+
+    try {
+        const html2canvas = await getMessageScreenshotLibrary();
+
+        if (document.fonts?.ready) {
+            await document.fonts.ready;
+        }
+
+        await delay(50);
+        await waitForMessageScreenshotAssets(surface);
+        normalizeMessageScreenshotStyles(surface);
+
+        return await html2canvas(surface, {
+            backgroundColor: null,
+            logging: false,
+            scale: Math.max(1, Math.min(window.devicePixelRatio || 1, 2)),
+            useCORS: true,
+        });
+    } finally {
+        shell.remove();
+    }
+}
+
+async function downloadMessageScreenshot(startId, endId) {
+    const canvas = await renderMessageScreenshotCanvas(startId, endId);
+    const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((result) => {
+            if (result) {
+                resolve(result);
+                return;
+            }
+
+            reject(new Error('Failed to create screenshot PNG blob'));
+        }, 'image/png');
+    });
+
+    download(blob, buildMessageScreenshotFilename(startId, endId), 'image/png');
+}
+
+async function promptForMessageScreenshotRange(messageId) {
+    const maximumMessageId = Math.max(chat.length - 1, 0);
+    let selectedRange = null;
+
+    const content = document.createElement('div');
+    content.classList.add('sb-message-screenshot-popup-copy');
+    content.innerHTML = `
+        <p>${t`Download a PNG of one message or an inclusive range.`}</p>
+        <small>${t`Single message: use the same message ID for both fields.`}</small>
+    `;
+
+    const popup = new Popup(content, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Download PNG`,
+        cancelButton: t`Cancel`,
+        customInputs: [
+            {
+                id: MESSAGE_SCREENSHOT_INPUT_IDS.start,
+                label: t`Start ID`,
+                type: 'text',
+                defaultState: String(messageId),
+                tooltip: `0-${maximumMessageId}`,
+            },
+            {
+                id: MESSAGE_SCREENSHOT_INPUT_IDS.end,
+                label: t`End ID`,
+                type: 'text',
+                defaultState: String(messageId),
+                tooltip: `0-${maximumMessageId}`,
+            },
+        ],
+        wider: true,
+        onOpen: function () {
+            const startInput = popup.dlg.querySelector(`#${MESSAGE_SCREENSHOT_INPUT_IDS.start}`);
+            if (startInput instanceof HTMLInputElement) {
+                startInput.focus();
+                startInput.select();
+            }
+        },
+        onClosing: function (activePopup) {
+            if (activePopup.result !== POPUP_RESULT.AFFIRMATIVE) {
+                return true;
+            }
+
+            const startInput = activePopup.dlg.querySelector(`#${MESSAGE_SCREENSHOT_INPUT_IDS.start}`);
+            const endInput = activePopup.dlg.querySelector(`#${MESSAGE_SCREENSHOT_INPUT_IDS.end}`);
+            const startId = Number.parseInt(String(startInput instanceof HTMLInputElement ? startInput.value : '').trim(), 10);
+            const endId = Number.parseInt(String(endInput instanceof HTMLInputElement ? endInput.value : '').trim(), 10);
+            const range = normalizeMessageScreenshotRange(startId, endId);
+
+            if (!range) {
+                toastr.warning(t`Enter message IDs between 0 and ${maximumMessageId}.`, t`Screenshot messages`);
+                if (startInput instanceof HTMLInputElement) {
+                    startInput.focus();
+                    startInput.select();
+                }
+                return false;
+            }
+
+            selectedRange = range;
+            return true;
+        },
+    });
+
+    popup.dlg.classList.add('message_screenshot_popup');
+
+    const result = await popup.show();
+    return result === POPUP_RESULT.AFFIRMATIVE ? selectedRange : null;
+}
+
+async function openMessageScreenshotDialog(messageId) {
+    if (!Number.isInteger(messageId) || chat.length === 0) {
+        toastr.warning(t`No messages are available to capture yet.`, t`Screenshot messages`);
+        return;
+    }
+
+    closeExpandedMessageActionMenus();
+
+    const range = await promptForMessageScreenshotRange(messageId);
+    if (!range) {
+        return;
+    }
+
+    try {
+        await downloadMessageScreenshot(range.startId, range.endId);
+        const successText = range.startId === range.endId
+            ? t`Message screenshot downloaded.`
+            : t`Message range screenshot downloaded.`;
+        toastr.success(successText, t`Screenshot ready`);
+    } catch (error) {
+        console.error('Failed to create message screenshot', error);
+        toastr.error(t`Couldn't create the screenshot. Check the browser console for details.`, t`Screenshot failed`);
     }
 }
 
@@ -11893,6 +12386,22 @@ jQuery(async function () {
         }
     });
 
+    $(document).on('click', '.mes_screenshot', async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const messageId = Number($(this).closest('.mes').attr('mesid'));
+        await openMessageScreenshotDialog(messageId);
+    });
+
+    $(document).on('click', '#wand_message_screenshot', async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const latestMessageId = chat.length - 1;
+        await openMessageScreenshotDialog(latestMessageId);
+    });
+
     //********************
     //***Message Editor***
     $(document).on('click', '.mes_edit', async function () {
@@ -12217,6 +12726,7 @@ jQuery(async function () {
     $(document).on('click', '.drawer-opener', doDrawerOpenClick);
 
     $('.drawer-toggle').on('click', doNavbarIconClick);
+    $('#clear_all_cache_button').on('click', handleClearAllCacheButtonClick);
 
     $('html').on('touchstart mousedown', async function (e) {
         const clickTarget = $(e.target);

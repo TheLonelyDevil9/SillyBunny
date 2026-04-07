@@ -206,6 +206,21 @@ body.sb-topbar-dragging {
     flex-wrap: wrap;
 }
 
+@media screen and (min-width: 769px) {
+    #sb-topbar-primary .sb-topbar-group-right {
+        align-items: center;
+        flex-wrap: nowrap;
+    }
+
+    #sb-topbar-primary .sb-topbar-group-right > .sb-chatbar-button {
+        width: var(--sb-proxy-button-height);
+        min-width: var(--sb-proxy-button-height);
+        height: var(--sb-proxy-button-height);
+        min-height: var(--sb-proxy-button-height) !important;
+        border-radius: 999px;
+    }
+}
+
 .sb-topbar-brand {
     display: flex;
     align-items: center;
@@ -302,6 +317,11 @@ body.sb-topbar-dragging {
 
 .sb-chatbar-button span {
     display: none;
+}
+
+#sb-topbar-primary .sb-chatbar-button > i {
+    font-size: var(--sb-topbar-compact-icon-size);
+    line-height: 1;
 }
 
 .sb-chatbar-button:hover {
@@ -913,6 +933,9 @@ body:not(.movingUI) .drawer-content.maximized {
     background: transparent;
     border-color: var(--sb-shell-border);
     box-shadow: var(--sb-shell-shadow);
+    transition: none !important;
+    transition-property: none !important;
+    transition-behavior: normal !important;
 }
 
 .sb-shell-root::before {
@@ -935,8 +958,10 @@ body:not(.movingUI) .drawer-content.maximized {
 .sb-shell-root.fillRight:not(.openDrawer) {
     display: none !important;
     width: 0 !important;
+    max-width: 0 !important;
     min-width: 0 !important;
     height: 0 !important;
+    min-height: 0 !important;
     max-height: 0 !important;
     pointer-events: none !important;
     overflow: hidden !important;
@@ -2311,7 +2336,8 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-api-toggle,
     #sb-home-toggle,
     #sb-right-shell-toggle,
-    #sb-character-toggle {
+    #sb-character-toggle,
+    #sb-chatbar-visibility-toggle {
         min-width: var(--sb-mobile-toggle-size);
         width: var(--sb-mobile-toggle-size);
         height: var(--sb-mobile-toggle-size);
@@ -2324,7 +2350,8 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-api-toggle span,
     #sb-home-toggle span,
     #sb-right-shell-toggle span,
-    #sb-character-toggle span {
+    #sb-character-toggle span,
+    #sb-chatbar-visibility-toggle span {
         display: none;
     }
 
@@ -2332,7 +2359,8 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-api-toggle::after,
     #sb-home-toggle::after,
     #sb-right-shell-toggle::after,
-    #sb-character-toggle::after {
+    #sb-character-toggle::after,
+    #sb-chatbar-visibility-toggle::after {
         left: var(--sb-proxy-underline-inset);
         right: var(--sb-proxy-underline-inset);
         bottom: var(--sb-proxy-underline-bottom);
@@ -2342,7 +2370,8 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-api-toggle i,
     #sb-home-toggle i,
     #sb-right-shell-toggle i,
-    #sb-character-toggle i {
+    #sb-character-toggle i,
+    #sb-chatbar-visibility-toggle i {
         font-size: var(--sb-topbar-compact-icon-size);
     }
 
@@ -2368,24 +2397,41 @@ body:not(.movingUI) .drawer-content.maximized {
     .sb-shell-nav {
         width: 100%;
         min-width: 0;
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-        gap: 4px;
-        padding: 6px 8px 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr));
+        overflow: visible;
+        gap: 6px;
+        padding: 8px 8px 6px;
         border-right: 0;
         border-bottom: 1px solid color-mix(in srgb, var(--sb-shell-border) 80%, transparent);
     }
 
     .sb-shell-tab {
-        min-width: 120px;
-        padding: 8px 10px;
+        width: 100%;
+        min-width: 0;
+        min-height: 52px;
+        padding: 10px 12px;
         border-radius: 14px;
         gap: 8px;
+        align-items: center;
+    }
+
+    .sb-shell-tab i {
+        margin-top: 0;
+        flex: 0 0 18px;
+    }
+
+    .sb-shell-tab-copy {
+        align-items: flex-start;
+        text-align: left;
     }
 
     .sb-shell-tab-copy strong {
         font-size: calc(var(--mainFontSize) * 0.78);
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        line-height: 1.2;
     }
 
     .sb-shell-tab-copy small {
@@ -2668,17 +2714,26 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     .sb-shell-nav {
-        padding: 6px 6px 0;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        padding: 6px;
     }
 
     .sb-shell-tab {
-        min-width: 112px;
-        padding: 8px 9px;
+        min-width: 0;
+        min-height: 50px;
+        padding: 8px 10px;
+        align-items: center;
     }
 
     .sb-shell-tab-copy small,
     .sb-shell-description {
         display: none;
+    }
+
+    .sb-shell-tab-copy {
+        align-items: flex-start;
+        text-align: left;
     }
 
     .sb-shell-title {

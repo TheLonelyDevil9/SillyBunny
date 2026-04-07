@@ -331,6 +331,16 @@ function formatTopbarScale(value) {
     return `${normalizeTopbarScale(value)}%`;
 }
 
+function seedTopbarScaleDefaults() {
+    if (safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop) === null) {
+        safeSetItem(SB_STORAGE_KEYS.topbarScaleDesktop, String(SB_TOPBAR_SCALE.defaultValue));
+    }
+
+    if (safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile) === null) {
+        safeSetItem(SB_STORAGE_KEYS.topbarScaleMobile, String(SB_TOPBAR_SCALE.defaultValue));
+    }
+}
+
 function clampTopbarOffset(offset) {
     const maxX = Math.max(0, Math.round(window.innerWidth * SB_TOPBAR_DRAG_X_RATIO));
     const maxY = Math.max(0, Math.round(window.innerHeight * SB_TOPBAR_DRAG_Y_RATIO));
@@ -343,10 +353,6 @@ function clampTopbarOffset(offset) {
 }
 
 function getRenderedTopbarOffset() {
-    if (isMobileViewport()) {
-        return { x: 0, y: 0 };
-    }
-
     return clampTopbarOffset(getChatbarState().topbarOffset);
 }
 
@@ -834,10 +840,10 @@ function updateTopbarUtilityButtons() {
 
     if (dragHandleButton instanceof HTMLButtonElement) {
         const dragTitle = isMobileViewport()
-            ? 'Top bar dragging is available on desktop'
+            ? 'Drag to move the chat info bar on mobile.'
             : 'Drag to move the chat info bar. Double-click to reset.';
         setTopbarUtilityButtonIcon(dragHandleButton, 'fa-grip-lines', dragTitle);
-        setButtonDisabled(dragHandleButton, isMobileViewport());
+        setButtonDisabled(dragHandleButton, false);
     }
 }
 
@@ -869,6 +875,14 @@ function getTopbarDragKey(event) {
         return null;
     }
 
+    if (event.changedTouches?.length) {
+        return `touch:${event.changedTouches[0].identifier}`;
+    }
+
+    if (event.touches?.length) {
+        return `touch:${event.touches[0].identifier}`;
+    }
+
     if (typeof event.pointerType === 'string') {
         if (event.pointerType === 'mouse') {
             return 'mouse';
@@ -890,13 +904,50 @@ function getTopbarDragKey(event) {
     return null;
 }
 
+function getTopbarDragPoint(event) {
+    if (!event) {
+        return null;
+    }
+
+    if (event.changedTouches?.length) {
+        return event.changedTouches[0];
+    }
+
+    if (event.touches?.length) {
+        return event.touches[0];
+    }
+
+    if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+        return event;
+    }
+
+    return null;
+}
+
+function isPrimaryTopbarDragStart(event) {
+    if (!event) {
+        return false;
+    }
+
+    if (event.type?.startsWith?.('mouse')) {
+        return event.button === 0;
+    }
+
+    if (typeof event.pointerType === 'string' && event.pointerType === 'mouse') {
+        return event.button === 0;
+    }
+
+    return true;
+}
+
 function beginTopbarDrag(event) {
-    if (!(event.currentTarget instanceof HTMLElement) || isMobileViewport() || event.button !== 0) {
+    if (!(event.currentTarget instanceof HTMLElement) || !isPrimaryTopbarDragStart(event)) {
         return;
     }
 
     const dragKey = getTopbarDragKey(event);
-    if (!dragKey) {
+    const point = getTopbarDragPoint(event);
+    if (!dragKey || !point) {
         return;
     }
 
@@ -916,8 +967,8 @@ function beginTopbarDrag(event) {
     state.dragging = {
         key: dragKey,
         pointerId: event.pointerId,
-        originX: event.clientX,
-        originY: event.clientY,
+        originX: point.clientX,
+        originY: point.clientY,
         startX: startOffset.x,
         startY: startOffset.y,
     };
@@ -926,7 +977,11 @@ function beginTopbarDrag(event) {
     document.body.classList.add('sb-topbar-dragging');
 
     if (Number.isFinite(event.pointerId)) {
-        event.currentTarget.setPointerCapture?.(event.pointerId);
+        try {
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Touch fallback events may not have an active pointer capture target.
+        }
     }
 
     event.preventDefault();
@@ -934,15 +989,20 @@ function beginTopbarDrag(event) {
 
 function updateTopbarDrag(event) {
     const state = getChatbarState();
+    const point = getTopbarDragPoint(event);
 
-    if (!state.dragging || getTopbarDragKey(event) !== state.dragging.key) {
+    if (!state.dragging || !point || getTopbarDragKey(event) !== state.dragging.key) {
         return;
     }
 
     setTopbarOffset({
-        x: state.dragging.startX + (event.clientX - state.dragging.originX),
-        y: state.dragging.startY + (event.clientY - state.dragging.originY),
+        x: state.dragging.startX + (point.clientX - state.dragging.originX),
+        y: state.dragging.startY + (point.clientY - state.dragging.originY),
     }, { persist: false });
+
+    if (event.cancelable) {
+        event.preventDefault();
+    }
 }
 
 function endTopbarDrag(event) {
@@ -973,6 +1033,9 @@ function bindTopbarDragEvents() {
     window.addEventListener('pointercancel', endTopbarDrag);
     window.addEventListener('mousemove', updateTopbarDrag);
     window.addEventListener('mouseup', endTopbarDrag);
+    window.addEventListener('touchmove', updateTopbarDrag, { passive: false });
+    window.addEventListener('touchend', endTopbarDrag);
+    window.addEventListener('touchcancel', endTopbarDrag);
 }
 
 function getChatDesktopRefs() {
@@ -1837,6 +1900,7 @@ function buildChatBar() {
     searchInput.addEventListener('input', () => setChatSearchQuery(searchInput.value, { source: searchInput }));
     dragHandleButton.addEventListener('pointerdown', beginTopbarDrag);
     dragHandleButton.addEventListener('mousedown', beginTopbarDrag);
+    dragHandleButton.addEventListener('touchstart', beginTopbarDrag, { passive: false });
     dragHandleButton.addEventListener('dblclick', event => {
         event.preventDefault();
         setTopbarOffset({ x: 0, y: 0 });
@@ -3008,7 +3072,7 @@ function renderServerAdminStatus(data) {
     statusGrid.replaceChildren();
 
     appendServerAdminStat(statusGrid, 'Runtime', data?.runtime || 'Unknown');
-    appendServerAdminStat(statusGrid, 'Version', version?.pkgVersion || 'Unknown');
+    appendServerAdminStat(statusGrid, 'Version', version?.pkgVersion ? `v${version.pkgVersion}` : 'Unknown');
     appendServerAdminStat(statusGrid, 'Branch', repository?.branch || version?.gitBranch || 'Unknown');
     appendServerAdminStat(statusGrid, 'Commit', repository?.currentCommit || version?.gitRevision || 'Unknown');
     appendServerAdminStat(statusGrid, 'Tracking', repository?.trackingBranch || 'Not set');
@@ -4085,14 +4149,12 @@ function closeShell(shellKey) {
         return;
     }
 
-    if (shellRoot.classList.contains('openDrawer')) {
-        triggerDrawerToggle(shellConfig.hostToggleSelector);
-        window.requestAnimationFrame(() => {
-            if (shellRoot.classList.contains('openDrawer')) {
-                forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
-            }
-        });
+    if (document.activeElement instanceof HTMLElement && shellRoot.contains(document.activeElement)) {
+        document.activeElement.blur();
     }
+
+    // Managed shells do not need the legacy drawer toggle close animation.
+    forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
 }
 
 function buildShell(shellKey) {
@@ -4764,6 +4826,7 @@ function initAll() {
 
     sbState.initialized = true;
 
+    seedTopbarScaleDefaults();
     hideHostToggles();
     forceDrawerState(leftShellRoot, false, getShellConfig('left').hostIconSelector);
     forceDrawerState(rightShellRoot, false, getShellConfig('right').hostIconSelector);

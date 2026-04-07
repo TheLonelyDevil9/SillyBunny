@@ -1985,7 +1985,7 @@
     "[Currently loaded]": "[Загруженная сейчас]",
     "Search providers...": "Искать по провайдерам...",
     "Automatically chooses an alternative provider if chosen providers can't serve your request.": "Автоматически переключаться на другого провайдера, если текущий не может обслужить запрос.",
-    "Example: http://127.0.0.1:8000": "Пример: http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "Пример: http://127.0.0.1:4444",
     "Edit a connection profile": "Редактировать профиль соединения",
     "System Prompt Name": "Название системного промпта",
     "Use System Prompt": "Использовать системный промпт",

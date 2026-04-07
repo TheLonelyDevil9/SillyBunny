@@ -320,7 +320,7 @@
     "Custom model (optional)": "自訂模型（選填）",
     "vllm-project/vllm": "vllm-project/vllm",
     "vLLM API key": "vLLM API 金鑰",
-    "Example: http://127.0.0.1:8000": "範例：http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "範例：http://127.0.0.1:4444",
     "vLLM Model": "vLLM 模型",
     "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite 引擎",
     "Aphrodite API key": "Aphrodite API 金鑰",

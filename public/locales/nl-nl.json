@@ -319,7 +319,7 @@
     "Custom model (optional)": "Aangepast model (optioneel)",
     "vllm-project/vllm": "vllm-project/vllm (OpenAI API-wrappermodus)",
     "vLLM API key": "vLLM API-sleutel",
-    "Example: http://127.0.0.1:8000": "Voorbeeld: http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "Voorbeeld: http://127.0.0.1:4444",
     "vLLM Model": "vLLM-model",
     "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite-engine (Wrappermodus voor OpenAI API)",
     "Aphrodite API key": "Aphrodite API-sleutel",

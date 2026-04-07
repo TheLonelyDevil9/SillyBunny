@@ -323,7 +323,7 @@
     "Custom model (optional)": "カスタムモデル（オプション）",
     "vllm-project/vllm": "vllm-project/vllm (OpenAI API ラッパーモード)",
     "vLLM API key": "vLLM API キー",
-    "Example: http://127.0.0.1:8000": "例: http://127.0.0.1:8000",
+    "Example: http://127.0.0.1:4444": "例: http://127.0.0.1:4444",
     "vLLM Model": "vLLM モデル",
     "PygmalionAI/aphrodite-engine": "PygmalionAI/aphrodite-engine（OpenAI APIエンドポイントのパッケージングモード）",
     "Aphrodite API key": "アフロディーテAPIキー",

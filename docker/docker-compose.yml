@@ -9,7 +9,7 @@ services:
       - FORCE_COLOR=1
       - SILLYTAVERN_HEARTBEATINTERVAL=30
     ports:
-      - "8000:8000"
+      - "4444:4444"
     volumes:
       - "./config:/home/bun/app/config"
       - "./data:/home/bun/app/data"

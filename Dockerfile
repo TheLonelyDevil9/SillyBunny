@@ -47,7 +47,7 @@ RUN \
 # Fix extension repos permissions
 RUN git config --global --add safe.directory "*"
 
-EXPOSE 8000
+EXPOSE 4444
 
 # Ensure proper handling of kernel signals
 ENTRYPOINT ["tini", "--", "./docker-entrypoint.sh"]

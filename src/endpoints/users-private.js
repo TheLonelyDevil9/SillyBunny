@@ -126,8 +126,79 @@ async function resolveSillyTavernFolderImportRoot(inputPath) {
     throw new Error('Multiple SillyTavern user folders were found. Please point to the exact user folder you want to import.');
 }
 
+function isSameOrNestedPath(candidatePath, parentPath) {
+    const relativePath = path.relative(parentPath, candidatePath);
+    return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+async function getStableRealPath(targetPath) {
+    try {
+        return await fsPromises.realpath(targetPath);
+    } catch {
+        return path.resolve(targetPath);
+    }
+}
+
+async function copyDirectoryTree(sourceDirectory, destinationDirectory, { overwrite = false, protectedRoots = new Set(), visitedDirectories = new Set() } = {}) {
+    const stableSourcePath = await getStableRealPath(sourceDirectory);
+
+    if (visitedDirectories.has(stableSourcePath)) {
+        console.warn(`Skipping already-visited import directory: ${sourceDirectory}`);
+        return 0;
+    }
+
+    for (const protectedRoot of protectedRoots) {
+        if (isSameOrNestedPath(stableSourcePath, protectedRoot)) {
+            console.warn(`Skipping import path that resolves into the current account: ${sourceDirectory}`);
+            return 0;
+        }
+    }
+
+    visitedDirectories.add(stableSourcePath);
+    await fsPromises.mkdir(destinationDirectory, { recursive: true });
+
+    let copiedFiles = 0;
+    const dirents = await fsPromises.readdir(sourceDirectory, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+        const sourcePath = path.join(sourceDirectory, dirent.name);
+        const destinationPath = path.join(destinationDirectory, dirent.name);
+
+        if (dirent.isSymbolicLink()) {
+            console.warn(`Skipping symbolic link during SillyTavern import: ${sourcePath}`);
+            continue;
+        }
+
+        if (dirent.isDirectory()) {
+            copiedFiles += await copyDirectoryTree(sourcePath, destinationPath, {
+                overwrite,
+                protectedRoots,
+                visitedDirectories,
+            });
+            continue;
+        }
+
+        if (!dirent.isFile()) {
+            console.warn(`Skipping unsupported import entry: ${sourcePath}`);
+            continue;
+        }
+
+        if (!overwrite && await pathExists(destinationPath)) {
+            continue;
+        }
+
+        ensureDirectory(path.dirname(destinationPath));
+        await fsPromises.copyFile(sourcePath, destinationPath);
+        copiedFiles++;
+    }
+
+    return copiedFiles;
+}
+
 async function copyAllowedFolderContents(sourceRoot, targetRoot) {
     let copiedEntries = 0;
+    const protectedRoots = new Set([await getStableRealPath(targetRoot)]);
+    const visitedDirectories = new Set();
 
     for (const relativePath of IMPORTABLE_RELATIVE_PATHS) {
         const sourcePath = path.join(sourceRoot, relativePath);
@@ -139,13 +210,19 @@ async function copyAllowedFolderContents(sourceRoot, targetRoot) {
         const stats = await fsPromises.stat(sourcePath);
 
         if (stats.isDirectory()) {
-            await fsPromises.cp(sourcePath, destinationPath, { recursive: true, force: true });
-            copiedEntries++;
+            const copiedFiles = await copyDirectoryTree(sourcePath, destinationPath, {
+                overwrite: true,
+                protectedRoots,
+                visitedDirectories,
+            });
+            if (copiedFiles > 0 || await pathExists(destinationPath)) {
+                copiedEntries++;
+            }
             continue;
         }
 
         ensureDirectory(path.dirname(destinationPath));
-        await fsPromises.cp(sourcePath, destinationPath, { force: true });
+        await fsPromises.copyFile(sourcePath, destinationPath);
         copiedEntries++;
     }
 

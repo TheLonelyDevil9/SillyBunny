@@ -278,16 +278,17 @@ function addTabStyles() {
     styleElement.textContent = `
         .moonlit-tabs {
             margin-bottom: 20px;
+            padding-top: 8px;
         }
 
         .moonlit-tab-buttons {
             display: flex;
             flex-wrap: wrap;
             align-items: flex-end;
-            gap: 18px;
-            padding: 0 6px;
+            gap: 20px;
+            padding: 4px 0 0;
             border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
-            margin-bottom: 15px;
+            margin: 0 0 22px -2px;
         }
 
         .moonlit-tab-button {
@@ -295,7 +296,7 @@ function addTabStyles() {
             align-items: center;
             justify-content: center;
             min-height: 40px;
-            padding: 8px 6px 12px;
+            padding: 10px 6px 14px;
             background: none;
             border: none;
             border-bottom: 1px solid transparent;
@@ -339,18 +340,18 @@ function addCollapsibleSectionStyles() {
     .moonlit-section {
         border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 25%, transparent);
         border-radius: 5px;
-        margin-bottom: 15px;
+        margin-bottom: 18px;
         overflow: hidden;
     }
 
     .moonlit-section-header {
         background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
-        padding: 5px 12px;
+        padding: 8px 12px 8px 8px;
         border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 25%, transparent);
     }
 
     .moonlit-first-section-header {
-        padding: 10px 12px;
+        padding: 12px 12px 12px 8px;
     }
 
     .moonlit-first-section .moonlit-section-toggle h4 {
