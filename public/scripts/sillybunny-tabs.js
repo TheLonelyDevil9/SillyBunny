@@ -279,6 +279,9 @@ const sbState = {
         refreshInFlight: false,
         refreshPending: false,
         refreshToken: 0,
+        bindingRetryTimer: 0,
+        boundEventSource: null,
+        windowBindingsAttached: false,
     },
     shells: {},
     chatbar: {
@@ -457,6 +460,20 @@ function seedTopbarScaleDefaults() {
     if (safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile) === null) {
         safeSetItem(SB_STORAGE_KEYS.topbarScaleMobile, String(SB_TOPBAR_SCALE.defaultValue));
     }
+}
+
+function restorePersistedTopbarState() {
+    sbState.topbarScale.desktop = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop));
+    sbState.topbarScale.mobile = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile));
+    sbState.topbarLabel.desktopParts = safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts) === null
+        ? ['char']
+        : normalizeTopbarLabelParts(safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts), []);
+    sbState.topbarLabel.mobilePart = safeGetItem(SB_STORAGE_KEYS.topbarLabelMobilePart) === null
+        ? 'char'
+        : normalizeTopbarLabelPart(safeGetItem(SB_STORAGE_KEYS.topbarLabelMobilePart), '');
+    sbState.topbarLabel.customText = normalizeTopbarCustomText(safeGetItem(SB_STORAGE_KEYS.topbarLabelCustomText));
+    sbState.chatbar.visible = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.chatbarVisible), sbState.chatbar.visible);
+    sbState.chatbar.topbarOffset = normalizeTopbarOffset(safeGetItem(SB_STORAGE_KEYS.topbarOffset));
 }
 
 function clampTopbarOffset(offset) {
@@ -1103,16 +1120,53 @@ function updateTopBarBrand() {
     brand.dataset.brandState = isActiveChat ? 'chat' : 'idle';
 }
 
+function scheduleTopBarBrandBindingRetry(delay = 240) {
+    window.clearTimeout(sbState.topbarLabel.bindingRetryTimer);
+    sbState.topbarLabel.bindingRetryTimer = window.setTimeout(() => {
+        bindTopBarBrand();
+    }, delay);
+}
+
+function bindTopBarBrandWindowEvents() {
+    if (sbState.topbarLabel.windowBindingsAttached) {
+        return;
+    }
+
+    const refreshWithContext = () => {
+        window.requestAnimationFrame(updateTopBarBrand);
+        scheduleTopbarContextRefresh(0);
+        bindTopBarBrand();
+    };
+
+    window.addEventListener('pageshow', refreshWithContext, { passive: true });
+    window.addEventListener('focus', refreshWithContext, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            refreshWithContext();
+        }
+    });
+
+    sbState.topbarLabel.windowBindingsAttached = true;
+}
+
 function bindTopBarBrand() {
     const context = getSillyTavernContext();
     const eventSource = context?.eventSource;
     const eventTypes = context?.eventTypes ?? context?.event_types;
+    bindTopBarBrandWindowEvents();
 
     if (!eventSource || !eventTypes) {
-        window.setTimeout(() => {
-            updateTopBarBrand();
-            scheduleTopbarContextRefresh(0);
-        }, 180);
+        window.requestAnimationFrame(updateTopBarBrand);
+        scheduleTopbarContextRefresh(0);
+        scheduleTopBarBrandBindingRetry();
+        return;
+    }
+
+    window.clearTimeout(sbState.topbarLabel.bindingRetryTimer);
+
+    if (sbState.topbarLabel.boundEventSource === eventSource) {
+        window.requestAnimationFrame(updateTopBarBrand);
+        scheduleTopbarContextRefresh(0);
         return;
     }
 
@@ -1149,6 +1203,7 @@ function bindTopBarBrand() {
         });
     }
 
+    sbState.topbarLabel.boundEventSource = eventSource;
     refresh();
     scheduleTopbarContextRefresh(0);
 }
@@ -5877,6 +5932,7 @@ function initAll() {
 
     sbState.initialized = true;
 
+    restorePersistedTopbarState();
     seedTopbarScaleDefaults();
     hideHostToggles();
     forceDrawerState(leftShellRoot, false, getShellConfig('left').hostIconSelector);

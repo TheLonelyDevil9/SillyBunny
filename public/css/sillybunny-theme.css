@@ -191,6 +191,19 @@ body::before {
     opacity: var(--sb-shell-surface-opacity);
 }
 
+/* Firefox on macOS can mispaint the fixed header surface pseudo-element. */
+body.firefox-macos #top-bar {
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-header-glow) 80%, transparent), transparent 110%),
+        var(--sb-topbar-surface-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.firefox-macos #top-bar::before {
+    display: none;
+}
+
 hr {
     background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-shell-border) 92%, transparent), transparent);
 }

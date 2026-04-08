@@ -65,6 +65,20 @@ function addSafariPatch() {
     }
 }
 
+function addFirefoxPatch() {
+    const userAgent = getParsedUA();
+    const isDesktopFirefox = userAgent?.browser?.name === 'Firefox' && userAgent?.platform?.type === 'desktop';
+    const isMacFirefox = isDesktopFirefox && userAgent?.os?.name === 'macOS';
+
+    if (isDesktopFirefox) {
+        document.body.classList.add('firefox-desktop');
+    }
+
+    if (isMacFirefox) {
+        document.body.classList.add('firefox-macos');
+    }
+}
+
 function applyBrowserFixes() {
     if (isFirefox()) {
         sanitizeInlineQuotationOnCopy();
@@ -81,6 +95,7 @@ function applyBrowserFixes() {
     }
 
     addSafariPatch();
+    addFirefoxPatch();
 }
 
 export { isFirefox, applyBrowserFixes };

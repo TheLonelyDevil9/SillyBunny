@@ -261,6 +261,14 @@ Current Agent Mode limitations:
 - Improved native Termux compatibility by defaulting the Android launcher path to Node.js plus npm, falling back to `node post-install.js` before Bun, and documenting `bash start.sh` as the correct path for aliases and auto-update.
 - Fixed duplicated provider icons, cleaned up Prompt Manager opacity/default-open behavior, moved `Import & Restore` into its own drawer above `Appearance`, and normalized Moonlit Echoes header styling.
 
+#### v1.2.7 hotfix follow-up
+
+- This keeps the existing `v1.2.7` version number and should be treated as a hotfix refresh, not a new feature release.
+- Fixed a Firefox-on-macOS header rendering issue that could leave a stray strip across the top bar.
+- Fixed the Presets `Prompts` drawer so it scales like the other dropdown sections instead of staying stuck at a smaller width.
+- Fixed mobile hidden top chat-info bar persistence so it survives restart.
+- Fixed in-chat top-bar label restoration so `Context Size`, `Character Name`, or the chosen custom label reapply automatically instead of getting stuck on `SillyBunny`.
+
 ### v1.2.5
 
 - Switched the default app port to `4444` across launchers, config defaults, and Docker.

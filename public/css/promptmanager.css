@@ -1,3 +1,9 @@
+#completion_prompt_manager {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+}
+
 #completion_prompt_manager .caution {
     color: var(--fullred);
 }
@@ -233,9 +239,9 @@
     min-width: 0;
 }
 
-#completion_prompt_manager .completion_prompt_manager_header div {
+#completion_prompt_manager .completion_prompt_manager_header > div {
     margin-top: 0;
-    width: fit-content;
+    min-width: 0;
 }
 
 #completion_prompt_manager .completion_prompt_manager_drawer {
@@ -276,6 +282,8 @@
 }
 
 #completion_prompt_manager .completion_prompt_manager_header_tokens {
+    flex: 0 0 auto;
+    width: fit-content;
     white-space: nowrap;
     padding-top: 0.1em;
     color: color-mix(in srgb, var(--SmartThemeBodyColor) 88%, transparent);
@@ -285,9 +293,12 @@
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: stretch;
     gap: 0.25em;
     padding: 0 0.25em;
-    width: 100%
+    width: 100%;
+    min-width: 0;
 }
 
 #completion_prompt_manager .completion_prompt_manager_footer a {
@@ -325,6 +336,8 @@
 
 #completion_prompt_manager_footer_append_prompt {
     font-size: 1em;
+    flex: 1 1 260px;
+    min-width: min(260px, 100%);
 }
 
 #prompt-manager-export-format-popup {
