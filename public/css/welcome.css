@@ -929,6 +929,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
     padding: 16px;
     border-radius: 18px;
     background: transparent;
@@ -951,6 +952,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     font-size: calc(var(--mainFontSize) * 0.82);
     line-height: 1.5;
     color: var(--welcome-muted-fg);
+    overflow-wrap: anywhere;
 }
 
 .welcomeGuideLinks {
@@ -1331,6 +1333,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 
 .welcomeBundledAssistantCard {
     gap: 12px;
+    width: 100%;
     min-height: 100%;
 }
 
@@ -1338,6 +1341,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     display: flex;
     align-items: center;
     gap: 14px;
+    min-width: 0;
 }
 
 .welcomeBundledAssistantCopy {
@@ -1352,6 +1356,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
     font-weight: 600;
     line-height: 1.4;
     color: color-mix(in srgb, var(--color-primary, #f1b285) 62%, var(--welcome-muted-fg));
+    overflow-wrap: anywhere;
 }
 
 .welcomeBundledAssistantQuestions {
@@ -1365,11 +1370,13 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 
 .welcomeAssistantGuideMedia {
     flex: 0 0 auto;
+    min-width: 0;
 }
 
 .welcomeAssistantGuideImage {
     width: 138px;
     height: 138px;
+    max-width: 100%;
 }
 
 .welcomeAssistantGuideCopy {
@@ -1744,6 +1751,51 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
         height: 112px;
     }
 
+    .welcomeBundledAssistantCard {
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .welcomeBundledAssistantHeader {
+        display: grid;
+        grid-template-columns: minmax(78px, 88px) minmax(0, 1fr);
+        align-items: start;
+        gap: 10px;
+    }
+
+    .welcomeAssistantGuideMedia {
+        width: 100%;
+    }
+
+    .welcomeAssistantGuideImage {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+    }
+
+    .welcomeBundledAssistantCopy {
+        gap: 8px;
+    }
+
+    .welcomeGuideCardHeader {
+        gap: 8px;
+    }
+
+    .welcomeBundledAssistantQuestions {
+        gap: 6px;
+    }
+
+    .welcomeQuestionChip {
+        max-width: 100%;
+        min-width: 0;
+        padding: 0 10px;
+    }
+
+    .welcomeQuestionChip span {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
     .welcomeTourNav {
         justify-content: stretch;
     }
@@ -1882,6 +1934,10 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 
     .welcomeShortcut {
         min-height: 40px;
+    }
+
+    .welcomeBundledAssistantHeader {
+        grid-template-columns: 72px minmax(0, 1fr);
     }
 
     .welcomeRecent {

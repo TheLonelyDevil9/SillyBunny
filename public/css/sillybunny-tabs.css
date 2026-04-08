@@ -362,6 +362,27 @@ body.sb-topbar-dragging {
     box-shadow: 0 8px 16px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
 }
 
+#sb-chatbar-visibility-toggle {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+#sb-chatbar-visibility-toggle::before {
+    display: none;
+}
+
+#sb-chatbar-visibility-toggle:hover,
+#sb-chatbar-visibility-toggle.is-active {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+#sb-chatbar-visibility-toggle.is-active > i {
+    color: var(--color-primary, #f1b285);
+}
+
 .sb-chatbar-button:disabled,
 .sb-chatbar-button.is-disabled {
     opacity: 0.46;
@@ -2581,8 +2602,8 @@ body:not(.movingUI) .drawer-content.maximized {
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         scroll-snap-type: x proximity;
-        gap: 4px;
-        padding: 6px 6px 4px;
+        gap: 2px;
+        padding: 4px 4px 2px;
         border-right: 0;
         border-bottom: 1px solid color-mix(in srgb, var(--sb-shell-border) 80%, transparent);
     }
@@ -2592,14 +2613,14 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     .sb-shell-tab {
-        flex: 0 0 clamp(188px, 60vw, 272px);
+        flex: 0 0 clamp(142px, 44vw, 176px);
         width: auto;
-        min-width: clamp(188px, 60vw, 272px);
-        max-width: calc(100vw - 24px);
-        min-height: 46px;
-        padding: 8px 10px;
-        border-radius: 12px;
-        gap: 6px;
+        min-width: clamp(142px, 44vw, 176px);
+        max-width: calc(100vw - 12px);
+        min-height: 42px;
+        padding: 7px 9px;
+        border-radius: 11px;
+        gap: 5px;
         align-items: center;
         scroll-snap-align: start;
     }
@@ -2615,16 +2636,16 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     .sb-shell-tab-copy strong {
-        font-size: calc(var(--mainFontSize) * 0.78);
+        font-size: calc(var(--mainFontSize) * 0.74);
         white-space: normal;
         overflow: visible;
         text-overflow: clip;
-        line-height: 1.2;
+        line-height: 1.15;
     }
 
     .sb-shell-tab-copy small {
-        font-size: calc(var(--mainFontSize) * 0.62);
-        line-height: 1.24;
+        font-size: calc(var(--mainFontSize) * 0.58);
+        line-height: 1.18;
     }
 
     .sb-shell-header {
