@@ -254,7 +254,7 @@ Current Agent Mode limitations:
 - Improved the Characters flow so clicking `Characters` from an active single-character chat can jump straight into that character's editor, with explicit `X` exits on desktop and mobile and cleaner toggling back to the real list drawer.
 - Improved Settings and Extensions UX with persistent drawer states, `Appearance` matching the other dropdowns, a more descriptive settings search, and cleaner `Notify on extension updates` layout and spacing.
 - Fixed the local invalid CSRF token startup issue by hardening token refresh and no-cache handling during first-load and admin requests.
-- Added bundled `Assistant Nahida` alongside Bunny Guide in Launchpad, added the Memory Sharding Quick Reply preset, refreshed the Welcome page credits for Geechan and TheLonelyDevil, and added a clear fork reminder that issues should go to `purachina` on GitHub.
+- Added the Memory Sharding Quick Reply preset, refreshed the Welcome page credits for Geechan and TheLonelyDevil, and added a clear fork reminder that issues should go to `purachina` on GitHub.
 - Tightened responsive UI behavior across desktop and mobile, including stop-button sizing, flatter message divider cleanup, better smaller-screen flexibility in Settings and Extensions, and tighter mobile shell-tab spacing.
 - Improved native Termux compatibility by defaulting the Android launcher path to Node.js plus npm, falling back to `node post-install.js` before Bun, and documenting `bash start.sh` as the correct path for aliases and auto-update.
 - Fixed duplicated provider icons, cleaned up Prompt Manager opacity/default-open behavior, moved `Import & Restore` into its own drawer above `Appearance`, and normalized Moonlit Echoes header styling.
