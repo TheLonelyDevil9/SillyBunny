@@ -1258,7 +1258,11 @@ function createTopBarIconButton({ id = '', icon, title, className = '', label = 
         ${label ? `<span>${label}</span>` : ''}
     `;
 
-    stopProxyPointerPropagation(button);
+    // Only stop mousedown/pointerdown propagation — stopping touchstart
+    // interferes with mobile click synthesis and causes double-tap issues.
+    const stop = event => event.stopPropagation();
+    button.addEventListener('mousedown', stop);
+    button.addEventListener('pointerdown', stop);
     button.addEventListener('click', onClick);
 
     return button;

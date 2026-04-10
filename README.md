@@ -264,6 +264,18 @@ Current Agent Mode limitations:
 - Missing group chat info now resolves cleanly instead of cascading into repeated `ENOENT` / `stat` failures, refresh warnings, and broken recent-chat or sidebar loops.
 - Frontend group validation now repairs missing group-chat references in-session and falls back to a valid chat when one still exists.
 
+#### v1.2.8 UI fixes (2026-04-10)
+
+- This keeps the existing `v1.2.8` version number and should be treated as a patch refresh, not a new feature release.
+- Added a **Reset** button next to the SillyBunny palette presets so you can restore all colors to the current theme after applying a palette without having to re-select the theme from the dropdown.
+- Blur Strength and Shadow Width sliders now show a tooltip explaining they are disabled when Fast UI Mode or No Shadows is on respectively, and applying a palette while those modes are active now shows a warning toast.
+- Fixed mobile eye toggle requiring two taps to hide the top chat bar by removing a `touchstart` stop-propagation from top-bar icon buttons that was interfering with browser touch-to-click synthesis. The same fix improves the chat info bar drag handle on mobile.
+- Removed the `overflow: hidden` clip from the persona management left column that was cutting off content.
+- Constrained the Top Bar Label option grid width so the three checkbox cards no longer stretch across the full settings panel width.
+- Fixed a sub-pixel border artifact on the top bar in Safari on macOS by replacing the `border-bottom` with an equivalent `box-shadow` line that composites correctly alongside `backdrop-filter`.
+- Comprehensive border-radius consistency pass: added `--sb-radius-button: 14px` token and migrated all hardcoded `px` radius values across `sillybunny-theme.css` and `sillybunny-tabs.css` to the `--sb-radius-sm/md/lg/xl/button` design tokens.
+- Equalized asymmetric vertical paddings on `#send_form`, persona section panels, `#nonQRFormItems`, `#UI-presets-block`, and settings subdrawer headers.
+
 ### v1.2.7
 
 - Bumped the app, client, and package version strings to `v1.2.7`.

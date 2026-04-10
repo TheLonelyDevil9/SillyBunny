@@ -1045,10 +1045,10 @@ function switchUiMode() {
     $('#fast_ui_mode').prop('checked', power_user.fast_ui_mode);
     if (power_user.fast_ui_mode) {
         $('#blur-strength-block').css('opacity', '0.2');
-        $('#blur_strength').prop('disabled', true);
+        $('#blur_strength').prop('disabled', true).attr('title', 'Disabled — Fast UI Mode is on');
     } else {
         $('#blur-strength-block').css('opacity', '1');
-        $('#blur_strength').prop('disabled', false);
+        $('#blur_strength').prop('disabled', false).attr('title', '');
     }
 }
 
@@ -1108,10 +1108,10 @@ function applyNoShadows() {
     $('#noShadowsmode').prop('checked', power_user.noShadows);
     if (power_user.noShadows) {
         $('#shadow-width-block').css('opacity', '0.2');
-        $('#shadow_width').prop('disabled', true);
+        $('#shadow_width').prop('disabled', true).attr('title', 'Disabled — No Shadows mode is on');
     } else {
         $('#shadow-width-block').css('opacity', '1');
-        $('#shadow_width').prop('disabled', false);
+        $('#shadow_width').prop('disabled', false).attr('title', '');
     }
     scrollChatToBottom();
 }
@@ -1298,6 +1298,13 @@ function applySillyBunnyPalettePreset(presetId) {
     applyShadowWidth();
     saveSettingsDebounced();
     toastr.success(`${preset.label} applied.`, 'SillyBunny palette');
+
+    if (power_user.fast_ui_mode && preset.values.blur_strength !== undefined) {
+        toastr.warning('Blur effects are disabled while Fast UI Mode is on.', 'SillyBunny palette', { timeOut: 4000 });
+    }
+    if (power_user.noShadows && preset.values.shadow_width !== undefined) {
+        toastr.warning('Text shadows are disabled while No Shadows mode is on.', 'SillyBunny palette', { timeOut: 4000 });
+    }
 }
 
 function applyCustomCSS() {
@@ -4234,6 +4241,16 @@ jQuery(() => {
 
     $(document).on('click', '.sb-theme-preset-button', function () {
         applySillyBunnyPalettePreset(String($(this).data('sb-palette')));
+    });
+
+    $(document).on('click', '.sb-theme-preset-reset', function () {
+        if (!power_user.theme) {
+            toastr.warning('No active theme to restore.', 'SillyBunny palette');
+            return;
+        }
+        applyTheme(power_user.theme);
+        saveSettingsDebounced();
+        toastr.info('Theme colors restored.', 'SillyBunny palette');
     });
 
     $('#media_display').on('input', async function () {

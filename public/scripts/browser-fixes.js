@@ -59,9 +59,14 @@ function addSafariPatch() {
     const isMobileSafari = /iPad|iPhone|iPod/.test(navigator.platform) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isDesktopSafari = userAgent?.browser?.name === 'Safari' && userAgent?.platform?.type === 'desktop';
     const isIOS = userAgent?.os?.name === 'iOS';
+    const isMacOS = userAgent?.os?.name === 'macOS';
 
     if (isIOS || isMobileSafari || isDesktopSafari) {
         document.body.classList.add('safari');
+    }
+
+    if (isDesktopSafari && isMacOS) {
+        document.body.classList.add('safari-macos');
     }
 }
 

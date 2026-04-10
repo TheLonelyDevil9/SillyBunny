@@ -20,6 +20,11 @@ SillyBunny already has a useful baseline in [public/scripts/agents.js](/run/medi
 - Existing on-disk group chats are now preferred during recovery, and missing references are repaired instead of trapping the UI in repeated missing-file loops.
 - This matters for agentic and metadata-heavy group sessions because chat-scoped state should no longer get stranded behind a broken active group-chat pointer.
 
+### 2026-04-10 UI fixes patch
+
+- Patch refresh for `v1.2.8`; this is not a new feature release.
+- Added Reset button next to palette presets, improved slider disabled-state feedback, fixed mobile eye toggle double-tap, persona overflow clip, settings grid centering, macOS top-bar border artifact, and a comprehensive border-radius token migration pass across theme stylesheets.
+
 ## Rules for experiments
 
 - Build agentic features on `staging` first.

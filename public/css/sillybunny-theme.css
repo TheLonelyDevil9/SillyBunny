@@ -7,6 +7,7 @@
     --sb-radius-md: 16px;
     --sb-radius-lg: 22px;
     --sb-radius-xl: 28px;
+    --sb-radius-button: 14px;
     --sb-transition-fast: 180ms ease;
     --sb-transition: 240ms ease;
     --sb-transition-slow: 360ms ease;
@@ -207,6 +208,14 @@ body.firefox-macos #top-bar::before {
     display: none;
 }
 
+/* Safari on macOS can show a sub-pixel border artifact with backdrop-filter. */
+body.safari-macos #top-bar {
+    border-bottom-color: transparent;
+    box-shadow:
+        0 1px 0 color-mix(in srgb, var(--sb-shell-border) 90%, transparent),
+        0 12px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 16%, transparent);
+}
+
 hr {
     background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sb-shell-border) 92%, transparent), transparent);
 }
@@ -250,7 +259,7 @@ h3:not(.popup h3):not(#chat h3) {
 .menu_button:not(.disabled):not([disabled]),
 .menu_button_icon:not(.disabled):not([disabled]) {
     background: var(--sb-button-bg);
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
 }
 
 .checkbox_label {
@@ -306,7 +315,7 @@ select.text_pole,
 input.text_pole {
     background: var(--sb-input-bg);
     border-color: var(--sb-input-border);
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     color: var(--SmartThemeBodyColor);
     caret-color: var(--color-primary, #f1b285);
     line-height: 1.45;
@@ -342,8 +351,8 @@ select.text_pole {
 #send_form {
     position: relative;
     isolation: isolate;
-    padding: 8px 8px 10px;
-    border-radius: 1.7rem;
+    padding: 8px;
+    border-radius: var(--sb-radius-xl);
     box-shadow: 0 -10px 40px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
     background: transparent;
 }
@@ -364,7 +373,7 @@ select.text_pole {
 #nonQRFormItems {
     align-items: center;
     gap: 6px;
-    padding: 6px 8px 2px;
+    padding: 6px 8px;
     font-size: calc(var(--bottomFormIconSize) * 0.76);
 }
 
@@ -384,7 +393,7 @@ select.text_pole {
     height: 42px;
     margin: 0;
     padding: 0;
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
@@ -401,7 +410,7 @@ select.text_pole {
     height: 38px;
     margin: 0;
     padding: 0;
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
@@ -429,7 +438,7 @@ select.text_pole {
     height: auto;
     padding: 14px 16px 16px;
     line-height: 1.56;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 3%, transparent);
     color: var(--SmartThemeBodyColor);
     caret-color: var(--color-primary, #f1b285);
@@ -627,7 +636,7 @@ input[type='range']::-moz-range-thumb {
 
 .select2-container--default .select2-dropdown {
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, transparent);
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 88%, transparent);
     box-shadow: 0 18px 32px color-mix(in srgb, var(--SmartThemeShadowColor) 18%, transparent);
     overflow: visible;
@@ -643,7 +652,7 @@ input[type='range']::-moz-range-thumb {
     padding: 8px 40px 8px 12px;
     background: var(--sb-input-bg);
     border: 1px solid var(--sb-input-border);
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     display: flex;
     align-items: center;
 }
@@ -1132,7 +1141,7 @@ input[type='range']::-moz-range-thumb {
 #AdvancedFormatting .sb-reasoning-max-field {
     min-height: 0;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 76%, transparent);
 }
@@ -1184,7 +1193,7 @@ input[type='range']::-moz-range-thumb {
     width: 100%;
     min-width: 0;
     padding: 20px;
-    border-radius: 22px;
+    border-radius: var(--sb-radius-lg);
     background: transparent;
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 18px 34px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
@@ -1222,7 +1231,7 @@ input[type='range']::-moz-range-thumb {
 #AdvancedFormatting .range-block-title.standoutHeader {
     margin: 0 0 12px;
     padding: 10px 14px 10px 16px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
 }
 
 #AdvancedFormatting #instructSettingsBlock > div,
@@ -1236,7 +1245,7 @@ input[type='range']::-moz-range-thumb {
 
 #AdvancedFormatting details {
     margin-top: 12px;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     overflow: hidden;
@@ -1255,7 +1264,7 @@ input[type='range']::-moz-range-thumb {
 #AdvancedFormatting > .info-block.warning {
     margin: 0;
     padding: 12px 14px;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
 }
 
 @media screen and (max-width: 850px) {
@@ -1355,6 +1364,7 @@ input[type='range']::-moz-range-thumb {
     width: 100%;
     min-width: 0;
     align-items: stretch;
+    overflow-x: hidden;
 }
 
 #persona-management-block .persona_management_current_persona,
@@ -1366,8 +1376,8 @@ input[type='range']::-moz-range-thumb {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 18px 18px 20px;
-    border-radius: 22px;
+    padding: 18px;
+    border-radius: var(--sb-radius-lg);
     background: transparent;
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 18px 34px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
@@ -1395,7 +1405,7 @@ input[type='range']::-moz-range-thumb {
     padding: 12px 18px;
     min-width: 0;
     box-sizing: border-box;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1418,7 +1428,7 @@ input[type='range']::-moz-range-thumb {
 
 #persona-management-block .extension_token_counter {
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--sb-radius-button);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1436,7 +1446,7 @@ input[type='range']::-moz-range-thumb {
     align-items: start;
     gap: 12px 14px;
     padding: 12px 14px;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1459,7 +1469,7 @@ input[type='range']::-moz-range-thumb {
     align-items: start;
     gap: 12px 14px;
     padding: 12px 14px;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1608,7 +1618,7 @@ input[type='range']::-moz-range-thumb {
     flex-direction: column;
     gap: 6px;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1630,7 +1640,7 @@ input[type='range']::-moz-range-thumb {
 #persona_connections_list {
     min-height: 72px;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1638,7 +1648,7 @@ input[type='range']::-moz-range-thumb {
 #persona-management-block .persona_management_global_settings .range-block {
     margin: 0;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1741,8 +1751,8 @@ input[type='range']::-moz-range-thumb {
 
 #UI-presets-block {
     gap: 12px;
-    padding: 20px 20px 22px;
-    border-radius: 20px;
+    padding: 20px;
+    border-radius: var(--sb-radius-lg);
     background:
         linear-gradient(135deg, color-mix(in srgb, var(--sb-accent) 16%, transparent), transparent 62%),
         linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent));
@@ -1775,7 +1785,7 @@ input[type='range']::-moz-range-thumb {
 #themes {
     flex: 1 1 auto;
     min-height: 46px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     border: 1px solid var(--sb-input-border);
     background: var(--sb-input-bg);
     padding-inline: 14px;
@@ -1857,7 +1867,7 @@ input[type='range']::-moz-range-thumb {
     gap: 12px;
     padding: 12px 14px;
     margin-bottom: 8px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -1926,7 +1936,7 @@ input[type='range']::-moz-range-thumb {
     flex-wrap: wrap;
     gap: 12px;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -2073,7 +2083,7 @@ input[type='range']::-moz-range-thumb {
     min-height: 44px;
     margin: 0;
     padding: 10px 16px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -2127,7 +2137,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .sb-settings-subdrawer > .inline-drawer-header {
-    padding: 16px 18px 15px;
+    padding: 16px 18px;
     min-height: 52px;
     gap: 12px;
     align-items: center;
@@ -2221,7 +2231,7 @@ input[type='range']::-moz-range-thumb {
 #AppearanceLayoutSection [name="FontBlurChatWidthBlock"] > .alignitemscenter.flex-container.flexFlowColumn {
     min-width: 0;
     padding: 14px;
-    border-radius: 18px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
@@ -2235,7 +2245,7 @@ input[type='range']::-moz-range-thumb {
 #ThemeTogglesSection [name="themeToggles"] .checkbox_label {
     margin: 0;
     padding: 12px 14px;
-    border-radius: 16px;
+    border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
     align-items: center;
@@ -2253,7 +2263,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .toast {
-    border-radius: 16px !important;
+    border-radius: var(--sb-radius-md) !important;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
 }
