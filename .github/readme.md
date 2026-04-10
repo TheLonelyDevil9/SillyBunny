@@ -258,6 +258,14 @@ Current Agent Mode limitations:
 - Added layout and style containment hints to the chat-bar layer for smoother drag and scroll performance.
 - Fixed top-bar drag event listeners not being unbound after a drag ends, preventing stale pointermove handlers from accumulating across sessions.
 
+#### v1.2.8 hotfix (2026-04-10)
+
+- This keeps the existing `v1.2.8` version number and should be treated as a hotfix refresh, not a new feature release.
+- Fixed the group chat recovery path when a new or renamed group chat left behind stale metadata pointing at a missing `.jsonl` file.
+- Existing group chat files on disk are now preferred over broken stale chat IDs during group load, so real chats stop getting stranded behind a missing active pointer.
+- Missing group chat info now resolves cleanly instead of cascading into repeated `ENOENT` / `stat` failures, refresh warnings, and broken recent-chat or sidebar loops.
+- Frontend group validation now repairs missing group-chat references in-session and falls back to a valid chat when one still exists.
+
 ### v1.2.7
 
 - Bumped the app, client, and package version strings to `v1.2.7`.
