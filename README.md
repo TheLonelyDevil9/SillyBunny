@@ -11,6 +11,26 @@ Project site, presets, themes, and extras: [platberlitz.github.io](https://platb
 > [!WARNING]
 > SillyBunny is an active fork. Expect ongoing UI iteration, Bun compatibility work, and occasional upstream sync churn.
 
+## Table of contents
+
+- [What makes it different](#what-makes-it-different)
+- [Quick start](#quick-start)
+  - [macOS notes](#macos-notes)
+  - [Termux notes](#termux-notes)
+  - [Auto-update controls](#auto-update-controls)
+- [Current features](#current-features)
+  - [Bun-first runtime](#bun-first-runtime)
+  - [Better UI](#better-ui)
+  - [UI preview](#ui-preview)
+  - [Native Agent Mode](#native-agent-mode)
+- [Changelog](#changelog)
+  - [v1.2.8](#v128)
+  - [v1.2.7](#v127)
+  - [v1.2.5](#v125)
+- [Docker](#docker)
+- [Compatibility and upstream](#compatibility-and-upstream)
+- [License](#license)
+
 ## What makes it different
 
 - Bun is the default runtime
@@ -220,13 +240,31 @@ Current UI work includes:
 
 ### UI preview
 
-![SillyBunny workspace overview](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-workspace-v1.2.8.png)
+These screenshots show the live `v1.2.8` shell in both full desktop and responsive mobile layouts.
 
-The welcome workspace keeps the new shell, assistant panel, and visible `v1.2.8` branding in one focused landing flow.
+#### Desktop home
 
-![SillyBunny customization overview](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-customize-v1.2.8.png)
+![SillyBunny desktop home](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-home-v1.2.8.png)
 
-The customization drawer highlights the built-in themes, palette presets, and shell controls that make the fork look distinct from stock SillyTavern.
+The desktop landing view keeps the `v1.2.8` badge, assistant shortcuts, bundled links, and recent chats visible in one full-width workspace.
+
+#### Desktop customization
+
+![SillyBunny desktop customization](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-customize-v1.2.8.png)
+
+The desktop customization flow highlights the settings search, shell controls, and the broader set of tabs available for tuning the app.
+
+#### Mobile home
+
+![SillyBunny mobile home](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-home-v1.2.8.png)
+
+The mobile landing layout keeps the welcome cards and bunny guide accessible while condensing the shell into a phone-friendly header.
+
+#### Mobile customization
+
+![SillyBunny mobile customization](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-customize-v1.2.8.png)
+
+The mobile customization screen shows the responsive tab rail and settings search working cleanly in a narrow portrait viewport.
 
 ### Native Agent Mode
 
