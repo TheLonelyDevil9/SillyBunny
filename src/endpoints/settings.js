@@ -264,6 +264,7 @@ router.post('/get', (request, response) => {
     const context = readAndParseFromDirectory(request.user.directories.context);
     const sysprompt = readAndParseFromDirectory(request.user.directories.sysprompt);
     const reasoning = readAndParseFromDirectory(request.user.directories.reasoning);
+    const inChatAgents = readAndParseFromDirectory(request.user.directories.inChatAgents);
 
     response.send({
         settings,
@@ -283,6 +284,7 @@ router.post('/get', (request, response) => {
         context,
         sysprompt,
         reasoning,
+        inChatAgents,
         enable_extensions: ENABLE_EXTENSIONS,
         enable_extensions_auto_update: ENABLE_EXTENSIONS_AUTO_UPDATE,
         enable_accounts: ENABLE_ACCOUNTS,

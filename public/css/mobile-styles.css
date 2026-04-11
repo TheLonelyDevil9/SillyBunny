@@ -183,8 +183,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 38px;
-        min-height: 38px;
+        min-width: 44px;
+        min-height: 44px;
         font-size: calc(var(--mainFontSize) * 1.2);
     }
 
@@ -203,8 +203,8 @@
     }
 
     .bg_folder_tile .jg-button {
-        width: 30px;
-        height: 30px;
+        width: 44px;
+        height: 44px;
     }
 
     .bg_list {
@@ -242,8 +242,8 @@
         position: absolute;
         top: 5px;
         right: 5px;
-        width: 30px;
-        height: 30px;
+        width: 44px;
+        height: 44px;
         background-color: rgba(0, 0, 0, 0.4);
         color: white;
         border-radius: 6px;
@@ -253,8 +253,8 @@
     }
 
     .bg_example .jg-button {
-        width: 30px;
-        height: 30px;
+        width: 44px;
+        height: 44px;
     }
 
     #background_fitting {
@@ -514,8 +514,8 @@
 
     :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .menu_button,
     :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .menu_button_icon {
-        min-height: 36px;
-        min-width: 36px;
+        min-height: 44px;
+        min-width: 44px;
         padding: 0 10px;
     }
 
@@ -631,7 +631,9 @@
         /*display: inline;*/
 
         max-width: 100vw;
+        max-width: 100dvw;
         height: 100vh;
+        height: 100dvh;
         width: max-content;
         margin: 0 auto;
         position: absolute;
@@ -750,6 +752,7 @@
 
     #top-bar {
         width: 100vw;
+        width: 100dvw;
     }
 
     #sheld {
@@ -857,8 +860,8 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 44px;
+        height: 44px;
         font-size: 18px;
     }
 

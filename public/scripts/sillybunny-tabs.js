@@ -3470,8 +3470,10 @@ function buildAgentsPanel() {
     const overview = createElement('div', { id: 'sb-agent-overview', className: 'sb-agent-overview' });
     const agentPanel = document.getElementById('agent_mode_panel');
 
+    const inChatAgentsContainer = createElement('div', { id: 'in_chat_agents_container' });
+
     if (agentPanel instanceof HTMLElement) {
-        column.append(callout, overview, agentPanel);
+        column.append(callout, overview, agentPanel, inChatAgentsContainer);
     } else {
         const fallback = createElement('div', { className: 'sb-shell-empty-state' });
         fallback.innerHTML = '<strong>Agents are unavailable.</strong><p>The agent controls did not render in time, so this tab is temporarily empty.</p>';
@@ -5079,8 +5081,19 @@ function createSearchIndex(tabState) {
 }
 
 function getSearchSectionLabel(element, fallback) {
-    const preferred = element.closest('.extension_container')?.querySelector('.extension_name, .inline-drawer-header, .inline-drawer-toggle, h3, h4, strong')
-        ?? element.closest('.inline-drawer')?.querySelector(':scope > .inline-drawer-toggle')
+    // For extension containers: use the extension's own name/header, not the parent tab label
+    const extContainer = element.closest('.extension_container');
+    if (extContainer instanceof HTMLElement) {
+        const extName = extContainer.querySelector('.extension_name')
+            ?? extContainer.querySelector(':scope > .inline-drawer > .inline-drawer-toggle, :scope > .inline-drawer > .inline-drawer-header')
+            ?? extContainer.querySelector('h3, h4, strong');
+        if (extName) {
+            const text = String(extName.textContent ?? '').replace(/\s+/g, ' ').trim();
+            if (text) return text;
+        }
+    }
+
+    const preferred = element.closest('.inline-drawer')?.querySelector(':scope > .inline-drawer-toggle')
         ?? element.closest('.persona_management_global_settings')
         ?? element.closest('.bg-header-row-1')
         ?? element.closest('.bg-header-row-2')
@@ -5507,7 +5520,6 @@ function registerShellTab(shellKey, tabConfig, panelBundle, explicitSearchRoot =
         <i class="fa-solid ${tabConfig.icon}" aria-hidden="true"></i>
         <span class="sb-shell-tab-copy">
             <strong>${tabConfig.label}</strong>
-            <small>${tabConfig.description}</small>
         </span>
     `;
 
@@ -5981,6 +5993,13 @@ function applyDefaultDrawerStates() {
         if (drawer instanceof HTMLElement && getStoredSettingsDrawerExpanded(drawer) === null) {
             setInlineDrawerExpanded(drawer, false);
         }
+    }
+
+    // Re-bind when extensions add drawers later (e.g. In-Chat Agents)
+    const root = document.getElementById('user-settings-block-content');
+    if (root instanceof HTMLElement) {
+        new MutationObserver(() => bindSettingsDrawerPersistence())
+            .observe(root, { childList: true, subtree: true });
     }
 }
 

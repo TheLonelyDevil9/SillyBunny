@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { SECRET_KEYS, readSecret } from '../endpoints/secrets.js';
+import { createSingleVectorFn } from './common.js';
 
 /**
  * Gets the vector for the given text batch from an OpenAI compatible endpoint.
@@ -56,8 +57,5 @@ export async function getCohereBatchVector(texts, isQuery, directories, model) {
  * @param {string} model - The model to use for the embedding
  * @returns {Promise<number[]>} - The vector for the text
  */
-export async function getCohereVector(text, isQuery, directories, model) {
-    const vectors = await getCohereBatchVector([text], isQuery, directories, model);
-    return vectors[0];
-}
+export const getCohereVector = createSingleVectorFn(getCohereBatchVector);
 

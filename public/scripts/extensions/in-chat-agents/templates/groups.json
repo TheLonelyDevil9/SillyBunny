@@ -1,0 +1,76 @@
+[
+    {
+        "id": "grp-pura-director",
+        "name": "Pura's Director Agents",
+        "description": "Full Director Preset v12 -- core prompts, anti-slop, trackers, and randomisers from Pura's Director Preset",
+        "builtin": true,
+        "agentTemplateIds": [
+            "tpl-director-core",
+            "tpl-friction-mode",
+            "tpl-grounded-prose",
+            "tpl-write-for-user",
+            "tpl-dont-write-for-user",
+            "tpl-cyoa-choices",
+            "tpl-npc-profiles",
+            "tpl-html-toggle",
+            "tpl-nsfw-mode",
+            "tpl-difficulty-increase",
+            "tpl-direction-menu",
+            "tpl-relationship-tracker",
+            "tpl-scene-tracker",
+            "tpl-time-tracker",
+            "tpl-event-tracker",
+            "tpl-item-tracker",
+            "tpl-achievements-tracker",
+            "tpl-reputation-tracker",
+            "tpl-status-tracker",
+            "tpl-secrets-tracker",
+            "tpl-parallel-tracker",
+            "tpl-world-detail",
+            "tpl-chaos-mode",
+            "tpl-grounded-complication",
+            "tpl-genre-randomiser",
+            "tpl-scene-driving-force",
+            "tpl-scene-pressure",
+            "tpl-combined-directors-cut",
+            "tpl-dead-dove-escalation",
+            "tpl-intimacy-kink-randomiser",
+            "tpl-anti-slop-regex"
+        ]
+    },
+    {
+        "id": "grp-pura-trackers",
+        "name": "Pura's Trackers Only",
+        "description": "Just the tracker agents from Director Preset v12",
+        "builtin": true,
+        "agentTemplateIds": [
+            "tpl-relationship-tracker",
+            "tpl-scene-tracker",
+            "tpl-time-tracker",
+            "tpl-event-tracker",
+            "tpl-item-tracker",
+            "tpl-achievements-tracker",
+            "tpl-reputation-tracker",
+            "tpl-status-tracker",
+            "tpl-secrets-tracker",
+            "tpl-parallel-tracker",
+            "tpl-world-detail"
+        ]
+    },
+    {
+        "id": "grp-pura-randomisers",
+        "name": "Pura's Randomisers Only",
+        "description": "Just the randomiser agents from Director Preset v12",
+        "builtin": true,
+        "agentTemplateIds": [
+            "tpl-chaos-mode",
+            "tpl-grounded-complication",
+            "tpl-genre-randomiser",
+            "tpl-scene-driving-force",
+            "tpl-scene-pressure",
+            "tpl-combined-directors-cut",
+            "tpl-dead-dove-escalation",
+            "tpl-intimacy-kink-randomiser"
+        ]
+    }
+]

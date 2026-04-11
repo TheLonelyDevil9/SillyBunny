@@ -475,7 +475,7 @@ export async function readAllChunks(readableStream) {
         });
 
         readableStream.on('end', () => {
-            //console.log('Finished reading the stream.');
+
             resolve(chunks);
         });
 
@@ -1505,7 +1505,7 @@ export function tryWriteFileSync(filePath, data) {
     }
 
     if (lastError) {
-        console.warn(`Atomic write failed for ${filePath}. Falling back to a direct write.`, lastError);
+        console.debug(`Atomic write failed for ${filePath}. Falling back to a direct write.`, lastError?.code);
     }
     fs.writeFileSync(filePath, data, 'utf8');
 }

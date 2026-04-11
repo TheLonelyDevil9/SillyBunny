@@ -1,0 +1,43 @@
+{
+    "id": "tpl-friction-mode",
+    "name": "Friction Mode",
+    "description": "Combats positivity bias -- characters resist, protect their pride, and take time to warm up",
+    "icon": "",
+    "category": "directive",
+    "tags": [
+        "realism",
+        "difficulty",
+        "bias"
+    ],
+    "version": 1,
+    "author": "SillyBunny",
+    "prompt": "### Friction Mode\n- Raise interpersonal resistance. Characters are harder to impress, slower to agree, and more likely to protect pride, time, interests, and existing judgments. Hesitation, distance, deflection, and conflict arise from established traits, history, present incentives, social context, and plausible misreading.\n- Motive continuity is non-negotiable. When a character resists, ground the resistance in what is already established, or leave it ambiguous if the cause is not fully visible.\n- Forbid all therapy language. Operate outside the bounds of perfect emotional intelligence.",
+    "phase": "pre",
+    "injection": {
+        "position": 1,
+        "depth": 0,
+        "role": 0,
+        "order": 100,
+        "scan": false
+    },
+    "postProcess": {
+        "enabled": false,
+        "type": "regex",
+        "regexFind": "",
+        "regexReplace": "",
+        "regexFlags": "g",
+        "appendText": "",
+        "extractPattern": "",
+        "extractVariable": ""
+    },
+    "enabled": false,
+    "conditions": {
+        "triggerKeywords": [],
+        "triggerProbability": 100,
+        "generationTypes": [
+            "normal",
+            "continue",
+            "impersonate"
+        ]
+    }
+}

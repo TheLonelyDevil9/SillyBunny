@@ -1901,13 +1901,22 @@ body:not(.movingUI) .drawer-content.maximized {
 
 .sb-agent-card {
     padding: 16px;
+    overflow: hidden;
 }
 
 .sb-agent-card-title {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 6px;
+    min-width: 0;
+}
+
+.sb-agent-card-title strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .sb-agent-card p {
@@ -1920,11 +1929,12 @@ body:not(.movingUI) .drawer-content.maximized {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 24px;
-    padding: 0 10px;
+    min-height: 22px;
+    padding: 0 8px;
     border-radius: 999px;
     font-size: calc(var(--mainFontSize) * 0.68);
     text-transform: uppercase;
+    flex-shrink: 0;
     letter-spacing: 0.08em;
 }
 

@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { setAdditionalHeadersByType } from '../additional-headers.js';
 import { TEXTGEN_TYPES } from '../constants.js';
+import { createSingleVectorFn } from './common.js';
 
 /**
  * Gets the vector for the given text from Ollama
@@ -56,7 +57,4 @@ export async function getOllamaBatchVector(texts, apiUrl, model, keep, directori
  * @param {import('../users.js').UserDirectoryList} directories - The directories object for the user
  * @returns {Promise<number[]>} - The vector for the text
  */
-export async function getOllamaVector(text, apiUrl, model, keep, directories) {
-    const vectors = await getOllamaBatchVector([text], apiUrl, model, keep, directories);
-    return vectors[0];
-}
+export const getOllamaVector = createSingleVectorFn(getOllamaBatchVector);

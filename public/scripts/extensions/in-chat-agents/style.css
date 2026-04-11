@@ -1,0 +1,482 @@
+/* ── In-Chat Agents: Panel ───────────────────────────── */
+
+.ica--settings {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 6px;
+}
+
+.ica--inner {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ica--subtitle {
+    margin: 0;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    opacity: 0.65;
+    line-height: 1.4;
+}
+
+/* Toolbar */
+.ica--toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ica--toolbar-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.ica--toolbar-secondary {
+    display: flex;
+    gap: 4px;
+}
+
+/* Filter bar */
+.ica--filter {
+    display: flex;
+    gap: 6px;
+}
+
+.ica--filter #ica--search {
+    flex: 1;
+    min-width: 0;
+}
+
+.ica--filter #ica--categoryFilter {
+    width: 120px;
+    flex-shrink: 0;
+}
+
+/* ── Agent List ─────────────────────────────────────── */
+
+.ica--agentList {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ica--empty-state {
+    text-align: center;
+    padding: 24px 16px;
+    opacity: 0.6;
+}
+
+/* Category section */
+.ica--category-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ica--category-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: calc(var(--mainFontSize) * 0.78);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.6;
+    padding: 0 2px;
+}
+
+.ica--category-header:hover {
+    opacity: 0.9;
+}
+
+.ica--category-header .ica--chevron {
+    transition: transform 0.15s;
+    font-size: 0.8em;
+}
+
+.ica--category-header.collapsed .ica--chevron {
+    transform: rotate(-90deg);
+}
+
+.ica--category-count {
+    margin-left: auto;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+/* Agent cards grid */
+.ica--category-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.ica--category-header.collapsed + .ica--category-items {
+    display: none;
+}
+
+/* ── Agent Card ─────────────────────────────────────── */
+
+.ica--agent-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #555) 60%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 30%, transparent);
+    transition: border-color 0.15s;
+    cursor: default;
+}
+
+.ica--agent-card:hover {
+    border-color: var(--SmartThemeBorderColor, #777);
+}
+
+.ica--agent-card.is-enabled {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 50%, transparent);
+}
+
+/* Card header row */
+.ica--card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ica--card-toggle {
+    position: relative;
+    width: 28px;
+    height: 14px;
+    border-radius: 999px;
+    border: none;
+    background: color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent);
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.ica--card-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--SmartThemeBodyColor, #ccc);
+    transition: transform 0.2s;
+}
+
+.ica--card-toggle.is-on {
+    background: var(--SmartThemeQuoteColor, #8b8);
+}
+
+.ica--card-toggle.is-on::after {
+    transform: translateX(14px);
+}
+
+.ica--card-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: calc(var(--mainFontSize) * 0.92);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.ica--card-phase {
+    font-size: calc(var(--mainFontSize) * 0.68);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+/* Card body: description + meta */
+.ica--card-desc {
+    font-size: calc(var(--mainFontSize) * 0.82);
+    opacity: 0.7;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ica--card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ica--card-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 0.68);
+    background: color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
+    opacity: 0.7;
+}
+
+/* Card actions row */
+.ica--card-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: auto;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 30%, transparent);
+}
+
+.ica--card-actions .ica--card-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: calc(var(--mainFontSize) * 0.78);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s, background 0.15s;
+    background: transparent;
+    border: none;
+    color: inherit;
+}
+
+.ica--card-actions .ica--card-btn:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--SmartThemeBorderColor) 30%, transparent);
+}
+
+.ica--card-actions .ica--card-btn.caution:hover {
+    color: var(--SmartThemeBodyColor);
+    background: color-mix(in srgb, #c44 30%, transparent);
+}
+
+/* Footer */
+.ica--footer {
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
+}
+
+.ica--profile-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: calc(var(--mainFontSize) * 0.85);
+}
+
+.ica--profile-label span {
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.ica--profile-label select {
+    flex: 1;
+}
+
+/* ── Prompt Manager button ──────────────────────────── */
+
+.prompt-manager-send-to-agents-action {
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+
+.prompt-manager-send-to-agents-action:hover {
+    opacity: 1;
+}
+
+/* ── Editor Modal ───────────────────────────────────── */
+
+.ica--editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.ica--editor-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: var(--sb-radius-lg, 14px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 20%, transparent);
+}
+
+.ica--editor-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ica--editor-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ica--editor-row.flex-container {
+    flex-direction: row;
+}
+
+.ica--editor-row label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: calc(var(--mainFontSize) * 0.88);
+}
+
+.ica--editor .checkbox_label {
+    font-size: calc(var(--mainFontSize) * 0.88);
+}
+
+/* ── Template Browser ───────────────────────────────── */
+
+.ica--template-browser {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.ica--template-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ica--template-section-title {
+    font-weight: 600;
+    font-size: calc(var(--mainFontSize) * 1.05);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ica--template-section-desc {
+    margin: 0;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    opacity: 0.6;
+}
+
+/* Group cards */
+.ica--group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.ica--group-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 40%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 8%, transparent);
+    cursor: default;
+}
+
+.ica--group-card-create {
+    cursor: pointer;
+    border-style: dashed;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.ica--group-card-create:hover {
+    opacity: 1;
+}
+
+.ica--group-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ica--group-card-desc {
+    font-size: calc(var(--mainFontSize) * 0.82);
+    opacity: 0.7;
+}
+
+.ica--group-card-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: auto;
+}
+
+/* Individual template cards */
+.ica--template-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+    padding: 4px;
+}
+
+.ica--template-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 30%, transparent);
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.ica--template-card:hover {
+    border-color: var(--SmartThemeQuoteColor, #8b8);
+}
+
+.ica--template-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ica--template-card-name {
+    font-weight: 600;
+    font-size: calc(var(--mainFontSize) * 0.92);
+}
+
+.ica--template-card-category {
+    font-size: calc(var(--mainFontSize) * 0.68);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.5;
+}
+
+.ica--template-card-description {
+    font-size: calc(var(--mainFontSize) * 0.82);
+    opacity: 0.7;
+}
+
+.ica--template-card-prompt {
+    font-size: calc(var(--mainFontSize) * 0.75);
+    opacity: 0.45;
+    max-height: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

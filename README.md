@@ -122,11 +122,35 @@ Agent Mode is a set of lightweight prompt hooks that run before, during, or afte
 - Runs with active chats only, targeting the chat-completions pipeline
 - Intentionally lightweight -- the goal is augmented RP, not autonomous orchestration
 
+### In-Chat Agents (Beta)
+
+In-Chat Agents are custom prompt modules you can create, toggle, and share for RP. The core idea: run trackers, formatting rules, and writing directives through separate API connections (including cheaper models), keeping your main generation budget for the actual story.
+
+Think of them as modular prompt building blocks -- each agent injects text into the generation pipeline at a configurable position and depth, and can optionally post-process the response (extract structured data, regex cleanup, etc.).
+
+**What you can do:**
+
+- Write your own custom agent prompts with full macro support (`{{char}}`, `{{user}}`, `{{random::a::b}}`)
+- Use pre-made templates: 31 agents covering trackers, randomisers, directives, formatting, anti-slop, and content control
+- Apply agent groups in one click (e.g. "Pura's Director Agents" imports all 31 templates at once)
+- Create your own custom groups from your current agents
+- Set a Connection Profile for the "Refine with AI" feature to use a cheaper model
+- Import agents directly from the Prompt Manager with one click (paper-plane button on each prompt)
+- Import/export agents as JSON for sharing
+
+**Pre-made agent groups:**
+
+- **Pura's Director Agents** -- full Director Preset v12 (all 31 agents)
+- **Pura's Trackers Only** -- 11 tracker agents (relationship, scene, time, events, items, achievements, reputation, status, secrets, off-screen, world detail)
+- **Pura's Randomisers Only** -- 8 randomiser agents (chaos mode, scene pressure, genre, complications, etc.)
+
+**Status:** Beta. If you find bugs, please let me know. The system is intentionally kept simple -- extensions already handle the more complex stuff. This is for people who want quick, toggleable prompt modules without writing a full extension.
+
 ---
 
 ## UI preview
 
-These screenshots show the `v1.2.9` shell on desktop and mobile.
+These screenshots show the `v1.3.0` shell on desktop and mobile.
 
 #### Desktop
 
@@ -143,6 +167,30 @@ These screenshots show the `v1.2.9` shell on desktop and mobile.
 ---
 
 ## Changelog
+
+### v1.3.0
+
+**In-Chat Agents (Beta)**
+
+- New "In-Chat Agents" system on the Agents page -- custom prompt modules that inject into your RP generation pipeline. Write your own or use pre-made templates. Agents run pre-generation (prompt injection), post-generation (regex cleanup, data extraction), or both.
+- 31 pre-made agent templates derived from Pura's Director Preset v12: trackers (relationship, scene, time, events, items, achievements, reputation, status, secrets, off-screen, world detail), randomisers (chaos mode, scene pressure, genre, complications, combined director's cut, dead dove, intimacy/kink), directives, formatting, anti-slop, and content control.
+- Agent Groups: apply a whole set of agents in one click. Three built-in groups (Pura's Director Agents, Trackers Only, Randomisers Only) plus custom group creation.
+- Connection Profile support for the "Refine with AI" feature -- use a cheaper model for prompt refinement via the ConnectionManagerRequestService API.
+- One-click prompt transfer: paper-plane button on each Prompt Manager entry creates an In-Chat Agent with matching settings.
+- Import/export agents as JSON for sharing.
+
+**UI/UX fixes**
+
+- Agent Mode and In-Chat Agents panels are now collapsible drawers on the Agents page, both closed by default
+- Settings drawer states now persist across page reloads (MutationObserver rebinding)
+- Instruct Template section is hidden in Advanced Formatting when Chat Completions mode is active
+- Removed subtitle descriptions from Customize menu tabs to save vertical space
+- Settings search now shows actual extension names instead of repeated "EXTENSIONS" labels
+- Prompts section in Chat Completions presets now matches the style of other drawer sections (bold title, aligned layout)
+- Fixed agent overview card "OFF" pill overflow on narrow viewports
+- Fixed user avatar vertical centering in Bubbles chat style
+- Downgraded atomic write EPERM warnings to debug level (Windows antivirus false positives)
+- Bundled third-party extensions (sillytavern-character-colors, sillytavern-image-gen) are now git-ignored to avoid stash churn
 
 ### v1.2.9
 

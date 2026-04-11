@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { SECRET_KEYS, readSecret } from '../endpoints/secrets.js';
+import { createSingleVectorFn } from './common.js';
 
 const SOURCES = {
     'nomicai': {
@@ -68,7 +69,4 @@ export async function getNomicAIBatchVector(texts, source, directories) {
  * @param {import('../users.js').UserDirectoryList} directories - The directories object for the user
  * @returns {Promise<number[]>} - The vector for the text
  */
-export async function getNomicAIVector(text, source, directories) {
-    const vectors = await getNomicAIBatchVector([text], source, directories);
-    return vectors[0];
-}
+export const getNomicAIVector = createSingleVectorFn(getNomicAIBatchVector);

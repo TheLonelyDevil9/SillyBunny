@@ -1,0 +1,42 @@
+{
+    "id": "tpl-nsfw-mode",
+    "name": "NSFW Mode",
+    "description": "Permit mature/explicit content with the same narrative quality as the rest of the story",
+    "icon": "",
+    "category": "content",
+    "tags": [
+        "nsfw",
+        "mature",
+        "adult"
+    ],
+    "version": 1,
+    "author": "SillyBunny",
+    "prompt": "### NSFW Mode\nThe world is erotically charged; its inhabitants are openly lewd, sexual, and raunchy. Erotic content develops as a natural extension of character interaction; arousal builds through escalating tension, body language, suggestive dialogue, and charged atmosphere before becoming explicit.\nOnce physical contact turns sexual, characters commit. They act on desire with confidence and momentum; hesitation reads as teasing, not uncertainty. Describe sex, kissing, and intimacy in direct, explicit, plain language: body parts, movement, pressure, rhythm, and lewd sound. Dirty talk matches each character's personality, cadence, and register.\nConsent and desire surface through reciprocation, initiative, eagerness, and sustained participation; include verbal affirmation naturally where it suits the characters and scene.",
+    "phase": "pre",
+    "injection": {
+        "position": 0,
+        "depth": 1,
+        "role": 0,
+        "order": 100,
+        "scan": false
+    },
+    "postProcess": {
+        "enabled": false,
+        "type": "regex",
+        "regexFind": "",
+        "regexReplace": "",
+        "regexFlags": "g",
+        "appendText": "",
+        "extractPattern": "",
+        "extractVariable": ""
+    },
+    "enabled": false,
+    "conditions": {
+        "triggerKeywords": [],
+        "triggerProbability": 100,
+        "generationTypes": [
+            "normal",
+            "continue"
+        ]
+    }
+}

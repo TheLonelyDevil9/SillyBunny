@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { SECRET_KEYS, readSecret } from '../endpoints/secrets.js';
 import { OPENROUTER_HEADERS } from '../constants.js';
+import { createSingleVectorFn, extractOpenAIEmbeddings } from './common.js';
 
 const SOURCES = {
     'togetherai': {
@@ -116,17 +117,7 @@ export async function getOpenAIBatchVector(texts, source, directories, model = '
 
     /** @type {any} */
     const data = await response.json();
-
-    if (!Array.isArray(data?.data)) {
-        console.warn('API response was not an array');
-        throw new Error('API response was not an array');
-    }
-
-    // Sort data by x.index to ensure the order is correct
-    data.data.sort((a, b) => a.index - b.index);
-
-    const vectors = data.data.map(x => x.embedding);
-    return vectors;
+    return extractOpenAIEmbeddings(data, 'OpenAI');
 }
 
 /**
@@ -138,7 +129,4 @@ export async function getOpenAIBatchVector(texts, source, directories, model = '
  * @param {string|null} urlOverride - Optional URL override for the API endpoint
  * @returns {Promise<number[]>} - The vector for the text
  */
-export async function getOpenAIVector(text, source, directories, model = '', urlOverride = null) {
-    const vectors = await getOpenAIBatchVector([text], source, directories, model, urlOverride);
-    return vectors[0];
-}
+export const getOpenAIVector = createSingleVectorFn(getOpenAIBatchVector);

@@ -5,23 +5,8 @@ import { Buffer } from 'node:buffer';
 import express from 'express';
 import sanitize from 'sanitize-filename';
 
-import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent } from '../util.js';
+import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent, ensureDirectory } from '../util.js';
 import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.js';
-
-/**
- * Ensure the directory for the provided file path exists.
- * If not, it will recursively create the directory.
- *
- * @param {string} filePath - The full path of the file for which the directory should be ensured.
- */
-function ensureDirectoryExistence(filePath) {
-    const dirname = path.dirname(filePath);
-    if (fs.existsSync(dirname)) {
-        return true;
-    }
-    ensureDirectoryExistence(dirname);
-    fs.mkdirSync(dirname);
-}
 
 export const router = express.Router();
 
@@ -67,7 +52,7 @@ router.post('/upload', async (request, response) => {
             pathToNewFile = path.join(request.user.directories.userImages, sanitize(request.body.ch_name), sanitize(filename));
         }
 
-        ensureDirectoryExistence(pathToNewFile);
+        ensureDirectory(path.dirname(pathToNewFile));
         const imageBuffer = Buffer.from(image, 'base64');
         await fs.promises.writeFile(pathToNewFile, new Uint8Array(imageBuffer));
         response.send({ path: clientRelativePath(request.user.directories.root, pathToNewFile) });

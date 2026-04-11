@@ -3,6 +3,7 @@ import urlJoin from 'url-join';
 import { setAdditionalHeadersByType } from '../additional-headers.js';
 import { TEXTGEN_TYPES } from '../constants.js';
 import { trimV1 } from '../util.js';
+import { createSingleVectorFn, extractOpenAIEmbeddings } from './common.js';
 
 /**
  * Gets the vector for the given text from VLLM
@@ -34,16 +35,7 @@ export async function getVllmBatchVector(texts, apiUrl, model, directories) {
 
     /** @type {any} */
     const data = await response.json();
-
-    if (!Array.isArray(data?.data)) {
-        throw new Error('API response was not an array');
-    }
-
-    // Sort data by x.index to ensure the order is correct
-    data.data.sort((a, b) => a.index - b.index);
-
-    const vectors = data.data.map(x => x.embedding);
-    return vectors;
+    return extractOpenAIEmbeddings(data, 'VLLM');
 }
 
 /**
@@ -54,7 +46,5 @@ export async function getVllmBatchVector(texts, apiUrl, model, directories) {
  * @param {import('../users.js').UserDirectoryList} directories - The directories object for the user
  * @returns {Promise<number[]>} - The vector for the text
  */
-export async function getVllmVector(text, apiUrl, model, directories) {
-    const vectors = await getVllmBatchVector([text], apiUrl, model, directories);
-    return vectors[0];
-}
+export const getVllmVector = createSingleVectorFn(getVllmBatchVector);
+

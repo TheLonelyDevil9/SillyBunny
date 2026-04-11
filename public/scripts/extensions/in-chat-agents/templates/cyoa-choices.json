@@ -1,0 +1,41 @@
+{
+    "id": "tpl-cyoa-choices",
+    "name": "CYOA Choices",
+    "description": "Append 3-5 numbered action choices at the end of every response",
+    "icon": "",
+    "category": "formatting",
+    "tags": [
+        "choices",
+        "interactive",
+        "cyoa"
+    ],
+    "version": 1,
+    "author": "SillyBunny",
+    "prompt": "### CYOA Choices\nEnd EVERY response with the EXACT formatting with no modifications and without leaving out any tags. Place this after every single other formatting when applicable at the very end of the scene message. This is strictly from {{user}}’s perspective.\n\n3-7 numbered options:\n[CHOICES]\n1. Action description\n2. Action description\n3. Action description\n[/CHOICES]",
+    "phase": "pre",
+    "injection": {
+        "position": 0,
+        "depth": 4,
+        "role": 0,
+        "order": 100,
+        "scan": false
+    },
+    "postProcess": {
+        "enabled": false,
+        "type": "regex",
+        "regexFind": "",
+        "regexReplace": "",
+        "regexFlags": "g",
+        "appendText": "",
+        "extractPattern": "",
+        "extractVariable": ""
+    },
+    "enabled": false,
+    "conditions": {
+        "triggerKeywords": [],
+        "triggerProbability": 100,
+        "generationTypes": [
+            "normal"
+        ]
+    }
+}

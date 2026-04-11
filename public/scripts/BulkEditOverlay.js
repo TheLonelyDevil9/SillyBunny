@@ -420,6 +420,13 @@ class BulkEditOverlay {
     #cancelNextToggle = false;
 
     /**
+     * Timer reference for the long-press hold detection
+     *
+     * @type {ReturnType<typeof setTimeout>|null}
+     */
+    #holdTimer = null;
+
+    /**
      * @type HTMLElement
      */
     container = null;
@@ -488,9 +495,26 @@ class BulkEditOverlay {
     selectState = () => this.state = BulkEditOverlayState.select;
 
     /**
+     * Remove event listeners added by onPageLoad
+     */
+    onPageUnload = () => {
+        const elements = this.#getEnabledElements();
+        elements.forEach(element => {
+            element.removeEventListener('touchstart', this.handleHold);
+            element.removeEventListener('mousedown', this.handleHold);
+            element.removeEventListener('contextmenu', this.handleDefaultContextMenu);
+            element.removeEventListener('touchend', this.handleLongPressEnd);
+            element.removeEventListener('mouseup', this.handleLongPressEnd);
+            element.removeEventListener('dragend', this.handleLongPressEnd);
+            element.removeEventListener('touchmove', this.handleLongPressEnd);
+        });
+    };
+
+    /**
      * Set up a Sortable grid for the loaded page
      */
     onPageLoad = () => {
+        this.onPageUnload();
         this.browseState();
 
         const elements = this.#getEnabledElements();
@@ -585,7 +609,7 @@ class BulkEditOverlay {
 
         this.isLongPress = true;
 
-        setTimeout(() => {
+        this.#holdTimer = setTimeout(() => {
             if (this.isLongPress && !cancel) {
                 if (this.state === BulkEditOverlayState.browse) {
                     this.selectState();
@@ -603,6 +627,10 @@ class BulkEditOverlay {
 
     handleLongPressEnd = (event) => {
         this.isLongPress = false;
+        if (this.#holdTimer) {
+            clearTimeout(this.#holdTimer);
+            this.#holdTimer = null;
+        }
         if (this.#contextMenuOpen) event.stopPropagation();
     };
 

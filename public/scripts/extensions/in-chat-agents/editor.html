@@ -1,0 +1,151 @@
+<div id="ica--editor" class="ica--editor">
+    <div class="ica--editor-section">
+        <div class="ica--editor-row">
+            <label>Name
+                <input type="text" id="ica--editor-name" class="text_pole" placeholder="Agent name" />
+            </label>
+        </div>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Category
+                <select id="ica--editor-category" class="text_pole">
+                    <option value="directive">Directive</option>
+                    <option value="formatting">Formatting</option>
+                    <option value="content">Content</option>
+                    <option value="tracker">Tracker</option>
+                    <option value="randomizer">Randomizer</option>
+                    <option value="guard">Guard</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+            <label class="flex1">Phase
+                <select id="ica--editor-phase" class="text_pole">
+                    <option value="pre">Pre-generation</option>
+                    <option value="post">Post-generation</option>
+                    <option value="both">Both</option>
+                </select>
+            </label>
+        </div>
+        <div class="ica--editor-row">
+            <label>Description
+                <input type="text" id="ica--editor-description" class="text_pole" placeholder="Short description" />
+            </label>
+        </div>
+    </div>
+
+    <div class="ica--editor-section">
+        <div class="ica--editor-section-header">
+            <strong>Prompt</strong>
+            <div id="ica--editor-refine" class="menu_button menu_button_icon" title="Refine with AI">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Refine</span>
+            </div>
+        </div>
+        <textarea id="ica--editor-prompt" class="text_pole textarea_compact" rows="8" placeholder="Write your agent prompt here. Supports macros: {{char}}, {{user}}, {{random::a::b::c}}, etc."></textarea>
+    </div>
+
+    <div class="ica--editor-section" id="ica--injection-section">
+        <strong>Injection Settings</strong>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Position
+                <select id="ica--editor-position" class="text_pole">
+                    <option value="0">In Prompt</option>
+                    <option value="1">In Chat</option>
+                    <option value="2">Before Prompt</option>
+                </select>
+            </label>
+            <label class="flex1">Depth
+                <input type="number" id="ica--editor-depth" class="text_pole" min="0" max="99" value="1" />
+            </label>
+        </div>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Role
+                <select id="ica--editor-role" class="text_pole">
+                    <option value="0">System</option>
+                    <option value="1">User</option>
+                    <option value="2">Assistant</option>
+                </select>
+            </label>
+            <label class="flex1">Order
+                <input type="number" id="ica--editor-order" class="text_pole" min="0" max="999" value="100" />
+            </label>
+        </div>
+        <label class="checkbox_label">
+            <input type="checkbox" id="ica--editor-scan" />
+            <span>Scan for World Info keywords</span>
+        </label>
+    </div>
+
+    <div class="ica--editor-section" id="ica--postprocess-section">
+        <strong>Post-Processing</strong>
+        <label class="checkbox_label">
+            <input type="checkbox" id="ica--editor-pp-enabled" />
+            <span>Enable post-processing</span>
+        </label>
+        <div id="ica--pp-options" style="display:none">
+            <div class="ica--editor-row">
+                <label>Type
+                    <select id="ica--editor-pp-type" class="text_pole">
+                        <option value="regex">Regex Find/Replace</option>
+                        <option value="extract">Extract to Variable</option>
+                        <option value="append">Append Text</option>
+                    </select>
+                </label>
+            </div>
+            <div id="ica--pp-regex">
+                <div class="ica--editor-row">
+                    <label>Find Pattern
+                        <input type="text" id="ica--editor-pp-regexFind" class="text_pole" placeholder="Regular expression" />
+                    </label>
+                </div>
+                <div class="ica--editor-row flex-container flexGap5">
+                    <label class="flex1">Replace
+                        <input type="text" id="ica--editor-pp-regexReplace" class="text_pole" placeholder="Replacement (empty = remove)" />
+                    </label>
+                    <label style="width:80px">Flags
+                        <input type="text" id="ica--editor-pp-regexFlags" class="text_pole" value="g" placeholder="gi" />
+                    </label>
+                </div>
+            </div>
+            <div id="ica--pp-extract" style="display:none">
+                <div class="ica--editor-row">
+                    <label>Extract Pattern
+                        <input type="text" id="ica--editor-pp-extractPattern" class="text_pole" placeholder="Regex to extract (e.g. \\[METER\\|[^\\]]+\\])" />
+                    </label>
+                </div>
+                <div class="ica--editor-row">
+                    <label>Variable Name
+                        <input type="text" id="ica--editor-pp-extractVariable" class="text_pole" placeholder="Variable name for storage" />
+                    </label>
+                </div>
+            </div>
+            <div id="ica--pp-append" style="display:none">
+                <div class="ica--editor-row">
+                    <label>Append Text
+                        <textarea id="ica--editor-pp-appendText" class="text_pole textarea_compact" rows="3" placeholder="Text to append after response"></textarea>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ica--editor-section">
+        <strong>Conditions</strong>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Probability (%)
+                <input type="number" id="ica--editor-probability" class="text_pole" min="0" max="100" value="100" />
+            </label>
+        </div>
+        <div class="ica--editor-row">
+            <label>Trigger Keywords <small>(comma-separated, blank = always)</small>
+                <input type="text" id="ica--editor-keywords" class="text_pole" placeholder="keyword1, keyword2, ..." />
+            </label>
+        </div>
+        <div class="ica--editor-row">
+            <span>Generation Types:</span>
+            <label class="checkbox_label"><input type="checkbox" id="ica--editor-type-normal" checked /><span>Normal</span></label>
+            <label class="checkbox_label"><input type="checkbox" id="ica--editor-type-continue" checked /><span>Continue</span></label>
+            <label class="checkbox_label"><input type="checkbox" id="ica--editor-type-impersonate" checked /><span>Impersonate</span></label>
+            <label class="checkbox_label"><input type="checkbox" id="ica--editor-type-quiet" /><span>Quiet</span></label>
+        </div>
+    </div>
+</div>

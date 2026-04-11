@@ -1,0 +1,41 @@
+{
+    "id": "tpl-item-tracker",
+    "name": "Item Tracker",
+    "description": "Track items {{user}} acquires, loses, or uses that have narrative significance",
+    "icon": "",
+    "category": "tracker",
+    "tags": [
+        "inventory",
+        "items",
+        "objects"
+    ],
+    "version": 1,
+    "author": "SillyBunny",
+    "prompt": "### Inventory\nTrack items {{user}} acquires, loses, or uses that have narrative significance. Do not list mundane carried items unless plot-relevant. Use this EXACT format:\n\n[ITEM|Action|Name|Detail]\nnote: MANDATORY; explain origin or significance; NEVER leave empty\n[/ITEM]\n\nAction options: ➕ GAINED | ➖ LOST | 🔄 USED | 💔 BROKEN | 🎁 GIVEN\n\nRules:\n- Items appear AFTER narrative content when inventory changes\n- Only show items that CHANGED this scene\n- Do not track currency, consumables, or mundane objects unless plot-relevant",
+    "phase": "both",
+    "injection": {
+        "position": 0,
+        "depth": 4,
+        "role": 0,
+        "order": 100,
+        "scan": false
+    },
+    "postProcess": {
+        "enabled": true,
+        "type": "extract",
+        "regexFind": "",
+        "regexReplace": "",
+        "regexFlags": "g",
+        "appendText": "",
+        "extractPattern": "\\[ITEM\\|[^\\]]*\\]",
+        "extractVariable": "item_data"
+    },
+    "enabled": false,
+    "conditions": {
+        "triggerKeywords": [],
+        "triggerProbability": 100,
+        "generationTypes": [
+            "normal"
+        ]
+    }
+}

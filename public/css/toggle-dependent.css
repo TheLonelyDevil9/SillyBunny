@@ -313,6 +313,7 @@ body.bubblechat .mes {
 
 body.bubblechat .mes[is_user="true"] {
     background-color: var(--SmartThemeUserMesBlurTintColor);
+    align-items: center;
 }
 
 
@@ -559,6 +560,10 @@ label[for="bind_preset_to_connection"]:has(input:checked) {
 }
 
 #AdvancedFormatting.sb-chat-completion-mode [data-cc-null]:not([data-cc-chat-completion-visible]) {
+    display: none !important;
+}
+
+#AdvancedFormatting.sb-chat-completion-mode #sb-af-instruct {
     display: none !important;
 }
 

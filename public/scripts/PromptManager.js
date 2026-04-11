@@ -572,6 +572,16 @@ class PromptManager {
             this.saveServiceSettings();
         };
 
+        // Send prompt to In-Chat Agents
+        this.handleSendToAgents = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const promptID = event.target.closest('.' + this.configuration.prefix + 'prompt_manager_prompt').dataset.pmIdentifier;
+            const prompt = this.getPromptById(promptID);
+            if (!prompt || prompt.marker) return;
+            window.dispatchEvent(new CustomEvent('PromptManagerSendToAgents', { detail: { prompt } }));
+        };
+
         // Save prompt edit form to settings and close form.
         this.handleSavePrompt = (event) => {
             const promptId = event.target.dataset.pmPrompt;
@@ -1787,6 +1797,10 @@ class PromptManager {
             }
 
             let editSpanHtml = '';
+            let sendToAgentsSpanHtml = '';
+            if (!prompt.marker) {
+                sendToAgentsSpanHtml = '<span title="Send to In-Chat Agents" class="prompt-manager-send-to-agents-action fa-solid fa-paper-plane fa-xs"></span>';
+            }
             if (this.isPromptEditAllowed(prompt)) {
                 editSpanHtml = `
                     <span title="edit" class="prompt-manager-edit-action fa-solid fa-pencil fa-xs"></span>
@@ -1838,6 +1852,7 @@ class PromptManager {
                     </span>
                     <span>
                             <span class="prompt_manager_prompt_controls">
+                                ${sendToAgentsSpanHtml}
                                 ${detachSpanHtml}
                                 ${editSpanHtml}
                                 ${toggleSpanHtml}
@@ -1866,6 +1881,10 @@ class PromptManager {
 
         Array.from(promptManagerList.querySelectorAll('.prompt-manager-toggle-action')).forEach(el => {
             el.addEventListener('click', this.handleToggle);
+        });
+
+        Array.from(promptManagerList.getElementsByClassName('prompt-manager-send-to-agents-action')).forEach(el => {
+            el.addEventListener('click', this.handleSendToAgents);
         });
     }
 

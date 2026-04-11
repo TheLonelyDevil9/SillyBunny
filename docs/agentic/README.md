@@ -8,6 +8,12 @@ SillyBunny already has a useful baseline in [public/scripts/agents.js](/run/medi
 
 ## Recent changes
 
+### v1.3.0 (2026-04-12)
+
+- **In-Chat Agents (Beta)**: New custom prompt module system on the Agents page. Users can create, toggle, and share modular RP prompt agents that inject into the generation pipeline. 31 pre-made templates from Pura's Director Preset v12 (trackers, randomisers, directives, formatting, anti-slop, content). Agent Groups for one-click bulk application. Connection Profile support for AI refinement via cheaper models. One-click transfer from Prompt Manager.
+- Agent Mode and In-Chat Agents panels are now collapsible drawers, closed by default
+- Settings drawer state persistence, Instruct Template hidden in CC mode, search label fix, Prompts section styling, agent card overflow fix, bubbles avatar centering, EPERM warning downgrade, bundled extensions git-ignored
+
 ### v1.2.9 (2026-04-11)
 
 - Text Completion and Advanced Formatting settings now use collapsible drawer sections

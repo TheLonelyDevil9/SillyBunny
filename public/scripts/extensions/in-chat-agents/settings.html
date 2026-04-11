@@ -1,0 +1,61 @@
+<div id="ica--settings" class="ica--settings">
+    <div class="inline-drawer wide100p flexFlowColumn">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>In-Chat Agents</b>
+            <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
+        </div>
+        <div class="inline-drawer-content" style="display:none">
+            <div class="ica--inner">
+                <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation. Toggle them on, tweak their prompts, or add your own.</p>
+
+                <div class="ica--toolbar">
+                    <div class="ica--toolbar-actions">
+                        <div id="ica--addAgent" class="menu_button menu_button_icon" title="Create a new agent from scratch">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>New Agent</span>
+                        </div>
+                        <div id="ica--templates" class="menu_button menu_button_icon" title="Add pre-made agents from the template library">
+                            <i class="fa-solid fa-book-open"></i>
+                            <span>Templates</span>
+                        </div>
+                    </div>
+                    <div class="ica--toolbar-secondary">
+                        <div id="ica--importAgent" class="menu_button menu_button_icon" title="Import agent(s) from a JSON file">
+                            <i class="fa-solid fa-file-import"></i>
+                        </div>
+                        <div id="ica--exportAll" class="menu_button menu_button_icon" title="Export all agents to a file">
+                            <i class="fa-solid fa-file-export"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ica--filter">
+                    <input type="text" id="ica--search" class="text_pole" placeholder="Search agents..." />
+                    <select id="ica--categoryFilter" class="text_pole">
+                        <option value="">All</option>
+                        <option value="directive">Directive</option>
+                        <option value="formatting">Formatting</option>
+                        <option value="content">Content</option>
+                        <option value="tracker">Tracker</option>
+                        <option value="randomizer">Randomizer</option>
+                        <option value="guard">Guard</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+
+                <div id="ica--agentList" class="ica--agentList"></div>
+
+                <div class="ica--footer">
+                    <label class="ica--profile-label">
+                        <span>AI Refine Profile</span>
+                        <select id="ica--connectionProfile" class="text_pole" title="Which connection profile to use when you click Refine with AI in the editor">
+                            <option value="">Use main AI</option>
+                        </select>
+                    </label>
+                </div>
+
+                <input type="file" id="ica--importFile" accept=".json" style="display:none" />
+            </div>
+        </div>
+    </div>
+</div>

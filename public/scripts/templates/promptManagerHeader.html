@@ -2,14 +2,11 @@
     {{#if error}}
         {{{errorDiv}}}
     {{/if}}
-    <div id="{{prefix}}prompt_manager_drawer" class="inline-drawer wide100p flexFlowColumn sb-settings-subdrawer sb-openai-settings-subdrawer {{prefix}}prompt_manager_drawer">
+    <div id="{{prefix}}prompt_manager_drawer" class="inline-drawer wide100p flexFlowColumn sb-openai-settings-subdrawer {{prefix}}prompt_manager_drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <div class="{{prefix}}prompt_manager_header">
-                <div class="{{prefix}}prompt_manager_header_advanced">
-                    <span class="{{prefix}}prompt_manager_header_title" data-i18n="Prompts">Prompts</span>
-                    <small class="{{prefix}}prompt_manager_header_description" data-i18n="Inspect, reorder, toggle, and edit injected prompts">Inspect, reorder, toggle, and edit injected prompts</small>
-                </div>
-                <div class="{{prefix}}prompt_manager_header_tokens"><span data-i18n="Total Tokens:">Total Tokens:</span> {{totalActiveTokens}}</div>
+            <div class="flex-container flexFlowColumn">
+                <b data-i18n="Prompts">Prompts</b>
+                <small class="sb-group-meta"><span data-i18n="Inspect, reorder, toggle, and edit injected prompts">Inspect, reorder, toggle, and edit injected prompts</span> &middot; <span data-i18n="Total Tokens:">Total Tokens:</span> {{totalActiveTokens}}</small>
             </div>
             <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
         </div>
