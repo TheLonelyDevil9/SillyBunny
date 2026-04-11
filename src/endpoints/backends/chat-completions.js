@@ -2150,22 +2150,38 @@ function forwardResponsesApiStream(fetchResponse, expressResponse) {
     expressResponse.setHeader('Connection', 'keep-alive');
 
     let buffer = '';
+    let done = false;
+
+    function finishStream() {
+        if (done) return;
+        done = true;
+        if (!expressResponse.writableEnded) {
+            expressResponse.write('data: [DONE]\n\n');
+            expressResponse.end();
+        }
+    }
 
     fetchResponse.body.on('data', (chunk) => {
+        if (done) return;
         buffer += chunk.toString();
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+            if (done) break;
             if (line.startsWith('data: ')) {
                 const dataStr = line.slice(6).trim();
                 if (!dataStr || dataStr === '[DONE]') {
-                    expressResponse.write('data: [DONE]\n\n');
-                    continue;
+                    finishStream();
+                    break;
                 }
 
                 try {
                     const event = JSON.parse(dataStr);
+                    if (event.type === 'response.completed' || event.type === 'response.done') {
+                        finishStream();
+                        break;
+                    }
                     const chatDelta = convertResponsesEventToChatDelta(event);
                     if (chatDelta) {
                         expressResponse.write(`data: ${JSON.stringify(chatDelta)}\n\n`);
@@ -2174,20 +2190,17 @@ function forwardResponsesApiStream(fetchResponse, expressResponse) {
                     // Skip unparseable events
                 }
             } else if (line.startsWith('event: ')) {
-                // The Responses API uses named events; we handle their data on the data: lines
                 const eventType = line.slice(7).trim();
                 if (eventType === 'response.completed' || eventType === 'response.done') {
-                    expressResponse.write('data: [DONE]\n\n');
+                    finishStream();
+                    break;
                 }
             }
         }
     });
 
     fetchResponse.body.on('end', () => {
-        if (!expressResponse.writableEnded) {
-            expressResponse.write('data: [DONE]\n\n');
-            expressResponse.end();
-        }
+        finishStream();
     });
 
     fetchResponse.body.on('error', (err) => {
@@ -2313,6 +2326,28 @@ async function sendOpenAIResponsesRequest(request, response) {
             requestBody.text = {
                 verbosity: request.body.verbosity,
             };
+        }
+
+        // Model-specific parameter cleanup (mirrors frontend logic in createGenerationParameters)
+        const model = request.body.model || '';
+        if (/^(o1|o3|o4)/.test(model)) {
+            delete requestBody.temperature;
+            delete requestBody.top_p;
+            delete requestBody.presence_penalty;
+            delete requestBody.frequency_penalty;
+            delete requestBody.stop;
+        } else if (/gpt-5/.test(model)) {
+            if (/gpt-5\.(1|2|3|4)/.test(model) && !/chat-latest/.test(model)) {
+                delete requestBody.frequency_penalty;
+                delete requestBody.presence_penalty;
+                delete requestBody.stop;
+            } else if (!/gpt-5-chat-latest/.test(model) && !/gpt-5\.\d/.test(model)) {
+                delete requestBody.temperature;
+                delete requestBody.top_p;
+                delete requestBody.frequency_penalty;
+                delete requestBody.presence_penalty;
+                delete requestBody.stop;
+            }
         }
 
         const endpointUrl = new URL('responses', trimTrailingSlash(apiUrl) + '/').toString();
