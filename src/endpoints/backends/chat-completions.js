@@ -1644,7 +1644,7 @@ router.post('/status', async function (request, statusResponse) {
         let headers = {};
         let queryParams = {};
 
-        if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENAI) {
+        if ([CHAT_COMPLETION_SOURCES.OPENAI, CHAT_COMPLETION_SOURCES.OPENAI_RESPONSES].includes(request.body.chat_completion_source)) {
             apiUrl = new URL(request.body.reverse_proxy || API_OPENAI).toString();
             apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.OPENAI);
             headers = {};
@@ -2301,12 +2301,21 @@ async function sendOpenAIResponsesRequest(request, response) {
         }
 
         if (request.body.reasoning_effort) {
+            const reasoningEffort = OPENAI_REASONING_EFFORT_MODELS.includes(request.body.model)
+                ? OPENAI_FIXED_REASONING_EFFORT[request.body.model] ?? OPENAI_REASONING_EFFORT_MAP[request.body.reasoning_effort] ?? request.body.reasoning_effort
+                : request.body.reasoning_effort;
             requestBody.reasoning = {
-                effort: request.body.reasoning_effort,
+                effort: reasoningEffort,
             };
         }
 
-        const endpointUrl = `${apiUrl}/responses`;
+        if (request.body.verbosity && OPENAI_VERBOSITY_MODELS.test(request.body.model)) {
+            requestBody.text = {
+                verbosity: request.body.verbosity,
+            };
+        }
+
+        const endpointUrl = new URL('responses', trimTrailingSlash(apiUrl) + '/').toString();
         const config = {
             method: 'POST',
             headers: {
@@ -2657,13 +2666,13 @@ router.post('/generate', async function (request, response) {
         }
 
         // A few of OpenAIs reasoning models support reasoning effort
-        if (request.body.reasoning_effort && [CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.OPENAI].includes(request.body.chat_completion_source)) {
+        if (request.body.reasoning_effort && [CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.OPENAI, CHAT_COMPLETION_SOURCES.OPENAI_RESPONSES].includes(request.body.chat_completion_source)) {
             if (OPENAI_REASONING_EFFORT_MODELS.includes(request.body.model)) {
                 bodyParams['reasoning_effort'] = OPENAI_FIXED_REASONING_EFFORT[request.body.model] ?? OPENAI_REASONING_EFFORT_MAP[request.body.reasoning_effort] ?? request.body.reasoning_effort;
             }
         }
 
-        if (request.body.verbosity && [CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.OPENAI].includes(request.body.chat_completion_source)) {
+        if (request.body.verbosity && [CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.OPENAI, CHAT_COMPLETION_SOURCES.OPENAI_RESPONSES].includes(request.body.chat_completion_source)) {
             if (OPENAI_VERBOSITY_MODELS.test(request.body.model)) {
                 bodyParams['verbosity'] = request.body.verbosity;
             }

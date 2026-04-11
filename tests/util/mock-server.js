@@ -21,6 +21,62 @@ export class MockServer {
     }
 
     /**
+     * Handles models endpoint requests.
+     * @returns {{data: {id: string}[]}} Mock response object.
+     */
+    handleModels() {
+        return {
+            data: [
+                { id: 'gpt-4o-mini' },
+                { id: 'gpt-5.4' },
+            ],
+        };
+    }
+
+    /**
+     * Handles Responses API requests.
+     * @param {object} jsonBody The parsed JSON body from the request.
+     * @returns {object} Mock response object.
+     */
+    handleResponses(jsonBody) {
+        const input = Array.isArray(jsonBody?.input) ? jsonBody.input : [];
+        const lastItem = input[input.length - 1];
+        const userText = typeof lastItem?.content === 'string'
+            ? lastItem.content
+            : lastItem?.content?.find?.(part => part?.type === 'input_text')?.text;
+
+        return {
+            id: 'resp-test-1',
+            model: jsonBody?.model,
+            status: 'completed',
+            output: [
+                {
+                    type: 'reasoning',
+                    content: [
+                        {
+                            type: 'reasoning_text',
+                            text: `${jsonBody?.model}\n${input.length}\n${jsonBody?.max_output_tokens}`,
+                        },
+                    ],
+                },
+                {
+                    type: 'message',
+                    content: [
+                        {
+                            type: 'output_text',
+                            text: String(userText ?? 'No prompt messages.'),
+                        },
+                    ],
+                },
+            ],
+            usage: {
+                input_tokens: 12,
+                output_tokens: 5,
+            },
+        };
+    }
+
+    /**
      * Handles Chat Completions requests.
      * @param {object} jsonBody The parsed JSON body from the request.
      * @returns {object} Mock response object.
@@ -58,6 +114,14 @@ export class MockServer {
                     const jsonBody = tryParse(body.toString());
                     if (req.method === 'POST' && req.url === '/v1/chat/completions') {
                         const mockResponse = this.handleChatCompletions(jsonBody);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(mockResponse));
+                    } else if (req.method === 'GET' && req.url === '/v1/models') {
+                        const mockResponse = this.handleModels();
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(mockResponse));
+                    } else if (req.method === 'POST' && req.url === '/v1/responses') {
+                        const mockResponse = this.handleResponses(jsonBody);
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify(mockResponse));
                     } else {

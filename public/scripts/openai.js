@@ -1706,6 +1706,7 @@ export function getChatCompletionModel(settings = null) {
         case chat_completion_sources.CLAUDE:
             return settings.claude_model;
         case chat_completion_sources.OPENAI:
+        case chat_completion_sources.OPENAI_RESPONSES:
             return settings.openai_model;
         case chat_completion_sources.MAKERSUITE:
             return settings.google_model;
@@ -1847,7 +1848,7 @@ function cacheOpenAIStaticModelGroups() {
 
 function collectOpenAIOptionMap() {
     const optionMap = new Map();
-    const externalModels = oai_settings.chat_completion_source === chat_completion_sources.OPENAI
+    const externalModels = [chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES].includes(oai_settings.chat_completion_source)
         ? (Array.isArray(model_list) ? model_list : [])
         : [];
     const addOption = (option) => {
@@ -1959,7 +1960,7 @@ function rebuildOpenAIModelSelect() {
         .map(modelId => optionMap.get(modelId))
         .filter(Boolean);
     const favoriteValues = new Set(favoriteOptions.map(option => option.value));
-    const externalModels = oai_settings.chat_completion_source === chat_completion_sources.OPENAI
+    const externalModels = [chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES].includes(oai_settings.chat_completion_source)
         ? (Array.isArray(model_list) ? model_list : [])
         : [];
 
@@ -2910,7 +2911,7 @@ function saveModelList(data) {
         $('#model_openrouter_select').val(oai_settings.openrouter_model).trigger('change');
     }
 
-    if (oai_settings.chat_completion_source == chat_completion_sources.OPENAI) {
+    if ([chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES].includes(oai_settings.chat_completion_source)) {
         rebuildOpenAIModelSelect();
         const selectedModel = $('#model_openai_select').find(`option[value="${CSS.escape(oai_settings.openai_model)}"]`).length > 0
             ? oai_settings.openai_model
@@ -3409,6 +3410,7 @@ function getReasoningEffort(settings = null, model = null) {
     // These sources expect the effort as string.
     const reasoningEffortSources = [
         chat_completion_sources.OPENAI,
+        chat_completion_sources.OPENAI_RESPONSES,
         chat_completion_sources.AZURE_OPENAI,
         chat_completion_sources.CUSTOM,
         chat_completion_sources.XAI,
@@ -3434,7 +3436,7 @@ function getReasoningEffort(settings = null, model = null) {
                     return 'none';
                 }
 
-                return [chat_completion_sources.OPENAI, chat_completion_sources.AZURE_OPENAI].includes(settings.chat_completion_source) && /^gpt-5/.test(model)
+                return [chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES, chat_completion_sources.AZURE_OPENAI].includes(settings.chat_completion_source) && /^gpt-5/.test(model)
                     ? reasoning_effort_types.min
                     : reasoning_effort_types.low;
             case reasoning_effort_types.max:
@@ -3801,7 +3803,7 @@ export async function createGenerationParameters(settings, model, type, messages
         generate_data.seed = settings.seed;
     }
 
-    if ([chat_completion_sources.OPENAI, chat_completion_sources.AZURE_OPENAI].includes(settings.chat_completion_source) && /^(o1|o3|o4)/.test(model) ||
+    if ([chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES, chat_completion_sources.AZURE_OPENAI].includes(settings.chat_completion_source) && /^(o1|o3|o4)/.test(model) ||
         (chat_completion_sources.OPENROUTER === settings.chat_completion_source && /^openai\/(o1|o3|o4)/.test(model))) {
         generate_data.max_completion_tokens = generate_data.max_tokens;
         delete generate_data.max_tokens;
@@ -4051,6 +4053,7 @@ function parseChatCompletionLogprobs(data) {
                 ? parseOpenAIChatLogprobs(data.choices[0]?.logprobs)
                 : parseOpenAITextLogprobs(data.choices[0]?.logprobs);
         case chat_completion_sources.OPENAI:
+        case chat_completion_sources.OPENAI_RESPONSES:
         case chat_completion_sources.AZURE_OPENAI:
         case chat_completion_sources.DEEPSEEK:
         case chat_completion_sources.XAI:
@@ -5215,6 +5218,7 @@ async function getStatusOpen() {
     const validateProxySources = [
         chat_completion_sources.CLAUDE,
         chat_completion_sources.OPENAI,
+        chat_completion_sources.OPENAI_RESPONSES,
         chat_completion_sources.MISTRALAI,
         chat_completion_sources.MAKERSUITE,
         chat_completion_sources.VERTEXAI,
@@ -5243,7 +5247,8 @@ async function getStatusOpen() {
         data.siliconflow_endpoint = oai_settings.siliconflow_endpoint;
     }
 
-    const canBypass = (oai_settings.chat_completion_source === chat_completion_sources.OPENAI && oai_settings.bypass_status_check) || oai_settings.chat_completion_source === chat_completion_sources.CUSTOM;
+    const canBypass = ([chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES].includes(oai_settings.chat_completion_source) && oai_settings.bypass_status_check)
+        || oai_settings.chat_completion_source === chat_completion_sources.CUSTOM;
     if (canBypass) {
         setOnlineStatus(t`Status check bypassed`);
     }
@@ -6378,7 +6383,7 @@ async function onModelChange() {
         $('#temp_openai').attr('max', claude_max_temp).val(oai_settings.temp_openai).trigger('input');
     }
 
-    if ([chat_completion_sources.AZURE_OPENAI, chat_completion_sources.OPENAI].includes(oai_settings.chat_completion_source)) {
+    if ([chat_completion_sources.AZURE_OPENAI, chat_completion_sources.OPENAI, chat_completion_sources.OPENAI_RESPONSES].includes(oai_settings.chat_completion_source)) {
         $('#openai_max_context').attr('max', getMaxContextOpenAI(value));
         oai_settings.openai_max_context = Math.min(oai_settings.openai_max_context, Number($('#openai_max_context').attr('max')));
         $('#openai_max_context').val(oai_settings.openai_max_context).trigger('input');
@@ -6923,6 +6928,7 @@ export function isImageInliningSupported() {
 
     switch (oai_settings.chat_completion_source) {
         case chat_completion_sources.OPENAI:
+        case chat_completion_sources.OPENAI_RESPONSES:
         case chat_completion_sources.AZURE_OPENAI: {
             const modelToCheck = oai_settings.chat_completion_source === chat_completion_sources.AZURE_OPENAI
                 ? oai_settings.azure_openai_model
@@ -7038,6 +7044,7 @@ export function isAudioInliningSupported() {
 
     switch (oai_settings.chat_completion_source) {
         case chat_completion_sources.OPENAI:
+        case chat_completion_sources.OPENAI_RESPONSES:
             return audioSupportedModels.some(model => oai_settings.openai_model.includes(model));
         case chat_completion_sources.MAKERSUITE:
             return audioSupportedModels.some(model => oai_settings.google_model.includes(model));
