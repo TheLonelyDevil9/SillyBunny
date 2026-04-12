@@ -42,6 +42,8 @@ import { getRequestHeaders } from '../../../script.js';
  * @property {'pre'|'post'|'both'} phase
  * @property {AgentInjection} injection
  * @property {AgentPostProcess} postProcess
+ * @property {string} connectionProfile
+ * @property {string} sourceTemplateId
  * @property {boolean} enabled
  * @property {AgentConditions} conditions
  */
@@ -99,6 +101,8 @@ export function createDefaultAgent() {
         author: '',
         prompt: '',
         phase: 'pre',
+        connectionProfile: '',
+        sourceTemplateId: '',
         injection: {
             position: 1,
             depth: 1,
@@ -121,6 +125,44 @@ export function createDefaultAgent() {
             triggerKeywords: [],
             triggerProbability: 100,
             generationTypes: ['normal', 'continue', 'impersonate'],
+        },
+    };
+}
+
+/**
+ * Normalizes an agent loaded from disk or import.
+ * @param {Partial<InChatAgent>} rawAgent
+ * @returns {InChatAgent}
+ */
+function normalizeAgent(rawAgent = {}) {
+    const defaults = createDefaultAgent();
+    const conditions = rawAgent.conditions && typeof rawAgent.conditions === 'object' ? rawAgent.conditions : {};
+
+    return {
+        ...defaults,
+        ...rawAgent,
+        tags: Array.isArray(rawAgent.tags)
+            ? rawAgent.tags.map(tag => String(tag ?? '').trim()).filter(Boolean)
+            : defaults.tags,
+        connectionProfile: typeof rawAgent.connectionProfile === 'string' ? rawAgent.connectionProfile : defaults.connectionProfile,
+        sourceTemplateId: typeof rawAgent.sourceTemplateId === 'string' ? rawAgent.sourceTemplateId : defaults.sourceTemplateId,
+        injection: {
+            ...defaults.injection,
+            ...(rawAgent.injection ?? {}),
+        },
+        postProcess: {
+            ...defaults.postProcess,
+            ...(rawAgent.postProcess ?? {}),
+        },
+        conditions: {
+            ...defaults.conditions,
+            ...conditions,
+            triggerKeywords: Array.isArray(conditions.triggerKeywords)
+                ? conditions.triggerKeywords.map(keyword => String(keyword ?? '').trim()).filter(Boolean)
+                : defaults.conditions.triggerKeywords,
+            generationTypes: Array.isArray(conditions.generationTypes)
+                ? conditions.generationTypes.map(type => String(type ?? '').trim()).filter(Boolean)
+                : defaults.conditions.generationTypes,
         },
     };
 }
@@ -158,7 +200,7 @@ export function getAgentById(id) {
  */
 export function loadAgents(data) {
     if (Array.isArray(data)) {
-        agents = data;
+        agents = data.map(normalizeAgent);
     }
 }
 
@@ -167,17 +209,18 @@ export function loadAgents(data) {
  * @param {InChatAgent} agent
  */
 export async function saveAgent(agent) {
-    const idx = agents.findIndex(a => a.id === agent.id);
+    const normalizedAgent = normalizeAgent(agent);
+    const idx = agents.findIndex(a => a.id === normalizedAgent.id);
     if (idx >= 0) {
-        agents[idx] = agent;
+        agents[idx] = normalizedAgent;
     } else {
-        agents.push(agent);
+        agents.push(normalizedAgent);
     }
 
     const response = await fetch('/api/in-chat-agents/save', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify(agent),
+        body: JSON.stringify(normalizedAgent),
     });
 
     if (!response.ok) {
@@ -221,7 +264,7 @@ export async function importAgents(data) {
 
     const imported = [];
     for (const raw of agentsToImport) {
-        const agent = { ...createDefaultAgent(), ...raw, id: crypto.randomUUID() };
+        const agent = normalizeAgent({ ...createDefaultAgent(), ...raw, id: crypto.randomUUID() });
         await saveAgent(agent);
         imported.push(agent);
     }
@@ -258,6 +301,7 @@ export function exportAgent(id) {
  * @property {string} name
  * @property {string} description
  * @property {string[]} agentTemplateIds - Template IDs (tpl-*) included in this group
+ * @property {Partial<InChatAgent>[]} customAgents - Custom agent snapshots included in this group
  * @property {boolean} builtin - Whether this is a pre-made group
  */
 
@@ -278,7 +322,24 @@ export function getGroups() {
  */
 export function loadGroups(data) {
     if (Array.isArray(data)) {
-        groups = data;
+        groups = data.map(group => ({
+            ...createDefaultGroup(),
+            ...group,
+            name: String(group?.name ?? ''),
+            description: String(group?.description ?? ''),
+            agentTemplateIds: Array.isArray(group?.agentTemplateIds)
+                ? group.agentTemplateIds.map(id => String(id ?? '').trim()).filter(Boolean)
+                : [],
+            customAgents: Array.isArray(group?.customAgents)
+                ? group.customAgents.map(agent => {
+                    const normalizedAgent = normalizeAgent(agent ?? {});
+                    delete normalizedAgent.id;
+                    normalizedAgent.enabled = false;
+                    return normalizedAgent;
+                })
+                : [],
+            builtin: Boolean(group?.builtin),
+        }));
     }
 }
 
@@ -287,11 +348,30 @@ export function loadGroups(data) {
  * @param {AgentGroup} group
  */
 export function saveGroup(group) {
-    const idx = groups.findIndex(g => g.id === group.id);
+    const normalizedGroup = {
+        ...createDefaultGroup(),
+        ...group,
+        name: String(group?.name ?? '').trim(),
+        description: String(group?.description ?? '').trim(),
+        agentTemplateIds: Array.isArray(group?.agentTemplateIds)
+            ? group.agentTemplateIds.map(id => String(id ?? '').trim()).filter(Boolean)
+            : [],
+        customAgents: Array.isArray(group?.customAgents)
+            ? group.customAgents.map(agent => {
+                const normalizedAgent = normalizeAgent(agent ?? {});
+                delete normalizedAgent.id;
+                normalizedAgent.enabled = false;
+                return normalizedAgent;
+            })
+            : [],
+        builtin: Boolean(group?.builtin),
+    };
+
+    const idx = groups.findIndex(g => g.id === normalizedGroup.id);
     if (idx >= 0) {
-        groups[idx] = group;
+        groups[idx] = normalizedGroup;
     } else {
-        groups.push(group);
+        groups.push(normalizedGroup);
     }
 }
 
@@ -313,6 +393,7 @@ export function createDefaultGroup() {
         name: '',
         description: '',
         agentTemplateIds: [],
+        customAgents: [],
         builtin: false,
     };
 }

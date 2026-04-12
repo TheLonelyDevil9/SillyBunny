@@ -1,7 +1,7 @@
-import { renderExtensionTemplateAsync } from '../../extensions.js';
+import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { download } from '../../utils.js';
-import { getRequestHeaders, generateQuietPrompt } from '../../../script.js';
+import { getRequestHeaders, generateQuietPrompt, saveSettingsDebounced } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import {
     getAgents,
@@ -29,6 +29,129 @@ const MODULE_NAME = 'in-chat-agents';
 /** Built-in templates loaded from JSON files. */
 let templates = [];
 
+function persistExtensionState() {
+    extension_settings.inChatAgents = {
+        ...(extension_settings.inChatAgents ?? {}),
+        globalSettings: structuredClone(getGlobalSettings()),
+        groups: getGroups()
+            .filter(group => !group.builtin)
+            .map(group => structuredClone(group)),
+    };
+    saveSettingsDebounced();
+}
+
+function getConnectionManagerRequestService() {
+    try {
+        return SillyTavern.getContext().ConnectionManagerRequestService ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function getSupportedConnectionProfiles() {
+    const CMRS = getConnectionManagerRequestService();
+    if (!CMRS || typeof CMRS.getSupportedProfiles !== 'function') {
+        return [];
+    }
+
+    try {
+        return CMRS.getSupportedProfiles();
+    } catch {
+        return [];
+    }
+}
+
+function populateConnectionProfileSelect(select, { emptyLabel = 'Use main AI', selectedValue = '' } = {}) {
+    if (!(select instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const profiles = getSupportedConnectionProfiles();
+    const resolvedValue = typeof selectedValue === 'string' ? selectedValue : '';
+    select.innerHTML = '';
+
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = emptyLabel;
+    select.appendChild(emptyOption);
+
+    for (const profile of profiles) {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name || profile.id;
+        select.appendChild(option);
+    }
+
+    if (resolvedValue && !profiles.some(profile => profile.id === resolvedValue)) {
+        const missingOption = document.createElement('option');
+        missingOption.value = resolvedValue;
+        missingOption.textContent = `Missing profile (${resolvedValue})`;
+        select.appendChild(missingOption);
+    }
+
+    select.value = resolvedValue;
+}
+
+function buildProfileNameMap() {
+    return new Map(
+        getSupportedConnectionProfiles()
+            .map(profile => [profile.id, profile.name || profile.id]),
+    );
+}
+
+function findTemplateById(templateId) {
+    return templates.find(template => template.id === templateId);
+}
+
+function buildAgentFromTemplate(template) {
+    return {
+        ...createDefaultAgent(),
+        ...structuredClone(template),
+        id: crypto.randomUUID(),
+        sourceTemplateId: template.id,
+        enabled: false,
+    };
+}
+
+function buildAgentFromSnapshot(snapshot) {
+    return {
+        ...createDefaultAgent(),
+        ...structuredClone(snapshot),
+        id: crypto.randomUUID(),
+        enabled: false,
+    };
+}
+
+function hasMatchingAgentSnapshot(snapshot, existingAgents = getAgents()) {
+    const snapshotTemplateId = String(snapshot?.sourceTemplateId ?? '').trim();
+    const snapshotName = String(snapshot?.name ?? '').trim().toLowerCase();
+    const snapshotPrompt = String(snapshot?.prompt ?? '').trim();
+
+    return existingAgents.some(agent => {
+        const existingTemplateId = String(agent?.sourceTemplateId ?? '').trim();
+        const existingName = String(agent?.name ?? '').trim().toLowerCase();
+        const existingPrompt = String(agent?.prompt ?? '').trim();
+
+        if (snapshotTemplateId && existingTemplateId === snapshotTemplateId) {
+            return true;
+        }
+
+        if (snapshotTemplateId && snapshotName && existingName === snapshotName) {
+            return true;
+        }
+
+        if (!snapshotName || existingName !== snapshotName) {
+            return false;
+        }
+
+        if (snapshotPrompt) {
+            return existingPrompt === snapshotPrompt;
+        }
+
+        return true;
+    });
+}
+
 // ===================== Panel Rendering =====================
 
 /**
@@ -37,6 +160,7 @@ let templates = [];
 function renderAgentList() {
     const container = $('#ica--agentList');
     container.empty();
+    const profileNames = buildProfileNameMap();
 
     const searchTerm = ($('#ica--search').val() || '').toString().toLowerCase();
     const categoryFilter = ($('#ica--categoryFilter').val() || '').toString();
@@ -92,11 +216,14 @@ function renderAgentList() {
             const enabledClass = agent.enabled ? 'is-enabled' : '';
             const toggleClass = agent.enabled ? 'is-on' : '';
             const desc = agent.description || agent.prompt.substring(0, 80).replace(/\n/g, ' ') + (agent.prompt.length > 80 ? '...' : '');
+            const connectionProfileLabel = agent.connectionProfile
+                ? profileNames.get(agent.connectionProfile) || `Missing profile (${agent.connectionProfile})`
+                : '';
 
             const card = $(`
                 <div class="ica--agent-card ${enabledClass}">
                     <div class="ica--card-header">
-                        <button class="ica--card-toggle ${toggleClass}" title="${agent.enabled ? 'Disable' : 'Enable'}"></button>
+                        <button type="button" class="ica--card-toggle ${toggleClass}" title="${agent.enabled ? 'Disable' : 'Enable'}"></button>
                         <span class="ica--card-name">${escapeHtml(agent.name)}</span>
                         <span class="ica--card-phase">${phaseLabels[agent.phase] || agent.phase}</span>
                     </div>
@@ -104,11 +231,12 @@ function renderAgentList() {
                     <div class="ica--card-meta">
                         ${agent.conditions.triggerProbability < 100 ? `<span class="ica--card-pill"><i class="fa-solid fa-dice fa-xs"></i> ${agent.conditions.triggerProbability}%</span>` : ''}
                         ${agent.injection.position === 1 ? `<span class="ica--card-pill">depth ${agent.injection.depth}</span>` : ''}
+                        ${connectionProfileLabel ? `<span class="ica--card-pill"><i class="fa-solid fa-plug fa-xs"></i> ${escapeHtml(connectionProfileLabel)}</span>` : ''}
                     </div>
                     <div class="ica--card-actions">
-                        <button class="ica--card-btn ica--btn-edit"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        <button class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>
-                        <button class="ica--card-btn ica--btn-delete caution"><i class="fa-solid fa-trash"></i></button>
+                        <button type="button" class="ica--card-btn ica--btn-edit"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                        <button type="button" class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>
+                        <button type="button" class="ica--card-btn ica--btn-delete caution"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
             `);
@@ -153,13 +281,10 @@ function renderAgentList() {
  * @param {string|null} agentId
  */
 async function openEditor(agentId = null) {
-    const agent = agentId ? { ...getAgentById(agentId) } : createDefaultAgent();
+    const existingAgent = agentId ? getAgentById(agentId) : null;
+    if (agentId && !existingAgent) return;
+    const agent = existingAgent ? structuredClone(existingAgent) : createDefaultAgent();
     if (!agent) return;
-
-    // Deep clone mutable nested objects
-    agent.injection = { ...agent.injection };
-    agent.postProcess = { ...agent.postProcess };
-    agent.conditions = { ...agent.conditions };
 
     const html = await renderExtensionTemplateAsync(MODULE_NAME, 'editor');
     const editorEl = $(html);
@@ -170,6 +295,10 @@ async function openEditor(agentId = null) {
     editorEl.find('#ica--editor-phase').val(agent.phase);
     editorEl.find('#ica--editor-description').val(agent.description);
     editorEl.find('#ica--editor-prompt').val(agent.prompt);
+    populateConnectionProfileSelect(editorEl.find('#ica--editor-connectionProfile')[0], {
+        emptyLabel: 'Use default connection profile',
+        selectedValue: agent.connectionProfile || '',
+    });
 
     // Injection
     editorEl.find('#ica--editor-position').val(agent.injection.position);
@@ -223,7 +352,8 @@ async function openEditor(agentId = null) {
         const currentPrompt = editorEl.find('#ica--editor-prompt').val()?.toString() || '';
         const category = editorEl.find('#ica--editor-category').val()?.toString() || 'custom';
         const phase = editorEl.find('#ica--editor-phase').val()?.toString() || 'pre';
-        const refined = await refinePromptWithAI(currentPrompt, category, phase);
+        const connectionProfile = editorEl.find('#ica--editor-connectionProfile').val()?.toString() || '';
+        const refined = await refinePromptWithAI(currentPrompt, category, phase, connectionProfile);
         if (refined) {
             editorEl.find('#ica--editor-prompt').val(refined);
         }
@@ -244,6 +374,7 @@ async function openEditor(agentId = null) {
     agent.category = editorEl.find('#ica--editor-category').val().toString();
     agent.phase = editorEl.find('#ica--editor-phase').val().toString();
     agent.description = editorEl.find('#ica--editor-description').val().toString().trim();
+    agent.connectionProfile = editorEl.find('#ica--editor-connectionProfile').val()?.toString() || '';
     agent.prompt = editorEl.find('#ica--editor-prompt').val().toString();
 
     agent.injection.position = Number(editorEl.find('#ica--editor-position').val());
@@ -328,7 +459,7 @@ async function openTemplateBrowser() {
 
         const groupGrid = $('<div class="ica--group-grid"></div>');
         for (const group of allGroups) {
-            const count = group.agentTemplateIds.length;
+            const count = group.agentTemplateIds.length + (group.customAgents?.length ?? 0);
             const card = $(`
                 <div class="ica--group-card">
                     <div class="ica--group-card-header">
@@ -337,8 +468,8 @@ async function openTemplateBrowser() {
                     </div>
                     <div class="ica--group-card-desc">${escapeHtml(group.description)}</div>
                     <div class="ica--group-card-actions">
-                        <button class="ica--card-btn ica--grp-apply"><i class="fa-solid fa-download"></i> Apply Group</button>
-                        ${!group.builtin ? '<button class="ica--card-btn ica--grp-delete caution"><i class="fa-solid fa-trash"></i></button>' : ''}
+                        <button type="button" class="ica--card-btn ica--grp-apply"><i class="fa-solid fa-download"></i> Apply Group</button>
+                        ${!group.builtin ? '<button type="button" class="ica--card-btn ica--grp-delete caution"><i class="fa-solid fa-trash"></i></button>' : ''}
                     </div>
                 </div>
             `);
@@ -351,6 +482,7 @@ async function openTemplateBrowser() {
                 const r = await new Popup(`Delete group "${escapeHtml(group.name)}"?`, POPUP_TYPE.CONFIRM).show();
                 if (r === POPUP_RESULT.AFFIRMATIVE) {
                     deleteGroup(group.id);
+                    persistExtensionState();
                     card.remove();
                     toastr.success(`Deleted group "${group.name}".`);
                 }
@@ -397,7 +529,7 @@ async function openTemplateBrowser() {
         `);
 
         card.on('click', async () => {
-            const newAgent = { ...createDefaultAgent(), ...tpl, id: crypto.randomUUID(), enabled: false };
+            const newAgent = buildAgentFromTemplate(tpl);
             await saveAgent(newAgent);
             renderAgentList();
             toastr.success(`Added "${tpl.name}" to your agents.`);
@@ -417,24 +549,49 @@ async function openTemplateBrowser() {
  * @param {import('./agent-store.js').AgentGroup} group
  */
 async function applyGroup(group) {
-    const existing = getAgents();
     let added = 0;
 
     for (const tplId of group.agentTemplateIds) {
-        // Skip if an agent from this template already exists (match by original template id)
-        const alreadyHas = existing.find(a => a.id === tplId || a.name === templates.find(t => t.id === tplId)?.name);
-        if (alreadyHas) continue;
-
-        const tpl = templates.find(t => t.id === tplId);
+        const tpl = findTemplateById(tplId);
         if (!tpl) continue;
 
-        const newAgent = { ...createDefaultAgent(), ...tpl, id: crypto.randomUUID(), enabled: false };
+        const newAgent = buildAgentFromTemplate(tpl);
+        if (hasMatchingAgentSnapshot(newAgent)) continue;
         await saveAgent(newAgent);
         added++;
     }
 
+    if (Array.isArray(group.customAgents)) {
+        for (const customAgent of group.customAgents) {
+            const newAgent = buildAgentFromSnapshot(customAgent);
+            if (hasMatchingAgentSnapshot(newAgent)) continue;
+            await saveAgent(newAgent);
+            added++;
+        }
+    }
+
+    if (!group.builtin && (!Array.isArray(group.customAgents) || group.customAgents.length === 0)) {
+        for (const legacyAgentId of group.agentTemplateIds) {
+            if (findTemplateById(legacyAgentId)) continue;
+            const sourceAgent = getAgentById(legacyAgentId);
+            if (!sourceAgent) continue;
+
+            const snapshot = structuredClone(sourceAgent);
+            delete snapshot.id;
+            snapshot.enabled = false;
+
+            if (hasMatchingAgentSnapshot(snapshot)) continue;
+            await saveAgent(buildAgentFromSnapshot(snapshot));
+            added++;
+        }
+    }
+
     renderAgentList();
-    toastr.success(`Applied "${group.name}" -- added ${added} new agent(s).`);
+    if (added > 0) {
+        toastr.success(`Applied "${group.name}" -- added ${added} new agent(s).`);
+    } else {
+        toastr.info(`"${group.name}" is already applied.`);
+    }
 }
 
 /**
@@ -498,16 +655,29 @@ async function createCustomGroup() {
         return;
     }
 
-    // Map agent IDs to template-style IDs (use agent name for matching since custom agents don't have template IDs)
-    const agentNames = selectedIds.map(id => getAgentById(id)?.name).filter(Boolean);
+    const selectedAgents = selectedIds
+        .map(id => getAgentById(String(id)))
+        .filter(Boolean);
 
     const group = createDefaultGroup();
     group.name = name;
     group.description = html.find('#ica--grp-desc').val()?.toString().trim() || '';
-    // Store agent names as identifiers for custom groups (matched by name on apply)
-    group.agentTemplateIds = selectedIds;
+    group.agentTemplateIds = [];
+    group.customAgents = selectedAgents.map(agent => {
+        const snapshot = structuredClone(agent);
+        delete snapshot.id;
+        snapshot.enabled = false;
+        return snapshot;
+    });
     group.builtin = false;
+
+    if (group.agentTemplateIds.length === 0 && group.customAgents.length === 0) {
+        toastr.warning('Unable to build a reusable group from the selected agents.');
+        return;
+    }
+
     saveGroup(group);
+    persistExtensionState();
 
     toastr.success(`Created group "${name}" with ${selectedIds.length} agent(s).`);
 }
@@ -571,23 +741,10 @@ function populateProfileDropdown() {
     const select = document.getElementById('ica--connectionProfile');
     if (!select) return;
 
-    while (select.options.length > 1) select.remove(1);
-
-    try {
-        const CMRS = SillyTavern.getContext().ConnectionManagerRequestService;
-        if (!CMRS) return;
-        const profiles = CMRS.getSupportedProfiles();
-        for (const p of profiles) {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.name || p.id;
-            select.appendChild(opt);
-        }
-    } catch {
-        // CMRS not available (pre-1.15.0 or connection-manager not loaded)
-    }
-
-    select.value = getGlobalSettings().connectionProfile || '';
+    populateConnectionProfileSelect(select, {
+        emptyLabel: 'Use main AI',
+        selectedValue: getGlobalSettings().connectionProfile || '',
+    });
 }
 
 /**
@@ -596,8 +753,8 @@ function populateProfileDropdown() {
  * @param {string} userPrompt
  * @returns {Promise<string>}
  */
-async function refineLLMCall(systemPrompt, userPrompt) {
-    const profileId = getGlobalSettings().connectionProfile;
+async function refineLLMCall(systemPrompt, userPrompt, connectionProfile = '') {
+    const profileId = connectionProfile || getGlobalSettings().connectionProfile;
 
     if (!profileId) {
         return await generateQuietPrompt({
@@ -606,10 +763,7 @@ async function refineLLMCall(systemPrompt, userPrompt) {
         });
     }
 
-    let CMRS = null;
-    try {
-        CMRS = SillyTavern.getContext().ConnectionManagerRequestService;
-    } catch { /* not available */ }
+    const CMRS = getConnectionManagerRequestService();
 
     if (!CMRS) {
         return await generateQuietPrompt({
@@ -638,7 +792,7 @@ async function refineLLMCall(systemPrompt, userPrompt) {
  * @param {string} phase - Agent phase
  * @returns {Promise<string|null>} - Refined prompt or null if cancelled
  */
-async function refinePromptWithAI(currentPrompt, category, phase) {
+async function refinePromptWithAI(currentPrompt, category, phase, connectionProfile = '') {
     if (!currentPrompt.trim()) {
         toastr.warning('Write a prompt first before refining.');
         return null;
@@ -690,7 +844,7 @@ async function refinePromptWithAI(currentPrompt, category, phase) {
     toastr.info('Refining prompt...', '', { timeOut: 0, extendedTimeOut: 0 });
 
     try {
-        const refined = await refineLLMCall(systemPrompt, userText);
+        const refined = await refineLLMCall(systemPrompt, userText, connectionProfile);
         toastr.clear();
 
         if (!refined || !refined.trim()) {
@@ -731,6 +885,16 @@ async function refinePromptWithAI(currentPrompt, category, phase) {
     const settingsHtml = await renderExtensionTemplateAsync(MODULE_NAME, 'settings');
     $('#in_chat_agents_container').append(settingsHtml);
 
+    const savedState = extension_settings.inChatAgents;
+    if (savedState && typeof savedState === 'object') {
+        if (savedState.globalSettings && typeof savedState.globalSettings === 'object') {
+            setGlobalSettings(savedState.globalSettings);
+        }
+        if (Array.isArray(savedState.groups)) {
+            loadGroups(savedState.groups);
+        }
+    }
+
     // Load agents from server settings
     const settingsResp = await fetch('/api/settings/get', {
         method: 'POST',
@@ -766,9 +930,14 @@ async function refinePromptWithAI(currentPrompt, category, phase) {
     populateProfileDropdown();
     $('#ica--connectionProfile').on('change', function () {
         setGlobalSettings({ connectionProfile: this.value });
+        persistExtensionState();
+        renderAgentList();
     });
     // Refresh profiles when chat changes (profiles may have been added/removed)
-    eventSource.on(event_types.CHAT_CHANGED, populateProfileDropdown);
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        populateProfileDropdown();
+        renderAgentList();
+    });
 
     // Listen for Prompt Manager "Send to Agents" events
     window.addEventListener('PromptManagerSendToAgents', async (event) => {

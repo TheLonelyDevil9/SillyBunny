@@ -239,7 +239,7 @@
     border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 30%, transparent);
 }
 
-.ica--card-actions .ica--card-btn {
+.ica--card-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -252,14 +252,19 @@
     background: transparent;
     border: none;
     color: inherit;
+    appearance: none;
+    font: inherit;
+    text-decoration: none;
 }
 
-.ica--card-actions .ica--card-btn:hover {
+.ica--card-actions .ica--card-btn:hover,
+.ica--group-card-actions .ica--card-btn:hover {
     opacity: 1;
     background: color-mix(in srgb, var(--SmartThemeBorderColor) 30%, transparent);
 }
 
-.ica--card-actions .ica--card-btn.caution:hover {
+.ica--card-actions .ica--card-btn.caution:hover,
+.ica--group-card-actions .ica--card-btn.caution:hover {
     color: var(--SmartThemeBodyColor);
     background: color-mix(in srgb, #c44 30%, transparent);
 }
@@ -421,6 +426,10 @@
     display: flex;
     gap: 4px;
     margin-top: auto;
+}
+
+.ica--group-card-actions .ica--card-btn {
+    justify-content: center;
 }
 
 /* Individual template cards */
