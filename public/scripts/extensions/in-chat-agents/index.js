@@ -1,6 +1,6 @@
 import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
-import { download } from '../../utils.js';
+import { download, uuidv4 } from '../../utils.js';
 import { CLIENT_VERSION, getRequestHeaders, generateQuietPrompt, saveSettingsDebounced } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import {
@@ -309,7 +309,7 @@ function buildAgentFromTemplate(template) {
     return {
         ...createDefaultAgent(),
         ...structuredClone(mergeTemplateDefaults(template)),
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         sourceTemplateId: template.id,
         enabled: false,
     };
@@ -319,7 +319,7 @@ function buildAgentFromSnapshot(snapshot) {
     return {
         ...createDefaultAgent(),
         ...structuredClone(snapshot),
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         enabled: false,
     };
 }

@@ -1,4 +1,4 @@
-import { regexFromString } from '../../utils.js';
+import { regexFromString, uuidv4 } from '../../utils.js';
 
 /**
  * @readonly
@@ -95,7 +95,7 @@ function getCompiledRegex(regexString) {
  */
 export function createDefaultRegexScript() {
     return {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         scriptName: '',
         findRegex: '',
         replaceString: '',

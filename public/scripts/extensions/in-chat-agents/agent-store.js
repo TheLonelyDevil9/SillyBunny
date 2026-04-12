@@ -1,4 +1,5 @@
 import { getRequestHeaders } from '../../../script.js';
+import { uuidv4 } from '../../utils.js';
 import {
     AGENT_REGEX_PLACEMENT,
     AGENT_REGEX_SUBSTITUTE,
@@ -124,7 +125,7 @@ export function getLegacyRegexScript(rawAgent = {}) {
 
     const flags = String(postProcess.regexFlags ?? 'g').trim() || 'g';
     return normalizeRegexScript({
-        id: `legacy-${String(rawAgent.id ?? crypto.randomUUID())}`,
+        id: `legacy-${String(rawAgent.id ?? uuidv4())}`,
         scriptName: `${String(rawAgent.name ?? '').trim() || 'Agent'} legacy regex`,
         findRegex: `/${escapeRegexLiteral(postProcess.regexFind)}/${flags}`,
         replaceString: String(postProcess.regexReplace ?? ''),
@@ -164,7 +165,7 @@ export function getAgentRegexScripts(rawAgent = {}) {
  */
 export function createDefaultAgent() {
     return {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         name: '',
         description: '',
         icon: '',
@@ -380,7 +381,7 @@ export async function importAgents(data) {
 
     const imported = [];
     for (const rawAgent of agentsToImport) {
-        const agent = normalizeAgent({ ...createDefaultAgent(), ...rawAgent, id: crypto.randomUUID() });
+        const agent = normalizeAgent({ ...createDefaultAgent(), ...rawAgent, id: uuidv4() });
         await saveAgent(agent);
         imported.push(agent);
     }
@@ -427,7 +428,7 @@ export function exportAgent(id) {
  */
 export function createDefaultGroup() {
     return {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         name: '',
         description: '',
         agentTemplateIds: [],
