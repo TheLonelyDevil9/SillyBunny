@@ -77,6 +77,7 @@ import {
     renderExtensionTemplate,
     renderExtensionTemplateAsync,
     saveMetadataDebounced,
+    setExtensionContextGetter,
     writeExtensionField,
 } from './extensions.js';
 import { groups, openGroupChat, selected_group, unshallowGroupMembers } from './group-chats.js';
@@ -299,5 +300,7 @@ export function getContext() {
         },
     };
 }
+
+setExtensionContextGetter(getContext);
 
 export default getContext;

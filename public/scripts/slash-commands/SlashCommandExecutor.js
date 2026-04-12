@@ -1,4 +1,4 @@
-import { uuidv4 } from '../utils.js';
+import { uuidv4 } from './SlashCommandRuntimeUtils.js';
 import { SlashCommand } from './SlashCommand.js';
 import { SlashCommandClosure } from './SlashCommandClosure.js';
 import { SlashCommandNamedArgumentAssignment } from './SlashCommandNamedArgumentAssignment.js';

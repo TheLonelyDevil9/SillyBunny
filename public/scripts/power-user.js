@@ -67,6 +67,7 @@ import { bindModelTemplates } from './chat-templates.js';
 import { IMAGE_OVERSWIPE, MEDIA_DISPLAY } from './constants.js';
 import { t } from './i18n.js';
 import { getBackgroundPath, isCustomBackgroundUrl } from './backgrounds.js';
+import { setSlashCommandParserSettingsGetter } from './slash-commands/SlashCommandParserConfig.js';
 
 export const toastPositionClasses = [
     'toast-top-left',
@@ -424,6 +425,11 @@ export const power_user = {
     media_display: MEDIA_DISPLAY.LIST,
     image_overswipe: IMAGE_OVERSWIPE.GENERATE,
 };
+
+setSlashCommandParserSettingsGetter(() => ({
+    experimentalMacroEngine: power_user.experimental_macro_engine,
+    flags: power_user.stscript?.parser?.flags ?? {},
+}));
 
 let themes = [];
 let movingUIPresets = [];

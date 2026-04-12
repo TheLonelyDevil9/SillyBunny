@@ -1,10 +1,13 @@
 import { hljs } from '../../lib.js';
-import { t } from '../i18n.js';
 import { SlashCommandAbortController } from './SlashCommandAbortController.js';
 import { SlashCommandArgument, SlashCommandNamedArgument } from './SlashCommandArgument.js';
 import { SlashCommandClosure } from './SlashCommandClosure.js';
 import { SlashCommandDebugController } from './SlashCommandDebugController.js';
 import { SlashCommandScope } from './SlashCommandScope.js';
+
+function t(strings, ...values) {
+    return String.raw({ raw: strings }, ...values);
+}
 
 /**
  * @typedef {NamedArgumentsCapture & {

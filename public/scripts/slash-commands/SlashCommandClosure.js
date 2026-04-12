@@ -1,6 +1,6 @@
 import { substituteParams } from '../../script.js';
-import { power_user } from '../power-user.js';
-import { delay, escapeRegex, uuidv4 } from '../utils.js';
+import { getSlashCommandParserSettings } from './SlashCommandParserConfig.js';
+import { delay, escapeRegex, uuidv4 } from './SlashCommandRuntimeUtils.js';
 import { SlashCommand } from './SlashCommand.js';
 import { SlashCommandAbortController } from './SlashCommandAbortController.js';
 import { SlashCommandBreak } from './SlashCommandBreak.js';
@@ -171,7 +171,7 @@ export class SlashCommandClosure {
             if (a.key.includes('*') && b.key.includes('*')) return b.key.indexOf('*') - a.key.indexOf('*');
             return 0;
         });
-        if (power_user.experimental_macro_engine) {
+        if (getSlashCommandParserSettings().experimentalMacroEngine) {
             return this.substituteWithMacroEngine(text, scope, macroList);
         }
         const macros = macroList.map(it => escapeMacro(it)).join('|');

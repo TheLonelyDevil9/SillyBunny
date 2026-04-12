@@ -1,6 +1,4 @@
 import { hljs } from '../../lib.js';
-import { power_user } from '../power-user.js';
-import { isFalseBoolean, isTrueBoolean, uuidv4 } from '../utils.js';
 import { SlashCommand } from './SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './SlashCommandArgument.js';
 import { SlashCommandClosure } from './SlashCommandClosure.js';
@@ -15,15 +13,10 @@ import { SlashCommandAbortController } from './SlashCommandAbortController.js';
 import { SlashCommandAutoCompleteNameResult } from './SlashCommandAutoCompleteNameResult.js';
 import { SlashCommandUnnamedArgumentAssignment } from './SlashCommandUnnamedArgumentAssignment.js';
 import { SlashCommandEnumValue } from './SlashCommandEnumValue.js';
-import {
-    findUnclosedScopes,
-    buildMacroAutoCompleteResult,
-} from '../autocomplete/MacroAutoCompleteHelper.js';
 import { SlashCommandBreakPoint } from './SlashCommandBreakPoint.js';
 import { SlashCommandDebugController } from './SlashCommandDebugController.js';
-import { commonEnumProviders } from './SlashCommandCommonEnumsProvider.js';
 import { SlashCommandBreak } from './SlashCommandBreak.js';
-import { parseMacroContext } from '../autocomplete/EnhancedMacroAutoCompleteOption.js';
+import { getSlashCommandParserSettings } from './SlashCommandParserConfig.js';
 
 /** @typedef {import('./SlashCommand.js').NamedArgumentsCapture} NamedArgumentsCapture */
 /** @typedef {import('./SlashCommand.js').NamedArguments} NamedArguments */
@@ -39,6 +32,74 @@ export const PARSER_FLAG = {
     'STRICT_ESCAPING': 1,
     'REPLACE_GETVAR': 2,
 };
+
+let macroAutoCompleteHelpersPromise = null;
+
+function getBooleanEnumList(mode = 'trueFalse') {
+    switch (mode) {
+        case 'onOff':
+            return [
+                new SlashCommandEnumValue('on', null, 'macro', '✔️'),
+                new SlashCommandEnumValue('off', null, 'macro', '❌'),
+            ];
+        case 'onOffToggle':
+            return [
+                new SlashCommandEnumValue('on', null, 'macro', '✔️'),
+                new SlashCommandEnumValue('off', null, 'macro', '❌'),
+                new SlashCommandEnumValue('toggle', null, 'macro', '🔲'),
+            ];
+        case 'trueFalse':
+        default:
+            return [
+                new SlashCommandEnumValue('true', null, 'macro', '✔️'),
+                new SlashCommandEnumValue('false', null, 'macro', '❌'),
+            ];
+    }
+}
+
+function isTrueBoolean(arg) {
+    return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
+}
+
+function isFalseBoolean(arg) {
+    return ['off', 'false', '0'].includes(arg?.trim()?.toLowerCase());
+}
+
+function uuidv4() {
+    if ('randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+function getParserSettings() {
+    return getSlashCommandParserSettings();
+}
+
+function extractMacroIdentifier(macroContent) {
+    const trimmed = String(macroContent ?? '').trimStart();
+
+    if (!trimmed.length) {
+        return '';
+    }
+
+    if (trimmed.startsWith('/')) {
+        return '/';
+    }
+
+    const identifier = trimmed.match(/^([!?.#/$%^&*@+-]*)([\w-]+)/);
+    return identifier?.[2] ?? '';
+}
+
+async function getMacroAutoCompleteHelpers() {
+    macroAutoCompleteHelpersPromise ??= import('../autocomplete/MacroAutoCompleteHelper.js');
+    return macroAutoCompleteHelpersPromise;
+}
 
 export class SlashCommandParser {
     /** @type {Object.<string, SlashCommand>} */ static commands = {};
@@ -159,7 +220,7 @@ export class SlashCommandParser {
                         description: 'The state of the parser flag to set.',
                         typeList: [ARGUMENT_TYPE.BOOLEAN],
                         defaultValue: 'on',
-                        enumList: commonEnumProviders.boolean('onOff')(),
+                        enumList: getBooleanEnumList('onOff'),
                     }),
                 ],
                 splitUnnamedArgument: true,
@@ -471,6 +532,11 @@ export class SlashCommandParser {
      * @param {*} index Index to check for names (cursor position).
      */
     async getNameAt(text, index) {
+        const {
+            findUnclosedScopes,
+            buildMacroAutoCompleteResult,
+        } = await getMacroAutoCompleteHelpers();
+
         if (this.text != text) {
             try {
                 this.parse(text, false);
@@ -646,7 +712,7 @@ export class SlashCommandParser {
 
     replaceGetvar(value) {
         // Not needed with the new parser.
-        if (power_user.experimental_macro_engine) {
+        if (getParserSettings().experimentalMacroEngine) {
             return value;
         }
         return value.replace(/{{(get(?:global)?var)::([^}]+)}}/gi, (match, cmd, name, idx) => {
@@ -707,8 +773,10 @@ export class SlashCommandParser {
 
     parse(text, verifyCommandNames = true, flags = null, abortController = null, debugController = null) {
         this.verifyCommandNames = verifyCommandNames;
+        const parserSettings = getParserSettings();
+        const configuredFlags = parserSettings.flags ?? {};
         for (const key of Object.keys(PARSER_FLAG)) {
-            this.flags[PARSER_FLAG[key]] = flags?.[PARSER_FLAG[key]] ?? power_user.stscript.parser.flags[PARSER_FLAG[key]] ?? false;
+            this.flags[PARSER_FLAG[key]] = flags?.[PARSER_FLAG[key]] ?? configuredFlags[PARSER_FLAG[key]] ?? false;
         }
         this.abortController = abortController;
         this.debugController = debugController;
@@ -1326,12 +1394,10 @@ export class SlashCommandParser {
                 const macroContent = text.slice(macroStart + 2, contentEnd);
 
                 // Use parseMacroContext to extract the identifier
-                const context = parseMacroContext(macroContent, macroContent.length);
-
                 this.macroIndex.push({
                     start: offset + macroStart,
                     end: offset + macroEnd,
-                    name: context.identifier,
+                    name: extractMacroIdentifier(macroContent),
                 });
 
                 // Continue from where we left off (don't skip ahead)

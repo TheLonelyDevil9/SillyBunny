@@ -1,5 +1,5 @@
 import { SlashCommandClosure } from './SlashCommandClosure.js';
-import { convertValueType } from '../utils.js';
+import { convertValueType } from './SlashCommandRuntimeUtils.js';
 
 export class SlashCommandScope {
     /** @type {string[]} */ variableNames = [];

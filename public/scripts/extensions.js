@@ -4,7 +4,6 @@ import { eventSource, event_types, saveSettings, saveSettingsDebounced, getReque
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
 import { renderTemplate, renderTemplateAsync } from './templates.js';
 import { delay, equalsIgnoreCaseAndAccents, isSubsetOf, sanitizeSelector, setValueByPath, versionCompare } from './utils.js';
-import { getContext } from './st-context.js';
 import { isAdmin } from './user.js';
 import { addLocaleData, getCurrentLocale, t } from './i18n.js';
 import { debounce_timeout } from './constants.js';
@@ -12,10 +11,23 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SimpleMutex } from './util/SimpleMutex.js';
 
 export {
-    getContext,
     getApiUrl,
     SimpleMutex as ModuleWorkerWrapper,
 };
+
+let extensionContextGetter = null;
+
+export function setExtensionContextGetter(getter) {
+    extensionContextGetter = typeof getter === 'function' ? getter : null;
+}
+
+export function getContext() {
+    if (typeof extensionContextGetter !== 'function') {
+        throw new Error('Extension context is not available yet.');
+    }
+
+    return extensionContextGetter();
+}
 
 /** @type {string[]} */
 export let extensionNames = [];
