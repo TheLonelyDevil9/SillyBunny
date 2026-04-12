@@ -1,7 +1,7 @@
 import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { download, uuidv4 } from '../../utils.js';
-import { CLIENT_VERSION, getRequestHeaders, generateQuietPrompt, saveSettingsDebounced } from '../../../script.js';
+import { CLIENT_VERSION, chat, getRequestHeaders, generateQuietPrompt, saveSettingsDebounced } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import {
     getAgents,
@@ -25,7 +25,7 @@ import {
     deleteGroup,
     createDefaultGroup,
 } from './agent-store.js';
-import { initAgentRunner } from './agent-runner.js';
+import { initAgentRunner, runAgentOnMessage } from './agent-runner.js';
 import {
     AGENT_REGEX_PLACEMENT,
     AGENT_REGEX_SUBSTITUTE,
@@ -374,11 +374,8 @@ function shouldMigrateBundledTrackerPromptPass(agent, template) {
         return false;
     }
 
-    if (Boolean(agent?.postProcess?.promptTransformEnabled)) {
-        return false;
-    }
-
-    return String(agent?.phase ?? '') === 'both';
+    const desiredPhase = mergeTemplateDefaults(template).phase ?? 'pre';
+    return String(agent?.phase ?? '') !== desiredPhase;
 }
 
 async function migrateBundledTrackerPromptPassesToSavedAgents() {
@@ -390,14 +387,15 @@ async function migrateBundledTrackerPromptPassesToSavedAgents() {
             continue;
         }
 
-        agent.phase = String(template.phase ?? 'pre');
+        const mergedTemplate = mergeTemplateDefaults(template);
+        agent.phase = String(mergedTemplate.phase ?? 'pre');
         agent.sourceTemplateId = agent.sourceTemplateId || template.id;
-        agent.postProcess.promptTransformEnabled = Boolean(template.postProcess?.promptTransformEnabled);
-        agent.postProcess.promptTransformShowNotifications = Object.hasOwn(template.postProcess ?? {}, 'promptTransformShowNotifications')
-            ? Boolean(template.postProcess?.promptTransformShowNotifications)
+        agent.postProcess.promptTransformEnabled = Boolean(mergedTemplate.postProcess?.promptTransformEnabled);
+        agent.postProcess.promptTransformShowNotifications = Object.hasOwn(mergedTemplate.postProcess ?? {}, 'promptTransformShowNotifications')
+            ? Boolean(mergedTemplate.postProcess?.promptTransformShowNotifications)
             : true;
-        agent.postProcess.promptTransformMode = template.postProcess?.promptTransformMode === 'append' ? 'append' : 'rewrite';
-        agent.postProcess.promptTransformMaxTokens = Number(template.postProcess?.promptTransformMaxTokens) || 2000;
+        agent.postProcess.promptTransformMode = mergedTemplate.postProcess?.promptTransformMode === 'append' ? 'append' : 'rewrite';
+        agent.postProcess.promptTransformMaxTokens = Number(mergedTemplate.postProcess?.promptTransformMaxTokens) || 2000;
         await saveAgent(agent);
         migratedCount++;
     }
@@ -754,7 +752,7 @@ function renderAgentList() {
     const searchTerm = ($('#ica--search').val() || '').toString().toLowerCase();
     const categoryFilter = ($('#ica--categoryFilter').val() || '').toString();
 
-    let agents = getAgents();
+    let agents = getAgents().sort((a, b) => a.injection.order - b.injection.order);
 
     if (searchTerm) {
         agents = agents.filter(a =>
@@ -941,6 +939,9 @@ function renderAgentList() {
         group.append(items);
         container.append(group);
     }
+
+    // Keep per-message run buttons in sync with current agent state
+    injectAllMessageRunButtons();
 }
 
 // ===================== Editor Modal =====================
@@ -1768,6 +1769,61 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     }
 }
 
+// ===================== Per-Message Run Buttons =====================
+
+/**
+ * Returns agents that can be manually run on a message (have a prompt, prompt-transform enabled or have a prompt at all).
+ * Agents are eligible if they are enabled and have a non-empty prompt.
+ */
+function getManualRunAgents() {
+    return getAgents().filter(agent =>
+        agent.enabled &&
+        String(agent.prompt ?? '').trim(),
+    );
+}
+
+/**
+ * Injects "Run Agent" buttons into the .extraMesButtons container of a single message element.
+ * @param {number} messageIndex
+ */
+function injectMessageRunButtons(messageIndex) {
+    const mesEl = document.querySelector(`.mes[mesid="${messageIndex}"]`);
+    if (!mesEl) return;
+
+    const message = chat[messageIndex];
+    if (!message || message.is_user || message.is_system) return;
+
+    // Remove any previously injected buttons for this message
+    mesEl.querySelectorAll('.ica--mes-run-btn').forEach(el => el.remove());
+
+    const agents = getManualRunAgents();
+    if (agents.length === 0) return;
+
+    const container = mesEl.querySelector('.extraMesButtons');
+    if (!container) return;
+
+    for (const agent of agents) {
+        const btn = document.createElement('div');
+        btn.className = 'mes_button ica--mes-run-btn';
+        btn.title = `Run agent: ${agent.name}`;
+        btn.dataset.agentId = agent.id;
+        btn.innerHTML = `<i class="fa-solid fa-robot"></i><span class="ica--mes-run-label">${escapeHtml(agent.name)}</span>`;
+        container.appendChild(btn);
+    }
+}
+
+/**
+ * Re-injects run buttons into all currently rendered messages.
+ */
+function injectAllMessageRunButtons() {
+    document.querySelectorAll('.mes[mesid]').forEach(mesEl => {
+        const messageIndex = Number(mesEl.getAttribute('mesid'));
+        if (!isNaN(messageIndex)) {
+            injectMessageRunButtons(messageIndex);
+        }
+    });
+}
+
 // ===================== Initialization =====================
 
 (async function () {
@@ -1849,6 +1905,9 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
 
     // Initialize the pipeline runner
     initAgentRunner();
+
+    // Inject run buttons into any already-rendered messages
+    injectAllMessageRunButtons();
 
     // Render the panel
     renderAgentList();
@@ -1963,6 +2022,24 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         populateProfileDropdown();
         populateGlobalNotificationToggle();
         renderAgentList();
+        injectAllMessageRunButtons();
+    });
+
+    // Inject run buttons when new messages are rendered or updated
+    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (messageIndex) => {
+        injectMessageRunButtons(Number(messageIndex));
+    });
+    eventSource.on(event_types.MESSAGE_UPDATED, (messageIndex) => {
+        injectMessageRunButtons(Number(messageIndex));
+    });
+
+    // Delegated click handler for run-agent buttons
+    $(document).on('click', '.ica--mes-run-btn', function (event) {
+        event.stopPropagation();
+        const agentId = $(this).data('agent-id');
+        const messageIndex = Number($(this).closest('.mes').attr('mesid'));
+        if (!agentId || isNaN(messageIndex)) return;
+        runAgentOnMessage(agentId, messageIndex);
     });
 
     // Listen for Prompt Manager "Send to Agents" events

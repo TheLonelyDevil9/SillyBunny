@@ -412,6 +412,28 @@
 
 /* ── Prompt Manager button ──────────────────────────── */
 
+/* ── Per-message run buttons ────────────────────────── */
+
+.ica--mes-run-btn {
+    display: flex !important;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: var(--mainFontSize, 13px);
+}
+
+.ica--mes-run-label {
+    font-size: calc(var(--mainFontSize, 13px) * 0.85);
+    opacity: 0.85;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Prompt Manager button ──────────────────────────── */
+
 .prompt-manager-send-to-agents-action {
     cursor: pointer;
     opacity: 0.5;

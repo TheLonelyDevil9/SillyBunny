@@ -833,3 +833,40 @@ export function initAgentRunner() {
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.MESSAGE_EDITED, onMessageEdited);
 }
+
+/**
+ * Manually runs a single agent on a specific message (on-demand, not triggered by generation).
+ * @param {string} agentId
+ * @param {number} messageIndex
+ * @returns {Promise<import('./agent-store.js').InChatAgent | null>}
+ */
+export async function runAgentOnMessage(agentId, messageIndex) {
+    if (internalPromptTransformDepth > 0) {
+        toastr.warning('Cannot run an agent while another is in progress.');
+        return null;
+    }
+
+    const agent = getAgentById(agentId);
+    if (!agent) {
+        toastr.error('Agent not found.');
+        return null;
+    }
+
+    const message = chat[messageIndex];
+    if (!message || message.is_user || message.is_system) {
+        return null;
+    }
+
+    const generationType = 'normal';
+    const result = await runPromptTransformAgent(agent, message, generationType);
+
+    if (updatePromptTransformRuns(message, [result])) {
+        saveChatDebounced();
+    }
+
+    if (result.changed) {
+        scheduleMessageRefresh(messageIndex, message);
+    }
+
+    return result;
+}
