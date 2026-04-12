@@ -18,6 +18,10 @@
                             <i class="fa-solid fa-book-open"></i>
                             <span>Templates</span>
                         </div>
+                        <div id="ica--selectMode" class="menu_button menu_button_icon" title="Select multiple agents for bulk actions">
+                            <i class="fa-solid fa-check-square"></i>
+                            <span>Select</span>
+                        </div>
                     </div>
                     <div class="ica--toolbar-secondary">
                         <div id="ica--importAgent" class="menu_button menu_button_icon" title="Import agent(s) from a JSON file">
@@ -26,6 +30,29 @@
                         <div id="ica--exportAll" class="menu_button menu_button_icon" title="Export all agents to a file">
                             <i class="fa-solid fa-file-export"></i>
                         </div>
+                    </div>
+                </div>
+
+                <div id="ica--bulkBar" class="ica--bulk-bar" style="display:none">
+                    <div class="ica--bulk-bar-top">
+                        <span id="ica--bulkCount" class="ica--bulk-count">0 selected</span>
+                    </div>
+                    <div class="ica--bulk-bar-actions">
+                        <button type="button" id="ica--bulkSelectAll" class="menu_button menu_button_icon" title="Select all agents">
+                            <i class="fa-solid fa-check-double"></i> Select All
+                        </button>
+                        <button type="button" id="ica--bulkEnable" class="menu_button menu_button_icon" title="Enable selected agents">
+                            <i class="fa-solid fa-toggle-on"></i> Enable
+                        </button>
+                        <button type="button" id="ica--bulkDisable" class="menu_button menu_button_icon" title="Disable selected agents">
+                            <i class="fa-solid fa-toggle-off"></i> Disable
+                        </button>
+                        <button type="button" id="ica--bulkDelete" class="menu_button menu_button_icon caution" title="Delete selected agents">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                        <button type="button" id="ica--bulkCancel" class="menu_button menu_button_icon" title="Cancel selection">
+                            <i class="fa-solid fa-xmark"></i> Cancel
+                        </button>
                     </div>
                 </div>
 
@@ -56,6 +83,10 @@
                         <input type="checkbox" id="ica--promptTransformShowNotifications" />
                         <span>Allow prompt pass toast notifications</span>
                     </label>
+                    <div id="ica--resetDefaults" class="menu_button menu_button_icon caution" title="Reset all bundled agents to their original template settings (custom agents are not affected)">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>Reset Bundled Agents to Defaults</span>
+                    </div>
                 </div>
 
                 <input type="file" id="ica--importFile" accept=".json" style="display:none" />

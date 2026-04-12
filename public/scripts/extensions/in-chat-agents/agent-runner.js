@@ -285,45 +285,28 @@ function describePromptTransformTarget(profileId = '', runner = '') {
     return 'the main model';
 }
 
-function showPromptTransformStartToast(agent, mode, profileId = '') {
-    return toastr.info(
-        `Running ${describePromptTransformMode(mode)} via ${describePromptTransformTarget(profileId)}...`,
-        agent?.name || 'In-Chat Agent',
-        {
-            timeOut: 0,
-            extendedTimeOut: 0,
-            closeButton: true,
-            tapToDismiss: false,
-            preventDuplicates: false,
-        },
-    );
-}
-
 function showPromptTransformResultToast(agent, result) {
-    const targetLabel = describePromptTransformTarget(result?.profileId, result?.runner);
     const agentName = agent?.name || result?.agentName || 'In-Chat Agent';
-    const modeLabel = describePromptTransformMode(result?.mode);
 
     switch (result?.status) {
         case 'changed':
-            toastr.success(`${modeLabel} finished via ${targetLabel}.`, agentName);
+            toastr.success('', agentName, { timeOut: 3000 });
             break;
         case 'unchanged':
-            toastr.info(`${modeLabel} ran via ${targetLabel} with no text change.`, agentName);
+            toastr.info('no change', agentName, { timeOut: 2000 });
             break;
-        case 'empty-response':
+        case 'empty-response': {
+            const targetLabel = describePromptTransformTarget(result?.profileId, result?.runner);
+            const modeLabel = describePromptTransformMode(result?.mode);
             toastr.warning(`${modeLabel} ran via ${targetLabel} but returned an empty response.`, agentName, {
                 timeOut: 7000,
                 extendedTimeOut: 10000,
             });
             break;
-        case 'skipped-empty-message':
-            toastr.info(`${modeLabel} skipped because the message was empty.`, agentName);
-            break;
-        case 'skipped-empty-prompt':
-            toastr.warning(`${modeLabel} skipped because the agent prompt was empty.`, agentName);
-            break;
-        case 'error':
+        }
+        case 'error': {
+            const targetLabel = describePromptTransformTarget(result?.profileId, result?.runner);
+            const modeLabel = describePromptTransformMode(result?.mode);
             toastr.error(
                 result?.error
                     ? `${modeLabel} failed via ${targetLabel}: ${result.error}`
@@ -335,6 +318,7 @@ function showPromptTransformResultToast(agent, result) {
                 },
             );
             break;
+        }
     }
 }
 
@@ -452,13 +436,12 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
     }
 }
 
-async function runPromptTransformAgent(agent, message, generationType) {
-    const currentMessageText = String(message?.mes ?? '');
+async function runPromptTransformAgent(agent, message, generationType, messageTextOverride = null) {
+    const currentMessageText = messageTextOverride !== null ? String(messageTextOverride) : String(message?.mes ?? '');
     const normalizedGenerationType = normalizeGenerationType(generationType);
     const promptTransformMode = getPromptTransformMode(agent);
     const profileId = resolveAgentConnectionProfile(agent);
     const showNotifications = shouldShowPromptTransformNotifications(agent);
-    const progressToast = showNotifications ? showPromptTransformStartToast(agent, promptTransformMode, profileId) : null;
 
     if (!currentMessageText.trim()) {
         const result = {
@@ -471,11 +454,6 @@ async function runPromptTransformAgent(agent, message, generationType) {
             runner: 'none',
             timestamp: new Date().toISOString(),
         };
-
-        if (progressToast) {
-            toastr.clear(progressToast);
-            showPromptTransformResultToast(agent, result);
-        }
 
         return result;
     }
@@ -497,11 +475,6 @@ async function runPromptTransformAgent(agent, message, generationType) {
             runner: 'none',
             timestamp: new Date().toISOString(),
         };
-
-        if (progressToast) {
-            toastr.clear(progressToast);
-            showPromptTransformResultToast(agent, result);
-        }
 
         return result;
     }
@@ -532,8 +505,7 @@ async function runPromptTransformAgent(agent, message, generationType) {
                 timestamp: new Date().toISOString(),
             };
 
-            if (progressToast) {
-                toastr.clear(progressToast);
+            if (showNotifications) {
                 showPromptTransformResultToast(agent, result);
             }
 
@@ -561,8 +533,7 @@ async function runPromptTransformAgent(agent, message, generationType) {
             timestamp: new Date().toISOString(),
         };
 
-        if (progressToast) {
-            toastr.clear(progressToast);
+        if (showNotifications) {
             showPromptTransformResultToast(agent, result);
         }
 
@@ -581,8 +552,7 @@ async function runPromptTransformAgent(agent, message, generationType) {
             timestamp: new Date().toISOString(),
         };
 
-        if (progressToast) {
-            toastr.clear(progressToast);
+        if (showNotifications) {
             showPromptTransformResultToast(agent, result);
         }
 
@@ -738,12 +708,18 @@ async function processReceivedMessage(messageIndex, generationType) {
 
     let chatStateChanged = false;
     let messageDisplayChanged = false;
-    const promptRuns = [];
 
-    for (const agent of promptTransformAgents) {
-        const result = await runPromptTransformAgent(agent, message, generationType);
-        promptRuns.push(result);
+    const originalMessageText = String(message.mes ?? '');
+    const settledRuns = await Promise.allSettled(
+        promptTransformAgents.map(agent => runPromptTransformAgent(agent, message, generationType, originalMessageText)),
+    );
+    const promptRuns = settledRuns.map(r =>
+        r.status === 'fulfilled'
+            ? r.value
+            : { status: 'error', changed: false, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+    );
 
+    for (const result of promptRuns) {
         if (result.changed) {
             chatStateChanged = true;
             messageDisplayChanged = true;

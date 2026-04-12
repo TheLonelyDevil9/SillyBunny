@@ -200,6 +200,7 @@ export function createDefaultAgent() {
         },
         regexScripts: [],
         enabled: false,
+        phaseLocked: false,
         conditions: {
             triggerKeywords: [],
             triggerProbability: 100,
@@ -267,6 +268,7 @@ export function normalizeAgent(rawAgent = {}) {
             ? rawAgent.regexScripts.map(script => normalizeRegexScript(script ?? {}))
             : defaults.regexScripts,
         enabled: Boolean(rawAgent.enabled),
+        phaseLocked: Boolean(rawAgent.phaseLocked),
         conditions: {
             ...defaults.conditions,
             ...conditions,

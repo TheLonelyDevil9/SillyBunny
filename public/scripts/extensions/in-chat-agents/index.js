@@ -39,6 +39,11 @@ const MODULE_NAME = 'in-chat-agents';
 let templates = [];
 let templateRegexBundles = {};
 
+/** Whether the agent list is in multi-select mode. */
+let selectModeActive = false;
+/** Set of agent IDs currently selected in select mode. */
+const selectedAgentIds = new Set();
+
 const BUNDLED_REGEX_POST_DEFAULT_EXCLUDED_TEMPLATE_IDS = new Set([
     'tpl-anti-slop-regex',
 ]);
@@ -180,10 +185,12 @@ function applyBundledTrackerPromptPass(template) {
 
     return {
         ...template,
-        phase: 'post',
+        phase: 'pre',
         postProcess: {
             ...postProcess,
-            promptTransformEnabled: true,
+            promptTransformEnabled: Object.hasOwn(postProcess, 'promptTransformEnabled')
+                ? Boolean(postProcess.promptTransformEnabled)
+                : false,
             promptTransformShowNotifications: Object.hasOwn(postProcess, 'promptTransformShowNotifications')
                 ? Boolean(postProcess.promptTransformShowNotifications)
                 : true,
@@ -355,6 +362,10 @@ function shouldMigrateBundledTrackerPromptPass(agent, template) {
         return false;
     }
 
+    if (agent?.phaseLocked) {
+        return false;
+    }
+
     if (String(agent?.name ?? '').trim() !== String(template?.name ?? '').trim()) {
         return false;
     }
@@ -379,7 +390,7 @@ async function migrateBundledTrackerPromptPassesToSavedAgents() {
             continue;
         }
 
-        agent.phase = String(template.phase ?? 'post');
+        agent.phase = String(template.phase ?? 'pre');
         agent.sourceTemplateId = agent.sourceTemplateId || template.id;
         agent.postProcess.promptTransformEnabled = Boolean(template.postProcess?.promptTransformEnabled);
         agent.postProcess.promptTransformShowNotifications = Object.hasOwn(template.postProcess ?? {}, 'promptTransformShowNotifications')
@@ -396,6 +407,10 @@ async function migrateBundledTrackerPromptPassesToSavedAgents() {
 
 function shouldMigrateBundledRegexPostDefaults(agent, template) {
     if (!template) {
+        return false;
+    }
+
+    if (agent?.phaseLocked) {
         return false;
     }
 
@@ -592,6 +607,143 @@ function hasMatchingAgentSnapshot(snapshot, existingAgents = getAgents()) {
 // ===================== Panel Rendering =====================
 
 /**
+ * Attaches touch-based drag-and-drop to a card element for mobile support.
+ * The HTML5 drag API is not available on touch devices, so we use pointer events.
+ * @param {HTMLElement} cardEl
+ * @param {HTMLElement} itemsEl
+ * @param {string} agentId
+ */
+function attachTouchDrag(cardEl, itemsEl, agentId) {
+    let touchDragActive = false;
+    let touchStartY = 0;
+    let touchMoveThreshold = 8; // px before drag starts
+    let ghost = null;
+    let ghostOffsetY = 0;
+
+    function getCardAtPoint(x, y) {
+        // Temporarily hide ghost so elementFromPoint sees what's underneath
+        if (ghost) ghost.style.display = 'none';
+        const el = document.elementFromPoint(x, y);
+        if (ghost) ghost.style.display = '';
+        return el ? el.closest('.ica--agent-card') : null;
+    }
+
+    function updateDropIndicator(clientX, clientY) {
+        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+        const target = getCardAtPoint(clientX, clientY);
+        if (!target || target === cardEl) return;
+        const rect = target.getBoundingClientRect();
+        const indicator = document.createElement('div');
+        indicator.className = 'ica--drop-indicator';
+        if (clientY < rect.top + rect.height / 2) {
+            target.before(indicator);
+        } else {
+            target.after(indicator);
+        }
+    }
+
+    cardEl.addEventListener('touchstart', (event) => {
+        if (event.touches.length !== 1) return;
+        touchStartY = event.touches[0].clientY;
+        touchDragActive = false;
+    }, { passive: true });
+
+    cardEl.addEventListener('touchmove', (event) => {
+        if (event.touches.length !== 1) return;
+        const touch = event.touches[0];
+
+        if (!touchDragActive) {
+            if (Math.abs(touch.clientY - touchStartY) < touchMoveThreshold) return;
+            touchDragActive = true;
+            cardEl.classList.add('ica--dragging');
+
+            // Create a visual ghost clone
+            ghost = cardEl.cloneNode(true);
+            ghost.classList.add('ica--drag-ghost');
+            ghost.style.cssText = `
+                position: fixed;
+                left: ${cardEl.getBoundingClientRect().left}px;
+                top: ${cardEl.getBoundingClientRect().top}px;
+                width: ${cardEl.offsetWidth}px;
+                opacity: 0.8;
+                pointer-events: none;
+                z-index: 9999;
+                transform: scale(1.02);
+            `;
+            ghostOffsetY = touch.clientY - cardEl.getBoundingClientRect().top;
+            document.body.appendChild(ghost);
+        }
+
+        event.preventDefault();
+        ghost.style.top = `${touch.clientY - ghostOffsetY}px`;
+        updateDropIndicator(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    cardEl.addEventListener('touchend', async (event) => {
+        if (!touchDragActive) return;
+        touchDragActive = false;
+        cardEl.classList.remove('ica--dragging');
+
+        if (ghost) {
+            ghost.remove();
+            ghost = null;
+        }
+
+        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+
+        const touch = event.changedTouches[0];
+        const target = getCardAtPoint(touch.clientX, touch.clientY);
+        if (!target || target === cardEl || !itemsEl.contains(target)) return;
+
+        const rect = target.getBoundingClientRect();
+        const insertBefore = touch.clientY < rect.top + rect.height / 2;
+        if (insertBefore) {
+            itemsEl.insertBefore(cardEl, target);
+        } else {
+            target.after(cardEl);
+        }
+
+        const orderedIds = Array.from(itemsEl.querySelectorAll('.ica--agent-card')).map(el => el.dataset.agentId);
+        await reorderAgentsInGroup(orderedIds);
+    });
+
+    cardEl.addEventListener('touchcancel', () => {
+        touchDragActive = false;
+        cardEl.classList.remove('ica--dragging');
+        if (ghost) {
+            ghost.remove();
+            ghost = null;
+        }
+        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+    });
+}
+
+async function reorderAgentsInGroup(orderedIds) {
+    for (let i = 0; i < orderedIds.length; i++) {
+        const agent = getAgentById(orderedIds[i]);
+        if (agent) {
+            agent.injection.order = i * 10;
+            await saveAgent(agent);
+        }
+    }
+    renderAgentList();
+}
+
+function updateBulkBar() {
+    const count = selectedAgentIds.size;
+    $('#ica--bulkCount').text(`${count} selected`);
+    $('#ica--bulkBar').toggle(selectModeActive);
+    $('#ica--selectMode').toggleClass('is-active', selectModeActive);
+}
+
+function exitSelectMode() {
+    selectModeActive = false;
+    selectedAgentIds.clear();
+    updateBulkBar();
+    renderAgentList();
+}
+
+/**
  * Re-renders the agent list panel.
  */
 function renderAgentList() {
@@ -654,13 +806,6 @@ function renderAgentList() {
             const toggleClass = agent.enabled ? 'is-on' : '';
             const desc = agent.description || agent.prompt.substring(0, 80).replace(/\n/g, ' ') + (agent.prompt.length > 80 ? '...' : '');
             const regexCount = getAgentRegexScripts(agent).length;
-            const runOrder = normalizeAgentOrderValue(agent?.injection?.order);
-            const runOrderLabel = agent.phase === 'both'
-                ? 'Pre/Post'
-                : (agent.phase === 'post' ? 'Post' : 'Pre');
-            const runOrderTitle = agent.phase === 'both'
-                ? 'Lower numbers run earlier during both the pre-generation and post-generation passes. Higher numbers run later.'
-                : `Lower numbers run earlier during the ${agent.phase === 'post' ? 'post-generation' : 'pre-generation'} pass. Higher numbers run later.`;
             const promptTransformEnabled = hasPromptTransform(agent);
             const promptTransformLabel = getPromptTransformLabel(agent);
             const connectionProfileLabel = agent.connectionProfile
@@ -668,9 +813,9 @@ function renderAgentList() {
                 : '';
 
             const card = $(`
-                <div class="ica--agent-card ${enabledClass}">
+                <div class="ica--agent-card ${enabledClass}${selectModeActive ? ' ica--selectable' : ''}${selectedAgentIds.has(agent.id) ? ' ica--selected' : ''}" draggable="true" data-agent-id="${escapeHtml(agent.id)}">
                     <div class="ica--card-header">
-                        <button type="button" class="ica--card-toggle ${toggleClass}" title="${agent.enabled ? 'Disable' : 'Enable'}"></button>
+                        ${selectModeActive ? `<input type="checkbox" class="ica--card-select" title="Select agent" ${selectedAgentIds.has(agent.id) ? 'checked' : ''} />` : `<button type="button" class="ica--card-toggle ${toggleClass}" title="${agent.enabled ? 'Disable' : 'Enable'}"></button>`}
                         <span class="ica--card-name">${escapeHtml(agent.name)}</span>
                         <span class="ica--card-phase">${phaseLabels[agent.phase] || agent.phase}</span>
                     </div>
@@ -683,11 +828,6 @@ function renderAgentList() {
                         ${connectionProfileLabel ? `<span class="ica--card-pill"><i class="fa-solid fa-plug fa-xs"></i> ${escapeHtml(connectionProfileLabel)}</span>` : ''}
                     </div>
                     <div class="ica--card-actions">
-                        <label class="ica--card-order-control" title="${escapeHtml(runOrderTitle)}">
-                            <span class="ica--card-order-label"><i class="fa-solid fa-arrow-down-1-9"></i> ${escapeHtml(runOrderLabel)}</span>
-                            <input type="number" class="ica--card-order-input text_pole" min="0" max="999" step="1" value="${runOrder}" aria-label="${escapeHtml(runOrderLabel)} run order" />
-                            <span class="ica--card-order-hint">lower first</span>
-                        </label>
                         <button type="button" class="ica--card-btn ica--btn-edit"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
                         <button type="button" class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>
                         <button type="button" class="ica--card-btn ica--btn-delete caution"><i class="fa-solid fa-trash"></i></button>
@@ -695,7 +835,30 @@ function renderAgentList() {
                 </div>
             `);
 
-            card.on('click', () => openEditor(agent.id));
+            card.on('click', () => {
+                if (selectModeActive) {
+                    if (selectedAgentIds.has(agent.id)) {
+                        selectedAgentIds.delete(agent.id);
+                    } else {
+                        selectedAgentIds.add(agent.id);
+                    }
+                    updateBulkBar();
+                    renderAgentList();
+                    return;
+                }
+                openEditor(agent.id);
+            });
+
+            card.find('.ica--card-select').on('click change', function (event) {
+                event.stopPropagation();
+                if ($(this).prop('checked')) {
+                    selectedAgentIds.add(agent.id);
+                } else {
+                    selectedAgentIds.delete(agent.id);
+                }
+                updateBulkBar();
+                renderAgentList();
+            });
 
             card.find('.ica--card-toggle').on('click', async function (event) {
                 stopEvent(event);
@@ -715,36 +878,6 @@ function renderAgentList() {
                 if (data) download(JSON.stringify(data, null, 2), `${agent.name}.json`, 'application/json');
             });
 
-            card.find('.ica--card-order-input').on('mousedown click focus', stopEventPropagation);
-            card.find('.ica--card-order-input').on('keydown', function (event) {
-                event.stopPropagation();
-
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    this.blur();
-                }
-
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    $(this).val(runOrder);
-                    this.blur();
-                }
-            });
-            card.find('.ica--card-order-input').on('change', async function (event) {
-                event.stopPropagation();
-
-                const normalizedOrder = normalizeAgentOrderValue($(this).val(), runOrder);
-                $(this).val(normalizedOrder);
-
-                if (normalizedOrder === runOrder) {
-                    return;
-                }
-
-                agent.injection.order = normalizedOrder;
-                await saveAgent(agent);
-                renderAgentList();
-            });
-
             card.find('.ica--btn-delete').on('click', async event => {
                 stopEvent(event);
                 const result = await new Popup('Delete agent "' + escapeHtml(agent.name) + '"?', POPUP_TYPE.CONFIRM).show();
@@ -753,6 +886,54 @@ function renderAgentList() {
                     renderAgentList();
                 }
             });
+
+            card[0].addEventListener('dragstart', (event) => {
+                event.stopPropagation();
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', agent.id);
+                card[0].classList.add('ica--dragging');
+            });
+            card[0].addEventListener('dragend', () => {
+                card[0].classList.remove('ica--dragging');
+                items[0].querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+            });
+            card[0].addEventListener('dragover', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = 'move';
+                const draggingCard = items[0].querySelector('.ica--dragging');
+                if (!draggingCard || draggingCard === card[0]) return;
+                const rect = card[0].getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                items[0].querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+                const indicator = document.createElement('div');
+                indicator.className = 'ica--drop-indicator';
+                if (event.clientY < midY) {
+                    card[0].before(indicator);
+                } else {
+                    card[0].after(indicator);
+                }
+            });
+            card[0].addEventListener('drop', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                items[0].querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
+                const draggedId = event.dataTransfer.getData('text/plain');
+                if (!draggedId || draggedId === agent.id) return;
+                const draggedEl = items[0].querySelector(`[data-agent-id="${draggedId}"]`);
+                if (!draggedEl) return;
+                const targetEl = card[0];
+                const rect = targetEl.getBoundingClientRect();
+                const insertBefore = event.clientY < rect.top + rect.height / 2;
+                if (insertBefore) {
+                    items[0].insertBefore(draggedEl, targetEl);
+                } else {
+                    targetEl.after(draggedEl);
+                }
+                const orderedIds = Array.from(items[0].querySelectorAll('.ica--agent-card')).map(el => el.dataset.agentId);
+                await reorderAgentsInGroup(orderedIds);
+            });
+            attachTouchDrag(card[0], items[0], agent.id);
 
             items.append(card);
         }
@@ -1059,6 +1240,7 @@ async function openEditor(agentId = null) {
     agent.name = editorEl.find('#ica--editor-name').val().toString().trim() || 'Untitled Agent';
     agent.category = editorEl.find('#ica--editor-category').val().toString();
     agent.phase = editorEl.find('#ica--editor-phase').val().toString();
+    agent.phaseLocked = true;
     agent.description = editorEl.find('#ica--editor-description').val().toString().trim();
     agent.connectionProfile = editorEl.find('#ica--editor-connectionProfile').val()?.toString() || '';
     agent.prompt = editorEl.find('#ica--editor-prompt').val().toString();
@@ -1677,6 +1859,53 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     $('#ica--importFile').on('change', handleImport);
     $('#ica--exportAll').on('click', handleExportAll);
     $('#ica--templates').on('click', openTemplateBrowser);
+    $('#ica--selectMode').on('click', () => {
+        selectModeActive = !selectModeActive;
+        if (!selectModeActive) {
+            selectedAgentIds.clear();
+        }
+        updateBulkBar();
+        renderAgentList();
+    });
+    $('#ica--bulkCancel').on('click', exitSelectMode);
+    $('#ica--bulkSelectAll').on('click', () => {
+        for (const agent of getAgents()) {
+            selectedAgentIds.add(agent.id);
+        }
+        updateBulkBar();
+        renderAgentList();
+    });
+    $('#ica--bulkEnable').on('click', async () => {
+        for (const id of selectedAgentIds) {
+            const agent = getAgentById(id);
+            if (agent && !agent.enabled) {
+                agent.enabled = true;
+                await saveAgent(agent);
+            }
+        }
+        exitSelectMode();
+    });
+    $('#ica--bulkDisable').on('click', async () => {
+        for (const id of selectedAgentIds) {
+            const agent = getAgentById(id);
+            if (agent && agent.enabled) {
+                agent.enabled = false;
+                await saveAgent(agent);
+            }
+        }
+        exitSelectMode();
+    });
+    $('#ica--bulkDelete').on('click', async () => {
+        const count = selectedAgentIds.size;
+        if (count === 0) return;
+        const result = await new Popup(`Delete ${count} selected agent${count !== 1 ? 's' : ''}?`, POPUP_TYPE.CONFIRM).show();
+        if (result === POPUP_RESULT.AFFIRMATIVE) {
+            for (const id of [...selectedAgentIds]) {
+                await deleteAgent(id);
+            }
+            exitSelectMode();
+        }
+    });
 
     // Wire up filter
     $('#ica--search').on('input', renderAgentList);
@@ -1693,6 +1922,41 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     $('#ica--promptTransformShowNotifications').on('change', function () {
         setGlobalSettings({ promptTransformShowNotifications: $(this).prop('checked') });
         persistExtensionState();
+    });
+    $('#ica--resetDefaults').on('click', async () => {
+        const agents = getAgents();
+        const bundledCount = agents.filter(a => findTemplateForAgent(a)).length;
+        if (bundledCount === 0) {
+            toastr.info('No bundled agents found to reset.');
+            return;
+        }
+        const result = await new Popup(
+            `Reset ${bundledCount} bundled agent${bundledCount !== 1 ? 's' : ''} to their original template defaults? Custom agents will not be affected. This cannot be undone.`,
+            POPUP_TYPE.CONFIRM,
+        ).show();
+        if (result !== POPUP_RESULT.AFFIRMATIVE) return;
+        let resetCount = 0;
+        for (const agent of agents) {
+            const template = findTemplateForAgent(agent);
+            if (!template) continue;
+            const fresh = mergeTemplateDefaults(template);
+            agent.name = fresh.name ?? agent.name;
+            agent.description = fresh.description ?? agent.description;
+            agent.icon = fresh.icon ?? agent.icon;
+            agent.category = fresh.category ?? agent.category;
+            agent.tags = fresh.tags ?? agent.tags;
+            agent.prompt = fresh.prompt ?? agent.prompt;
+            agent.phase = fresh.phase ?? 'pre';
+            agent.phaseLocked = false;
+            agent.injection = { ...agent.injection, ...fresh.injection };
+            agent.postProcess = { ...agent.postProcess, ...fresh.postProcess };
+            agent.regexScripts = Array.isArray(fresh.regexScripts) ? structuredClone(fresh.regexScripts) : agent.regexScripts;
+            agent.sourceTemplateId = template.id;
+            await saveAgent(agent);
+            resetCount++;
+        }
+        toastr.success(`Reset ${resetCount} bundled agent${resetCount !== 1 ? 's' : ''} to defaults.`);
+        renderAgentList();
     });
     // Refresh profiles when chat changes (profiles may have been added/removed)
     eventSource.on(event_types.CHAT_CHANGED, () => {
