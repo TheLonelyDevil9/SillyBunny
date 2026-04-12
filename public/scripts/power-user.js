@@ -3287,7 +3287,7 @@ export function forceCharacterEditorTokenize() {
     $('#character_popup').trigger('input');
 }
 
-jQuery(() => {
+jQuery(async () => {
     const adjustAutocompleteDebounced = debounce(() => {
         $('.ui-autocomplete-input').each(function () {
             const isOpen = $(this).autocomplete('widget')[0].style.display !== 'none';
@@ -4290,6 +4290,8 @@ jQuery(() => {
     $(window).on('blur', function () {
         browser_has_focus = false;
     });
+
+    const { SlashCommandParser } = await import('./slash-commands/SlashCommandParser.js');
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'vn',
