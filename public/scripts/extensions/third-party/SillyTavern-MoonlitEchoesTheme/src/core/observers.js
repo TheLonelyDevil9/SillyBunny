@@ -133,6 +133,17 @@ export function initAvatarInjector() {
 
 /**
  * Initialize monitoring of #form_sheld height and expose helper controls.
+ *
+ * Only a ResizeObserver is needed — it fires precisely when the element's
+ * box size changes, which is the only thing we care about. The previous
+ * implementation used a body-wide MutationObserver (childList + subtree),
+ * a form_sheld MutationObserver (childList + subtree + attributes +
+ * characterData), triple-fire textarea input handlers, and multiple
+ * delayed setTimeout chains — all to set a single CSS variable. The
+ * ResizeObserver alone handles every case (typing, QR buttons, window
+ * resize, orientation change, DOM reparenting) without polling or
+ * scanning the entire DOM on every mutation.
+ *
  * @returns {{update: function, start: function, stop: function}} Control helpers.
  */
 export function initFormSheldHeightMonitor() {
@@ -140,8 +151,7 @@ export function initFormSheldHeightMonitor() {
 
     function getAccurateHeight(element) {
         if (!element) return 0;
-        const rect = element.getBoundingClientRect();
-        return rect.height;
+        return element.getBoundingClientRect().height;
     }
 
     function updateFormSheldHeight() {
@@ -155,33 +165,6 @@ export function initFormSheldHeightMonitor() {
         }
     }
 
-    const mutationObserver = new MutationObserver((mutations) => {
-        let shouldUpdate = false;
-
-        for (const mutation of mutations) {
-            if (mutation.target.id === 'form_sheld' || mutation.target.closest?.('#form_sheld')) {
-                shouldUpdate = true;
-                break;
-            }
-
-            if (mutation.addedNodes.length) {
-                for (const node of mutation.addedNodes) {
-                    if (
-                        node.id === 'form_sheld' ||
-                        (node.nodeType === 1 && node.querySelector && node.querySelector('#form_sheld'))
-                    ) {
-                        shouldUpdate = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (shouldUpdate) {
-            setTimeout(updateFormSheldHeight, 0);
-        }
-    });
-
     const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
             if (entry.target.id === 'form_sheld') {
@@ -194,9 +177,18 @@ export function initFormSheldHeightMonitor() {
         }
     });
 
+    // Light body observer: only watches for form_sheld being added to the DOM
+    // (e.g. after the shell system reparents content). Once found, attaches
+    // the ResizeObserver and disconnects itself.
+    const bodyObserver = new MutationObserver(() => {
+        const formSheld = document.getElementById('form_sheld');
+        if (formSheld && !isInitialized) {
+            startObservers();
+        }
+    });
+
     function stopObservers() {
         resizeObserver.disconnect();
-        mutationObserver.disconnect();
     }
 
     function startObservers() {
@@ -205,110 +197,25 @@ export function initFormSheldHeightMonitor() {
         const formSheld = document.getElementById('form_sheld');
         if (formSheld) {
             resizeObserver.observe(formSheld);
-            mutationObserver.observe(formSheld, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true,
-            });
-
-            const parent = formSheld.parentElement;
-            if (parent) {
-                mutationObserver.observe(parent, {
-                    attributes: true,
-                    attributeFilter: ['style', 'class'],
-                });
-            }
-
             updateFormSheldHeight();
+            // form_sheld is present — no need to keep scanning the body
+            bodyObserver.disconnect();
         }
     }
 
-    const bodyObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            if (mutation.addedNodes.length) {
-                for (const node of mutation.addedNodes) {
-                    if (
-                        node.id === 'form_sheld' ||
-                        (node.nodeType === 1 && node.querySelector && node.querySelector('#form_sheld'))
-                    ) {
-                        setTimeout(startObservers, 50);
-                        return;
-                    }
-                }
-            }
-        }
-
-        const formSheld = document.getElementById('form_sheld');
-        if (formSheld && !isInitialized) {
-            setTimeout(startObservers, 50);
-        }
-    });
-
-    function onTextAreaInput() {
-        updateFormSheldHeight();
-        setTimeout(updateFormSheldHeight, 10);
-        setTimeout(updateFormSheldHeight, 100);
-    }
-
-    function setupTextAreaListener() {
-        const textArea = document.getElementById('send_textarea');
-        if (textArea) {
-            textArea.removeEventListener('input', onTextAreaInput);
-            textArea.addEventListener('input', onTextAreaInput);
-        }
-    }
-
-    window.addEventListener('resize', updateFormSheldHeight);
-    window.addEventListener('orientationchange', () => {
-        updateFormSheldHeight();
-        setTimeout(updateFormSheldHeight, 100);
-        setTimeout(updateFormSheldHeight, 500);
-    });
-
-    document.addEventListener('DOMContentLoaded', () => {
+    // Deferred init: attach once the DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => startObservers(), { once: true });
+    } else {
         startObservers();
-        setupTextAreaListener();
-        updateFormSheldHeight();
-        setTimeout(updateFormSheldHeight, 100);
-        setTimeout(updateFormSheldHeight, 500);
-        setTimeout(updateFormSheldHeight, 1000);
-    });
-
-    window.addEventListener('load', () => {
-        startObservers();
-        setupTextAreaListener();
-        updateFormSheldHeight();
-        setTimeout(updateFormSheldHeight, 500);
-    });
-
-    function setupUIListeners() {
-        document.querySelectorAll('#qr--bar .qr--option').forEach((button) => {
-            button.addEventListener('click', () => {
-                setTimeout(updateFormSheldHeight, 10);
-                setTimeout(updateFormSheldHeight, 100);
-            });
-        });
-
-        const optionsButton = document.getElementById('options_button');
-        if (optionsButton) {
-            optionsButton.addEventListener('click', () => {
-                setTimeout(updateFormSheldHeight, 10);
-                setTimeout(updateFormSheldHeight, 100);
-            });
-        }
     }
 
-    setTimeout(setupUIListeners, 1000);
+    window.addEventListener('load', () => startObservers(), { once: true });
 
-    bodyObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-    });
-
-    startObservers();
-    setupTextAreaListener();
-    updateFormSheldHeight();
+    // Fallback: if form_sheld isn't in the DOM yet, watch body for it
+    if (!document.getElementById('form_sheld')) {
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     return {
         update: updateFormSheldHeight,
