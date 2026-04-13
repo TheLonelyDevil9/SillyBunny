@@ -286,6 +286,7 @@ const SB_SEARCH_TARGET_SELECTOR = [
     'strong',
     '.bg-header-row-1',
     '.bg-header-row-2',
+    '.ch_name',
 ].join(', ');
 
 const sbState = {
@@ -5219,7 +5220,46 @@ function createSearchIndex(tabState) {
     return entries;
 }
 
-function getSearchSectionLabel(element, fallback) {
+/**
+ * Returns synthetic search entries for all personas from power_user.personas.
+ * These are not in the DOM in a searchable form (paginated list), so we read
+ * the data directly and provide an action that navigates to the persona.
+ */
+function getPersonaSearchEntries(tabState) {
+    const context = getSillyTavernContext();
+    const personas = context?.powerUserSettings?.personas ?? {};
+    const entries = [];
+
+    for (const [avatarId, name] of Object.entries(personas)) {
+        if (!name || name === '[Unnamed Persona]') continue;
+        const normalizedName = normalizeText(name);
+        if (normalizedName.length < 2) continue;
+
+        entries.push({
+            element: null,
+            searchText: normalizedName,
+            displayText: name,
+            sectionLabel: 'Persona',
+            tabId: tabState.id,
+            tabLabel: tabState.label,
+            action: () => {
+                // Activate the persona tab and trigger ST's own persona search
+                openShell('right', 'persona');
+                window.setTimeout(() => {
+                    const searchInput = document.getElementById('persona_search_bar');
+                    if (searchInput instanceof HTMLInputElement) {
+                        searchInput.value = name;
+                        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }, 80);
+            },
+        });
+    }
+
+    return entries;
+}
+
+
     // For extension containers: use the extension's own name/header, not the parent tab label
     const extContainer = element.closest('.extension_container, [id$="-container"]');
     if (extContainer instanceof HTMLElement) {
@@ -5278,7 +5318,10 @@ function renderSearchResults(shellKey, query) {
     for (const tabState of shellState.tabs.values()) {
         tabState.searchIndex = createSearchIndex(tabState);
 
-        for (const entry of tabState.searchIndex) {
+        // Supplement with persona data entries for the persona tab
+        const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : [];
+
+        for (const entry of [...tabState.searchIndex, ...extraEntries]) {
             if (!searchTerms.every(term => entry.searchText.includes(term))) {
                 continue;
             }
@@ -5379,6 +5422,12 @@ function pulseSearchTarget(target) {
 }
 
 function revealSearchMatch(shellKey, match) {
+    // Entries with a custom action (e.g. persona results) bypass DOM scrolling
+    if (typeof match.action === 'function') {
+        match.action();
+        return;
+    }
+
     openShell(shellKey, match.tabId);
 
     window.setTimeout(() => {
