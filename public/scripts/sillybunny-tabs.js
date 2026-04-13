@@ -5259,7 +5259,7 @@ function getPersonaSearchEntries(tabState) {
     return entries;
 }
 
-
+function getSearchSectionLabel(element, fallback) {
     // For extension containers: use the extension's own name/header, not the parent tab label
     const extContainer = element.closest('.extension_container, [id$="-container"]');
     if (extContainer instanceof HTMLElement) {
