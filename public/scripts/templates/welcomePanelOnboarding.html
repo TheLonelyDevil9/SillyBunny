@@ -35,6 +35,13 @@
                         <span>Chat with the built-in bunny guide for LLM basics, SillyBunny tips, and plain-English help.</span>
                     </span>
                 </button>
+                <button class="menu_button menu_button_icon welcomeActionCard welcomeAssistantButton welcomeActionButton" data-action="open-assistant" data-assistant-id="nahida">
+                    <i class="fa-solid fa-leaf"></i>
+                    <span class="welcomeActionMeta">
+                        <strong>Chat with Assistant Nahida</strong>
+                        <span>Chat with Assistant Nahida for prompt, preset, and context setup guidance.</span>
+                    </span>
+                </button>
                 <button class="menu_button menu_button_icon welcomeActionCard welcomeActionButton replayTutorial" data-action="replay-tutorial">
                     <i class="fa-solid fa-route"></i>
                     <span class="welcomeActionMeta">
@@ -261,12 +268,49 @@
                 <div class="welcomeGuideHeader">
                     <div class="welcomeGuideTitleBlock">
                         <div class="welcomeHeroEyebrow">Starter Pack</div>
-                        <h3>Bundled extras, still opt-in</h3>
-                        <p>These ship with SillyBunny so newcomers can discover them easily, but nothing here turns itself on unless you ask for it.</p>
+                        <h3>Pre-installed</h3>
+                        <p>These presets and creator picks ship with SillyBunny and are ready to use.</p>
                     </div>
                 </div>
                 <div class="welcomeGuideGrid welcomeStarterPackGrid">
-                    {{#each starterPackItems}}
+                    {{#each starterPackItems.preInstalled}}
+                        <article class="welcomeGuideCard welcomeStarterPackCard">
+                            <div class="welcomeStarterPackHeader">
+                                <div class="welcomeGuideCardHeader">
+                                    <i class="fa-solid {{icon}}"></i>
+                                    <strong>{{title}}</strong>
+                                </div>
+                                <span class="welcomeStatusBadge welcomeStatusBadge--{{statusTone}}">{{statusLabel}}</span>
+                            </div>
+                            <p>{{body}}</p>
+                            <div class="welcomeChipRow" data-chip-columns="{{chipColumnCount}}">
+                                {{#each chips}}
+                                    <span class="welcomeChip">{{this}}</span>
+                                {{/each}}
+                            </div>
+                            <div class="welcomeStarterPackActions">
+                                <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{actionType}}" data-action-value="{{actionValue}}">
+                                    <i class="fa-solid {{#if actionIcon}}{{actionIcon}}{{else}}fa-wand-magic-sparkles{{/if}}"></i>
+                                    <span>{{actionLabel}}</span>
+                                </button>
+                                {{#if secondaryActionLabel}}
+                                    <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{secondaryActionType}}" data-action-value="{{secondaryActionValue}}">
+                                        <i class="fa-solid {{#if secondaryActionIcon}}{{secondaryActionIcon}}{{else}}fa-arrow-up-right-from-square{{/if}}"></i>
+                                        <span>{{secondaryActionLabel}}</span>
+                                    </button>
+                                {{/if}}
+                            </div>
+                        </article>
+                    {{/each}}
+                </div>
+                <div class="welcomeGuideHeader" style="margin-top: 16px;">
+                    <div class="welcomeGuideTitleBlock">
+                        <h3>Optional installs</h3>
+                        <p>These extensions are not installed by default. Install them if you want the extra functionality.</p>
+                    </div>
+                </div>
+                <div class="welcomeGuideGrid welcomeStarterPackGrid">
+                    {{#each starterPackItems.optional}}
                         <article class="welcomeGuideCard welcomeStarterPackCard">
                             <div class="welcomeStarterPackHeader">
                                 <div class="welcomeGuideCardHeader">

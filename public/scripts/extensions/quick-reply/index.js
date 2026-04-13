@@ -2,7 +2,7 @@ import { chat, chat_metadata, eventSource, event_types, getRequestHeaders, this_
 import { extension_settings } from '../../extensions.js';
 import { QuickReplyApi } from './api/QuickReplyApi.js';
 import { AutoExecuteHandler } from './src/AutoExecuteHandler.js';
-import { QuickReply } from './src/QuickReply.js';
+// QuickReply imported lazily inside loadSets to avoid circular TDZ
 import { QuickReplyConfig } from './src/QuickReplyConfig.js';
 import { QuickReplySet } from './src/QuickReplySet.js';
 import { QuickReplySettings } from './src/QuickReplySettings.js';
@@ -95,6 +95,7 @@ const loadSets = async () => {
             }
         }
         // need to load QR lists after all sets are loaded to be able to resolve context menu entries
+        const { QuickReply } = await import('./src/QuickReply.js');
         setList.forEach((set, idx) => {
             QuickReplySet.list[idx].qrList = set.qrList.map(it => QuickReply.from(it));
             QuickReplySet.list[idx].init();

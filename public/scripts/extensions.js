@@ -256,7 +256,7 @@ function applyBundledOptInDefaults() {
     }
 
     extension_settings.bundledOptInDefaultsApplied = true;
-    return true || changed;
+    return changed;
 }
 
 function showHideExtensionsMenu() {

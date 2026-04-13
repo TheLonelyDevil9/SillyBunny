@@ -165,7 +165,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Agents can run **prompt transforms** in `rewrite` or `append` mode
 - Agents can be bundled into **Agent Groups** for one-click setup
 
-**What ships with v1.3.1:**
+**What ships with v1.3.2:**
 
 - **31 bundled templates** based on Pura's Director Preset ecosystem
 - Trackers, randomisers, directives, formatting helpers, anti-slop, and content toggles
@@ -175,7 +175,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Inline run-order editing directly from the agent cards
 - Prompt-transform greeting protection: greeting messages are intentionally left alone
 
-**Bundled defaults in v1.3.1:**
+**Bundled defaults in v1.3.2:**
 
 - Bundled trackers are set up for **post-generation prompt append**
 - Bundled regex-backed helpers default to **post-generation**
@@ -190,7 +190,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 ## UI preview
 
-These screenshots show the `v1.3.1` shell on desktop and mobile.
+These screenshots show the `v1.3.2` shell on desktop and mobile.
 
 #### Desktop
 
@@ -207,6 +207,47 @@ These screenshots show the `v1.3.1` shell on desktop and mobile.
 ---
 
 ## Changelog
+
+### v1.3.2 (2026-04-13)
+
+**UI/UX overhaul**
+
+- Redesigned shell panels: centered on screen, narrower (900px max), horizontal tab bar at top instead of vertical sidebar
+- Centered shell animations: all shells now open with a scale+fade from center, replacing the directional slide-in
+- Rearranged top bar: Navigate + Customize on the left, Home + Characters on the right, removed duplicate API button
+- Added customizable quick-access shortcut buttons in the top bar (configurable in Settings)
+- Removed the optional chatbar overlay; integrated chat management (select, new, rename, delete) into the bottom bar
+- Added persona quick-access bubble next to the chat input with popup picker
+- Added bottom bar size slider (replaces the desktop top bar size slider)
+- Home screen defaults to First Steps tab with launchpad collapsed; renamed "Replay Tutorial" to "Show Launchpad"
+- Added "Chat with Assistant Nahida" button on the home screen alongside "Open Assistant"
+- Assistant Nahida is now created at app startup so she appears in the character list by default
+- Starter pack split into "Pre-installed" and "Optional installs" sections with clearer wording
+- Added Summary Sharder and Guided Generations (forked) to the optional installs in the starter pack
+- Bundled Memory Sharding Quick Reply preset for chat summarisation
+
+**Agent mode changes**
+
+- Removed Agent Mode orchestration (retrieval/memory/lorebook services) to match the "intentionally lightweight" philosophy
+- Kept In-Chat Agents as a standalone tab with its own settings panel
+- Recommended Summary Sharder extension as the memory solution in the starter pack
+
+**Bug fixes**
+
+- Fixed stop generation button: `onStopStreaming()` now properly sets `isStopped` flag to prevent generation from appearing to complete normally
+- Fixed story branching performance: replaced deep `structuredClone` of entire chat with shallow copy, only deep-cloning the target message when swipe selection requires it
+- Fixed `applyBundledOptInDefaults()` always returning true (`return true || changed` → `return changed`)
+- Fixed CLIENT_VERSION format: removed `v` prefix so `versionCompare()` works correctly with extensions that specify `minimum_client_version`
+- Fixed circular dependency TDZ errors in GuidedGenerations, TunnelVision, Quick Reply, and TTS extensions
+- Fixed duplicate TTS settings panel by adding init guard
+- Fixed shell search results showing generic "Extensions" label instead of actual extension/section names
+- Added single-dropdown-at-a-time enforcement via `closeAllDropdowns()`
+
+**Platform support**
+
+- Added Node.js fallback launcher: `start-node.sh`, `Start-Node.bat`, `npm run start:node`
+- Auto-detect macOS and ARM platforms and switch to Node.js to avoid Bun CPU overhead (oven-sh/bun#26415)
+- `SILLYBUNNY_USE_NODE=1` environment variable forces Node.js on any platform
 
 ### v1.3.1 (2026-04-12)
 

@@ -162,6 +162,14 @@ Here's what happens on each generation turn when both systems are active:
 - Reset Bundled Agents to Defaults button
 - Fixed drag-drop snap-back and tracker migration bugs
 
+### v1.3.2 (2026-04-13)
+
+- Removed Agent Mode orchestration (retrieval, memory, lorebook services) to align with "intentionally lightweight" philosophy
+- Kept In-Chat Agents as a standalone tab with a simplified panel (no agent mode overlay)
+- Recommended Summary Sharder extension as the replacement for agent-based memory
+- Fixed circular dependency TDZ errors that prevented extensions from loading
+- Fixed TunnelVision tool-registry initialization with lazy tool name resolution
+
 ### v1.3.1 (2026-04-12)
 
 - Fixed In-Chat Agent card interactions and Agent Group behavior

@@ -169,11 +169,16 @@ async function saveBookmarkMenu() {
  * @returns {ChatMessage[]|null}
  */
 function getBranchChatSnapshot(mesId, { swipeId = null } = {}) {
-    const snapshot = structuredClone(chat.slice(0, Number(mesId) + 1));
+    // Shallow copy is sufficient for saving — the data is only serialized, not mutated.
+    // Only deep-copy the target message when a swipe selection needs to modify it in place.
+    const snapshot = chat.slice(0, Number(mesId) + 1);
 
     if (swipeId === null) {
         return snapshot;
     }
+
+    // Deep-copy only the message that syncSwipeToMes will mutate
+    snapshot[mesId] = structuredClone(snapshot[mesId]);
 
     if (!syncSwipeToMes(null, swipeId, snapshot[mesId])) {
         return null;

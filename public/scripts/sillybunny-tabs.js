@@ -11,7 +11,37 @@ const SB_STORAGE_KEYS = Object.freeze({
     chatbarVisible: 'sb-chatbar-visible',
     topbarOffset: 'sb-topbar-offset',
     settingsDrawerStatePrefix: 'sb-settings-inline-drawer',
+    shortcutLeft: 'sb-shortcut-left',
+    shortcutRight: 'sb-shortcut-right',
+    bottomBarScale: 'sb-bottom-bar-scale',
 });
+
+const SB_SHORTCUT_TARGETS = Object.freeze([
+    { value: 'left:presets', label: 'Presets', icon: 'fa-sliders' },
+    { value: 'left:api', label: 'API', icon: 'fa-plug' },
+    { value: 'left:advanced-formatting', label: 'Adv. Formatting', icon: 'fa-font' },
+    { value: 'left:world-info', label: 'World Info', icon: 'fa-book-atlas' },
+    { value: 'left:agents', label: 'Agents', icon: 'fa-robot' },
+    { value: 'right:settings', label: 'Settings', icon: 'fa-sliders' },
+    { value: 'right:extensions', label: 'Extensions', icon: 'fa-cubes' },
+    { value: 'right:persona', label: 'Persona', icon: 'fa-face-smile' },
+    { value: 'right:background', label: 'Background', icon: 'fa-panorama' },
+]);
+
+const SB_SHORTCUT_DEFAULTS = Object.freeze({
+    left: 'left:agents',
+    right: 'right:persona',
+});
+
+function getShortcutTarget(side) {
+    const stored = safeGetItem(side === 'left' ? SB_STORAGE_KEYS.shortcutLeft : SB_STORAGE_KEYS.shortcutRight);
+    const valid = SB_SHORTCUT_TARGETS.some(t => t.value === stored);
+    return valid ? stored : SB_SHORTCUT_DEFAULTS[side];
+}
+
+function getShortcutConfig(target) {
+    return SB_SHORTCUT_TARGETS.find(t => t.value === target) || SB_SHORTCUT_TARGETS[0];
+}
 
 function safeGetItem(key) {
     try { return localStorage.getItem(key); } catch { return null; }
@@ -66,15 +96,15 @@ const SB_CONSOLE_LOG_STICKY_THRESHOLD = 28;
 const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
 const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
 const SB_DESKTOP_SHELL_LAYOUT = Object.freeze({
-    minWidth: 920,
-    maxWidth: 1680,
-    ratio: 0.78,
-    compactMaxWidth: 620,
+    minWidth: 600,
+    maxWidth: 900,
+    ratio: 0.55,
+    compactMaxWidth: 900,
     compactViewportWidth: 1100,
-    compactGap: 28,
-    gutterMin: 28,
-    gutterRatio: 0.08,
-    gutterMax: 160,
+    compactGap: 20,
+    gutterMin: 20,
+    gutterRatio: 0.04,
+    gutterMax: 80,
     fullWidthMaxHeight: 860,
 });
 
@@ -112,8 +142,8 @@ const SB_SHELLS = Object.freeze({
         proxyIcon: 'fa-bars',
         proxyLabel: 'Navigate',
         title: 'Workspace',
-        subtitle: 'Model behavior, presets, lore, and agent tools live here.',
-        searchPlaceholder: 'Quick find presets, samplers, lorebooks, agents...',
+        subtitle: 'Model behavior, presets, lore, and formatting tools live here.',
+        searchPlaceholder: 'Quick find presets, samplers, lorebooks...',
         storageKey: SB_STORAGE_KEYS.leftTab,
         defaultTabId: 'presets',
         baseTab: {
@@ -150,7 +180,7 @@ const SB_SHELLS = Object.freeze({
                 id: 'agents',
                 label: 'Agents',
                 icon: 'fa-robot',
-                description: 'Configure retrieval, memory, and lorebook helpers in one place.',
+                description: 'Configure in-chat agent helpers.',
             },
         ],
     },
@@ -310,6 +340,7 @@ const sbState = {
         chatbarToggleButton: null,
         dragHandleButton: null,
     },
+    bottomChatBar: null,
     serverAdmin: {
         refs: null,
         originalConfig: '',
@@ -468,6 +499,7 @@ function seedTopbarScaleDefaults() {
 function restorePersistedTopbarState() {
     sbState.topbarScale.desktop = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop));
     sbState.topbarScale.mobile = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile));
+    sbState.bottomBarScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.bottomBarScale));
     sbState.topbarLabel.desktopParts = safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts) === null
         ? ['char']
         : normalizeTopbarLabelParts(safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts), []);
@@ -542,6 +574,26 @@ function setTopbarScale(mode, value, { persist = true } = {}) {
 
     if (getChatDesktopRefs()) {
         scheduleChatbarRefresh(0);
+    }
+
+    updateThemePickerUi();
+}
+
+function setBottomBarScale(value, { persist = true } = {}) {
+    const nextScale = normalizeTopbarScale(value);
+    const scaleFactor = Number((nextScale / 100).toFixed(2)).toString();
+
+    sbState.bottomBarScale = nextScale;
+    document.documentElement.style.setProperty('--sb-bottom-bar-scale', scaleFactor);
+
+    // Apply scale to the bottom form via font-size scaling
+    const formSheld = document.getElementById('form_sheld');
+    if (formSheld) {
+        formSheld.style.fontSize = `calc(var(--mainFontSize) * ${scaleFactor})`;
+    }
+
+    if (persist) {
+        safeSetItem(SB_STORAGE_KEYS.bottomBarScale, String(nextScale));
     }
 
     updateThemePickerUi();
@@ -2977,58 +3029,12 @@ async function refreshChatbarState() {
 }
 
 function scheduleChatbarRefresh(delay = 0) {
-    clearTimeout(getChatbarState().refreshTimer);
-    getChatbarState().refreshTimer = window.setTimeout(() => {
-        void refreshChatbarState();
-    }, delay);
+    // Chatbar has been removed — this is a no-op stub to prevent errors from existing call sites.
 }
 
 function bindChatbarEvents() {
-    const context = getSillyTavernContext();
-    const eventSource = context?.eventSource;
-    const eventTypes = context?.eventTypes ?? context?.event_types;
-
-    bindConnectionProfileSourceObserver();
-    initChatSearchObserver();
-
-    if (!eventSource || !eventTypes) {
-        window.setTimeout(bindChatbarEvents, 180);
-        scheduleChatbarRefresh(180);
-        return;
-    }
-
-    const refresh = () => scheduleChatbarRefresh(80);
-    const events = [
-        eventTypes.APP_READY,
-        eventTypes.CHAT_CHANGED,
-        eventTypes.CHAT_CREATED,
-        eventTypes.GROUP_CHAT_CREATED,
-        eventTypes.CHAT_DELETED,
-        eventTypes.GROUP_CHAT_DELETED,
-        eventTypes.CHARACTER_DELETED,
-        eventTypes.CHARACTER_RENAMED,
-        eventTypes.GROUP_UPDATED,
-        eventTypes.ONLINE_STATUS_CHANGED,
-    ].filter(Boolean);
-
-    for (const eventName of new Set(events)) {
-        eventSource.on(eventName, refresh);
-    }
-
-    scheduleChatbarRefresh(80);
-
-    document.addEventListener('click', event => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
-            return;
-        }
-
-        if (isConnectionStripOpen()
-            && !target.closest('#sb-connection-strip')
-            && !target.closest('#sb-chatbar-connection-toggle')) {
-            setConnectionStripOpenState(false);
-        }
-    });
+    // Chatbar has been removed — event binding is no longer needed.
+    // Chat management is now handled from the bottom bar.
 }
 
 function triggerDrawerToggle(selector) {
@@ -3203,9 +3209,6 @@ function closeCharacterPanel() {
 }
 
 function toggleCharacterPanel() {
-    closeMobileNav();
-    closeMobileChatTools();
-    setConnectionStripOpenState(false);
     injectCharacterCloseButton();
     const shouldOpenActiveCharacterEditor = hasActiveCharacterChat();
 
@@ -3213,6 +3216,8 @@ function toggleCharacterPanel() {
         closeCharacterPanel();
         return;
     }
+
+    closeAllDropdowns({ except: 'characters' });
 
     if (shouldOpenActiveCharacterEditor) {
         showActiveCharacterEditor();
@@ -3244,26 +3249,29 @@ function toggleCharacterPanel() {
     });
 }
 
+function closeAllDropdowns({ except = '' } = {}) {
+    if (except !== 'left') closeShell('left');
+    if (except !== 'right') closeShell('right');
+    if (except !== 'characters') closeCharacterPanel();
+    closeMobileNav();
+    closeMobileChatTools();
+    setConnectionStripOpenState(false);
+
+    // Close persona picker
+    document.getElementById('sb-persona-picker')?.remove();
+}
+
 function toggleShellPanel(shellKey, tabId = null) {
     if (!ensureShellReady(shellKey)) {
         return;
     }
-
-    closeMobileChatTools();
-    setConnectionStripOpenState(false);
 
     if (tabId ? isShellTabOpen(shellKey, tabId) : isShellOpen(shellKey)) {
         closeShell(shellKey);
         return;
     }
 
-    if (shellKey === 'left') {
-        closeShell('right');
-    } else {
-        closeShell('left');
-    }
-
-    closeCharacterPanel();
+    closeAllDropdowns({ except: shellKey });
     openShell(shellKey, tabId);
 }
 
@@ -3397,17 +3405,6 @@ function buildTopBar() {
         },
     );
 
-    const apiButton = createProxyButton(
-        {
-            id: 'sb-api-toggle',
-            icon: 'fa-plug',
-            label: 'API',
-            title: 'Open API settings',
-            className: 'sb-proxy-button-icon-only',
-        },
-        openApiShellTab,
-    );
-
     const rightButton = createProxyButton(
         {
             id: 'sb-right-shell-toggle',
@@ -3427,41 +3424,57 @@ function buildTopBar() {
         },
         () => toggleCharacterPanel(),
     );
-    const chatbarToggleButton = createTopBarIconButton(
+
+    const leftShortcutConfig = getShortcutConfig(getShortcutTarget('left'));
+    const leftShortcut = createProxyButton(
         {
-            id: 'sb-chatbar-visibility-toggle',
-            icon: 'fa-eye-slash',
-            title: 'Hide top chat bar',
+            id: 'sb-shortcut-left',
+            icon: leftShortcutConfig.icon,
+            label: leftShortcutConfig.label,
+            title: `Quick access: ${leftShortcutConfig.label}`,
+            className: 'sb-proxy-button-icon-only',
         },
-        toggleChatbarVisibility,
+        () => {
+            const target = getShortcutTarget('left');
+            const [shell, tab] = target.split(':');
+            toggleShellPanel(shell, tab);
+        },
+    );
+
+    const rightShortcutConfig = getShortcutConfig(getShortcutTarget('right'));
+    const rightShortcut = createProxyButton(
+        {
+            id: 'sb-shortcut-right',
+            icon: rightShortcutConfig.icon,
+            label: rightShortcutConfig.label,
+            title: `Quick access: ${rightShortcutConfig.label}`,
+            className: 'sb-proxy-button-icon-only',
+        },
+        () => {
+            const target = getShortcutTarget('right');
+            const [shell, tab] = target.split(':');
+            toggleShellPanel(shell, tab);
+        },
     );
 
     centerGroup.innerHTML = `
         <div id="sb-topbar-title" class="sb-brand-title">${SB_IDLE_BRAND_LABEL}</div>
     `;
 
-    leftGroup.append(mobileButton, leftButton, homeButton, apiButton);
-    rightGroup.append(chatbarToggleButton, charactersButton, rightButton);
+    leftGroup.append(mobileButton, leftButton, rightButton, leftShortcut);
+    rightGroup.append(rightShortcut, homeButton, charactersButton);
     topBarInner.append(leftGroup, centerGroup, rightGroup);
     primaryRow.appendChild(topBarInner);
 
-    const chatBar = buildChatBar();
-    stack.append(primaryRow, chatBar.layer);
+    stack.append(primaryRow);
     topBar.append(stack);
-
-    const chatbarState = getChatbarState();
-    chatbarState.chatbarToggleButton = chatbarToggleButton;
-    chatbarState.dragHandleButton = chatbarState.desktop?.dragHandleButton ?? null;
 
     observeProxyButton('sb-left-shell-toggle', getShellConfig('left').hostIconSelector);
     observeProxyButton('sb-right-shell-toggle', getShellConfig('right').hostIconSelector);
     observeProxyButton('sb-character-toggle', '#rightNavDrawerIcon');
     bindTopBarBrand();
     updateTopBarBrand();
-    syncChatbarVisibilityState();
-    applyTopbarOffset();
     updateTopbarUtilityButtons();
-    scheduleChatbarRefresh(80);
 }
 
 function hideHostToggles() {
@@ -3534,7 +3547,7 @@ function prepareEmbeddedDrawer(drawerId) {
     return { drawer, drawerContent };
 }
 
-function buildAgentsPanel() {
+function buildInChatAgentsPanel() {
     const { panel, scroller } = createShellPanel({
         id: 'agents',
     });
@@ -3542,29 +3555,13 @@ function buildAgentsPanel() {
     const column = createElement('div', { className: 'sb-shell-column' });
     const callout = createElement('div', { className: 'sb-shell-callout' });
     callout.innerHTML = `
-        <strong>Agent Workspace</strong>
-        <p>Retrieval helps before generation, while memory and lorebook helpers clean up afterward.</p>
+        <strong>In-Chat Agents</strong>
+        <p>Lightweight helpers that run alongside your conversation. Configure them per-chat for modular functionality.</p>
     `;
-
-    const agentPanel = document.getElementById('agent_mode_panel');
 
     const inChatAgentsContainer = createElement('div', { id: 'in_chat_agents_container' });
 
-    if (agentPanel instanceof HTMLElement) {
-        const drawerContent = agentPanel.querySelector('.inline-drawer-content');
-
-        if (drawerContent instanceof HTMLElement && !drawerContent.querySelector('#sb-agent-overview')) {
-            const overview = createElement('div', { id: 'sb-agent-overview', className: 'sb-agent-overview' });
-            drawerContent.prepend(overview);
-        }
-
-        column.append(callout, agentPanel, inChatAgentsContainer);
-    } else {
-        const fallback = createElement('div', { className: 'sb-shell-empty-state' });
-        fallback.innerHTML = '<strong>Agents are unavailable.</strong><p>The agent controls did not render in time, so this tab is temporarily empty.</p>';
-        column.append(callout, fallback);
-    }
-
+    column.append(callout, inChatAgentsContainer);
     scroller.appendChild(column);
 
     return {
@@ -4912,6 +4909,76 @@ function createTopbarLabelOption(mode, part) {
     return option;
 }
 
+function createShortcutSettingsGroup() {
+    const group = createElement('section', {
+        className: 'sb-theme-slider-group',
+    });
+
+    const heading = createElement('div', { className: 'sb-theme-slider-label' });
+    heading.innerHTML = '<strong>Quick Access Shortcuts</strong><br><small>Assign a shell tab to each shortcut button in the top bar.</small>';
+    group.appendChild(heading);
+
+    const rows = createElement('div', {
+        className: 'sb-shortcut-rows',
+    });
+    rows.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 8px;';
+
+    for (const side of ['left', 'right']) {
+        const row = createElement('div', {});
+        row.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+
+        const label = createElement('label', {});
+        label.style.cssText = 'flex-shrink: 0; font-size: calc(var(--mainFontSize) * 0.85); opacity: 0.8; min-width: 56px;';
+        label.textContent = side === 'left' ? 'Left' : 'Right';
+
+        const select = createElement('select', {
+            id: `sb-shortcut-${side}-select`,
+        });
+        select.style.cssText = 'flex: 1; height: 28px; padding: 0 8px; font: inherit; font-size: calc(var(--mainFontSize) * 0.85); border-radius: 8px; background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 60%, transparent); border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent); color: var(--SmartThemeBodyColor);';
+
+        const currentTarget = getShortcutTarget(side);
+        for (const target of SB_SHORTCUT_TARGETS) {
+            const option = createElement('option', {
+                attrs: { value: target.value },
+            });
+            option.textContent = target.label;
+            option.selected = target.value === currentTarget;
+            select.appendChild(option);
+        }
+
+        select.addEventListener('change', () => {
+            const key = side === 'left' ? SB_STORAGE_KEYS.shortcutLeft : SB_STORAGE_KEYS.shortcutRight;
+            safeSetItem(key, select.value);
+            updateShortcutButton(side);
+        });
+
+        row.append(label, select);
+        rows.appendChild(row);
+    }
+
+    group.appendChild(rows);
+    return group;
+}
+
+function updateShortcutButton(side) {
+    const buttonId = side === 'left' ? 'sb-shortcut-left' : 'sb-shortcut-right';
+    const button = document.getElementById(buttonId);
+    if (!(button instanceof HTMLElement)) return;
+
+    const config = getShortcutConfig(getShortcutTarget(side));
+    const icon = button.querySelector('i');
+    const span = button.querySelector('span');
+
+    if (icon) {
+        icon.className = `fa-solid ${config.icon}`;
+    }
+    if (span) {
+        span.textContent = config.label;
+    }
+    button.title = `Quick access: ${config.label}`;
+    button.setAttribute('aria-label', `Quick access: ${config.label}`);
+}
+
 function createTopbarLabelSettingsGroup() {
     const group = createElement('section', {
         className: 'sb-theme-slider-group sb-topbar-label-group',
@@ -5003,19 +5070,18 @@ function injectThemePicker() {
         caption: 'Higher values make the home and chat surfaces more transparent so your selected background picture shows through.',
         onInput: nextValue => setSurfaceTransparency(nextValue),
     });
-    const desktopTopbarSliderGroup = createThemeSliderGroup({
-        title: 'Desktop Top Bar Size',
-        valueId: 'sb-topbar-scale-desktop-value',
-        inputId: 'sb-topbar-scale-desktop-input',
-        value: sbState.topbarScale.desktop,
+    const bottomBarSliderGroup = createThemeSliderGroup({
+        title: 'Bottom Bar Size',
+        valueId: 'sb-bottom-bar-scale-value',
+        inputId: 'sb-bottom-bar-scale-input',
+        value: sbState.bottomBarScale,
         min: SB_TOPBAR_SCALE.min,
         max: SB_TOPBAR_SCALE.max,
         step: SB_TOPBAR_SCALE.step,
-        ariaLabel: 'Desktop top bar size',
-        caption: 'Resize the desktop navigation row, search bar, and header controls without editing CSS.',
-        onInput: nextValue => setTopbarScale('desktop', nextValue),
+        ariaLabel: 'Bottom bar size',
+        caption: 'Resize the bottom chat bar, send form, and action buttons without editing CSS.',
+        onInput: nextValue => setBottomBarScale(nextValue),
     });
-    desktopTopbarSliderGroup.classList.add('sb-desktop-setting');
     const mobileTopbarSliderGroup = createThemeSliderGroup({
         title: 'Mobile Top Bar Size',
         valueId: 'sb-topbar-scale-mobile-value',
@@ -5030,6 +5096,7 @@ function injectThemePicker() {
     });
     mobileTopbarSliderGroup.classList.add('sb-mobile-setting');
     const topbarLabelSettingsGroup = createTopbarLabelSettingsGroup();
+    const shortcutSettingsGroup = createShortcutSettingsGroup();
     header.append(title, description);
 
     for (const theme of SB_THEMES) {
@@ -5053,7 +5120,7 @@ function injectThemePicker() {
     getMessageStyleSelect()?.addEventListener('change', updateThemePickerUi);
     document.addEventListener('sb:chat-style-updated', updateThemePickerUi);
 
-    card.append(header, optionRow, surfaceSliderGroup, desktopTopbarSliderGroup, mobileTopbarSliderGroup, topbarLabelSettingsGroup);
+    card.append(header, optionRow, surfaceSliderGroup, bottomBarSliderGroup, mobileTopbarSliderGroup, topbarLabelSettingsGroup, shortcutSettingsGroup);
     themeBlock.prepend(card);
     updateThemePickerUi();
 }
@@ -5167,9 +5234,10 @@ function createSearchIndex(tabState) {
 
 function getSearchSectionLabel(element, fallback) {
     // For extension containers: use the extension's own name/header, not the parent tab label
-    const extContainer = element.closest('.extension_container');
+    const extContainer = element.closest('.extension_container, [id$="-container"]');
     if (extContainer instanceof HTMLElement) {
         const extName = extContainer.querySelector('.extension_name')
+            ?? extContainer.querySelector(':scope > .inline-drawer > .inline-drawer-toggle b, :scope > .inline-drawer > .inline-drawer-header b')
             ?? extContainer.querySelector(':scope > .inline-drawer > .inline-drawer-toggle, :scope > .inline-drawer > .inline-drawer-header')
             ?? extContainer.querySelector('h3, h4, strong');
         if (extName) {
@@ -5178,8 +5246,17 @@ function getSearchSectionLabel(element, fallback) {
         }
     }
 
-    const preferred = element.closest('.inline-drawer')?.querySelector(':scope > .inline-drawer-toggle')
-        ?? element.closest('.persona_management_global_settings')
+    // Walk up to the nearest inline-drawer and use its toggle header as the section
+    const inlineDrawer = element.closest('.inline-drawer');
+    if (inlineDrawer instanceof HTMLElement) {
+        const toggle = inlineDrawer.querySelector(':scope > .inline-drawer-toggle');
+        if (toggle) {
+            const text = String(toggle.textContent ?? '').replace(/\s+/g, ' ').trim();
+            if (text && text !== fallback) return text;
+        }
+    }
+
+    const preferred = element.closest('.persona_management_global_settings')
         ?? element.closest('.bg-header-row-1')
         ?? element.closest('.bg-header-row-2')
         ?? element.closest('label, h3, h4, h5, strong');
@@ -5243,9 +5320,14 @@ function renderSearchResults(shellKey, query) {
                 ? `Jump straight to this item in ${match.tabLabel}.`
                 : match.displayText;
 
+            // When section label is the same as tab label, show the matched text as primary
+            const sectionDisplay = match.sectionLabel === match.tabLabel
+                ? match.displayText || match.tabLabel
+                : match.sectionLabel;
+
             button.innerHTML = `
-                <strong>${match.sectionLabel}</strong>
-                <span>${detailText}</span>
+                <strong>${sectionDisplay}</strong>
+                ${sectionDisplay !== match.displayText ? `<span>${detailText}</span>` : ''}
                 <small>${match.tabLabel}</small>
             `;
 
@@ -5447,6 +5529,7 @@ function buildShell(shellKey) {
         attrs: {
             role: 'tablist',
             'aria-label': `${shellConfig.title} sections`,
+            'aria-orientation': 'horizontal',
         },
     });
     const main = createElement('div', { className: 'sb-shell-main' });
@@ -5538,7 +5621,7 @@ function buildShell(shellKey) {
 
     for (const customTab of shellConfig.customTabs) {
         if (customTab.id === 'agents') {
-            const agentPanel = buildAgentsPanel();
+            const agentPanel = buildInChatAgentsPanel();
             registerShellTab(shellKey, customTab, agentPanel, agentPanel.searchRoot);
             continue;
         }
@@ -5655,83 +5738,6 @@ function registerShellTab(shellKey, tabConfig, panelBundle, explicitSearchRoot =
         onActivate: panelBundle.onActivate ?? tabConfig.onActivate ?? null,
         onDeactivate: panelBundle.onDeactivate ?? tabConfig.onDeactivate ?? null,
     });
-}
-
-function updateAgentOverview() {
-    const overview = document.getElementById('sb-agent-overview');
-    const agentPanel = document.getElementById('agent_mode_panel');
-
-    if (!(overview instanceof HTMLElement) || !(agentPanel instanceof HTMLElement)) {
-        return;
-    }
-
-    const isEnabled = Boolean(document.getElementById('agent_mode_enabled')?.checked);
-    const hintText = String(document.getElementById('agent_mode_status_hint')?.textContent ?? '').trim();
-    const services = [
-        { id: 'retrieval', label: 'Retrieval', inputId: 'agent_service_retrieval' },
-        { id: 'memory', label: 'Memory', inputId: 'agent_service_memory' },
-        { id: 'lorebook', label: 'Lorebook', inputId: 'agent_service_lorebook' },
-    ];
-    const statusRows = Array.from(document.querySelectorAll('#agent_status_list > div'));
-
-    overview.replaceChildren();
-
-    const hero = createElement('div', { className: 'sb-agent-hero' });
-    hero.innerHTML = `
-        <strong>${isEnabled ? 'Agent mode is ready' : 'Agent mode is idle'}</strong>
-        <p>${hintText || 'Open a chat to configure per-chat agent behavior.'}</p>
-    `;
-    overview.appendChild(hero);
-
-    const cardGrid = createElement('div', { className: 'sb-agent-grid' });
-
-    for (const service of services) {
-        const enabled = Boolean(document.getElementById(service.inputId)?.checked);
-        const matchingStatus = statusRows.find(row => normalizeText(row.querySelector('strong')?.textContent) === normalizeText(service.label));
-        const statusText = String(matchingStatus?.querySelector('small')?.textContent ?? (enabled ? 'ready' : 'disabled')).trim();
-
-        const card = createElement('div', { className: 'sb-agent-card' });
-        const badgeClass = enabled && isEnabled ? 'is-on' : 'is-off';
-
-        card.innerHTML = `
-            <div class="sb-agent-card-title">
-                <strong>${service.label}</strong>
-                <span class="sb-agent-pill ${badgeClass}">${enabled && isEnabled ? 'Active' : 'Off'}</span>
-            </div>
-            <p>${statusText}</p>
-        `;
-
-        cardGrid.appendChild(card);
-    }
-
-    overview.appendChild(cardGrid);
-}
-
-function initAgentOverview() {
-    updateAgentOverview();
-
-    const agentPanel = document.getElementById('agent_mode_panel');
-    const statusList = document.getElementById('agent_status_list');
-    const statusHint = document.getElementById('agent_mode_status_hint');
-
-    agentPanel?.addEventListener('input', updateAgentOverview);
-    agentPanel?.addEventListener('change', updateAgentOverview);
-
-    if (statusList instanceof HTMLElement) {
-        new MutationObserver(updateAgentOverview).observe(statusList, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-        });
-    }
-
-    if (statusHint instanceof HTMLElement) {
-        new MutationObserver(updateAgentOverview).observe(statusHint, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-        });
-    }
 }
 
 function routeDrawerTarget(targetId) {
@@ -6185,6 +6191,279 @@ function injectModelFilterInput($select) {
     $select.before(input);
 }
 
+function buildBottomChatBar() {
+    const container = document.getElementById('sb-bottom-chat-bar');
+    if (!(container instanceof HTMLElement)) {
+        return;
+    }
+
+    container.replaceChildren();
+
+    // Persona bubble
+    const personaBubble = createElement('button', {
+        id: 'sb-persona-bubble',
+        attrs: { type: 'button', title: 'Switch persona' },
+    });
+    personaBubble.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePersonaPicker();
+    });
+    updatePersonaBubble(personaBubble);
+
+    const chatSelect = createElement('select', {
+        id: 'sb-bottom-chat-select',
+        attrs: { title: 'Switch chat' },
+    });
+    chatSelect.addEventListener('change', () => {
+        const chatName = chatSelect.value;
+        if (!chatName) return;
+        const context = getSillyTavernContext();
+        if (!context) return;
+
+        // Use ST's own chat-load mechanism via the hidden input
+        const chatPole = document.getElementById('selected_chat_pole');
+        if (chatPole) {
+            chatPole.value = chatName;
+            chatPole.dispatchEvent(new Event('change', { bubbles: true }));
+            return;
+        }
+        // Fallback: context API
+        if (typeof context.openCharacterChat === 'function') {
+            void context.openCharacterChat(chatName);
+        }
+    });
+
+    const newBtn = createElement('button', {
+        className: 'sb-bottom-chat-btn',
+        attrs: { type: 'button', title: 'New chat' },
+    });
+    newBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+    newBtn.addEventListener('click', () => handleNewChat());
+
+    const renameBtn = createElement('button', {
+        className: 'sb-bottom-chat-btn',
+        attrs: { type: 'button', title: 'Rename chat' },
+    });
+    renameBtn.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i>';
+    renameBtn.addEventListener('click', () => handleRenameChat());
+
+    const deleteBtn = createElement('button', {
+        className: 'sb-bottom-chat-btn',
+        attrs: { type: 'button', title: 'Delete chat' },
+    });
+    deleteBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+    deleteBtn.addEventListener('click', () => handleDeleteChat());
+
+    container.append(personaBubble, chatSelect, newBtn, renameBtn, deleteBtn);
+
+    // Store reference for refresh
+    sbState.bottomChatBar = { chatSelect, personaBubble };
+
+    // Bind events to refresh the chat select when chats change
+    const context = getSillyTavernContext();
+    const eventSource = context?.eventSource;
+    const eventTypes = context?.eventTypes ?? context?.event_types;
+
+    if (eventSource && eventTypes) {
+        const refresh = () => refreshBottomChatSelect();
+        const events = [
+            eventTypes.APP_READY,
+            eventTypes.CHAT_CHANGED,
+            eventTypes.CHAT_CREATED,
+            eventTypes.GROUP_CHAT_CREATED,
+            eventTypes.CHAT_DELETED,
+            eventTypes.GROUP_CHAT_DELETED,
+        ].filter(Boolean);
+
+        for (const eventName of new Set(events)) {
+            eventSource.on(eventName, refresh);
+        }
+
+        // Update persona bubble on persona change
+        if (eventTypes.PERSONA_CHANGED) {
+            eventSource.on(eventTypes.PERSONA_CHANGED, () => {
+                updatePersonaBubble(personaBubble);
+            });
+        }
+    }
+
+    // Close persona picker when clicking outside
+    document.addEventListener('click', (e) => {
+        const picker = document.getElementById('sb-persona-picker');
+        if (picker && !picker.contains(e.target) && e.target !== personaBubble) {
+            picker.remove();
+        }
+    });
+
+    refreshBottomChatSelect();
+}
+
+async function refreshBottomChatSelect() {
+    const chatSelect = sbState.bottomChatBar?.chatSelect;
+    if (!(chatSelect instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const context = getSillyTavernContext();
+    if (!context) {
+        return;
+    }
+
+    const currentChatName = context.getCurrentChatDetails?.()?.sessionName || '';
+    const character = context.characters?.[context.characterId];
+
+    chatSelect.replaceChildren();
+
+    // Add placeholder option showing the current chat
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = currentChatName || 'No chat selected';
+    placeholder.selected = true;
+    chatSelect.appendChild(placeholder);
+
+    // Fetch the list of available chats for this character
+    if (!character?.avatar) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/characters/chats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...context.getRequestHeaders?.() },
+            body: JSON.stringify({ avatar_url: character.avatar, simple: true }),
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const chats = Object.values(data)
+            .sort((a, b) => (b.last_mes || '').localeCompare(a.last_mes || ''))
+            .map(c => c.file_name?.replace('.jsonl', ''));
+
+        chatSelect.replaceChildren();
+
+        for (const chatName of chats) {
+            if (!chatName) continue;
+            const option = document.createElement('option');
+            option.value = chatName;
+            option.textContent = chatName;
+            option.selected = chatName === currentChatName;
+            chatSelect.appendChild(option);
+        }
+
+        if (!chats.includes(currentChatName)) {
+            const fallback = document.createElement('option');
+            fallback.value = '';
+            fallback.textContent = currentChatName || 'No chat selected';
+            fallback.selected = true;
+            chatSelect.prepend(fallback);
+        }
+    } catch {
+        // Silently keep the placeholder on error
+    }
+}
+
+function updatePersonaBubble(bubble) {
+    if (!(bubble instanceof HTMLElement)) {
+        bubble = document.getElementById('sb-persona-bubble');
+    }
+    if (!bubble) {
+        return;
+    }
+
+    const context = getSillyTavernContext();
+    const personas = context?.powerUserSettings?.personas ?? {};
+    const currentName = context?.name1 || 'You';
+
+    // Find the avatar ID whose persona name matches the current name1
+    const currentAvatarId = Object.entries(personas).find(([, name]) => name === currentName)?.[0] || '';
+
+    if (currentAvatarId) {
+        bubble.style.backgroundImage = `url("/User Avatars/${currentAvatarId}")`;
+    } else {
+        bubble.style.backgroundImage = 'none';
+    }
+    bubble.setAttribute('title', `Persona: ${currentName}`);
+}
+
+function togglePersonaPicker() {
+    const existing = document.getElementById('sb-persona-picker');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+
+    const context = getSillyTavernContext();
+    if (!context) return;
+
+    const currentName = context.name1 || 'You';
+    const picker = createElement('div', { id: 'sb-persona-picker' });
+
+    // powerUserSettings is the correct context property (not power_user)
+    const personas = context.powerUserSettings?.personas ?? {};
+    const keys = Object.keys(personas);
+
+    if (!keys.length) {
+        const empty = createElement('div', { className: 'sb-persona-option' });
+        empty.textContent = 'No personas defined';
+        picker.appendChild(empty);
+    } else {
+        for (const avatarId of keys) {
+            const name = personas[avatarId] || avatarId;
+            const isActive = name === currentName;
+            addPersonaOption(picker, avatarId, name, isActive, context);
+        }
+    }
+
+    // Position relative to the bubble
+    const bubble = document.getElementById('sb-persona-bubble');
+    if (bubble) {
+        bubble.parentElement.style.position = 'relative';
+        bubble.parentElement.appendChild(picker);
+    }
+}
+
+function addPersonaOption(picker, avatarId, name, isActive, context) {
+    const option = createElement('div', {
+        className: `sb-persona-option${isActive ? ' is-active' : ''}`,
+    });
+
+    const img = createElement('img', {
+        className: 'sb-persona-option-avatar',
+        attrs: {
+            src: `/User Avatars/${avatarId}`,
+            alt: name,
+            loading: 'lazy',
+        },
+    });
+    img.addEventListener('error', () => { img.style.display = 'none'; });
+
+    const label = createElement('span', { className: 'sb-persona-option-name' });
+    label.textContent = name;
+
+    option.append(img, label);
+    option.addEventListener('click', async () => {
+        picker.remove();
+        // Use ST's /persona slash command — the most reliable way to switch personas
+        const execSlash = context?.executeSlashCommandsWithOptions;
+        if (typeof execSlash === 'function') {
+            await execSlash(`/persona ${name}`);
+        } else {
+            // Fallback: try clicking the DOM avatar
+            const avatarBlock = document.getElementById('user_avatar_block');
+            const domAvatar = avatarBlock?.querySelector(`.avatar-container[title="${CSS.escape(avatarId)}"]`);
+            if (domAvatar instanceof HTMLElement) {
+                domAvatar.click();
+            } else {
+                openShell('right', 'persona');
+            }
+        }
+        updatePersonaBubble();
+    });
+
+    picker.appendChild(option);
+}
+
 function initAll() {
     if (sbState.initialized) {
         return;
@@ -6214,13 +6493,14 @@ function initAll() {
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
     setTopbarScale('desktop', sbState.topbarScale.desktop, { persist: false });
     setTopbarScale('mobile', sbState.topbarScale.mobile, { persist: false });
+    setBottomBarScale(sbState.bottomBarScale, { persist: false });
     syncDesktopShellSizing();
     buildTopBar();
+    buildBottomChatBar();
     bindTopbarDragEvents();
     bindChatbarEvents();
     interceptDrawerOpeners();
     bindWorldInfoRoute();
-    initAgentOverview();
     applyDefaultDrawerStates();
     syncMobileViewportState();
 

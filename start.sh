@@ -24,21 +24,46 @@ is_termux() {
 }
 
 prefer_node_runtime() {
-    if ! is_termux; then
-        return 1
+    # Forced via environment variable
+    if is_truthy "${SILLYBUNNY_USE_NODE:-}"; then
+        return 0
     fi
 
-    case "${SILLYBUNNY_TERMUX_RUNTIME:-auto}" in
-        bun)
-            return 1
-            ;;
-        auto|node|'')
-            return 0
-            ;;
-        *)
-            return 0
+    # Termux always prefers Node unless overridden
+    if is_termux; then
+        case "${SILLYBUNNY_TERMUX_RUNTIME:-auto}" in
+            bun) return 1 ;;
+            *) return 0 ;;
+        esac
+    fi
+
+    # macOS and ARM platforms: Bun has high idle CPU usage (oven-sh/bun#26415)
+    # Auto-switch to Node.js if available
+    local os arch
+    os="$(uname -s 2>/dev/null || echo Unknown)"
+    arch="$(uname -m 2>/dev/null || echo Unknown)"
+
+    case "$os" in
+        Darwin)
+            # macOS — Bun CPU bug confirmed on all Mac architectures
+            if command -v node >/dev/null 2>&1; then
+                echo "[SillyBunny] macOS detected — using Node.js to avoid Bun CPU overhead (oven-sh/bun#26415)"
+                return 0
+            fi
             ;;
     esac
+
+    case "$arch" in
+        aarch64|arm64|armv7l|armv8l)
+            # ARM — Bun event loop issue causes 90%+ idle CPU
+            if command -v node >/dev/null 2>&1; then
+                echo "[SillyBunny] ARM platform detected — using Node.js to avoid Bun CPU overhead (oven-sh/bun#26415)"
+                return 0
+            fi
+            ;;
+    esac
+
+    return 1
 }
 
 resolve_runtime_command() {
@@ -162,7 +187,7 @@ RUNTIME_CMD="$(resolve_runtime_command "$runtime_kind")"
 PACKAGE_MANAGER_CMD="$(resolve_package_manager_command "$runtime_kind")"
 
 if [[ "$runtime_kind" == node ]]; then
-    echo "Installing Node.js packages for native Termux..."
+    echo "Installing packages via npm (Node.js mode)..."
 else
     echo "Installing Bun packages..."
 fi

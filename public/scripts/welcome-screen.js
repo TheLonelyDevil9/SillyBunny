@@ -62,6 +62,14 @@ const STARTER_PACK_EXTENSIONS = Object.freeze({
         id: 'third-party/sillytavern-image-gen',
         repoUrl: 'https://github.com/platberlitz/sillytavern-image-gen',
     }),
+    summarySharder: Object.freeze({
+        id: 'third-party/summary-sharder',
+        repoUrl: 'https://github.com/Promansis/summary-sharder',
+    }),
+    guidedGenerations: Object.freeze({
+        id: 'third-party/GuidedGenerations-Extension',
+        repoUrl: 'https://github.com/platberlitz/GuidedGenerations-Extension',
+    }),
 });
 
 const WELCOME_TUTORIAL_STEPS = Object.freeze([
@@ -105,7 +113,7 @@ const WELCOME_TUTORIAL_STEPS = Object.freeze([
         title: 'Ask the bunny when stuck',
         body: 'The default welcome assistant is a beginner-friendly bunny guide. It can explain LLM basics, SillyBunny concepts, and SillyTavern terms without assuming you already know the jargon.',
         hint: 'A good first question is the difference between providers, models, presets, personas, and world info.',
-        chips: ['LLM basics', 'SillyBunny tips', 'SillyTavern terms', 'Replay tutorial anytime'],
+        chips: ['LLM basics', 'SillyBunny tips', 'SillyTavern terms', 'Show Launchpad'],
         actionLabel: 'Prefill a beginner question',
         actionType: 'assistant-prompt',
         actionValue: 'Explain the difference between providers, models, presets, personas, and world info in simple terms.',
@@ -142,10 +150,10 @@ const WELCOME_GUIDE_CARDS = Object.freeze([
     },
     {
         title: 'What to do when confused',
-        body: 'Replay the tour, ask the bunny guide a plain-English question, or open the docs. You should not need to memorize the whole interface to start using it.',
-        chips: ['Replay tutorial', 'Bunny guide', 'Docs', 'Start small'],
+        body: 'Show the Launchpad, ask the bunny guide a plain-English question, or open the docs. You should not need to memorize the whole interface to start using it.',
+        chips: ['Show Launchpad', 'Bunny guide', 'Docs', 'Start small'],
         icon: 'fa-life-ring',
-        actionLabel: 'Replay the tutorial',
+        actionLabel: 'Show Launchpad',
         actionType: 'replay-tutorial',
         actionValue: '',
     },
@@ -445,11 +453,12 @@ function getInitialDeckView() {
         return storedView;
     }
 
-    return getTutorialStatus() ? 'basics' : 'tour';
+    return 'tour';
 }
 
 function isWelcomeDeckCollapsed() {
-    return getWelcomeUiPreference(welcomeDeckCollapsedKey) === 'true';
+    const stored = getWelcomeUiPreference(welcomeDeckCollapsedKey);
+    return stored === null ? true : stored === 'true';
 }
 
 function getWelcomeUiPreference(key) {
@@ -722,7 +731,7 @@ function buildGeechanStarterPackItem() {
 function buildTldStarterPackItem() {
     return buildLinkStarterPackItem({
         title: 'TheLonelyDevil',
-        body: 'TheLonelyDevil\'s Chub profile is linked here, SillyBunny bundles the standalone TLD Card Conversion Preset for card-maker and conversion-focused OpenAI-style workflows, and he also made the bundled Memory Sharding Quick Reply prompt. For the Memory Sharding flow, use around 30k context so the shard pass has enough room to work cleanly. Discord Pals is included as a GitHub link for running LLM character roleplay inside Discord.',
+        body: 'TheLonelyDevil\'s Chub profile is linked here. SillyBunny bundles the standalone TLD Card Conversion Preset for card-maker and conversion-focused OpenAI-style workflows, and the Memory Sharding Quick Reply set for compressing chat history into structured memory shards. To use Memory Sharding, go to the Quick Reply settings, enable the "Memory Sharding" set, then click the "Shard Memory" button when you want to summarise your chat. Use around 30k context so the shard pass has enough room to work cleanly. Discord Pals is included as a GitHub link for running LLM character roleplay inside Discord.',
         icon: 'fa-shoe-prints',
         chips: ['Card maker', 'Memory shards', 'Discord RP', 'Preset'],
         statusLabel: 'Bundled',
@@ -735,26 +744,44 @@ function buildTldStarterPackItem() {
 }
 
 function buildStarterPackItems() {
-    return [
-        buildExtensionStarterPackItem({
-            title: 'Dialogue Colors',
-            body: `${STARTER_PACK_CREATOR_NAME}'s dialogue coloring add-on helps visually busy or emotionally dense chats stay readable, with optional regex setup if you want finer control.`,
-            icon: 'fa-palette',
-            chips: ['Extension', 'Readable chats', 'Opt-in'],
-            extensionName: STARTER_PACK_EXTENSIONS.dialogueColors.id,
-        }),
-        buildExtensionStarterPackItem({
-            title: 'Quick Image Gen',
-            body: `${STARTER_PACK_CREATOR_NAME}'s opt-in image generation companion makes visual moments easier to spin up without hunting through separate tools first.`,
-            icon: 'fa-image',
-            chips: ['Extension', 'Images', 'Opt-in'],
-            extensionName: STARTER_PACK_EXTENSIONS.quickImageGen.id,
-        }),
-        buildPresetStarterPackItem(),
-        buildSiteStarterPackItem(),
-        buildGeechanStarterPackItem(),
-        buildTldStarterPackItem(),
-    ];
+    return {
+        preInstalled: [
+            buildPresetStarterPackItem(),
+            buildSiteStarterPackItem(),
+            buildGeechanStarterPackItem(),
+            buildTldStarterPackItem(),
+        ],
+        optional: [
+            buildExtensionStarterPackItem({
+                title: 'Summary Sharder',
+                body: 'A recommended way to add persistent memory to your chats. Summary Sharder keeps a rolling summary of your conversation so the AI remembers key events, characters, and context across long sessions.',
+                icon: 'fa-brain',
+                chips: ['Extension', 'Memory', 'Recommended'],
+                extensionName: STARTER_PACK_EXTENSIONS.summarySharder.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Dialogue Colors',
+                body: `${STARTER_PACK_CREATOR_NAME}'s dialogue coloring add-on helps visually busy or emotionally dense chats stay readable, with optional regex setup if you want finer control.`,
+                icon: 'fa-palette',
+                chips: ['Extension', 'Readable chats', 'Opt-in'],
+                extensionName: STARTER_PACK_EXTENSIONS.dialogueColors.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Quick Image Gen',
+                body: `${STARTER_PACK_CREATOR_NAME}'s opt-in image generation companion makes visual moments easier to spin up without hunting through separate tools first.`,
+                icon: 'fa-image',
+                chips: ['Extension', 'Images', 'Opt-in'],
+                extensionName: STARTER_PACK_EXTENSIONS.quickImageGen.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Guided Generations',
+                body: 'Adds structured generation controls to your chats, letting you guide the AI with specific instructions for each response to get more consistent and directed output.',
+                icon: 'fa-compass',
+                chips: ['Extension', 'Generation', 'Opt-in'],
+                extensionName: STARTER_PACK_EXTENSIONS.guidedGenerations.id,
+            }),
+        ],
+    };
 }
 
 function buildWelcomeTemplateData(chats) {
@@ -887,7 +914,7 @@ function setWelcomeDeckCollapsed(root, collapsed, { persist = true } = {}) {
 
     if (toggleButton instanceof HTMLButtonElement) {
         toggleButton.setAttribute('aria-expanded', String(!collapsed));
-        toggleButton.setAttribute('title', 'Close Launchpad');
+        toggleButton.setAttribute('title', collapsed ? 'Show Launchpad' : 'Close Launchpad');
     }
 
     if (persist) {
@@ -1720,6 +1747,13 @@ export function assignCharacterAsAssistant(characterId) {
 
 export function initWelcomeScreen() {
     PinnedChatsManager.init();
+
+    // Ensure all bundled assistants exist in the character list on startup
+    eventSource.on(event_types.APP_READY, async () => {
+        for (const assistant of WELCOME_BUNDLED_ASSISTANTS) {
+            await ensureBundledAssistantCharacter(assistant, { tryCreate: true });
+        }
+    });
 
     const events = [event_types.CHAT_CHANGED, event_types.APP_READY];
     for (const event of events) {

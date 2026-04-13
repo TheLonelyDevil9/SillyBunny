@@ -55,6 +55,22 @@ set NODE_ENV=production
 call bun install --frozen-lockfile --production
 if %errorlevel% neq 0 goto end
 
+REM Check if running on ARM — Bun has CPU overhead issues on ARM (oven-sh/bun#26415)
+if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+    where node > nul 2>&1
+    if !errorlevel! equ 0 (
+        echo.
+        echo [SillyBunny] ARM64 detected. Bun may use excessive CPU on this platform.
+        echo [SillyBunny] Switching to Node.js automatically. Use Start.bat with SILLYBUNNY_USE_BUN=1 to override.
+        echo.
+        if /I not "%SILLYBUNNY_USE_BUN%"=="1" (
+            set NODE_NO_WARNINGS=1
+            node --no-warnings server.js %*
+            goto end
+        )
+    )
+)
+
 bun server.js %*
 
 :end

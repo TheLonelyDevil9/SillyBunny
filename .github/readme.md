@@ -167,7 +167,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Agents can run **prompt transforms** in `rewrite` or `append` mode
 - Agents can be bundled into **Agent Groups** for one-click setup
 
-**What ships with v1.3.1:**
+**What ships with v1.3.2:**
 
 - **31 bundled templates** based on Pura's Director Preset ecosystem
 - Trackers, randomisers, directives, formatting helpers, anti-slop, and content toggles
@@ -177,7 +177,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Inline run-order editing directly from the agent cards
 - Prompt-transform greeting protection: greeting messages are intentionally left alone
 
-**Bundled defaults in v1.3.1:**
+**Bundled defaults in v1.3.2:**
 
 - Bundled trackers are set up for **post-generation prompt append**
 - Bundled regex-backed helpers default to **post-generation**
@@ -192,7 +192,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 ## UI preview
 
-These screenshots show the `v1.3.1` shell on desktop and mobile.
+These screenshots show the `v1.3.2` shell on desktop and mobile.
 
 #### Desktop
 
@@ -209,6 +209,41 @@ These screenshots show the `v1.3.1` shell on desktop and mobile.
 ---
 
 ## Changelog
+
+### v1.3.2 (2026-04-13)
+
+**UI/UX overhaul**
+
+- Redesigned shell panels: centered on screen, narrower (900px max), horizontal tab bar at top
+- Centered shell open animations (scale+fade instead of directional slide)
+- Rearranged top bar: Navigate + Customize left, Home + Characters right, removed duplicate API button
+- Added customizable quick-access shortcut buttons in the top bar (configurable in Settings)
+- Removed chatbar overlay; integrated chat management into the bottom bar with persona bubble
+- Added bottom bar size slider in Settings
+- Home screen defaults to First Steps with launchpad collapsed; "Show Launchpad" replaces "Replay Tutorial"
+- Added "Chat with Assistant Nahida" button on home screen; Nahida now appears in character list by default
+- Starter pack split into Pre-installed and Optional sections; added Summary Sharder, Guided Generations
+- Bundled Memory Sharding Quick Reply preset for chat summarisation
+
+**Agent mode changes**
+
+- Removed Agent Mode orchestration; kept In-Chat Agents as a standalone lightweight tab
+- Summary Sharder recommended as the memory solution
+
+**Bug fixes**
+
+- Fixed stop generation button (`isStopped` flag now set correctly in `onStopStreaming`)
+- Fixed story branching performance (shallow copy instead of full `structuredClone`)
+- Fixed `applyBundledOptInDefaults()` always returning true
+- Fixed CLIENT_VERSION `v` prefix breaking extension version checks
+- Fixed circular dependency TDZ errors in GuidedGenerations, TunnelVision, Quick Reply, TTS
+- Fixed duplicate TTS settings panel
+- Fixed shell search showing generic "Extensions" instead of actual section names
+
+**Platform support**
+
+- Added Node.js fallback launchers (`start-node.sh`, `Start-Node.bat`, `npm run start:node`)
+- Auto-switches to Node.js on macOS and ARM to avoid Bun CPU overhead (oven-sh/bun#26415)
 
 ### v1.3.1 (2026-04-12)
 

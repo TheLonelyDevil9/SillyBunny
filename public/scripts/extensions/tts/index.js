@@ -120,36 +120,50 @@ export function registerTtsProvider(name, provider) {
     }
 }
 
-const ttsProviders = {
-    AllTalk: AllTalkTtsProvider,
-    Azure: AzureTtsProvider,
-    Chatterbox: ChatterboxTtsProvider,
-    Chutes: ChutesTtsProvider,
-    Coqui: CoquiTtsProvider,
-    'CosyVoice (Unofficial)': CosyVoiceProvider,
-    Edge: EdgeTtsProvider,
-    ElevenLabs: ElevenLabsTtsProvider,
-    'Electron Hub': ElectronHubTtsProvider,
-    'Google Translate': GoogleTranslateTtsProvider,
-    'Google Gemini TTS': GoogleNativeTtsProvider,
-    GSVI: GSVITtsProvider,
-    'GPT-SoVITS-Adapter': GptSoVITSAdapterProvider,
-    'GPT-SoVITS-V2 (Unofficial)': GptSovitsV2Provider,
-    Kokoro: KokoroTtsProvider,
-    MiniMax: MiniMaxTtsProvider,
-    Novel: NovelTtsProvider,
-    OpenAI: OpenAITtsProvider,
-    'OpenAI Compatible': OpenAICompatibleTtsProvider,
-    Pollinations: PollinationsTtsProvider,
-    SBVits2: SBVits2TtsProvider,
-    Silero: SileroTtsProvider,
-    SpeechT5: SpeechT5TtsProvider,
-    System: SystemTtsProvider,
-    'TTS WebUI': TtsWebuiProvider,
-    VITS: VITSTtsProvider,
-    XTTSv2: XTTSTtsProvider,
-    Volcengine: VolcengineTtsProvider,
-};
+var _ttsProviders = null;
+function getTtsProviders() {
+    if (!_ttsProviders) {
+        _ttsProviders = {
+            AllTalk: AllTalkTtsProvider,
+            Azure: AzureTtsProvider,
+            Chatterbox: ChatterboxTtsProvider,
+            Chutes: ChutesTtsProvider,
+            Coqui: CoquiTtsProvider,
+            'CosyVoice (Unofficial)': CosyVoiceProvider,
+            Edge: EdgeTtsProvider,
+            ElevenLabs: ElevenLabsTtsProvider,
+            'Electron Hub': ElectronHubTtsProvider,
+            'Google Translate': GoogleTranslateTtsProvider,
+            'Google Gemini TTS': GoogleNativeTtsProvider,
+            GSVI: GSVITtsProvider,
+            'GPT-SoVITS-Adapter': GptSoVITSAdapterProvider,
+            'GPT-SoVITS-V2 (Unofficial)': GptSovitsV2Provider,
+            Kokoro: KokoroTtsProvider,
+            MiniMax: MiniMaxTtsProvider,
+            Novel: NovelTtsProvider,
+            OpenAI: OpenAITtsProvider,
+            'OpenAI Compatible': OpenAICompatibleTtsProvider,
+            Pollinations: PollinationsTtsProvider,
+            SBVits2: SBVits2TtsProvider,
+            Silero: SileroTtsProvider,
+            SpeechT5: SpeechT5TtsProvider,
+            System: SystemTtsProvider,
+            'TTS WebUI': TtsWebuiProvider,
+            VITS: VITSTtsProvider,
+            XTTSv2: XTTSTtsProvider,
+            Volcengine: VolcengineTtsProvider,
+        };
+    }
+    return _ttsProviders;
+}
+// Proxy so existing code using ttsProviders[key] and Object.entries(ttsProviders) still works
+const ttsProviders = new Proxy({}, {
+    get(_, prop) { return getTtsProviders()[prop]; },
+    set(_, prop, val) { getTtsProviders()[prop] = val; return true; },
+    has(_, prop) { return prop in getTtsProviders(); },
+    ownKeys() { return Reflect.ownKeys(getTtsProviders()); },
+    getOwnPropertyDescriptor(_, prop) { return Object.getOwnPropertyDescriptor(getTtsProviders(), prop); },
+});
 let ttsProvider;
 let ttsProviderName;
 
@@ -1507,6 +1521,10 @@ async function initVoiceMapInternal(unrestricted) {
 }
 
 jQuery(async function () {
+    // Guard against double initialization (module may be loaded via multiple URL variants)
+    if (window._ttsExtensionInitialized) return;
+    window._ttsExtensionInitialized = true;
+
     async function addExtensionControls() {
         const settingsHtml = $(await renderExtensionTemplateAsync('tts', 'settings'));
         $('#tts_container').append(settingsHtml);
