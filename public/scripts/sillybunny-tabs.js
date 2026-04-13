@@ -5749,6 +5749,42 @@ function interceptDrawerOpeners() {
         event.preventDefault();
         event.stopPropagation();
     }, true);
+
+    // Collapse sibling inline-drawers when one is opened — prevents nested
+    // dropdown clutter by keeping only one drawer open per container at a time.
+    document.addEventListener('click', event => {
+        if (!(event.target instanceof Element)) return;
+        const toggle = event.target.closest('.inline-drawer-toggle');
+        if (!toggle) return;
+
+        const thisDrawer = toggle.closest('.inline-drawer');
+        if (!thisDrawer) return;
+
+        // Only collapse if this toggle is about to OPEN (icon currently points down = closed)
+        const icon = thisDrawer.querySelector(':scope > .inline-drawer-header .inline-drawer-icon');
+        const isCurrentlyClosed = icon?.classList.contains('fa-circle-chevron-down');
+        if (!isCurrentlyClosed) return;
+
+        // Find sibling inline-drawers in the same parent and close any that are open
+        const parent = thisDrawer.parentElement;
+        if (!parent) return;
+
+        parent.querySelectorAll(':scope > .inline-drawer').forEach(sibling => {
+            if (sibling === thisDrawer) return;
+            const siblingIcon = sibling.querySelector(':scope > .inline-drawer-header .inline-drawer-icon');
+            const siblingContent = sibling.querySelector(':scope > .inline-drawer-content');
+            if (!siblingIcon?.classList.contains('fa-circle-chevron-up')) return;
+
+            // Close it — mirror what ST's handler does
+            siblingIcon.classList.replace('fa-circle-chevron-up', 'fa-circle-chevron-down');
+            siblingIcon.classList.replace('up', 'down');
+            if (window.jQuery && siblingContent) {
+                window.jQuery(siblingContent).stop().slideUp();
+            } else {
+                siblingContent?.style.setProperty('display', 'none');
+            }
+        });
+    }, true);
 }
 
 function bindWorldInfoRoute() {
