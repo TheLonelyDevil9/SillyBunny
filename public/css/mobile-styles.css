@@ -390,6 +390,11 @@
         padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
     }
 
+    /* Ignore desktop bottom bar scale on mobile — mobile sizing is handled by CSS */
+    #form_sheld {
+        font-size: var(--mainFontSize) !important;
+    }
+
     /* Minimum touch targets for mobile */
     button, .menu_button, .right_menu_button, select {
         min-height: 44px;

@@ -5082,19 +5082,6 @@ function injectThemePicker() {
         caption: 'Resize the bottom chat bar, send form, and action buttons without editing CSS.',
         onInput: nextValue => setBottomBarScale(nextValue),
     });
-    const mobileTopbarSliderGroup = createThemeSliderGroup({
-        title: 'Mobile Top Bar Size',
-        valueId: 'sb-topbar-scale-mobile-value',
-        inputId: 'sb-topbar-scale-mobile-input',
-        value: sbState.topbarScale.mobile,
-        min: SB_TOPBAR_SCALE.min,
-        max: SB_TOPBAR_SCALE.max,
-        step: SB_TOPBAR_SCALE.step,
-        ariaLabel: 'Mobile top bar size',
-        caption: 'Resize the mobile one-line header and compact chat-tools panel for phones and narrow screens.',
-        onInput: nextValue => setTopbarScale('mobile', nextValue),
-    });
-    mobileTopbarSliderGroup.classList.add('sb-mobile-setting');
     const topbarLabelSettingsGroup = createTopbarLabelSettingsGroup();
     const shortcutSettingsGroup = createShortcutSettingsGroup();
     header.append(title, description);
@@ -5120,7 +5107,7 @@ function injectThemePicker() {
     getMessageStyleSelect()?.addEventListener('change', updateThemePickerUi);
     document.addEventListener('sb:chat-style-updated', updateThemePickerUi);
 
-    card.append(header, optionRow, surfaceSliderGroup, bottomBarSliderGroup, mobileTopbarSliderGroup, topbarLabelSettingsGroup, shortcutSettingsGroup);
+    card.append(header, optionRow, surfaceSliderGroup, bottomBarSliderGroup, topbarLabelSettingsGroup, shortcutSettingsGroup);
     themeBlock.prepend(card);
     updateThemePickerUi();
 }
@@ -5130,8 +5117,8 @@ function updateThemePickerUi() {
     const sliderValue = document.getElementById('sb-surface-transparency-value');
     const desktopTopbarScaleInput = document.getElementById('sb-topbar-scale-desktop-input');
     const desktopTopbarScaleValue = document.getElementById('sb-topbar-scale-desktop-value');
-    const mobileTopbarScaleInput = document.getElementById('sb-topbar-scale-mobile-input');
-    const mobileTopbarScaleValue = document.getElementById('sb-topbar-scale-mobile-value');
+    const bottomBarScaleInput = document.getElementById('sb-bottom-bar-scale-input');
+    const bottomBarScaleValue = document.getElementById('sb-bottom-bar-scale-value');
     const customTextInput = document.getElementById('sb-topbar-custom-text-input');
 
     for (const button of document.querySelectorAll('[data-sb-theme-option]')) {
@@ -5157,12 +5144,12 @@ function updateThemePickerUi() {
         desktopTopbarScaleValue.textContent = formatTopbarScale(sbState.topbarScale.desktop);
     }
 
-    if (mobileTopbarScaleInput instanceof HTMLInputElement) {
-        mobileTopbarScaleInput.value = String(sbState.topbarScale.mobile);
+    if (bottomBarScaleInput instanceof HTMLInputElement) {
+        bottomBarScaleInput.value = String(sbState.bottomBarScale);
     }
 
-    if (mobileTopbarScaleValue instanceof HTMLElement) {
-        mobileTopbarScaleValue.textContent = formatTopbarScale(sbState.topbarScale.mobile);
+    if (bottomBarScaleValue instanceof HTMLElement) {
+        bottomBarScaleValue.textContent = formatTopbarScale(sbState.bottomBarScale);
     }
 
     for (const input of document.querySelectorAll('[data-sb-topbar-label-mode][data-sb-topbar-label-part]')) {

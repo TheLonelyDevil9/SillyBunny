@@ -2656,6 +2656,8 @@ body:not(.movingUI) .drawer-content.maximized {
 
     .sb-topbar-group-right {
         justify-self: end;
+        align-items: center;
+        flex-wrap: nowrap;
     }
 
     .sb-topbar-brand {
@@ -2889,7 +2891,7 @@ body:not(.movingUI) .drawer-content.maximized {
     #sb-mobile-nav {
         display: none;
         position: fixed;
-        inset: var(--sb-topbar-stack-height) 0 0;
+        inset: var(--sb-topbar-layout-offset) 0 0;
         z-index: -1;
         padding: 12px;
         isolation: isolate;
@@ -2936,7 +2938,7 @@ body:not(.movingUI) .drawer-content.maximized {
 
     #sb-mobile-chat-tools {
         position: fixed;
-        inset: var(--sb-topbar-stack-height) 0 0;
+        inset: var(--sb-topbar-layout-offset) 0 0;
         z-index: -1;
         padding: 12px;
         visibility: hidden;
@@ -2965,7 +2967,7 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     #sb-mobile-chat-tools-panel {
-        max-height: calc(100dvh - var(--sb-topbar-stack-height) - 48px);
+        max-height: calc(100dvh - var(--sb-topbar-layout-offset) - 48px);
         overflow-y: auto;
     }
 
@@ -2973,7 +2975,7 @@ body:not(.movingUI) .drawer-content.maximized {
         position: relative;
         isolation: isolate;
         width: min(100%, 420px);
-        max-height: calc(100dvh - var(--sb-topbar-stack-height) - 48px);
+        max-height: calc(100dvh - var(--sb-topbar-layout-offset) - 48px);
         margin: 0 auto;
         padding: 14px 12px 18px;
         display: flex;
