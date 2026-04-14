@@ -12,14 +12,22 @@ import {
 } from '../../../script.js';
 import { getContext } from '../../extensions.js';
 import { eventSource, event_types } from '../../events.js';
+import { ToolManager } from '../../tool-calling.js';
 import {
     DEFAULT_AGENT_MAX_TOKENS,
     getAgentById,
     getAgentRegexScripts,
     getEnabledAgents,
+    getEnabledToolAgents,
     getGlobalSettings,
+    isToolAgent,
     resolveConnectionProfile,
 } from './agent-store.js';
+import {
+    getToolAction,
+    getToolFormatter,
+} from './tool-action-registry.js';
+import { getTree as pfGetTree, getAllEntryUids as pfGetAllEntryUids } from './pathfinder/tree-store.js';
 
 const PROMPT_KEY_PREFIX = 'inchat_agent_';
 const MESSAGE_EXTRA_KEY = 'inChatAgents';
@@ -35,6 +43,78 @@ let isGenerationInProgress = false;
 let generationStopRequested = false;
 let deferredPostProcessing = null;
 let deferredPostProcessingTimeout = null;
+
+/** Track which tool names were registered by the agent system so we can cleanly unregister only our own. */
+const agentRegisteredToolNames = new Set();
+
+/** Guard to prevent re-registration during generation when WORLDINFO_UPDATED fires. */
+let toolSyncDuringGeneration = false;
+
+/** Recursion depth tracker for tool-call passes. */
+let toolRecursionDepth = 0;
+
+/**
+ * Syncs tool registrations for all enabled tool-category agents.
+ * Unregisters tools from disabled agents, registers tools from enabled ones.
+ */
+export function syncToolAgentRegistrations() {
+    if (toolSyncDuringGeneration) {
+        return;
+    }
+
+    const desiredTools = new Set();
+    const enabledToolAgents = getEnabledToolAgents();
+
+    for (const agent of enabledToolAgents) {
+        const enabledTools = (agent.tools ?? []).filter(tool => tool.enabled !== false);
+        for (const tool of enabledTools) {
+            desiredTools.add(tool.name);
+        }
+    }
+
+    for (const name of agentRegisteredToolNames) {
+        if (!desiredTools.has(name)) {
+            ToolManager.unregisterFunctionTool(name);
+            agentRegisteredToolNames.delete(name);
+        }
+    }
+
+    for (const agent of enabledToolAgents) {
+        const enabledTools = (agent.tools ?? []).filter(tool => tool.enabled !== false);
+        for (const toolDef of enabledTools) {
+            const action = getToolAction(toolDef.actionKey);
+            if (!action) {
+                console.warn(`[InChatAgents] Tool "${toolDef.name}" has actionKey "${toolDef.actionKey}" with no registered action. Skipping.`);
+                continue;
+            }
+
+            const formatMessage = getToolFormatter(toolDef.formatMessageKey) ?? (async () => `Calling ${toolDef.displayName}...`);
+
+            ToolManager.registerFunctionTool({
+                name: toolDef.name,
+                displayName: toolDef.displayName,
+                description: toolDef.description,
+                parameters: toolDef.parameters,
+                action,
+                formatMessage,
+                shouldRegister: async () => true,
+                stealth: toolDef.stealth ?? false,
+            });
+
+            agentRegisteredToolNames.add(toolDef.name);
+        }
+    }
+}
+
+/**
+ * Unregisters all agent-owned tools from ToolManager.
+ */
+export function unregisterAllAgentTools() {
+    for (const name of agentRegisteredToolNames) {
+        ToolManager.unregisterFunctionTool(name);
+    }
+    agentRegisteredToolNames.clear();
+}
 
 function normalizeGenerationType(generationType) {
     switch (String(generationType ?? '').trim().toLowerCase()) {
@@ -737,9 +817,18 @@ function onGenerationStarted() {
     }
 
     isGenerationInProgress = true;
+    toolSyncDuringGeneration = true;
     generationStopRequested = false;
     clearDeferredPostProcessing();
     pendingGenerationSnapshot = null;
+
+    const lastMsg = chat[chat.length - 1];
+    const isRecursiveToolPass = lastMsg?.extra?.tool_invocations != null;
+    if (isRecursiveToolPass) {
+        toolRecursionDepth++;
+    } else {
+        toolRecursionDepth = 0;
+    }
 
     for (const key of Object.keys(extension_prompts)) {
         if (key.startsWith(PROMPT_KEY_PREFIX)) {
@@ -754,6 +843,8 @@ function onGenerationEnded() {
     }
 
     isGenerationInProgress = false;
+    toolSyncDuringGeneration = false;
+    generationStopRequested = false;
     scheduleDeferredPostProcessingFlush();
 }
 
@@ -783,6 +874,10 @@ function onGenerationAfterCommands(generationType, _options, dryRun) {
     const promptAgents = activeAgents.filter(agent => agent.phase === 'pre' || agent.phase === 'both');
 
     for (const agent of promptAgents) {
+        if (isToolAgent(agent)) {
+            continue;
+        }
+
         const expandedPrompt = substituteParams(agent.prompt, {
             dynamicMacros: buildPromptDynamicMacros('', null, agent, generationType),
         });
@@ -800,6 +895,8 @@ function onGenerationAfterCommands(generationType, _options, dryRun) {
             agent.injection.role,
         );
     }
+
+    syncToolAgentRegistrations();
 }
 
 /**
@@ -938,6 +1035,110 @@ function onMessageEdited(messageIndex) {
 }
 
 /**
+ * Handles CHAT_COMPLETION_SETTINGS_READY for tool-category agents.
+ * Converts registered tools to Anthropic format when needed,
+ * and strips tools on the final recursion pass to force narrative output.
+ * @param {object} data Generation data being prepared for the API call
+ */
+function onChatCompletionSettingsReady(data) {
+    if (agentRegisteredToolNames.size === 0) {
+        return;
+    }
+
+    const recurseLimit = ToolManager.RECURSE_LIMIT ?? 5;
+    if (toolRecursionDepth >= recurseLimit - 1) {
+        delete data.tools;
+        data.tool_choice = 'none';
+        return;
+    }
+
+    if (!Array.isArray(data.tools) || data.tools.length === 0) {
+        return;
+    }
+
+    const isClaude = String(data.model ?? '').startsWith('claude') ||
+        data.chat_completion_source === 'claude';
+
+    if (isClaude && Array.isArray(data.tools)) {
+        data.tools = data.tools.map(tool => {
+            if (tool.type === 'function' && tool.function) {
+                return {
+                    name: tool.function.name,
+                    description: tool.function.description,
+                    input_schema: tool.function.parameters,
+                };
+            }
+            return tool;
+        });
+
+        if (data.tool_choice === 'auto') {
+            data.tool_choice = { type: 'auto' };
+        } else if (typeof data.tool_choice === 'object' && data.tool_choice?.function?.name) {
+            data.tool_choice = { type: 'tool', name: data.tool_choice.function.name };
+        }
+    }
+}
+
+/**
+ * Handles WORLDINFO_ENTRIES_LOADED for tool-category agents.
+ * Suppresses keyword-based scanning for lorebooks managed by tool agents
+ * (e.g., Pathfinder) to prevent double-injection.
+ * @param {object} data World info data with globalLore, characterLore, etc.
+ */
+function onWorldInfoEntriesLoaded(data) {
+    const enabledToolAgents = getEnabledToolAgents();
+    if (enabledToolAgents.length === 0) return;
+
+    const managedUids = getPfManagedEntryUids(enabledToolAgents);
+    if (managedUids.size === 0) return;
+
+    const loreArrayKeys = ['globalLore', 'characterLore', 'chatLore', 'personaLore'];
+    for (const key of loreArrayKeys) {
+        if (!Array.isArray(data[key])) continue;
+        data[key] = data[key].filter(entry => {
+            if (!entry) return true;
+            return !managedUids.has(entry.uid);
+        });
+    }
+}
+
+function getPfManagedEntryUids(toolAgents) {
+    const uids = new Set();
+    for (const agent of toolAgents) {
+        const books = agent.settings?.enabledLorebooks ?? [];
+        for (const bookName of books) {
+            const tree = pfGetTree(bookName);
+            if (tree) {
+                for (const uid of pfGetAllEntryUids(tree)) uids.add(uid);
+            }
+        }
+    }
+    return uids;
+}
+
+let _onChatChangedToolSync = false;
+
+function onChatChangedToolSync() {
+    if (_onChatChangedToolSync) {
+        return;
+    }
+    _onChatChangedToolSync = true;
+
+    requestAnimationFrame(() => {
+        _onChatChangedToolSync = false;
+        toolRecursionDepth = 0;
+        syncToolAgentRegistrations();
+    });
+}
+
+function onWorldInfoUpdatedToolSync() {
+    if (toolSyncDuringGeneration || isGenerationInProgress) {
+        return;
+    }
+    syncToolAgentRegistrations();
+}
+
+/**
  * Registers all event listeners for the agent runner.
  */
 export function initAgentRunner() {
@@ -947,6 +1148,22 @@ export function initAgentRunner() {
     eventSource.on(event_types.GENERATION_STOPPED, onGenerationStopped);
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.MESSAGE_EDITED, onMessageEdited);
+
+    if (event_types.CHAT_COMPLETION_SETTINGS_READY) {
+        eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, onChatCompletionSettingsReady);
+    }
+
+    if (event_types.WORLDINFO_ENTRIES_LOADED) {
+        eventSource.on(event_types.WORLDINFO_ENTRIES_LOADED, onWorldInfoEntriesLoaded);
+    }
+
+    if (event_types.CHAT_CHANGED) {
+        eventSource.on(event_types.CHAT_CHANGED, onChatChangedToolSync);
+    }
+
+    if (event_types.WORLDINFO_UPDATED) {
+        eventSource.on(event_types.WORLDINFO_UPDATED, onWorldInfoUpdatedToolSync);
+    }
 }
 
 /**

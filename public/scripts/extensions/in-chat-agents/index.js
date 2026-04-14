@@ -1,4 +1,4 @@
-import { extension_settings, renderExtensionTemplateAsync } from '../../extensions.js';
+import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../extensions.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { download, uuidv4 } from '../../utils.js';
 import { CLIENT_VERSION, chat, getRequestHeaders, generateQuietPrompt, saveSettingsDebounced } from '../../../script.js';
@@ -28,16 +28,23 @@ import {
     saveGroup,
     deleteGroup,
     createDefaultGroup,
+    isToolAgent,
+    getEnabledToolAgents,
+    normalizeToolDef,
 } from './agent-store.js';
-import { initAgentRunner, runAgentOnMessage } from './agent-runner.js';
+import { initAgentRunner, runAgentOnMessage, syncToolAgentRegistrations } from './agent-runner.js';
 import {
     AGENT_REGEX_PLACEMENT,
     AGENT_REGEX_SUBSTITUTE,
     createDefaultRegexScript,
     normalizeRegexScript,
 } from './regex-scripts.js';
+import { initPathfinder, getPathfinderToolDefinitions, runDiagnostics as runPathfinderDiagnostics, buildPathfinderTree, getPathfinderSettings, setPathfinderSettings } from './pathfinder-init.js';
+import { openPathfinderSettings, isPathfinderAgent } from './pathfinder-settings-ui.js';
 
 const MODULE_NAME = 'in-chat-agents';
+
+let collapsedCategories = new Set();
 
 /** Built-in templates loaded from JSON files. */
 let templates = [];
@@ -949,14 +956,21 @@ function renderAgentList() {
         const group = $('<div class="ica--category-group"></div>');
 
         const header = $(`
-            <div class="ica--category-header">
+            <div class="ica--category-header${collapsedCategories.has(cat) ? ' collapsed' : ''}">
                 <i class="fa-solid fa-chevron-down ica--chevron"></i>
                 <i class="fa-solid ${catInfo.icon}"></i>
                 ${catInfo.label}
                 <span class="ica--category-count">${catAgents.length}</span>
             </div>
         `);
-        header.on('click', function () { $(this).toggleClass('collapsed'); });
+        header.on('click', function () {
+            $(this).toggleClass('collapsed');
+            if ($(this).hasClass('collapsed')) {
+                collapsedCategories.add(cat);
+            } else {
+                collapsedCategories.delete(cat);
+            }
+        });
         group.append(header);
 
         const items = $('<div class="ica--category-items"></div>');
@@ -988,9 +1002,9 @@ function renderAgentList() {
                         ${connectionProfileLabel ? `<span class="ica--card-pill"><i class="fa-solid fa-plug fa-xs"></i> ${escapeHtml(connectionProfileLabel)}</span>` : ''}
                     </div>
                     <div class="ica--card-actions">
-                        <button type="button" class="ica--card-btn ica--btn-run" title="Manually apply this agent to the last assistant reply"><i class="fa-solid fa-robot"></i> Apply to Last Reply</button>
+                        ${isPathfinderAgent(agent) ? '' : '<button type="button" class="ica--card-btn ica--btn-run" title="Manually apply this agent to the last assistant reply"><i class="fa-solid fa-robot"></i> Apply to Last Reply</button>'}
                         <button type="button" class="ica--card-btn ica--btn-edit"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        <button type="button" class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>
+                        ${isPathfinderAgent(agent) ? '' : '<button type="button" class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>'}
                         <button type="button" class="ica--card-btn ica--btn-delete caution"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
@@ -1230,6 +1244,13 @@ async function openEditor(agentId = null) {
     if (agentId && !existingAgent) return;
     const agent = existingAgent ? structuredClone(existingAgent) : createDefaultAgent();
     if (!agent) return;
+
+    // Check if this is a Pathfinder agent - open special settings panel
+    if (isPathfinderAgent(agent)) {
+        await openPathfinderEditor(agent);
+        return;
+    }
+
     let regexScripts = getAgentRegexScripts(agent).map(script => structuredClone(script));
     const template = findTemplateForAgent(agent);
     const bundledRegexScripts = Array.isArray(template?.regexScripts)
@@ -1591,7 +1612,7 @@ async function openTemplateBrowser() {
                 </div>
                 <div class="ica--template-card-description">${escapeHtml(tpl.description)}</div>
                 ${regexCount > 0 ? `<div class="ica--template-card-badges"><span class="ica--card-pill"><i class="fa-solid fa-wand-magic-sparkles fa-xs"></i> ${buildRegexTemplateLabel(regexCount)}</span></div>` : ''}
-                <div class="ica--template-card-prompt">${escapeHtml(tpl.prompt.substring(0, 200))}</div>
+                <div class="ica--template-card-prompt">${escapeHtml((tpl.prompt || '').substring(0, 200))}</div>
             </div>
         `);
 
@@ -1796,6 +1817,36 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// ===================== Pathfinder Editor =====================
+
+/**
+ * Opens the Pathfinder-specific settings editor
+ * @param {Object} agent - The Pathfinder agent
+ */
+async function openPathfinderEditor(agent) {
+    const settingsPanel = await openPathfinderSettings(agent, async (updatedAgent) => {
+        await saveAgent(updatedAgent);
+        renderAgentList();
+    });
+
+    if (!settingsPanel) return;
+
+    const result = await new Popup(settingsPanel, POPUP_TYPE.CONFIRM, '', {
+        okButton: 'Save & Close',
+        cancelButton: 'Cancel',
+        wide: true,
+        large: true,
+    }).show();
+
+    if (result === POPUP_RESULT.AFFIRMATIVE) {
+        // Settings are already saved via the UI callbacks
+        await saveAgent(agent);
+        renderAgentList();
+        syncToolAgentRegistrations();
+        toastr.success('Pathfinder settings saved');
+    }
 }
 
 // ===================== Connection Profiles =====================
@@ -2094,7 +2145,25 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     }
 
     // Initialize the pipeline runner
-    initAgentRunner();
+    try {
+        initAgentRunner();
+    } catch (err) {
+        console.error('[InChatAgents] Agent runner initialization failed:', err);
+    }
+
+    // Initialize Pathfinder (tool agent core)
+    try {
+        initPathfinder(getContext());
+    } catch (err) {
+        console.warn('[InChatAgents] Pathfinder initialization failed:', err);
+    }
+
+    // Sync any existing tool agents' tools with ToolManager
+    try {
+        syncToolAgentRegistrations();
+    } catch (err) {
+        console.warn('[InChatAgents] Tool agent sync failed:', err);
+    }
 
     // Render the panel
     renderAgentList();

@@ -1595,7 +1595,7 @@ export async function prepareOpenAIMessages({
         } else {
             toastr.error(t`An unknown error occurred while counting tokens. Further information may be available in console.`);
             chatCompletion.log('----- Unexpected error while preparing prompts -----');
-            chatCompletion.log(error);
+            chatCompletion.log(String(error?.message ?? error));
             chatCompletion.log(error.stack);
             chatCompletion.log('----------------------------------------------------');
         }
@@ -1644,17 +1644,17 @@ export function tryParseStreamingError(response, decoded, { quiet = false } = {}
 
         if (data.error) {
             !quiet && toastr.error(data.error.message || response.statusText, 'Chat Completion API');
-            throw new Error(data);
+            throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
         }
 
         if (data.message) {
             !quiet && toastr.error(data.message, 'Chat Completion API');
-            throw new Error(data);
+            throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
         }
 
         if (data.detail) {
             !quiet && toastr.error(data.detail?.error?.message || response.statusText, 'Chat Completion API');
-            throw new Error(data);
+            throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
         }
     } catch {
         // No JSON. Do nothing.
@@ -1677,9 +1677,7 @@ function checkQuotaError(data, { quiet = false } = {}) {
     if (data.quota_error) {
         !quiet && renderTemplateAsync('quotaError').then((html) => Popup.show.text('Quota Error', html));
 
-        // this does not throw correctly (equiv to Error("[object Object]"))
-        // if trying to fix "[object Object]" displayed to users, start here
-        throw new Error(data);
+        throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
     }
 }
 
@@ -4905,7 +4903,7 @@ export class ChatCompletion {
      */
     validateMessageCollection(collection) {
         if (!(collection instanceof MessageCollection)) {
-            console.log(collection);
+            console.log(JSON.stringify(collection));
             throw new Error('Argument must be an instance of MessageCollection');
         }
     }
@@ -4918,7 +4916,7 @@ export class ChatCompletion {
      */
     validateMessage(message) {
         if (!(message instanceof Message)) {
-            console.log(message);
+            console.log(JSON.stringify(message));
             throw new Error('Argument must be an instance of Message');
         }
     }
@@ -5384,7 +5382,7 @@ function onLogitBiasPresetChange() {
                 order.unshift($(this).data('id'));
             });
             preset.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-            console.log('Logit bias reordered:', preset);
+            console.log('Logit bias reordered:', JSON.stringify(preset));
             saveSettingsDebounced();
         },
     });

@@ -516,7 +516,7 @@ async function translateInner(text, lang, provider) {
         case 'yandex':
             return await translateProviderYandex(text, lang);
         default:
-            console.error('Unknown translation provider', provider);
+            console.error('Unknown translation provider', JSON.stringify(provider));
             return text;
     }
 }

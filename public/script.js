@@ -434,7 +434,7 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.3';
+const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.4';
 
 export let displayVersion = SILLYBUNNY_UI_VERSION;
 
@@ -451,7 +451,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/sillybunny-pixel-logo.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyBunny:v1.3.3:platberlitz'; // For Horde header
+export let CLIENT_VERSION = 'SillyBunny:v1.3.4:platberlitz'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -5389,7 +5389,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
      */
     async function finishGenerating() {
         if (power_user.console_log_prompts) {
-            console.log(generate_data.prompt);
+            console.log(typeof generate_data.prompt === 'string' ? generate_data.prompt : JSON.stringify(generate_data.prompt));
         }
 
         console.debug('rungenerate calling API');

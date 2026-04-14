@@ -455,6 +455,7 @@
         left: 0 !important;
         resize: none !important;
         top: var(--topBarBlockSize);
+        transform: none;
     }
 
     .wi-settings {
@@ -613,6 +614,7 @@
         border-radius: 0 0 20px 20px;
         margin-top: 0px;
         height: calc(100% - var(--topBarBlockSize));
+        transform: none;
     }
 
     .drawer25pWidth {
@@ -818,7 +820,7 @@
         max-height: calc(100vh - 70px);
         max-height: calc(100dvh - 70px);
         max-width: calc(100dvw - 5px);
-
+        transform: none;
     }
 
     #character_popup,

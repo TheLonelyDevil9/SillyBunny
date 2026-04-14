@@ -770,7 +770,7 @@ class PromptManager {
                 this.activePopupArea = '';
             }
 
-            this.render();
+            this.render(false);
             this.saveServiceSettings();
         };
 

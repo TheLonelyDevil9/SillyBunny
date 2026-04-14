@@ -44,12 +44,25 @@ import {
  */
 
 /**
+ * @typedef {object} AgentToolDef
+ * @property {string} name - Unique ToolManager name (e.g., 'Pathfinder_Search')
+ * @property {string} displayName - Human-readable label
+ * @property {string} description - LLM-facing instruction text
+ * @property {object} parameters - OpenAI JSON Schema for tool parameters
+ * @property {string} actionKey - Key resolved from ToolActionRegistry at runtime
+ * @property {string} [formatMessageKey] - Key for display text formatter
+ * @property {boolean} [shouldRegister=true] - Whether to include in LLM tool list
+ * @property {boolean} [stealth=false] - If true, result hidden from chat
+ * @property {boolean} [enabled=true] - Per-tool toggle within the agent
+ */
+
+/**
  * @typedef {object} InChatAgent
  * @property {string} id
  * @property {string} name
  * @property {string} description
  * @property {string} icon
- * @property {'content'|'tracker'|'randomizer'|'custom'} category
+ * @property {'content'|'tracker'|'randomizer'|'custom'|'tool'} category
  * @property {string[]} tags
  * @property {number} version
  * @property {string} author
@@ -62,6 +75,9 @@ import {
  * @property {string} sourceTemplateId
  * @property {boolean} enabled
  * @property {AgentConditions} conditions
+ * @property {AgentToolDef[]} tools - Tool definitions for 'tool' category agents
+ * @property {object} settings - Per-agent settings object for tool agents
+ * @property {boolean} phaseLocked - Prevent phase from being changed by migrations
  */
 
 /** @type {InChatAgent[]} */
@@ -145,7 +161,7 @@ export function normalizeAgentCategory(category = '', sourceTemplateId = '', nam
     }
 
     const normalizedCategory = typeof category === 'string' ? category.trim().toLowerCase() : '';
-    if (['content', 'tracker', 'randomizer', 'custom'].includes(normalizedCategory)) {
+    if (['content', 'tracker', 'randomizer', 'custom', 'tool'].includes(normalizedCategory)) {
         return normalizedCategory;
     }
 
@@ -159,6 +175,7 @@ export const AGENT_CATEGORIES = {
     tracker: { label: 'Tracker', icon: 'fa-chart-line' },
     randomizer: { label: 'Randomizer', icon: 'fa-dice' },
     content: { label: 'Content', icon: 'fa-film' },
+    tool: { label: 'Tool', icon: 'fa-screwdriver-wrench' },
     custom: { label: 'Custom', icon: 'fa-puzzle-piece' },
 };
 
@@ -261,6 +278,27 @@ export function createDefaultAgent() {
             triggerProbability: 100,
             generationTypes: ['normal', 'continue', 'impersonate'],
         },
+        tools: [],
+        settings: {},
+    };
+}
+
+/**
+ * Normalizes a single tool definition loaded from disk or import.
+ * @param {Partial<AgentToolDef>} raw
+ * @returns {AgentToolDef}
+ */
+export function normalizeToolDef(raw = {}) {
+    return {
+        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : '',
+        displayName: typeof raw.displayName === 'string' ? raw.displayName : (raw.name ?? ''),
+        description: typeof raw.description === 'string' ? raw.description : '',
+        parameters: raw.parameters && typeof raw.parameters === 'object' ? raw.parameters : { type: 'object', properties: {} },
+        actionKey: typeof raw.actionKey === 'string' ? raw.actionKey.trim() : '',
+        formatMessageKey: typeof raw.formatMessageKey === 'string' ? raw.formatMessageKey.trim() : '',
+        shouldRegister: typeof raw.shouldRegister === 'boolean' ? raw.shouldRegister : true,
+        stealth: typeof raw.stealth === 'boolean' ? raw.stealth : false,
+        enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
     };
 }
 
@@ -337,6 +375,12 @@ export function normalizeAgent(rawAgent = {}) {
                 ? conditions.generationTypes.map(type => String(type ?? '').trim()).filter(Boolean)
                 : defaults.conditions.generationTypes,
         },
+        tools: Array.isArray(rawAgent.tools)
+            ? rawAgent.tools.map(tool => normalizeToolDef(tool))
+            : defaults.tools,
+        settings: rawAgent.settings && typeof rawAgent.settings === 'object' && !Array.isArray(rawAgent.settings)
+            ? { ...rawAgent.settings }
+            : { ...defaults.settings },
     };
 }
 
@@ -365,6 +409,31 @@ export function getEnabledAgents() {
  */
 export function getAgentById(id) {
     return agents.find(agent => agent.id === id);
+}
+
+/**
+ * Returns all tool-category agents.
+ * @returns {InChatAgent[]}
+ */
+export function getToolAgents() {
+    return agents.filter(agent => agent.category === 'tool');
+}
+
+/**
+ * Returns enabled tool agents.
+ * @returns {InChatAgent[]}
+ */
+export function getEnabledToolAgents() {
+    return agents.filter(agent => agent.enabled && agent.category === 'tool');
+}
+
+/**
+ * Checks if an agent is a tool-category agent.
+ * @param {InChatAgent} agent
+ * @returns {boolean}
+ */
+export function isToolAgent(agent) {
+    return agent?.category === 'tool';
 }
 
 /**

@@ -1105,8 +1105,8 @@ body:not(.movingUI) .drawer-content.maximized {
     bottom: 10px;
     z-index: 3;
     display: none;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     border-radius: 0 0 var(--sb-radius-button, 14px) 0;
     pointer-events: auto;
     cursor: nwse-resize;
@@ -1122,6 +1122,13 @@ body:not(.movingUI) .drawer-content.maximized {
     background:
         linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 48% 54%, transparent 54% 68%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 68% 74%, transparent 74% 88%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 88% 94%, transparent 94% 100%);
     opacity: 0.92;
+}
+
+.sb-shell-resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: -20px;
+    border-radius: inherit;
 }
 
 .sb-shell-root.sb-shell-can-resize.openDrawer .sb-shell-resize-handle {

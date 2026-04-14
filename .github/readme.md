@@ -105,10 +105,7 @@ Bun is the default. Startup is faster, and the launchers bootstrap it automatica
 
 ### Agents, without the buzzword soup
 
-SillyBunny has **two different agent systems**, and they solve different problems:
-
-- **Agent Mode** is the built-in service layer. It handles retrieval, memory, and lorebook upkeep for an active chat.
-- **In-Chat Agents** are user-facing prompt modules. They are the modular building blocks you toggle on the Agents page for trackers, formatting, cleanup, randomisers, and other RP helpers.
+SillyBunny has **In-Chat Agents** -- user-facing prompt modules you can create, toggle, group, refine, import, export, and share.
 
 These are not autonomous "go do tasks on the internet" agents. They are deliberately scoped prompt hooks around the chat generation pipeline.
 
@@ -128,30 +125,9 @@ Typical uses:
 - Formatting helpers like direction menus, CYOA choices, or NPC profile cards
 - Cleanup passes like anti-slop or regex-based formatting
 - Randomisers and directives that change the pressure, genre, pacing, or escalation of a scene
+- Content toggles for prose style, difficulty, POV, and HTML artifacts
+- Agentic lorebook navigation for on-demand retrieval, memory maintenance, and tree building
 - Cheap helper-model passes that prepare or polish content without spending your main model's budget
-
-### Agent Mode
-
-Agent Mode is the built-in chat-scoped system for durable story support.
-
-**Current services:**
-
-- **Retrieval** -- injects relevant context from recent chat, memory, and lorebooks before the next reply
-- **Memory** -- updates compact long-term memory after a reply is saved
-- **Lorebook** -- syncs lorebook entries after a reply is saved
-
-**How it works:**
-
-- Each service can reuse the main chat profile or use its own source/model/reverse-proxy settings
-- You can copy the active chat profile to all Agent Mode services in one click
-- Agent Mode state is stored per chat
-- World info entries can be marked `Agent blacklisted` to exclude them from agent processing
-
-**Scope:**
-
-- Runs with active chats only
-- Targets the chat-completions pipeline
-- Intentionally lightweight: the goal is stronger RP support, not autonomous orchestration
 
 ### In-Chat Agents (Beta)
 
@@ -167,12 +143,13 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Agents can run **prompt transforms** in `rewrite` or `append` mode
 - Agents can be bundled into **Agent Groups** for one-click setup
 
-**What ships with v1.3.3:**
+**What ships with v1.3.4:**
 
-- **29 bundled templates** based on Pura's Director Preset ecosystem
-- Trackers, randomisers, content helpers, and custom prompt toggles
-- Simplified categories: **Tracker**, **Randomizer**, **Content**, and **Custom**
-- Direction Menu and CYOA Choices now live in Tracker and their generated options can be clicked into the message box
+- **30 bundled templates** based on Pura's Director Preset ecosystem
+- Trackers, randomisers, content helpers, tool agents, and custom prompt toggles
+- Four categories: **Tracker**, **Randomizer**, **Content**, and **Tool** (plus Custom for user-created agents)
+- **Pathfinder** agentic lorebook navigator with 8 tools for retrieval, memory maintenance, and tree building
+- Direction Menu and CYOA Choices live in Tracker and their generated options can be clicked into the message box
 - Bundled **Prose Polisher** post-generation agent by Geechan
 - Built-in groups for the full preset, trackers only, and randomisers only
 - ST-style regex options for custom agents
@@ -180,7 +157,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Inline run-order editing directly from the agent cards
 - Fullscreen prompt editors and click-to-edit agent cards
 
-**Bundled defaults in v1.3.3:**
+**Bundled defaults in v1.3.4:**
 
 - Bundled trackers are set up for **post-generation prompt append**
 - Agents use the main connection profile by default, with separate profile support when explicitly selected
@@ -197,7 +174,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 ## UI preview
 
-These screenshots show the `v1.3.3` shell across Navigate, Customize, Agents, and Characters on desktop and mobile, plus the same views with Moonlit Echoes enabled.
+These screenshots show the `v1.3.4` shell across Navigate, Customize, Agents, and Characters on desktop and mobile, plus the same views with Moonlit Echoes enabled.
 
 #### Default shell
 
@@ -246,6 +223,27 @@ These screenshots show the `v1.3.3` shell across Navigate, Customize, Agents, an
 ---
 
 ## Changelog
+
+### v1.3.4 (2026-04-15)
+
+**Shell and panel fixes**
+
+- Widened the Navigate and Customize resize grip from 22px to 28px with a 20px invisible touch area so the corner handle is easier to grab on small or edge-positioned panels
+- Fixed the Prompt Manager scrolling back to the top after saving a prompt on desktop split layout
+- Fixed Advanced Definitions (character popup) clipping off the left edge of the screen on iOS Safari and other mobile browsers
+
+**Agents**
+
+- Added Pathfinder, an agentic lorebook navigator with eight tools (Search, Remember, Update, Forget, Summarize, Reorganize, Merge/Split, Notebook) and a predictive pipeline system with LLM-powered tree building
+- Added the Tool agent category for agents that require API tool-calling support
+- Reassigned Grounded Prose, HTML Toggle, Difficulty Increase, Friction Mode, Don't Write for User, and Write for User to Content; NPC Profile Cards to Tracker
+- Removed the legacy Agent Mode drawer from Settings (In-Chat Agents remains)
+- Removed "Apply to Last Reply" and "Export" buttons from Pathfinder cards
+- Fixed a bug where clicking a category chevron in the Agents page on desktop with the edit panel open could make all agent categories disappear until the preset extension was disabled
+
+**Console logging**
+
+- Fixed `[object Object]` appearing in the browser console instead of actual prompt text across all providers
 
 ### v1.3.3 (2026-04-14)
 

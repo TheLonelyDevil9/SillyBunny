@@ -188,7 +188,7 @@ body.no-blur .popup[open]::backdrop {
 
 .menu_button.popup-button-ok {
     background-color: var(--color-primary, #f1b285);
-    color: var(--color-background, #130f0d);
+    color: black;
     border-color: transparent;
 }
 

@@ -24,6 +24,198 @@
         "type": "theme"
     },
     {
+        "filename": "themes/Amber Dusk.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Burnt Orange.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Catppuccin Latte.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Catppuccin Mocha.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Cerulean.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Cinder.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Dracula Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Dracula.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Everforest Dark.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Everforest Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Glacier.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Gruvbox Dark.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Gruvbox Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Hacker-Terminal-Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Hacker-Terminal.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Lavender.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Lime.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Magenta.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Mint.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Monochrome.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Neon Abyss.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Neon Yellow.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Nord Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Nord.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Plum.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Rose.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Rosé Pine Dawn.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Rosé Pine.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sage.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Slate.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Solarized Dark.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Solarized Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Andromeda Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Andromeda.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Atlantis Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Atlantis.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Default Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Default.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Espresso Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Espresso.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Maia Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Maia.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Shusia Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Sonokai Shusia.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Tokyo Night Day.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Tokyo Night.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Verdant Light.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/Verdant.json",
+        "type": "theme"
+    },
+    {
         "filename": "backgrounds/__transparent.png",
         "type": "background"
     },

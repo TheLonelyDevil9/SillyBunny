@@ -208,7 +208,7 @@
     "name": "Difficulty Increase",
     "description": "Sharply raise difficulty -- characters protect their interests, resist harder",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "difficulty",
       "challenge",
@@ -291,7 +291,7 @@
     "name": "Don't Write for User",
     "description": "Never write {{user}}'s actions or dialogue -- only {{char}} and NPCs",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "pov",
       "user"
@@ -373,7 +373,7 @@
     "name": "Friction Mode",
     "description": "Combats positivity bias -- characters resist, protect their pride, and take time to warm up",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "realism",
       "difficulty",
@@ -498,7 +498,7 @@
     "name": "Grounded Prose",
     "description": "Anti-slop rules: avoid purple prose, cliches, and AI writing tics",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "anti-slop",
       "quality",
@@ -588,7 +588,7 @@
     "name": "HTML Toggle",
     "description": "Use inline HTML for diegetic in-world objects (signs, letters, screens)",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "html",
       "artifacts",
@@ -712,7 +712,7 @@
     "name": "NPC Profile Cards",
     "description": "Generate brief profile cards when introducing new named NPCs",
     "icon": "",
-    "category": "custom",
+    "category": "tracker",
     "tags": [
       "npc",
       "characters",
@@ -1166,7 +1166,7 @@
     "name": "Write for User",
     "description": "Include {{user}} as a fully realized character -- write their actions, dialogue, and reactions",
     "icon": "",
-    "category": "custom",
+    "category": "content",
     "tags": [
       "pov",
       "user"
@@ -1201,5 +1201,22 @@
         "continue"
       ]
     }
+  },
+  {
+    "id": "tpl-pathfinder",
+    "name": "Pathfinder",
+    "description": "Agentic lorebook retrieval - the AI pathfinds through your knowledge base, retrieves context on demand, and maintains living memory. (Tool agent - requires API with tool calling support)",
+    "icon": "fa-route",
+    "category": "tool",
+    "tags": [
+      "lorebook",
+      "retrieval",
+      "memory",
+      "agentic"
+    ],
+    "version": 1,
+    "author": "SillyBunny",
+    "prompt": "",
+    "phase": "both"
   }
 ]

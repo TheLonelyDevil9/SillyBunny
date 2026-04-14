@@ -489,7 +489,7 @@ function getServiceSkipReason(serviceId, { phase, dryRun = false, depth = 0 } = 
 
     const state = getAgentChatState();
     if (!state.enabled) {
-        return 'Agent Mode is disabled for this chat';
+        return 'Agent is disabled for this chat';
     }
 
     if (!state.services[serviceId]?.enabled) {
@@ -613,7 +613,7 @@ async function runDirectedService(turn, serviceId, handler, { phase } = {}) {
     } catch (error) {
         const errorMessage = summarizeError(error);
         console.error(`[AgentMode] ${serviceId} failed`, error);
-        toastr.warning(`${SERVICE_LABELS[serviceId]} agent failed: ${errorMessage}`, t`Agent Mode`);
+        toastr.warning(`${SERVICE_LABELS[serviceId]} agent failed: ${errorMessage}`, t`Agent`);
         serviceRun.status = 'failed';
         serviceRun.error = errorMessage;
         serviceRun.completed_at = new Date().toISOString();
@@ -2414,7 +2414,7 @@ async function runServiceSafely(serviceId, handler, { saveAfter = false } = {}) 
         return result;
     } catch (error) {
         console.error(`[AgentMode] ${serviceId} failed`, error);
-        toastr.warning(`${SERVICE_LABELS[serviceId]} agent failed: ${summarizeError(error)}`, t`Agent Mode`);
+        toastr.warning(`${SERVICE_LABELS[serviceId]} agent failed: ${summarizeError(error)}`, t`Agent`);
         return null;
     }
 }
@@ -2459,12 +2459,12 @@ export async function runPostGenerationAgents({ depth } = {}) {
 
 async function runLorebookSyncFromUi() {
     if (!isAgentModeAvailable()) {
-        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent Mode`);
+        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent`);
         return;
     }
 
     if (!getAgentChatState().enabled) {
-        toastr.info(t`Enable Agent Mode for this chat first.`, t`Agent Mode`);
+        toastr.info(t`Enable Agent for this chat first.`, t`Agent`);
         return;
     }
 
@@ -2477,7 +2477,7 @@ async function runLorebookSyncFromUi() {
 
 async function applyPendingLoreReviewFromUi() {
     if (!isAgentModeAvailable()) {
-        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent Mode`);
+        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent`);
         return;
     }
 
@@ -2485,7 +2485,7 @@ async function applyPendingLoreReviewFromUi() {
     const pendingChanges = normalizeLoreChangeList(lorebookState.pending_changes);
 
     if (!pendingChanges.length) {
-        toastr.info(t`There are no pending lore changes to review.`, t`Agent Mode`);
+        toastr.info(t`There are no pending lore changes to review.`, t`Agent`);
         return;
     }
 
@@ -2496,7 +2496,7 @@ async function applyPendingLoreReviewFromUi() {
 
     const { bookNames, workingBooks } = await loadAccessibleLorebookWorkspace();
     if (!bookNames.length) {
-        toastr.info(t`No active lorebooks are available for review right now.`, t`Agent Mode`);
+        toastr.info(t`No active lorebooks are available for review right now.`, t`Agent`);
         return;
     }
 
@@ -2549,7 +2549,7 @@ async function applyPendingLoreReviewFromUi() {
 
 async function discardPendingLoreReviewFromUi() {
     if (!getCurrentChatId()) {
-        toastr.info(t`Open a chat to review pending lore changes.`, t`Agent Mode`);
+        toastr.info(t`Open a chat to review pending lore changes.`, t`Agent`);
         return;
     }
 
@@ -2557,7 +2557,7 @@ async function discardPendingLoreReviewFromUi() {
     const pendingChanges = normalizeLoreChangeList(lorebookState.pending_changes);
 
     if (!pendingChanges.length) {
-        toastr.info(t`There are no pending lore changes to discard.`, t`Agent Mode`);
+        toastr.info(t`There are no pending lore changes to discard.`, t`Agent`);
         return;
     }
 
@@ -3046,7 +3046,7 @@ async function importAgentPresetFromFileInput(event) {
         const rawPreset = await parseJsonFile(file);
         const importedPreset = buildImportedAgentPreset(rawPreset, getAgentPresetFileBaseName(file.name));
         applyImportedAgentPreset(importedPreset);
-        toastr.success(`Applied ${importedPreset.preset.name || 'chat preset'} to all agents.`, t`Agent Mode`);
+        toastr.success(`Applied ${importedPreset.preset.name || 'chat preset'} to all agents.`, t`Agent`);
     } catch (error) {
         console.error('Failed to import agent preset', error);
         toastr.error(summarizeError(error), t`Failed to import agent preset`);
@@ -3062,7 +3062,7 @@ async function clearImportedAgentPreset() {
     const hasPreset = Boolean(settings.preset?.name) || Object.keys(settings.preset?.settings_overrides ?? {}).length > 0;
 
     if (!hasPreset) {
-        toastr.info(t`There is no imported agent preset to clear.`, t`Agent Mode`);
+        toastr.info(t`There is no imported agent preset to clear.`, t`Agent`);
         return;
     }
 
@@ -3078,7 +3078,7 @@ async function clearImportedAgentPreset() {
     settings.preset = cloneDefaultAgentPreset();
     saveSettingsDebounced();
     renderAgentPanelDebounced();
-    toastr.success(t`Removed the imported agent preset overlay.`, t`Agent Mode`);
+    toastr.success(t`Removed the imported agent preset overlay.`, t`Agent`);
 }
 
 function bindAgentPanel() {

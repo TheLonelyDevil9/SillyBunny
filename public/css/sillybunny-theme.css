@@ -374,7 +374,7 @@ h3:not(.popup h3):not(#chat h3) {
 .menu_button.menu_button_primary:not(.disabled):not([disabled]),
 .menu_button.popup-button-ok:not(.disabled):not([disabled]) {
     background: color-mix(in srgb, var(--color-primary, #f1b285) 88%, white 12%);
-    color: var(--color-background, #130f0d);
+    color: black;
     border-color: transparent;
     box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #f1b285) 18%, transparent);
 }
