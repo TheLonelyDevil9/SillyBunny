@@ -15,7 +15,11 @@ import {
     exportAllAgents,
     exportAgent,
     AGENT_CATEGORIES,
+    DEFAULT_AGENT_MAX_TOKENS,
     getGlobalSettings,
+    LEGACY_AGENT_MAX_TOKENS,
+    normalizeAgentCategory,
+    resolveConnectionProfile,
     setGlobalSettings,
     getGroups,
     getCustomGroups,
@@ -38,15 +42,39 @@ const MODULE_NAME = 'in-chat-agents';
 /** Built-in templates loaded from JSON files. */
 let templates = [];
 let templateRegexBundles = {};
+let autoSeededTemplateIds = new Set();
+
+const DEFAULT_BUNDLED_TEMPLATE_IDS = new Set([
+    'tpl-prose-polisher',
+]);
 
 /** Whether the agent list is in multi-select mode. */
 let selectModeActive = false;
 /** Set of agent IDs currently selected in select mode. */
 const selectedAgentIds = new Set();
 
-const BUNDLED_REGEX_POST_DEFAULT_EXCLUDED_TEMPLATE_IDS = new Set([
+const REMOVED_BUNDLED_TEMPLATE_IDS = new Set([
     'tpl-anti-slop-regex',
+    'tpl-director-core',
+    'tpl-nsfw-mode',
 ]);
+
+const REMOVED_BUNDLED_AGENT_NAMES = new Set([
+    'anti-slop regex',
+    'director core',
+    'nsfw mode',
+]);
+
+const REMOVED_BUNDLED_GROUP_IDS = new Set([
+    'grp-pura-director',
+]);
+
+const TRACKER_CATEGORY_MENU_TEMPLATE_IDS = new Set([
+    'tpl-cyoa-choices',
+    'tpl-direction-menu',
+]);
+
+const BUNDLED_REGEX_POST_DEFAULT_EXCLUDED_TEMPLATE_IDS = new Set();
 
 const REGEX_PLACEMENT_LABELS = {
     [AGENT_REGEX_PLACEMENT.AI_OUTPUT]: 'AI Output',
@@ -64,9 +92,19 @@ function persistExtensionState() {
     extension_settings.inChatAgents = {
         ...(extension_settings.inChatAgents ?? {}),
         globalSettings: structuredClone(getGlobalSettings()),
+        autoSeededTemplateIds: [...autoSeededTemplateIds],
     };
     delete extension_settings.inChatAgents.groups;
     saveSettingsDebounced();
+}
+
+function restoreAutoSeededTemplateIds(savedState) {
+    const rawIds = Array.isArray(savedState?.autoSeededTemplateIds) ? savedState.autoSeededTemplateIds : [];
+    autoSeededTemplateIds = new Set(
+        rawIds
+            .map(id => String(id ?? '').trim())
+            .filter(Boolean),
+    );
 }
 
 function stopEvent(event) {
@@ -107,7 +145,7 @@ function getSupportedConnectionProfiles() {
     }
 }
 
-function populateConnectionProfileSelect(select, { emptyLabel = 'Use main AI', selectedValue = '' } = {}) {
+function populateConnectionProfileSelect(select, { emptyLabel = 'Use default profile', selectedValue = '' } = {}) {
     if (!(select instanceof HTMLSelectElement)) {
         return;
     }
@@ -174,8 +212,13 @@ function getBundledRegexScriptsForTemplate(templateId) {
         : [];
 }
 
+function shouldUseTrackerPromptPassDefaults(template) {
+    return String(template?.category ?? '') === 'tracker'
+        && !TRACKER_CATEGORY_MENU_TEMPLATE_IDS.has(String(template?.id ?? '').trim());
+}
+
 function applyBundledTrackerPromptPass(template) {
-    if (String(template?.category ?? '') !== 'tracker') {
+    if (!shouldUseTrackerPromptPassDefaults(template)) {
         return template;
     }
 
@@ -197,7 +240,7 @@ function applyBundledTrackerPromptPass(template) {
             promptTransformMode: 'append',
             promptTransformMaxTokens: Number.isFinite(Number(postProcess.promptTransformMaxTokens))
                 ? Number(postProcess.promptTransformMaxTokens)
-                : 2000,
+                : DEFAULT_AGENT_MAX_TOKENS,
         },
     };
 }
@@ -216,7 +259,7 @@ function isBundledRegexPostDefaultTemplate(template, bundledScripts = null) {
 }
 
 function getBundledRegexPromptTransformMode(template) {
-    return String(template?.category ?? '') === 'tracker' ? 'append' : 'rewrite';
+    return shouldUseTrackerPromptPassDefaults(template) ? 'append' : 'rewrite';
 }
 
 function applyBundledRegexPostDefaults(template, bundledScripts = null) {
@@ -243,13 +286,17 @@ function applyBundledRegexPostDefaults(template, bundledScripts = null) {
                 : (postProcess.promptTransformMode === 'append' ? 'append' : 'rewrite'),
             promptTransformMaxTokens: Number.isFinite(Number(postProcess.promptTransformMaxTokens))
                 ? Number(postProcess.promptTransformMaxTokens)
-                : 2000,
+                : DEFAULT_AGENT_MAX_TOKENS,
         },
     };
 }
 
 function mergeTemplateDefaults(template) {
-    const templateWithPromptPass = applyBundledTrackerPromptPass(template);
+    const normalizedTemplate = {
+        ...template,
+        category: normalizeAgentCategory(template?.category, template?.id, template?.name),
+    };
+    const templateWithPromptPass = applyBundledTrackerPromptPass(normalizedTemplate);
     const bundledScripts = getBundledRegexScriptsForTemplate(templateWithPromptPass?.id);
     const templateWithRegexPostDefaults = applyBundledRegexPostDefaults(templateWithPromptPass, bundledScripts);
     if (bundledScripts.length === 0) {
@@ -263,6 +310,10 @@ function mergeTemplateDefaults(template) {
         ...templateWithRegexPostDefaults,
         regexScripts: bundledScripts,
     };
+}
+
+function getDefaultBundledTemplates() {
+    return templates.filter(template => DEFAULT_BUNDLED_TEMPLATE_IDS.has(String(template?.id ?? '').trim()));
 }
 
 function getTemplateRegexCount(template) {
@@ -357,8 +408,34 @@ async function migrateBundledRegexScriptsToSavedAgents() {
     }
 }
 
+async function migrateBundledTemplateMetadataToSavedAgents() {
+    let migratedCount = 0;
+
+    for (const agent of getAgents()) {
+        const template = findTemplateForAgent(agent);
+        if (!template) {
+            continue;
+        }
+
+        const desiredTemplate = mergeTemplateDefaults(template);
+        const desiredAuthor = typeof desiredTemplate.author === 'string' ? desiredTemplate.author : '';
+        const currentAuthor = typeof agent.author === 'string' ? agent.author : '';
+
+        if (currentAuthor === desiredAuthor) {
+            continue;
+        }
+
+        agent.author = desiredAuthor;
+        agent.sourceTemplateId = agent.sourceTemplateId || template.id;
+        await saveAgent(agent);
+        migratedCount++;
+    }
+
+    return migratedCount;
+}
+
 function shouldMigrateBundledTrackerPromptPass(agent, template) {
-    if (!template || String(template.category ?? '') !== 'tracker') {
+    if (!template || !shouldUseTrackerPromptPassDefaults(template)) {
         return false;
     }
 
@@ -398,7 +475,7 @@ async function migrateBundledTrackerPromptPassesToSavedAgents() {
             ? Boolean(mergedTemplate.postProcess?.promptTransformShowNotifications)
             : true;
         agent.postProcess.promptTransformMode = mergedTemplate.postProcess?.promptTransformMode === 'append' ? 'append' : 'rewrite';
-        agent.postProcess.promptTransformMaxTokens = Number(mergedTemplate.postProcess?.promptTransformMaxTokens) || 2000;
+        agent.postProcess.promptTransformMaxTokens = Number(mergedTemplate.postProcess?.promptTransformMaxTokens) || DEFAULT_AGENT_MAX_TOKENS;
         await saveAgent(agent);
         migratedCount++;
     }
@@ -462,9 +539,26 @@ async function migrateBundledRegexPostDefaultsToSavedAgents() {
                 ? Boolean(desiredTemplate.postProcess.promptTransformShowNotifications)
                 : true;
             agent.postProcess.promptTransformMode = getPromptTransformMode(desiredTemplate);
-            agent.postProcess.promptTransformMaxTokens = Number(desiredTemplate.postProcess?.promptTransformMaxTokens) || 2000;
+            agent.postProcess.promptTransformMaxTokens = Number(desiredTemplate.postProcess?.promptTransformMaxTokens) || DEFAULT_AGENT_MAX_TOKENS;
         }
 
+        await saveAgent(agent);
+        migratedCount++;
+    }
+
+    return migratedCount;
+}
+
+async function migrateLegacyPromptTransformMaxTokens() {
+    let migratedCount = 0;
+
+    for (const agent of getAgents()) {
+        const currentValue = Number(agent?.postProcess?.promptTransformMaxTokens);
+        if (currentValue !== LEGACY_AGENT_MAX_TOKENS) {
+            continue;
+        }
+
+        agent.postProcess.promptTransformMaxTokens = DEFAULT_AGENT_MAX_TOKENS;
         await saveAgent(agent);
         migratedCount++;
     }
@@ -529,6 +623,27 @@ async function removeRedundantBundledAgentDuplicates() {
     return redundantIds.size;
 }
 
+async function purgeRemovedBundledAgents() {
+    let removedCount = 0;
+
+    for (const agent of [...getAgents()]) {
+        const sourceTemplateId = String(agent?.sourceTemplateId ?? '').trim();
+        const agentName = String(agent?.name ?? '').trim().toLowerCase();
+        const agentAuthor = String(agent?.author ?? '').trim().toLowerCase();
+        const isRemovedBundledAgent = REMOVED_BUNDLED_TEMPLATE_IDS.has(sourceTemplateId)
+            || (REMOVED_BUNDLED_AGENT_NAMES.has(agentName) && agentAuthor === 'sillybunny');
+
+        if (!isRemovedBundledAgent) {
+            continue;
+        }
+
+        await deleteAgent(agent.id);
+        removedCount++;
+    }
+
+    return removedCount;
+}
+
 async function loadCustomGroupsFromServer() {
     const response = await fetch('/api/in-chat-agents/groups/list', {
         method: 'POST',
@@ -542,6 +657,31 @@ async function loadCustomGroupsFromServer() {
 
     const groups = await response.json();
     loadCustomGroups(groups);
+}
+
+async function ensureDefaultBundledAgents() {
+    let touchedSeedState = false;
+
+    for (const template of getDefaultBundledTemplates()) {
+        const templateId = String(template?.id ?? '').trim();
+        if (!templateId) {
+            continue;
+        }
+
+        if (!autoSeededTemplateIds.has(templateId)) {
+            const seededAgent = buildAgentFromTemplate(template);
+            if (!hasMatchingAgentSnapshot(seededAgent)) {
+                await saveAgent(seededAgent);
+            }
+
+            autoSeededTemplateIds.add(templateId);
+            touchedSeedState = true;
+        }
+    }
+
+    if (touchedSeedState) {
+        persistExtensionState();
+    }
 }
 
 async function migrateLegacyGroups(legacyGroups = []) {
@@ -848,7 +988,7 @@ function renderAgentList() {
                         ${connectionProfileLabel ? `<span class="ica--card-pill"><i class="fa-solid fa-plug fa-xs"></i> ${escapeHtml(connectionProfileLabel)}</span>` : ''}
                     </div>
                     <div class="ica--card-actions">
-                        <button type="button" class="ica--card-btn ica--btn-run" title="Run this agent on the latest message"><i class="fa-solid fa-robot"></i></button>
+                        <button type="button" class="ica--card-btn ica--btn-run" title="Manually apply this agent to the last assistant reply"><i class="fa-solid fa-robot"></i> Apply to Last Reply</button>
                         <button type="button" class="ica--card-btn ica--btn-edit"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
                         <button type="button" class="ica--card-btn ica--btn-export"><i class="fa-solid fa-download"></i> Export</button>
                         <button type="button" class="ica--card-btn ica--btn-delete caution"><i class="fa-solid fa-trash"></i></button>
@@ -897,7 +1037,7 @@ function renderAgentList() {
                 stopEvent(event);
                 const lastCharMessageIndex = chat.findLastIndex(m => m && !m.is_user && !m.is_system);
                 if (lastCharMessageIndex < 0) {
-                    toastr.warning('No character message to run the agent on.');
+                    toastr.warning('No assistant reply yet to manually apply this agent to.');
                     return;
                 }
                 await runAgentOnMessage(agent.id, lastCharMessageIndex);
@@ -1111,7 +1251,7 @@ async function openEditor(agentId = null) {
     editorEl.find('#ica--editor-description').val(agent.description);
     editorEl.find('#ica--editor-prompt').val(agent.prompt);
     populateConnectionProfileSelect(editorEl.find('#ica--editor-connectionProfile')[0], {
-        emptyLabel: 'Use default connection profile',
+        emptyLabel: 'Use extension default',
         selectedValue: agent.connectionProfile || '',
     });
 
@@ -1126,7 +1266,7 @@ async function openEditor(agentId = null) {
     const postProcessType = agent.postProcess.type === 'append' ? 'append' : 'extract';
     editorEl.find('#ica--editor-pp-promptEnabled').prop('checked', Boolean(agent.postProcess.promptTransformEnabled));
     editorEl.find('#ica--editor-pp-promptMode').val(getPromptTransformMode(agent));
-    editorEl.find('#ica--editor-pp-promptMaxTokens').val(agent.postProcess.promptTransformMaxTokens ?? 2000);
+    editorEl.find('#ica--editor-pp-promptMaxTokens').val(agent.postProcess.promptTransformMaxTokens ?? DEFAULT_AGENT_MAX_TOKENS);
     editorEl.find('#ica--editor-pp-promptShowNotifications').prop('checked', Boolean(agent.postProcess.promptTransformShowNotifications));
     editorEl.find('#ica--editor-pp-enabled').prop('checked', agent.postProcess.enabled && agent.postProcess.type !== 'regex');
     editorEl.find('#ica--editor-pp-type').val(postProcessType);
@@ -1295,7 +1435,7 @@ async function openEditor(agentId = null) {
     agent.postProcess.promptTransformEnabled = editorEl.find('#ica--editor-pp-promptEnabled').prop('checked');
     agent.postProcess.promptTransformShowNotifications = editorEl.find('#ica--editor-pp-promptShowNotifications').prop('checked');
     agent.postProcess.promptTransformMode = editorEl.find('#ica--editor-pp-promptMode').val()?.toString() === 'append' ? 'append' : 'rewrite';
-    agent.postProcess.promptTransformMaxTokens = Number(editorEl.find('#ica--editor-pp-promptMaxTokens').val()) || 2000;
+    agent.postProcess.promptTransformMaxTokens = Number(editorEl.find('#ica--editor-pp-promptMaxTokens').val()) || DEFAULT_AGENT_MAX_TOKENS;
     agent.regexScripts = regexScripts.map(script => normalizeRegexScript(script));
 
     agent.conditions.triggerProbability = Number(editorEl.find('#ica--editor-probability').val());
@@ -1333,11 +1473,24 @@ async function loadTemplates() {
         const rawTemplates = templateResponse.ok ? await templateResponse.json() : [];
         templateRegexBundles = regexBundleResponse.ok ? await regexBundleResponse.json() : {};
         templates = Array.isArray(rawTemplates)
-            ? rawTemplates.map(template => mergeTemplateDefaults(template))
+            ? rawTemplates
+                .filter(template => !REMOVED_BUNDLED_TEMPLATE_IDS.has(String(template?.id ?? '').trim()))
+                .map(template => mergeTemplateDefaults(template))
             : [];
 
         if (groupResponse.ok) {
-            loadBuiltinGroups(await groupResponse.json());
+            const rawGroups = await groupResponse.json();
+            const builtinGroups = Array.isArray(rawGroups)
+                ? rawGroups
+                    .filter(group => !REMOVED_BUNDLED_GROUP_IDS.has(String(group?.id ?? '').trim()))
+                    .map(group => ({
+                        ...group,
+                        agentTemplateIds: Array.isArray(group?.agentTemplateIds)
+                            ? group.agentTemplateIds.filter(id => !REMOVED_BUNDLED_TEMPLATE_IDS.has(String(id ?? '').trim()))
+                            : [],
+                    }))
+                : [];
+            loadBuiltinGroups(builtinGroups);
         }
     } catch (e) {
         console.warn('[InChatAgents] Failed to load templates:', e);
@@ -1655,7 +1808,7 @@ function populateProfileDropdown() {
     if (!select) return;
 
     populateConnectionProfileSelect(select, {
-        emptyLabel: 'Use main AI',
+        emptyLabel: 'Use selected connection profile',
         selectedValue: getGlobalSettings().connectionProfile || '',
     });
 }
@@ -1667,6 +1820,22 @@ function populateGlobalNotificationToggle() {
     );
 }
 
+function extractProfileResponseText(response) {
+    if (typeof response === 'string') {
+        return response;
+    }
+
+    return typeof response?.content === 'string'
+        ? response.content
+        : (response?.toString?.() || '');
+}
+
+function buildFallbackPromptText(messages) {
+    return messages
+        .map(message => `${String(message?.role ?? 'user').toUpperCase()}:\n${String(message?.content ?? '')}`)
+        .join('\n\n');
+}
+
 /**
  * Makes an LLM call for prompt refinement, using CMRS if a profile is selected.
  * @param {string} systemPrompt
@@ -1674,7 +1843,7 @@ function populateGlobalNotificationToggle() {
  * @returns {Promise<string>}
  */
 async function refineLLMCall(systemPrompt, userPrompt, connectionProfile = '') {
-    const profileId = connectionProfile || getGlobalSettings().connectionProfile;
+    const profileId = resolveConnectionProfile(connectionProfile);
 
     if (!profileId) {
         return await generateQuietPrompt({
@@ -1696,13 +1865,42 @@ async function refineLLMCall(systemPrompt, userPrompt, connectionProfile = '') {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
     ];
-    const response = await CMRS.sendRequest(profileId, messages, 2000, {
-        extractData: true,
-        includePreset: true,
-        stream: false,
-    });
-    if (typeof response === 'string') return response;
-    return response?.content || response?.toString() || '';
+
+    try {
+        const response = await CMRS.sendRequest(profileId, messages, DEFAULT_AGENT_MAX_TOKENS, {
+            extractData: true,
+            includePreset: true,
+            includeInstruct: true,
+            stream: false,
+        });
+        const responseText = extractProfileResponseText(response);
+        if (responseText.trim()) {
+            return responseText;
+        }
+    } catch (error) {
+        console.warn(`[InChatAgents] Prompt refinement via profile "${profileId}" failed, retrying with fallback prompt formatting.`, error);
+    }
+
+    let fallbackPrompt = '';
+    if (typeof CMRS.constructPrompt === 'function') {
+        try {
+            fallbackPrompt = String(CMRS.constructPrompt(messages, profileId) ?? '');
+        } catch (error) {
+            console.warn(`[InChatAgents] Failed to construct fallback prompt for profile "${profileId}" during prompt refinement.`, error);
+        }
+    }
+    const fallbackResponse = await CMRS.sendRequest(
+        profileId,
+        fallbackPrompt.trim() ? fallbackPrompt : buildFallbackPromptText(messages),
+        DEFAULT_AGENT_MAX_TOKENS,
+        {
+            extractData: true,
+            includePreset: true,
+            includeInstruct: false,
+            stream: false,
+        },
+    );
+    return extractProfileResponseText(fallbackResponse);
 }
 
 /**
@@ -1818,6 +2016,7 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         if (savedState.globalSettings && typeof savedState.globalSettings === 'object') {
             setGlobalSettings(savedState.globalSettings);
         }
+        restoreAutoSeededTemplateIds(savedState);
     }
 
     const initResults = await Promise.allSettled([
@@ -1862,7 +2061,13 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         persistExtensionState();
     }
 
+    await ensureDefaultBundledAgents();
     await migrateBundledRegexScriptsToSavedAgents();
+    const migratedTemplateMetadataCount = await migrateBundledTemplateMetadataToSavedAgents();
+    if (migratedTemplateMetadataCount > 0) {
+        toastr.success(`Updated ${migratedTemplateMetadataCount} bundled agent credit${migratedTemplateMetadataCount !== 1 ? 's' : ''}.`);
+    }
+
     const migratedTrackerPromptPassCount = await migrateBundledTrackerPromptPassesToSavedAgents();
     if (migratedTrackerPromptPassCount > 0) {
         toastr.success(`Updated ${migratedTrackerPromptPassCount} bundled tracker agent(s) to prompt append mode.`);
@@ -1871,6 +2076,16 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     const migratedRegexPostDefaultsCount = await migrateBundledRegexPostDefaultsToSavedAgents();
     if (migratedRegexPostDefaultsCount > 0) {
         toastr.success(`Updated ${migratedRegexPostDefaultsCount} bundled regex agent(s) to post-generation defaults.`);
+    }
+
+    const migratedPromptTransformTokenCount = await migrateLegacyPromptTransformMaxTokens();
+    if (migratedPromptTransformTokenCount > 0) {
+        toastr.success(`Updated ${migratedPromptTransformTokenCount} agent(s) to the new 8192 prompt transform token default.`);
+    }
+
+    const removedBundledAgentCount = await purgeRemovedBundledAgents();
+    if (removedBundledAgentCount > 0) {
+        toastr.success(`Removed ${removedBundledAgentCount} bundled agent(s) from the default catalog.`);
     }
 
     const removedDuplicateCount = await removeRedundantBundledAgentDuplicates();
@@ -1956,7 +2171,9 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
     });
     $('#ica--resetDefaults').on('click', async () => {
         const agents = getAgents();
-        const bundledCount = agents.filter(a => findTemplateForAgent(a)).length;
+        const missingDefaultBundledTemplates = getDefaultBundledTemplates()
+            .filter(template => !hasMatchingAgentSnapshot(buildAgentFromTemplate(template), agents));
+        const bundledCount = agents.filter(a => findTemplateForAgent(a)).length + missingDefaultBundledTemplates.length;
         if (bundledCount === 0) {
             toastr.info('No bundled agents found to reset.');
             return;
@@ -1976,6 +2193,7 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
             agent.icon = fresh.icon ?? agent.icon;
             agent.category = fresh.category ?? agent.category;
             agent.tags = fresh.tags ?? agent.tags;
+            agent.author = fresh.author ?? agent.author;
             agent.prompt = fresh.prompt ?? agent.prompt;
             agent.phase = fresh.phase ?? 'pre';
             agent.phaseLocked = false;
@@ -1985,6 +2203,15 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
             agent.sourceTemplateId = template.id;
             await saveAgent(agent);
             resetCount++;
+        }
+        for (const template of missingDefaultBundledTemplates) {
+            const freshAgent = buildAgentFromTemplate(template);
+            await saveAgent(freshAgent);
+            autoSeededTemplateIds.add(String(template.id ?? '').trim());
+            resetCount++;
+        }
+        if (missingDefaultBundledTemplates.length > 0) {
+            persistExtensionState();
         }
         toastr.success(`Reset ${resetCount} bundled agent${resetCount !== 1 ? 's' : ''} to defaults.`);
         renderAgentList();

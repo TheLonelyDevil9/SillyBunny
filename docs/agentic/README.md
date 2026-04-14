@@ -150,7 +150,7 @@ Here's what happens on each generation turn when both systems are active:
 
 ## Recent Changes
 
-### v1.3.2 (2026-04-12)
+### v1.3.3 (2026-04-12)
 
 - Trackers now default to pre-generation phase with User role
 - Added phaseLocked flag to prevent startup migrations from overriding manual phase changes
@@ -162,7 +162,7 @@ Here's what happens on each generation turn when both systems are active:
 - Reset Bundled Agents to Defaults button
 - Fixed drag-drop snap-back and tracker migration bugs
 
-### v1.3.2 (2026-04-13)
+### v1.3.3 (2026-04-13)
 
 - Removed Agent Mode orchestration (retrieval, memory, lorebook services) to align with "intentionally lightweight" philosophy
 - Kept In-Chat Agents as a standalone tab with a simplified panel (no agent mode overlay)

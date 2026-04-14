@@ -87,6 +87,8 @@ const saveSettingsDebounced = debounce(() => {
 }, debounce_timeout.relaxed);
 const sortFn = (a, b) => b.order - a.order;
 let updateEditor = (navigation, flashOnNav = true) => { console.debug('Triggered WI navigation', navigation, flashOnNav); };
+const WORLD_INFO_DESKTOP_SPLIT_QUERY = '(min-width: 961px)';
+let desktopSelectedWorldInfoUid = null;
 
 // Do not optimize. updateEditor is a function that is updated by the displayWorldEntries with new data.
 export const worldInfoFilter = new FilterHelper(() => updateEditor());
@@ -2084,7 +2086,40 @@ export async function updateWorldInfoList() {
 }
 
 async function hideWorldEditor() {
+    desktopSelectedWorldInfoUid = null;
+    clearWorldInfoDesktopEditor();
     await displayWorldEntries(null, null);
+}
+
+function isWorldInfoDesktopSplitLayout() {
+    return window.matchMedia(WORLD_INFO_DESKTOP_SPLIT_QUERY).matches;
+}
+
+function getWorldInfoDesktopEditorElements() {
+    return {
+        workspace: $('#world_popup_workspace'),
+        host: $('#world_popup_editor_host'),
+        title: $('#world_popup_editor_title'),
+        uid: $('#world_popup_editor_uid'),
+    };
+}
+
+function clearWorldInfoDesktopEditor() {
+    const { workspace, host, title, uid } = getWorldInfoDesktopEditorElements();
+    if (host.length) {
+        clearEntryList(host);
+    }
+    workspace.removeClass('world_popup_has_selection');
+    title.text(t`No entry selected`);
+    uid.text('');
+}
+
+function setWorldInfoDesktopEditorMeta(entry) {
+    const { workspace, title, uid } = getWorldInfoDesktopEditorElements();
+    const fallbackTitle = Array.isArray(entry?.key) && entry.key.length > 0 ? entry.key.join(', ') : t`Untitled entry`;
+    workspace.addClass('world_popup_has_selection');
+    title.text(String(entry?.comment || fallbackTitle));
+    uid.text(`UID ${entry?.uid ?? ''}`.trim());
 }
 
 function getWIElement(name) {
@@ -2311,7 +2346,15 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
     updateEditor = async (navigation, flashOnNav = true) => await displayWorldEntries(name, data, navigation, flashOnNav);
 
     const worldEntriesList = $('#world_popup_entries_list');
+    const { workspace: desktopWorkspace, host: desktopEditorHost } = getWorldInfoDesktopEditorElements();
+    const isDesktopSplit = isWorldInfoDesktopSplitLayout();
+    const requestedUid = typeof navigation === 'number' && Number(navigation) >= 0 ? Number(navigation) : null;
+    if (requestedUid !== null) {
+        desktopSelectedWorldInfoUid = requestedUid;
+    }
     clearEntryList(worldEntriesList);
+    clearEntryList(desktopEditorHost);
+    clearWorldInfoDesktopEditor();
     worldEntriesList.show();
 
     if (!data || !('entries' in data)) {
@@ -2323,6 +2366,10 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         worldEntriesList.hide();
         $('#world_info_pagination').html('');
         return;
+    }
+
+    if (desktopSelectedWorldInfoUid !== null && !data.entries[desktopSelectedWorldInfoUid]) {
+        desktopSelectedWorldInfoUid = null;
     }
 
     // Regardless of whether success is displayed or not. Make sure the delete button is available.
@@ -2388,11 +2435,14 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         startPage = $('#world_info_pagination').pagination('getCurrentPageNum');
     }
 
-    if (typeof navigation === 'number' && Number(navigation) >= 0) {
+    const navigationTargetUid = requestedUid ?? (isDesktopSplit ? desktopSelectedWorldInfoUid : null);
+    if (navigationTargetUid !== null) {
         const data = getDataArray();
-        const uidIndex = data.findIndex(x => x.uid === navigation);
+        const uidIndex = data.findIndex(x => x.uid === navigationTargetUid);
         const perPage = Number(accountStorage.getItem(storageKey)) || perPageDefault;
-        startPage = Math.floor(uidIndex / perPage) + 1;
+        if (uidIndex >= 0) {
+            startPage = Math.floor(uidIndex / perPage) + 1;
+        }
     }
 
     $('#world_info_pagination').pagination({
@@ -2411,13 +2461,19 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         callback: async function (/** @type {object[]} */ page) {
             try {
                 clearEntryList(worldEntriesList);
+                clearEntryList(desktopEditorHost);
+                clearWorldInfoDesktopEditor();
 
                 const keywordHeaders = await renderTemplateAsync('worldInfoKeywordHeaders');
                 const blocks = [];
 
                 for (const entry of page) {
                     try {
-                        const block = await getWorldEntry(name, data, entry);
+                        const block = await getWorldEntry(name, data, entry, {
+                            desktopEditorHost,
+                            isDesktopSplit,
+                            selectedUid: desktopSelectedWorldInfoUid,
+                        });
                         if (block) {
                             blocks.push(block);
                         }
@@ -2435,6 +2491,14 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
 
                 worldEntriesList.append(keywordHeaders);
                 worldEntriesList.append(blocks);
+
+                if (isDesktopSplit) {
+                    const hasDesktopSelection = desktopSelectedWorldInfoUid !== null && desktopEditorHost.children().length > 0;
+                    desktopWorkspace.toggleClass('world_popup_has_selection', hasDesktopSelection);
+                    if (!hasDesktopSelection) {
+                        clearWorldInfoDesktopEditor();
+                    }
+                }
             } catch (error) {
                 console.error('Error while rendering WI entries:', error);
             }
@@ -2449,20 +2513,24 @@ async function displayWorldEntries(name, data, navigation = navigation_option.no
         },
     });
 
-    if (typeof navigation === 'number' && Number(navigation) >= 0) {
-        const selector = `#world_popup_entries_list [uid="${navigation}"]`;
+    if (navigationTargetUid !== null) {
+        const selector = `#world_popup_entries_list [uid="${navigationTargetUid}"]`;
         waitUntilCondition(() => document.querySelector(selector) !== null).finally(() => {
             const element = $(selector);
 
             if (element.length === 0) {
-                console.log(`Could not find element for uid ${navigation}`);
+                console.log(`Could not find element for uid ${navigationTargetUid}`);
                 return;
             }
 
             const elementOffset = element.offset();
             const parentOffset = element.parent().offset();
             const scrollOffset = elementOffset.top - parentOffset.top;
-            $('#WorldInfo').scrollTop(scrollOffset);
+            if (isDesktopSplit) {
+                worldEntriesList.scrollTop(scrollOffset);
+            } else {
+                $('#WorldInfo').scrollTop(scrollOffset);
+            }
             if (flashOnNav) flashHighlight(element);
         });
     }
@@ -3118,15 +3186,17 @@ function handleProbabilityInputHelper({ probabilityInput, data, entry, name }) {
  * @param {string} params.name - The name of the world info to save changes to.
  * @param {JQuery<HTMLElement>} params.probabilityInput - The input element for probability.
  */
-function handleProbabilityToggleHelper({ probabilityToggle, data, entry, name, probabilityInput }) {
+function handleProbabilityToggleHelper({ probabilityToggle, data, entry, name, probabilityInput, probabilityContainer = null }) {
     probabilityToggle.data('uid', entry.uid);
     probabilityToggle.on('input', async function (_, { noSave = false } = {}) {
         const uid = $(this).data('uid');
         const value = $(this).prop('checked');
         data.entries[uid].useProbability = value;
-        const probabilityContainer = $(this).closest('.world_entry').find('.probabilityContainer');
+        const probabilityContainerElement = probabilityContainer && typeof probabilityContainer.show === 'function' && probabilityContainer.length
+            ? probabilityContainer
+            : $(this).closest('.world_entry').find('.probabilityContainer');
         !noSave && await saveWorldInfo(name, data);
-        value ? probabilityContainer.show() : probabilityContainer.hide();
+        value ? probabilityContainerElement.show() : probabilityContainerElement.hide();
         if (value && data.entries[uid].probability === null) {
             data.entries[uid].probability = 100;
         }
@@ -3279,9 +3349,15 @@ function setCommentPlaceholder(keys, commentInput) {
  * @param {object} data - The world info data object.
  * @param {object} entry - The entry object to be edited.
  */
-export async function getWorldEntry(name, data, entry) {
+export async function getWorldEntry(name, data, entry, options = {}) {
     if (!data.entries[entry.uid]) return;
 
+    const {
+        desktopEditorHost = $('#world_popup_editor_host'),
+        isDesktopSplit = isWorldInfoDesktopSplitLayout(),
+        selectedUid = desktopSelectedWorldInfoUid,
+    } = options;
+    const isSelectedEntry = isDesktopSplit && selectedUid === entry.uid;
     const headerTemplate = WI_ENTRY_HEADER_TEMPLATE.clone();
     headerTemplate.data('uid', entry.uid);
     headerTemplate.attr('uid', entry.uid);
@@ -3302,6 +3378,9 @@ export async function getWorldEntry(name, data, entry) {
         !skipReset && await resetScrollHeight(this);
         data.entries[uid].comment = value;
         setWIOriginalDataValue(data, uid, 'comment', data.entries[uid].comment);
+        if (desktopSelectedWorldInfoUid === uid) {
+            setWorldInfoDesktopEditorMeta(data.entries[uid]);
+        }
         !noSave && await saveWorldInfo(name, data);
     });
     commentInput.val(entry.comment).trigger('input', { skipReset: true, noSave: true });
@@ -3386,6 +3465,9 @@ export async function getWorldEntry(name, data, entry) {
         const deleted = await deleteWorldInfoEntry(data, uid);
         if (!deleted) return;
         deleteWIOriginalDataValue(data, uid);
+        if (desktopSelectedWorldInfoUid === uid) {
+            desktopSelectedWorldInfoUid = null;
+        }
         await saveWorldInfo(name, data);
         updateEditor(navigation_option.previous);
     });
@@ -3447,33 +3529,14 @@ export async function getWorldEntry(name, data, entry) {
         await moveWorldInfoEntry(sourceWorld, selectedValue, sourceUid, { deleteOriginal });
     });
 
-    let drawerInitialized = false;
-    let drawerDestroyTimeout = null;
-    headerTemplate.find('.inline-drawer').on('inline-drawer-toggle', function () {
-        if (drawerDestroyTimeout) {
-            clearTimeout(drawerDestroyTimeout);
-            drawerDestroyTimeout = null;
-        }
-        if (drawerInitialized) {
-            drawerDestroyTimeout = setTimeout(() => {
-                // Drawer was reopened, so we don't destroy it
-                if (editOutlet.is(':visible')) {
-                    return;
-                }
-                drawerInitialized = false;
-                clearEntryList(editOutlet);
-                drawerDestroyTimeout = null;
-            }, debounce_timeout.relaxed);
-        } else {
-            drawerInitialized = true;
-            addEditorDrawerContent();
-        }
-    });
-
     const editOutlet = headerTemplate.find('.inline-drawer-outlet');
 
-    function addEditorDrawerContent() {
+    function addEditorDrawerContent(targetOutlet = editOutlet, { desktop = false } = {}) {
         const editTemplate = WI_ENTRY_EDIT_TEMPLATE.clone();
+        const editorSurface = desktop
+            ? $('<div class="world_entry world_entry_editor_surface"></div>').attr('uid', entry.uid)
+            : null;
+        const editorRoot = desktop ? editorSurface : editTemplate;
 
         // UID display
         editTemplate.find('.world_entry_form_uid_value').text(`(UID: ${entry.uid})`);
@@ -3490,7 +3553,9 @@ export async function getWorldEntry(name, data, entry) {
             saveSettingsDebounced();
             const uid = ($(this).parents('.world_entry')).data('uid');
             updateEditor(uid, false);
-            $(`.world_entry[uid="${uid}"] .inline-drawer-icon`).trigger('click');
+            if (!desktop) {
+                $(`.world_entry[uid="${uid}"] .inline-drawer-icon`).trigger('click');
+            }
         }).each((_, icon) => {
             $(icon).attr('title', $(icon).data(power_user.wi_key_input_plaintext ? 'tooltip-on' : 'tooltip-off'));
             $(icon).text($(icon).data(power_user.wi_key_input_plaintext ? 'icon-on' : 'icon-off'));
@@ -3501,6 +3566,7 @@ export async function getWorldEntry(name, data, entry) {
             probabilityToggle: editTemplate.find('input[name="useProbability"]'),
             data, entry, name,
             probabilityInput: headerTemplate.find('input[name="probability"]'),
+            probabilityContainer: headerTemplate.find('.probabilityContainer'),
         });
 
         // Comment toggle
@@ -3509,7 +3575,7 @@ export async function getWorldEntry(name, data, entry) {
         commentToggle.on('input', async function (_, { noSave = false } = {}) {
             const uid = $(this).data('uid');
             const value = $(this).prop('checked');
-            const commentContainer = $(this).closest('.world_entry').find('.commentContainer');
+            const commentContainer = editorRoot.find('.commentContainer');
             data.entries[uid].addMemo = value;
             !noSave && await saveWorldInfo(name, data);
             value ? commentContainer.show() : commentContainer.hide();
@@ -3539,9 +3605,9 @@ export async function getWorldEntry(name, data, entry) {
             data.entries[uid].selective = value;
             setWIOriginalDataValue(data, uid, 'selective', data.entries[uid].selective);
             !noSave && await saveWorldInfo(name, data);
-            const keysecondary = $(this).closest('.world_entry').find('.keysecondary');
-            const keysecondarytextpole = $(this).closest('.world_entry').find('.keysecondarytextpole');
-            const keyprimaryselect = $(this).closest('.world_entry').find('.keyprimaryselect');
+            const keysecondary = editorRoot.find('.keysecondary');
+            const keysecondarytextpole = editorRoot.find('.keysecondarytextpole');
+            const keyprimaryselect = editorRoot.find('.keyprimaryselect');
             const keyprimaryHeight = keyprimaryselect.outerHeight();
             keysecondarytextpole.css('height', keyprimaryHeight + 'px');
             value ? keysecondary.show() : keysecondary.hide();
@@ -3797,7 +3863,59 @@ export async function getWorldEntry(name, data, entry) {
         countTokensDebounced(counter, contentInput.val());
 
         editTemplate.find('.inline-drawer-content').css('display', 'none');
-        editOutlet.append(editTemplate);
+        if (desktop) {
+            editorSurface.append(editTemplate);
+            targetOutlet.append(editorSurface);
+            setWorldInfoDesktopEditorMeta(data.entries[entry.uid] ?? entry);
+        } else {
+            targetOutlet.append(editTemplate);
+        }
+    }
+
+    if (isDesktopSplit) {
+        const header = headerTemplate.find('.inline-drawer-header');
+        const icon = headerTemplate.find('.inline-drawer-icon');
+        icon.removeClass('inline-drawer-toggle down up fa-circle-chevron-down fa-circle-chevron-up')
+            .addClass('fa-pen-to-square');
+        header.addClass('inline-drawer-header-pointer').on('click', function (event) {
+            if ($(event.target).closest('textarea, input, select, option, button, .menu_button, .killSwitch').length) {
+                return;
+            }
+            updateEditor(entry.uid, false);
+        });
+        icon.on('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            updateEditor(entry.uid, false);
+        });
+
+        if (isSelectedEntry) {
+            headerTemplate.addClass('world_entry_selected');
+            addEditorDrawerContent(desktopEditorHost, { desktop: true });
+        }
+    } else {
+        let drawerInitialized = false;
+        let drawerDestroyTimeout = null;
+        headerTemplate.find('.inline-drawer').on('inline-drawer-toggle', function () {
+            if (drawerDestroyTimeout) {
+                clearTimeout(drawerDestroyTimeout);
+                drawerDestroyTimeout = null;
+            }
+            if (drawerInitialized) {
+                drawerDestroyTimeout = setTimeout(() => {
+                    // Drawer was reopened, so we don't destroy it
+                    if (editOutlet.is(':visible')) {
+                        return;
+                    }
+                    drawerInitialized = false;
+                    clearEntryList(editOutlet);
+                    drawerDestroyTimeout = null;
+                }, debounce_timeout.relaxed);
+            } else {
+                drawerInitialized = true;
+                addEditorDrawerContent();
+            }
+        });
     }
 
     headerTemplate.find('.inline-drawer-content').css('display', 'none');
@@ -6090,6 +6208,12 @@ export function initWorldInfo() {
         }
     });
 
+    $('#world_popup_editor_close').on('click', () => {
+        desktopSelectedWorldInfoUid = null;
+        clearWorldInfoDesktopEditor();
+        updateEditor(navigation_option.none, false);
+    });
+
     $('#world_editor_select').on('change', async () => {
         $('#world_info_search').val('');
         worldInfoFilter.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, '', true);
@@ -6276,7 +6400,7 @@ export function initWorldInfo() {
         }, { buttonStyle: true, closeDrawer: true });
     }
 
-    $('#WorldInfo').on('scroll', () => {
+    $('#WorldInfo, #world_popup_editor_host, #world_popup_entries_list').on('scroll', () => {
         $('.world_entry input[name="group"], .world_entry input[name="automationId"]').each((_, el) => {
             const instance = $(el).autocomplete('instance');
 

@@ -112,6 +112,7 @@ import {
     loadProxyPresets,
     selected_proxy,
     initOpenAI,
+    reconnectOpenAi,
 } from './scripts/openai.js';
 
 import {
@@ -433,7 +434,7 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.2';
+const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.3';
 
 export let displayVersion = SILLYBUNNY_UI_VERSION;
 
@@ -450,7 +451,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/sillybunny-pixel-logo.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyBunny:v1.3.2:platberlitz'; // For Horde header
+export let CLIENT_VERSION = 'SillyBunny:v1.3.3:platberlitz'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });
@@ -1977,8 +1978,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
  * @param {ChatMessageExtra} extra - Contains the API and model details.
  */
 function insertSVGIcon(mes, extra) {
-    // Determine the SVG filename
-    let modelName = extra?.api || '';
+    const modelName = getMessageIconName(extra);
 
     // If there's no API information, we can't determine which SVG to use
     if (!modelName) {
@@ -2008,6 +2008,76 @@ function insertSVGIcon(mes, extra) {
 
     createModelImage('timestamp-icon', '.timestamp');
     createModelImage('thinking-icon', '.mes_reasoning_header_title', true);
+}
+
+const CUSTOM_MODEL_ICON_PATTERNS = Object.freeze([
+    { icon: 'claude', pattern: /\bclaude\b|anthropic[/:_-]/i },
+    { icon: 'openai', pattern: /\b(?:gpt|chatgpt|codex|o1|o3|o4|omni)\b|openai[/:_-]/i },
+    { icon: 'makersuite', pattern: /\b(?:gemini|gemma|learnlm)\b|google[/:_-]/i },
+    { icon: 'deepseek', pattern: /\bdeepseek\b|deepseek-ai[/:_-]|mai-ds\b/i },
+    { icon: 'xai', pattern: /\bgrok\b|xai[/:_-]/i },
+    { icon: 'mistralai', pattern: /\b(?:mistral|mixtral|ministral|magistral|pixtral|codestral)\b/i },
+    { icon: 'cohere', pattern: /\b(?:command-r|command-a|aya)\b|cohere[/:_-]|c4ai-aya/i },
+    { icon: 'ai21', pattern: /\bjamba\b|ai21[/:_-]|(?:^|[/_-])j2-[\w.-]+/i },
+    { icon: 'perplexity', pattern: /\bsonar\b|perplexity[/:_-]|r1-1776/i },
+    { icon: 'moonshot', pattern: /\b(?:kimi|moonshot)\b/i },
+    { icon: 'zai', pattern: /\b(?:glm|autoglm)\b|zai-org[/:_-]/i },
+    { icon: 'openrouter', pattern: /\bopenrouter\b/i },
+    { icon: 'fireworks', pattern: /\bfireworks\b/i },
+    { icon: 'groq', pattern: /\bgroq\b/i },
+    { icon: 'pollinations', pattern: /\bpollinations\b/i },
+    { icon: 'aimlapi', pattern: /\baimlapi\b|ai\/ml/i },
+    { icon: 'electronhub', pattern: /\belectronhub\b/i },
+    { icon: 'nanogpt', pattern: /\bnanogpt\b/i },
+    { icon: 'chutes', pattern: /\bchutes\b/i },
+    { icon: 'siliconflow', pattern: /\bsiliconflow\b/i },
+    { icon: 'cometapi', pattern: /\bcometapi\b/i },
+]);
+
+function inferCustomModelIconName(model) {
+    const normalizedModel = String(model ?? '').trim();
+
+    if (!normalizedModel) {
+        return '';
+    }
+
+    for (const { icon, pattern } of CUSTOM_MODEL_ICON_PATTERNS) {
+        if (pattern.test(normalizedModel)) {
+            return icon;
+        }
+    }
+
+    return '';
+}
+
+function getMessageIconName(extra) {
+    const apiName = String(extra?.api ?? '').trim().toLowerCase();
+
+    if (!apiName) {
+        return '';
+    }
+
+    if (apiName === chat_completion_sources.CUSTOM && oai_settings.custom_model_icon_detection) {
+        return inferCustomModelIconName(extra?.model) || apiName;
+    }
+
+    return apiName;
+}
+
+export function refreshMessageModelIcons() {
+    chatElement.find('.mes').each((_, element) => {
+        const messageElement = $(element);
+        const messageId = Number.parseInt(String(messageElement.attr('mesid') ?? ''), 10);
+        const message = Number.isInteger(messageId) ? chat[messageId] : null;
+
+        messageElement.find('.timestamp-icon, .thinking-icon').remove();
+
+        if (!power_user.timestamp_model_icon || !message?.extra?.api) {
+            return;
+        }
+
+        insertSVGIcon(messageElement, message.extra);
+    });
 }
 
 /**
@@ -7858,6 +7928,10 @@ export function changeMainAPI(api = null) {
     validateDisabledSamplers();
     setupChatCompletionPromptManager(oai_settings);
     forceCharacterEditorTokenize();
+
+    if (main_api === 'openai') {
+        reconnectOpenAi();
+    }
 }
 
 export function setUserName(value, { toastPersonaNameChange = true } = {}) {
@@ -12812,7 +12886,10 @@ jQuery(async function () {
         const drawerContent = drawer.find('>.inline-drawer-content');
         icon.toggleClass('down up');
         icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
-        drawer.trigger('inline-drawer-toggle');
+        const drawerElement = drawer.get(0);
+        if (drawerElement instanceof HTMLElement) {
+            drawerElement.dispatchEvent(new CustomEvent('inline-drawer-toggle', { bubbles: true }));
+        }
         drawerContent.stop().slideToggle({
             complete: () => {
                 $(this).css('height', '');

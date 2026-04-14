@@ -9,3 +9,8 @@
 #connection_profile_spinner {
     margin-left: 5px;
 }
+
+#connection_profiles ~ .menu_button {
+    user-select: none;
+    -webkit-user-select: none;
+}

@@ -3,14 +3,14 @@
     "name": "Difficulty Increase",
     "description": "Sharply raise difficulty -- characters protect their interests, resist harder",
     "icon": "",
-    "category": "directive",
+    "category": "custom",
     "tags": [
         "difficulty",
         "challenge",
         "stakes"
     ],
     "version": 1,
-    "author": "SillyBunny",
+    "author": "Purachina",
     "prompt": "### Difficulty Increase\nRaise difficulty sharply. The world resists. Characters protect their own interests first, dig in harder, and yield to kindness, persuasion, or promises only when backed by leverage, sacrifice, or sustained effort over time.\nPush toward harsher conflict, harder choices, and deeper interpersonal fallout. Failed attempts change relationships, close doors, create resentment, or force riskier options. Alliances stay conditional, generosity carries a cost, and trust emerges slowly through significant action. Preserve breathing room for humor, tenderness, and hard-won victories; success remains possible but must feel earned.",
     "phase": "pre",
     "injection": {

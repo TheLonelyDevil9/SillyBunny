@@ -22,6 +22,89 @@
     gap: 14px;
 }
 
+#WorldInfo.sb-shell-embedded-content {
+    container-type: inline-size;
+    container-name: sb-world-info;
+    min-width: 0;
+}
+
+#WorldInfo.sb-shell-embedded-content #world_popup,
+#WorldInfo.sb-shell-embedded-content #world_popup_workspace,
+#WorldInfo.sb-shell-embedded-content #world_popup_entries_column,
+#WorldInfo.sb-shell-embedded-content #world_popup_editor_pane,
+#WorldInfo.sb-shell-embedded-content #world_popup_editor_host {
+    min-width: 0;
+}
+
+#world_popup_workspace {
+    min-width: 0;
+}
+
+#world_popup_entries_column {
+    min-width: 0;
+}
+
+#world_popup_editor_pane {
+    display: none;
+}
+
+#world_popup_editor_header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+#world_popup_editor_heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+#world_popup_editor_title {
+    color: var(--SmartThemeBodyColor);
+    line-height: 1.3;
+}
+
+#world_popup_editor_uid {
+    font-size: calc(var(--mainFontSize) * 0.9);
+}
+
+#world_popup_editor_host {
+    display: none;
+}
+
+#world_popup_workspace.world_popup_has_selection #world_popup_editor_empty {
+    display: none;
+}
+
+#world_popup_workspace.world_popup_has_selection #world_popup_editor_host {
+    display: block;
+}
+
+#world_popup_editor_host .world_entry_editor_surface,
+#world_popup_editor_host .world_entry_edit {
+    width: 100%;
+    min-width: 0;
+}
+
+#world_popup_editor_host .world_entry_form_control,
+#world_popup_editor_host .flex1,
+#world_popup_editor_host .flex2,
+#world_popup_editor_host .flex4 {
+    min-width: 0;
+}
+
+#world_popup_editor_host .text_pole,
+#world_popup_editor_host textarea,
+#world_popup_editor_host select,
+#world_popup_editor_host .select2-container {
+    max-width: 100%;
+    min-width: 0;
+}
+
 .WIEntryContentAndMemo {
     width: 100% !important;
     flex-wrap: nowrap !important;
@@ -285,6 +368,12 @@
 .world_entry {
     transition: opacity var(--animation-duration-3x);
     min-width: 0;
+}
+
+.world_entry_selected .wi-card-entry {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 58%, var(--SmartThemeBorderColor));
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, var(--sb-card-bg, transparent));
+    box-shadow: 0 20px 36px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
 }
 
 .world_entry_edit {
@@ -630,6 +719,10 @@ select.keyselect+span.select2-container .select2-selection--multiple {
 }
 
 @media screen and (max-width: 960px) {
+    #world_popup_editor_pane {
+        display: none !important;
+    }
+
     #wiSliders,
     #wiCheckboxes {
         grid-template-columns: 1fr;
@@ -683,6 +776,163 @@ select.keyselect+span.select2-container .select2-selection--multiple {
     }
 }
 
+@media screen and (min-width: 961px) {
+    #world_popup_workspace {
+        display: grid;
+        grid-template-columns: minmax(380px, 0.98fr) minmax(460px, 1.2fr);
+        align-items: start;
+        gap: 16px;
+        min-height: 0;
+    }
+
+    #world_popup_entries_column {
+        display: flex;
+        flex-direction: column;
+        min-height: clamp(420px, 62vh, 920px);
+    }
+
+    #world_popup_entries_list {
+        min-height: 0;
+        height: 100%;
+        max-height: clamp(420px, 62vh, 920px);
+        padding-right: 4px;
+    }
+
+    #world_popup_editor_pane {
+        display: flex;
+        flex-direction: column;
+        min-height: clamp(420px, 62vh, 920px);
+        padding: 16px;
+        border-radius: 22px;
+        border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 78%, transparent);
+        background:
+            linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent), transparent 24%),
+            color-mix(in srgb, var(--SmartThemeBodyColor) 3%, transparent);
+        box-shadow: 0 18px 36px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
+        overflow: hidden;
+    }
+
+    #world_popup_editor_host {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding-right: 4px;
+    }
+
+    #world_popup_toolbar #OpenAllWIEntries,
+    #world_popup_toolbar #CloseAllWIEntries {
+        display: none;
+    }
+
+    #world_popup_entries_list .world_entry .inline-drawer-content {
+        display: none !important;
+    }
+
+    #world_popup_entries_list .WIEntryHeaderBody {
+        grid-template-columns: 1fr;
+    }
+
+    #world_popup_entries_list .WIEnteryHeaderControls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #world_popup_entries_list .WIEnteryHeaderControls > [name="PositionBlock"] {
+        grid-column: 1 / -1;
+    }
+
+    #world_popup_editor_host .world_entry_edit > .flex-container.wide100p.alignitemscenter,
+    #world_popup_editor_host .world_entry_edit > .flex-container.wide100p.flexGap10 {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    #world_popup_editor_host [name="keywordsAndLogicBlock"] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(120px, 0.55fr) minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        min-width: 0;
+    }
+
+    #world_popup_editor_host [name="perEntryOverridesBlock"] {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        align-items: start;
+        min-width: 0;
+    }
+
+    #world_popup_editor_host [name="contentAndCharFilterBlock"],
+    #world_popup_editor_host .commentContainer {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+    }
+
+    #world_popup_editor_host [name="contentAndCharFilterBlock"] .justifySpaceBetween.flexnowrap {
+        flex-wrap: wrap !important;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    #world_popup_editor_host [name="contentAndCharFilterBlock"] .justifySpaceBetween.flexnowrap > * {
+        min-width: 0;
+    }
+}
+
+@media screen and (max-width: 1080px) and (min-width: 961px) {
+    #world_popup_editor_host [name="keywordsAndLogicBlock"] {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media screen and (max-width: 1120px) and (min-width: 961px) {
+    #world_popup_primary_actions,
+    #world_popup_toolbar {
+        gap: 10px;
+    }
+
+    .world_popup_action_group {
+        padding: 10px;
+    }
+
+    .world_popup_action_group--select,
+    .world_popup_action_group--filters {
+        flex-basis: 100%;
+    }
+
+    .world_popup_action_group--entry,
+    .world_popup_action_group--library {
+        flex: 1 1 260px;
+    }
+
+    .world_popup_action_group--filters {
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+
+    #world_popup_workspace {
+        grid-template-columns: minmax(320px, 0.94fr) minmax(0, 1.04fr);
+    }
+
+    #world_popup_editor_pane {
+        padding: 14px;
+    }
+
+    #world_popup_editor_host {
+        padding-right: 0;
+    }
+
+    #world_popup_entries_list {
+        gap: 8px;
+    }
+
+    #world_popup_entries_list .wi-card-entry {
+        padding: 10px 12px;
+    }
+}
+
 @media screen and (max-width: 620px) {
     .WIEntryTitleAndStatus {
         grid-template-columns: minmax(0, 1fr) 48px;
@@ -695,5 +945,153 @@ select.keyselect+span.select2-container .select2-selection--multiple {
 
     .WIEnteryHeaderControls {
         grid-template-columns: 1fr;
+    }
+}
+
+@container sb-world-info (max-width: 1180px) {
+    #WorldInfo.sb-shell-embedded-content #wiTopBlock {
+        grid-template-columns: 1fr;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryHeaderBody {
+        grid-template-columns: 1fr;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEnteryHeaderControls {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEnteryHeaderControls > [name="PositionBlock"] {
+        grid-column: 1 / -1;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #wiActivationSettings {
+        flex-direction: column;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #wiSliders,
+    #WorldInfo.sb-shell-embedded-content #wiCheckboxes {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_primary_actions,
+    #WorldInfo.sb-shell-embedded-content #world_popup_toolbar {
+        gap: 10px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group {
+        padding: 10px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--select,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--filters {
+        flex-basis: 100%;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--entry,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--library {
+        flex: 1 1 260px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--filters {
+        margin-left: 0;
+        justify-content: flex-start;
+    }
+}
+
+@container sb-world-info (max-width: 1020px) {
+    #WorldInfo.sb-shell-embedded-content #world_popup_workspace {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_entries_column,
+    #WorldInfo.sb-shell-embedded-content #world_popup_editor_pane {
+        min-height: 0;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_entries_list {
+        max-height: clamp(280px, 40vh, 420px);
+        padding-right: 0;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_editor_pane {
+        padding: 14px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_editor_host {
+        padding-right: 0;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_entries_list {
+        gap: 8px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content #world_popup_entries_list .wi-card-entry {
+        padding: 10px 12px;
+    }
+}
+
+@container sb-world-info (max-width: 760px) {
+    #WorldInfo.sb-shell-embedded-content #wiSliders,
+    #WorldInfo.sb-shell-embedded-content #wiCheckboxes {
+        grid-template-columns: 1fr;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--filters,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--library,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--entry {
+        flex-basis: 100%;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--select > #world_editor_select,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--select > .select2-container,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--filters > #world_info_search,
+    #WorldInfo.sb-shell-embedded-content .world_popup_action_group--filters > #world_info_sort_order {
+        flex-basis: 100%;
+        min-width: 0;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryContentAndMemo {
+        flex-wrap: wrap !important;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_entry .inline-drawer-header,
+    #WorldInfo.sb-shell-embedded-content .world_entry .inline-drawer-header:hover {
+        grid-template-columns: 1fr;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryHeaderMain {
+        flex-wrap: wrap;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryHeaderActions {
+        padding-top: 0;
+        justify-content: flex-start;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEnteryHeaderControls,
+    #WorldInfo.sb-shell-embedded-content #world_popup_entries_list .WIEnteryHeaderControls {
+        grid-template-columns: 1fr;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_entry_form_control.world_entry_form_horizontal {
+        align-items: flex-start;
+        gap: 8px 10px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .world_entry_form_horizontal h5 {
+        margin: 0 0 4px;
+        width: 100%;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryTitleAndStatus {
+        grid-template-columns: minmax(0, 1fr) 48px;
+    }
+
+    #WorldInfo.sb-shell-embedded-content .WIEntryTitleAndStatus select[name="entryStateSelector"] {
+        width: 48px;
+        min-width: 48px;
     }
 }

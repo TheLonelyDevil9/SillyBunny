@@ -1,96 +1,85 @@
 <div id="ica--settings" class="ica--settings">
-    <div class="inline-drawer wide100p flexFlowColumn">
-        <div class="inline-drawer-toggle inline-drawer-header">
-            <b>In-Chat Agents</b>
-            <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
-        </div>
-        <div class="inline-drawer-content" style="display:none">
-            <div class="ica--inner">
-                <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation. Toggle them on, tweak their prompts, or add your own.</p>
+    <div class="ica--inner">
+        <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation. Toggle them on, tweak their prompts, add your own, or use the robot button on a card to manually apply that agent to the last assistant reply.</p>
 
-                <div class="ica--toolbar">
-                    <div class="ica--toolbar-actions">
-                        <div id="ica--addAgent" class="menu_button menu_button_icon" title="Create a new agent from scratch">
-                            <i class="fa-solid fa-plus"></i>
-                            <span>New Agent</span>
-                        </div>
-                        <div id="ica--templates" class="menu_button menu_button_icon" title="Add pre-made agents from the template library">
-                            <i class="fa-solid fa-book-open"></i>
-                            <span>Templates</span>
-                        </div>
-                        <div id="ica--selectMode" class="menu_button menu_button_icon" title="Select multiple agents for bulk actions">
-                            <i class="fa-solid fa-check-square"></i>
-                            <span>Select</span>
-                        </div>
-                    </div>
-                    <div class="ica--toolbar-secondary">
-                        <div id="ica--importAgent" class="menu_button menu_button_icon" title="Import agent(s) from a JSON file">
-                            <i class="fa-solid fa-file-import"></i>
-                        </div>
-                        <div id="ica--exportAll" class="menu_button menu_button_icon" title="Export all agents to a file">
-                            <i class="fa-solid fa-file-export"></i>
-                        </div>
-                    </div>
+        <div class="ica--toolbar">
+            <div class="ica--toolbar-actions">
+                <div id="ica--addAgent" class="menu_button menu_button_icon" title="Create a new agent from scratch">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>New Agent</span>
                 </div>
-
-                <div id="ica--bulkBar" class="ica--bulk-bar" style="display:none">
-                    <div class="ica--bulk-bar-top">
-                        <span id="ica--bulkCount" class="ica--bulk-count">0 selected</span>
-                    </div>
-                    <div class="ica--bulk-bar-actions">
-                        <button type="button" id="ica--bulkSelectAll" class="menu_button menu_button_icon" title="Select all agents">
-                            <i class="fa-solid fa-check-double"></i> Select All
-                        </button>
-                        <button type="button" id="ica--bulkEnable" class="menu_button menu_button_icon" title="Enable selected agents">
-                            <i class="fa-solid fa-toggle-on"></i> Enable
-                        </button>
-                        <button type="button" id="ica--bulkDisable" class="menu_button menu_button_icon" title="Disable selected agents">
-                            <i class="fa-solid fa-toggle-off"></i> Disable
-                        </button>
-                        <button type="button" id="ica--bulkDelete" class="menu_button menu_button_icon caution" title="Delete selected agents">
-                            <i class="fa-solid fa-trash"></i> Delete
-                        </button>
-                        <button type="button" id="ica--bulkCancel" class="menu_button menu_button_icon" title="Cancel selection">
-                            <i class="fa-solid fa-xmark"></i> Cancel
-                        </button>
-                    </div>
+                <div id="ica--templates" class="menu_button menu_button_icon" title="Add pre-made agents from the template library">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Templates</span>
                 </div>
-
-                <div class="ica--filter">
-                    <input type="text" id="ica--search" class="text_pole" placeholder="Search agents..." />
-                    <select id="ica--categoryFilter" class="text_pole">
-                        <option value="">All</option>
-                        <option value="directive">Directive</option>
-                        <option value="formatting">Formatting</option>
-                        <option value="content">Content</option>
-                        <option value="tracker">Tracker</option>
-                        <option value="randomizer">Randomizer</option>
-                        <option value="guard">Guard</option>
-                        <option value="custom">Custom</option>
-                    </select>
+                <div id="ica--selectMode" class="menu_button menu_button_icon" title="Select multiple agents for bulk actions">
+                    <i class="fa-solid fa-check-square"></i>
+                    <span>Select</span>
                 </div>
-
-                <div id="ica--agentList" class="ica--agentList"></div>
-
-                <div class="ica--footer">
-                    <label class="ica--profile-label">
-                        <span>Default Connection Profile</span>
-                        <select id="ica--connectionProfile" class="text_pole" title="Which connection profile to use when an agent does not have its own editor profile override">
-                            <option value="">Use main AI</option>
-                        </select>
-                    </label>
-                    <label class="checkbox_label" title="Master switch for prompt pass toasts. Per-agent notification checkboxes still decide which agents can show them.">
-                        <input type="checkbox" id="ica--promptTransformShowNotifications" />
-                        <span>Allow prompt pass toast notifications</span>
-                    </label>
-                    <div id="ica--resetDefaults" class="menu_button menu_button_icon caution" title="Reset all bundled agents to their original template settings (custom agents are not affected)">
-                        <i class="fa-solid fa-rotate-left"></i>
-                        <span>Reset Bundled Agents to Defaults</span>
-                    </div>
+            </div>
+            <div class="ica--toolbar-secondary">
+                <div id="ica--importAgent" class="menu_button menu_button_icon" title="Import agent(s) from a JSON file">
+                    <i class="fa-solid fa-file-import"></i>
                 </div>
-
-                <input type="file" id="ica--importFile" accept=".json" style="display:none" />
+                <div id="ica--exportAll" class="menu_button menu_button_icon" title="Export all agents to a file">
+                    <i class="fa-solid fa-file-export"></i>
+                </div>
             </div>
         </div>
+
+        <div id="ica--bulkBar" class="ica--bulk-bar" style="display:none">
+            <div class="ica--bulk-bar-top">
+                <span id="ica--bulkCount" class="ica--bulk-count">0 selected</span>
+            </div>
+            <div class="ica--bulk-bar-actions">
+                <button type="button" id="ica--bulkSelectAll" class="menu_button menu_button_icon" title="Select all agents">
+                    <i class="fa-solid fa-check-double"></i> Select All
+                </button>
+                <button type="button" id="ica--bulkEnable" class="menu_button menu_button_icon" title="Enable selected agents">
+                    <i class="fa-solid fa-toggle-on"></i> Enable
+                </button>
+                <button type="button" id="ica--bulkDisable" class="menu_button menu_button_icon" title="Disable selected agents">
+                    <i class="fa-solid fa-toggle-off"></i> Disable
+                </button>
+                <button type="button" id="ica--bulkDelete" class="menu_button menu_button_icon caution" title="Delete selected agents">
+                    <i class="fa-solid fa-trash"></i> Delete
+                </button>
+                <button type="button" id="ica--bulkCancel" class="menu_button menu_button_icon" title="Cancel selection">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        </div>
+
+        <div class="ica--filter">
+            <input type="text" id="ica--search" class="text_pole" placeholder="Search agents..." />
+            <select id="ica--categoryFilter" class="text_pole">
+                <option value="">All</option>
+                <option value="tracker">Tracker</option>
+                <option value="randomizer">Randomizer</option>
+                <option value="content">Content</option>
+                <option value="custom">Custom</option>
+            </select>
+        </div>
+
+        <div id="ica--agentList" class="ica--agentList"></div>
+
+        <div class="ica--footer">
+            <label class="ica--profile-label">
+                <span>Default Connection Profile</span>
+                <select id="ica--connectionProfile" class="text_pole" title="Which connection profile to use when an agent does not have its own editor profile override. Leave this on the selected Connection Manager profile to follow the active profile.">
+                    <option value="">Use selected connection profile</option>
+                </select>
+            </label>
+            <label class="checkbox_label" title="Master switch for prompt pass toasts. Per-agent notification checkboxes still decide which agents can show them.">
+                <input type="checkbox" id="ica--promptTransformShowNotifications" />
+                <span>Allow prompt pass toast notifications</span>
+            </label>
+            <div id="ica--resetDefaults" class="menu_button menu_button_icon caution" title="Reset all bundled agents to their original template settings (custom agents are not affected)">
+                <i class="fa-solid fa-rotate-left"></i>
+                <span>Reset Bundled Agents to Defaults</span>
+            </div>
+        </div>
+
+        <input type="file" id="ica--importFile" accept=".json" style="display:none" />
     </div>
 </div>

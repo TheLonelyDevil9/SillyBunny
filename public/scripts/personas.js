@@ -259,6 +259,7 @@ export async function getUserAvatars(doRender = true, openPageAt = '') {
 
         const storageKey = 'Personas_PerPage';
         const listId = '#user_avatar_block';
+        const listScrollerId = '#persona_management_list_scroller';
         const perPage = Number(accountStorage.getItem(storageKey)) || 5;
         const sizeChangerOptions = [5, 10, 25, 50, 100, 250, 500, 1000];
 
@@ -292,6 +293,7 @@ export async function getUserAvatars(doRender = true, openPageAt = '') {
                 savePersonasPage = e;
             },
             afterRender: function () {
+                $(listScrollerId).scrollTop(0);
                 $(listId).scrollTop(0);
             },
         });

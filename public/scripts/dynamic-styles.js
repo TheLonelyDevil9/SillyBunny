@@ -25,6 +25,42 @@ const observer = new MutationObserver(mutations => {
     });
 });
 
+function isIgnorableCssRuleAccessError(error) {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+
+    return error.name === 'SecurityError'
+        || error.name === 'NotAllowedError'
+        || /cssrules/i.test(String(error.message));
+}
+
+function getReadableCssRules(styleSheet) {
+    if (!styleSheet) {
+        return null;
+    }
+
+    try {
+        return styleSheet.cssRules;
+    } catch (error) {
+        if (isIgnorableCssRuleAccessError(error)) {
+            return null;
+        }
+
+        throw error;
+    }
+}
+
+function canGenerateDynamicFocusSelector(selector) {
+    const hoverIndex = selector.indexOf(':hover');
+
+    if (hoverIndex === -1) {
+        return false;
+    }
+
+    return selector.lastIndexOf('::', hoverIndex) === -1;
+}
+
 /**
  * Generates dynamic focus styles based on the given stylesheet, taking its hover styles as reference
  *
@@ -34,7 +70,7 @@ const observer = new MutationObserver(mutations => {
  */
 function applyDynamicFocusStyles(styleSheet, { fromExtension = false } = {}) {
     /** @typedef {{ type: 'media'|'supports'|'container', conditionText: string }} WrapperCond */
-    /** @type {{baseSelector: string, rule: CSSStyleRule, wrappers: WrapperCond[]}[]} */
+    /** @type {{baseSelector: string, selector: string, styleText: string, wrappers: WrapperCond[]}[]} */
     const hoverRules = [];
     /** @type {Set<string>} */
     const focusRules = new Set();
@@ -74,8 +110,12 @@ function applyDynamicFocusStyles(styleSheet, { fromExtension = false } = {}) {
                     if (isHover && isFocus) {
                         // We currently do nothing here. Rules containing both hover and focus are very specific and should never be automatically touched
                     } else if (isHover) {
+                        if (!canGenerateDynamicFocusSelector(selector)) {
+                            return;
+                        }
+
                         const baseSelector = selector.replace(/:hover/g, PLACEHOLDER).trim();
-                        hoverRules.push({ baseSelector, rule, wrappers: [...wrappers] });
+                        hoverRules.push({ baseSelector, selector, styleText: rule.style.cssText, wrappers: [...wrappers] });
                     } else if (isFocus) {
                         // We need to make sure that we remember all existing :focus, :focus-within and :focus-visible rules
                         const baseSelector = selector.replace(/:focus(-within|-visible)?/g, PLACEHOLDER).trim();
@@ -88,7 +128,7 @@ function applyDynamicFocusStyles(styleSheet, { fromExtension = false } = {}) {
             } else if (rule instanceof CSSSupportsRule) {
                 // Recursively process nested @supports rules
                 processRules(rule.cssRules, [...wrappers, { type: 'supports', conditionText: rule.conditionText }]);
-            } else if (rule instanceof window.CSSContainerRule) {
+            } else if (typeof window.CSSContainerRule === 'function' && rule instanceof window.CSSContainerRule) {
                 // Recursively process nested @container rules (if supported by the browser)
                 // Note: conditionText contains the query like "(min-width: 300px)" or "style(color)"
                 // Using 'container' as the type ensures uniqueness separate from @media/@supports
@@ -103,18 +143,24 @@ function applyDynamicFocusStyles(styleSheet, { fromExtension = false } = {}) {
      * @param {WrapperCond[]} wrappers - Wrapper conditions inherited from (at)import media
      */
     function processImportedStylesheet(sheet, wrappers = []) {
-        if (sheet && sheet.cssRules) {
-            processRules(sheet.cssRules, wrappers);
+        const rules = getReadableCssRules(sheet);
+        if (rules) {
+            processRules(rules, wrappers);
         }
     }
 
-    processRules(styleSheet.cssRules, []);
+    const rules = getReadableCssRules(styleSheet);
+    if (!rules) {
+        return;
+    }
+
+    processRules(rules, []);
 
     /** @type {CSSStyleSheet} */
     let targetStyleSheet = null;
 
     // Now finally create the dynamic focus rules
-    hoverRules.forEach(({ baseSelector, rule, wrappers }) => {
+    hoverRules.forEach(({ baseSelector, selector, styleText, wrappers }) => {
         if (!focusRules.has(`${baseSelector}|${wrapperSignature(wrappers)}`)) {
             // Only initialize the dynamic stylesheet if needed
             targetStyleSheet ??= getDynamicStyleSheet({ fromExtension });
@@ -125,8 +171,8 @@ function applyDynamicFocusStyles(styleSheet, { fromExtension = false } = {}) {
             // :focus-visible counterpart, which will make the styling work the same for keyboard and mouse.
             // If something like :focus-within or a more specific selector like `.blah:has(:focus-visible)` for elements inside,
             // it should be manually defined in CSS.
-            const focusSelector = rule.selectorText.replace(/:hover/g, ':focus-visible');
-            let focusRule = `${focusSelector} { ${rule.style.cssText} }`;
+            const focusSelector = selector.replace(/:hover/g, ':focus-visible');
+            let focusRule = `${focusSelector} { ${styleText} }`;
 
             // Wrap the generated rule into the same @media/@supports/@container chain (if any)
             if (wrappers.length > 0) {

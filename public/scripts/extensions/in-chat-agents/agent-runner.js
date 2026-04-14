@@ -1,22 +1,30 @@
 import {
     chat,
     chat_metadata,
+    ensureSwipes,
     extension_prompts,
     setExtensionPrompt,
     substituteParams,
     generateQuietPrompt,
     saveChatDebounced,
     streamingProcessor,
+    syncMesToSwipe,
 } from '../../../script.js';
 import { getContext } from '../../extensions.js';
 import { eventSource, event_types } from '../../events.js';
-import { getAgentById, getAgentRegexScripts, getEnabledAgents, getGlobalSettings } from './agent-store.js';
+import {
+    DEFAULT_AGENT_MAX_TOKENS,
+    getAgentById,
+    getAgentRegexScripts,
+    getEnabledAgents,
+    resolveConnectionProfile,
+} from './agent-store.js';
 
 const PROMPT_KEY_PREFIX = 'inchat_agent_';
 const MESSAGE_EXTRA_KEY = 'inChatAgents';
 const PROMPT_RUNS_EXTRA_KEY = 'inChatAgentPromptRuns';
 const pendingRefreshTimeouts = new Map();
-const DEFAULT_PROMPT_TRANSFORM_MAX_TOKENS = 2000;
+const DEFAULT_PROMPT_TRANSFORM_MAX_TOKENS = DEFAULT_AGENT_MAX_TOKENS;
 const GREETING_GENERATION_TYPE = 'first_message';
 
 /** @type {{ generationType: string, activeAgentIds: string[] } | null} */
@@ -231,13 +239,7 @@ function normalizePromptTransformMaxTokens(value) {
 }
 
 function resolveAgentConnectionProfile(agent) {
-    const agentProfileId = String(agent?.connectionProfile ?? '').trim();
-    if (agentProfileId) {
-        return agentProfileId;
-    }
-
-    const defaultProfileId = String(getGlobalSettings()?.connectionProfile ?? '').trim();
-    return defaultProfileId || '';
+    return resolveConnectionProfile(agent?.connectionProfile);
 }
 
 function getPromptTransformAgents(activeAgents) {
@@ -283,6 +285,60 @@ function describePromptTransformTarget(profileId = '', runner = '') {
     }
 
     return 'the main model';
+}
+
+function showPromptTransformRunningToast(agent, mode, profileId = '') {
+    const agentName = agent?.name || 'In-Chat Agent';
+    const modeLabel = describePromptTransformMode(mode);
+    const targetLabel = describePromptTransformTarget(profileId, profileId ? 'profile' : 'main');
+
+    return toastr.info(`Running ${modeLabel} via ${targetLabel}...`, agentName, {
+        timeOut: 0,
+        extendedTimeOut: 0,
+        tapToDismiss: false,
+        closeButton: false,
+        escapeHtml: true,
+    });
+}
+
+function clearPromptTransformRunningToast(toast) {
+    if (!toast) {
+        return;
+    }
+
+    toastr.clear(toast);
+}
+
+async function commitOpenEditorForMessage(messageIndex) {
+    if (!Number.isInteger(Number(messageIndex))) {
+        return;
+    }
+
+    const editorDoneButton = $(`.mes[mesid="${Number(messageIndex)}"] .mes_edit_done:visible`).first();
+    if (!editorDoneButton.length) {
+        return;
+    }
+
+    editorDoneButton.trigger('click');
+    await Promise.resolve();
+}
+
+function syncPromptTransformMessageState(message, messageIndex) {
+    if (!message || message.is_user || message.is_system) {
+        return;
+    }
+
+    if (message.extra?.display_text) {
+        delete message.extra.display_text;
+    }
+
+    ensureSwipes(message);
+
+    if (typeof message.swipe_id === 'number' && Array.isArray(message.swipes) && typeof message.swipes[message.swipe_id] === 'string') {
+        message.swipes[message.swipe_id] = message.mes;
+    }
+
+    syncMesToSwipe(messageIndex);
 }
 
 function showPromptTransformResultToast(agent, result) {
@@ -378,6 +434,71 @@ function appendPromptTransformOutput(originalText, appendedText) {
     return `${baseText}\n\n${addition}`;
 }
 
+function extractProfileResponseText(response) {
+    if (typeof response === 'string') {
+        return response;
+    }
+
+    return typeof response?.content === 'string'
+        ? response.content
+        : (response?.toString?.() || '');
+}
+
+function buildFallbackPromptText(promptMessages) {
+    return promptMessages
+        .map(message => `${String(message?.role ?? 'user').toUpperCase()}:\n${String(message?.content ?? '')}`)
+        .join('\n\n');
+}
+
+async function requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens) {
+    const requestOptions = {
+        extractData: true,
+        includePreset: true,
+        includeInstruct: true,
+        stream: false,
+    };
+
+    try {
+        const primaryResponse = await CMRS.sendRequest(profileId, promptMessages, maxTokens, requestOptions);
+        const primaryOutput = extractProfileResponseText(primaryResponse);
+        if (primaryOutput.trim()) {
+            return {
+                output: primaryOutput,
+                runner: 'profile',
+                profileId,
+            };
+        }
+    } catch (error) {
+        console.warn(`[InChatAgents] Primary prompt transform request via profile "${profileId}" failed, retrying with fallback prompt formatting.`, error);
+    }
+
+    let fallbackPrompt = '';
+    if (typeof CMRS.constructPrompt === 'function') {
+        try {
+            fallbackPrompt = String(CMRS.constructPrompt(promptMessages, profileId) ?? '');
+        } catch (error) {
+            console.warn(`[InChatAgents] Failed to construct fallback prompt for profile "${profileId}".`, error);
+        }
+    }
+
+    if (!fallbackPrompt.trim()) {
+        fallbackPrompt = buildFallbackPromptText(promptMessages);
+    }
+
+    const fallbackResponse = await CMRS.sendRequest(profileId, fallbackPrompt, maxTokens, {
+        extractData: true,
+        includePreset: true,
+        includeInstruct: false,
+        stream: false,
+    });
+
+    return {
+        output: extractProfileResponseText(fallbackResponse),
+        runner: 'profile',
+        profileId,
+    };
+}
+
 async function requestPromptTransform(agent, promptMessages, maxTokens) {
     const profileId = resolveAgentConnectionProfile(agent);
     const context = getContext();
@@ -388,20 +509,7 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
             throw new Error(`Connection profile "${profileId}" is set, but Connection Manager is unavailable.`);
         }
 
-        const response = await CMRS.sendRequest(profileId, promptMessages, maxTokens, {
-            extractData: true,
-            includePreset: true,
-            includeInstruct: true,
-            stream: false,
-        });
-
-        return {
-            output: typeof response === 'string'
-                ? response
-                : (response?.content || response?.toString() || ''),
-            runner: 'profile',
-            profileId,
-        };
+        return await requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens);
     }
 
     const quietPrompt = promptMessages
@@ -436,7 +544,7 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
     }
 }
 
-async function runPromptTransformAgent(agent, message, generationType, messageTextOverride = null) {
+async function runPromptTransformAgent(agent, message, generationType, messageTextOverride = null, messageIndex = null) {
     const currentMessageText = messageTextOverride !== null ? String(messageTextOverride) : String(message?.mes ?? '');
     const normalizedGenerationType = normalizeGenerationType(generationType);
     const promptTransformMode = getPromptTransformMode(agent);
@@ -486,6 +594,9 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
         normalizedGenerationType,
         promptTransformMode,
     );
+    const runningToast = showNotifications
+        ? showPromptTransformRunningToast(agent, promptTransformMode, profileId)
+        : null;
 
     try {
         const maxTokens = normalizePromptTransformMaxTokens(agent.postProcess?.promptTransformMaxTokens);
@@ -518,6 +629,7 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
         const changed = nextMessageText !== currentMessageText;
         if (changed) {
             message.mes = nextMessageText;
+            syncPromptTransformMessageState(message, messageIndex);
         }
 
         console.info(`[InChatAgents] ${describePromptTransformMode(promptTransformMode)} agent "${agent.name}" ran via ${response.runner === 'profile' ? `profile "${response.profileId}"` : 'the main model'}${changed ? ' and changed the message.' : ' with no text change.'}`);
@@ -557,6 +669,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
         }
 
         return result;
+    } finally {
+        clearPromptTransformRunningToast(runningToast);
     }
 }
 
@@ -711,7 +825,7 @@ async function processReceivedMessage(messageIndex, generationType) {
 
     const originalMessageText = String(message.mes ?? '');
     const settledRuns = await Promise.allSettled(
-        promptTransformAgents.map(agent => runPromptTransformAgent(agent, message, generationType, originalMessageText)),
+        promptTransformAgents.map(agent => runPromptTransformAgent(agent, message, generationType, originalMessageText, messageIndex)),
     );
     const promptRuns = settledRuns.map(r =>
         r.status === 'fulfilled'
@@ -846,6 +960,8 @@ export async function runAgentOnMessage(agentId, messageIndex) {
         return null;
     }
 
+    await commitOpenEditorForMessage(messageIndex);
+
     const agent = getAgentById(agentId);
     if (!agent) {
         toastr.error('Agent not found.');
@@ -858,7 +974,7 @@ export async function runAgentOnMessage(agentId, messageIndex) {
     }
 
     const generationType = 'normal';
-    const result = await runPromptTransformAgent(agent, message, generationType);
+    const result = await runPromptTransformAgent(agent, message, generationType, null, messageIndex);
 
     if (updatePromptTransformRuns(message, [result])) {
         saveChatDebounced();

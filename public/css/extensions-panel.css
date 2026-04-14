@@ -19,6 +19,19 @@ label[for="extensions_autoconnect"] {
     margin: 0 !important;
 }
 
+label[for="extensions_notify_updates"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 !important;
+}
+
+label[for="extensions_notify_updates"] input[type="checkbox"] {
+    margin: 0;
+    flex: 0 0 auto;
+    align-self: center;
+}
+
 .extensions_url_block {
     display: flex;
     align-items: center;
@@ -160,7 +173,7 @@ input.extension_missing[type="checkbox"] {
 #rm_extensions_block .extensions_block > .alignitemscenter.flex-container.wide100p > label[for='extensions_notify_updates'] {
     flex: 1 1 280px;
     min-width: min(100%, 280px);
-    align-items: flex-start;
+    align-items: center;
 }
 
 #rm_extensions_block .extensions_block > .alignitemscenter.flex-container.wide100p > label[for='extensions_notify_updates'] > span {

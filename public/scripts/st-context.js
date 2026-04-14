@@ -69,6 +69,7 @@ import {
     scrollOnMediaLoad,
     getOneCharacter,
     getCharacterSource,
+    user_avatar,
 } from '../script.js';
 import {
     extension_settings,
@@ -118,6 +119,7 @@ export function getContext() {
         groups,
         name1,
         name2,
+        userAvatar: user_avatar,
         characterId: this_chid,
         groupId: selected_group,
         chatId: selected_group

@@ -3797,6 +3797,15 @@
                             <div class="flex-container">
                                 <select id="model_custom_select" class="text_pole model_custom_select"></select>
                             </div>
+                            <div class="range-block">
+                                <label class="checkbox_label widthFreeExpand" for="custom_model_icon_detection">
+                                    <input id="custom_model_icon_detection" type="checkbox">
+                                    <span data-i18n="Auto-detect message icon from model name">Auto-detect message icon from model name</span>
+                                </label>
+                                <small data-i18n="Use the custom model name to pick a closer timestamp icon while keeping the provider label as Custom.">
+                                    Use the custom model name to pick a closer timestamp icon while keeping the provider label as Custom.
+                                </small>
+                            </div>
                         </form>
                         <div id="xai_form" data-source="xai">
                             <h4>
@@ -4853,7 +4862,27 @@
                                 <div id="world_info_pagination"></div>
                             </div>
                         </div>
-                        <div id="world_popup_entries_list">
+                        <div id="world_popup_workspace" class="sb-workspace-split">
+                            <div id="world_popup_entries_column" class="sb-workspace-pane sb-workspace-list-pane">
+                                <div id="world_popup_entries_list">
+                                </div>
+                            </div>
+                            <aside id="world_popup_editor_pane" class="sb-workspace-pane sb-workspace-editor-pane" aria-live="polite">
+                                <div id="world_popup_editor_header">
+                                    <div class="world_popup_editor_heading">
+                                        <small data-i18n="Editor">Editor</small>
+                                        <strong id="world_popup_editor_title" data-i18n="No entry selected">No entry selected</strong>
+                                        <span id="world_popup_editor_uid" class="text_muted"></span>
+                                    </div>
+                                    <button id="world_popup_editor_close" class="menu_button menu_button_icon" type="button" title="Close entry editor" aria-label="Close entry editor">
+                                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div id="world_popup_editor_empty" class="sb-workspace-empty" data-i18n="Select an entry to edit its keywords and content">
+                                    Select an entry to edit its keywords and content
+                                </div>
+                                <div id="world_popup_editor_host"></div>
+                            </aside>
                         </div>
                     </div>
                 </div>
@@ -6109,8 +6138,10 @@
                                 <div id="persona_pagination_container" class="flex1"></div>
                                 <i id="persona_grid_toggle" class="fa-solid fa-table-cells-large menu_button" data-i18n="[title]Toggle grid view" title="Toggle grid view"></i>
                             </div>
-                            <div id="user_avatar_block" data-i18n="[no_desc_text]No persona description" no_desc_text="[No description]">
-                                <div class="avatar_upload">+</div>
+                            <div id="persona_management_list_scroller">
+                                <div id="user_avatar_block" data-i18n="[no_desc_text]No persona description" no_desc_text="[No description]">
+                                    <div class="avatar_upload">+</div>
+                                </div>
                             </div>
                             <form id="form_upload_avatar" action="javascript:void(null);" method="post" enctype="multipart/form-data">
                                 <input type="file" id="avatar_upload_file" accept="image/*" name="avatar">
@@ -7631,17 +7662,20 @@
                             </div>
                         </div>
                         <div class="completion_prompt_manager_popup_entry_form_control">
-                            <div class="flex-container alignItemsCenter" data-i18n="[external_piece_text]The content of this prompt is pulled from elsewhere and cannot be edited here." external_piece_text="The content of this prompt is pulled from elsewhere and cannot be edited here.">
+                            <div class="completion_prompt_manager_prompt_header flex-container alignItemsCenter" data-i18n="[external_piece_text]The content of this prompt is pulled from elsewhere and cannot be edited here." external_piece_text="The content of this prompt is pulled from elsewhere and cannot be edited here.">
                                 <div class="flex1">
                                     <label for="completion_prompt_manager_popup_entry_form_prompt">
                                         <span data-i18n="Prompt">Prompt</span>
                                     </label>
                                 </div>
-                                <div id="completion_prompt_manager_forbid_overrides_block">
-                                    <label class="checkbox_label" for="completion_prompt_manager_popup_entry_form_forbid_overrides" title="This prompt cannot be overridden by character cards, even if overrides are preferred." data-i18n="[title]This prompt cannot be overridden by character cards, even if overrides are preferred.">
-                                        <input type="checkbox" id="completion_prompt_manager_popup_entry_form_forbid_overrides" name="forbid_overrides" />
-                                        <span data-i18n="prompt_manager_forbid_overrides">Forbid Overrides</span>
-                                    </label>
+                                <div class="completion_prompt_manager_prompt_header_actions">
+                                    <i class="editor_maximize fa-solid fa-maximize right_menu_button completion_prompt_manager_editor_maximize" data-for="completion_prompt_manager_popup_entry_form_prompt" title="Expand the editor" data-i18n="[title]Expand the editor"></i>
+                                    <div id="completion_prompt_manager_forbid_overrides_block">
+                                        <label class="checkbox_label" for="completion_prompt_manager_popup_entry_form_forbid_overrides" title="This prompt cannot be overridden by character cards, even if overrides are preferred." data-i18n="[title]This prompt cannot be overridden by character cards, even if overrides are preferred.">
+                                            <input type="checkbox" id="completion_prompt_manager_popup_entry_form_forbid_overrides" name="forbid_overrides" />
+                                            <span data-i18n="prompt_manager_forbid_overrides">Forbid Overrides</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                             <div id="completion_prompt_manager_popup_entry_source_block">

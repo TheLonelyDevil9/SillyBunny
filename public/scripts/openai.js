@@ -29,6 +29,7 @@ import {
     startStatusLoading,
     substituteParams,
     substituteParamsExtended,
+    refreshMessageModelIcons,
     system_message_types,
     this_chid,
 } from '../script.js';
@@ -351,6 +352,7 @@ export const settingsToUpdate = {
     fireworks_model: ['#model_fireworks_select', 'fireworks_model', false, true],
     cometapi_model: ['#model_cometapi_select', 'cometapi_model', false, true],
     custom_model: ['#custom_model_id', 'custom_model', false, true],
+    custom_model_icon_detection: ['#custom_model_icon_detection', 'custom_model_icon_detection', true, true],
     custom_url: ['#custom_api_url_text', 'custom_url', false, true],
     custom_include_body: ['#custom_include_body', 'custom_include_body', false, true],
     custom_exclude_body: ['#custom_exclude_body', 'custom_exclude_body', false, true],
@@ -467,6 +469,7 @@ const default_settings = {
     azure_api_version: '2024-02-15-preview',
     azure_openai_model: '',
     custom_model: '',
+    custom_model_icon_detection: false,
     custom_url: '',
     custom_include_body: '',
     custom_exclude_body: '',
@@ -6820,7 +6823,7 @@ async function testApiConnection() {
     }
 }
 
-function reconnectOpenAi() {
+export function reconnectOpenAi() {
     if (main_api == 'openai') {
         setOnlineStatus('no_connection');
         resultCheckStatus();
@@ -7717,6 +7720,12 @@ export function initOpenAI() {
 
     $('#custom_model_id').on('input', function () {
         oai_settings.custom_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#custom_model_icon_detection').on('input', function () {
+        oai_settings.custom_model_icon_detection = !!$(this).prop('checked');
+        refreshMessageModelIcons();
         saveSettingsDebounced();
     });
 

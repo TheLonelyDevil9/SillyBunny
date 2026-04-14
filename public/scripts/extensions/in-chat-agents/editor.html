@@ -8,12 +8,9 @@
         <div class="ica--editor-row flex-container flexGap5">
             <label class="flex1">Category
                 <select id="ica--editor-category" class="text_pole">
-                    <option value="directive">Directive</option>
-                    <option value="formatting">Formatting</option>
-                    <option value="content">Content</option>
                     <option value="tracker">Tracker</option>
                     <option value="randomizer">Randomizer</option>
-                    <option value="guard">Guard</option>
+                    <option value="content">Content</option>
                     <option value="custom">Custom</option>
                 </select>
             </label>
@@ -43,7 +40,7 @@
         <div class="ica--editor-row">
             <label>Connection Profile <small>(used when refining this agent with AI and for prompt-based post-generation rewrites)</small>
                 <select id="ica--editor-connectionProfile" class="text_pole">
-                    <option value="">Use default connection profile</option>
+                    <option value="">Use extension default</option>
                 </select>
             </label>
         </div>
@@ -116,7 +113,7 @@
                     </select>
                 </label>
                 <label class="flex1">Max Tokens
-                    <input type="number" id="ica--editor-pp-promptMaxTokens" class="text_pole" min="16" max="16000" value="2000" />
+                    <input type="number" id="ica--editor-pp-promptMaxTokens" class="text_pole" min="16" max="16000" value="8192" />
                 </label>
             </div>
             <label class="checkbox_label">

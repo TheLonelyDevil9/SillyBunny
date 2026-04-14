@@ -167,21 +167,26 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Agents can run **prompt transforms** in `rewrite` or `append` mode
 - Agents can be bundled into **Agent Groups** for one-click setup
 
-**What ships with v1.3.2:**
+**What ships with v1.3.3:**
 
-- **31 bundled templates** based on Pura's Director Preset ecosystem
-- Trackers, randomisers, directives, formatting helpers, anti-slop, and content toggles
+- **29 bundled templates** based on Pura's Director Preset ecosystem
+- Trackers, randomisers, content helpers, and custom prompt toggles
+- Simplified categories: **Tracker**, **Randomizer**, **Content**, and **Custom**
+- Direction Menu and CYOA Choices now live in Tracker and their generated options can be clicked into the message box
+- Bundled **Prose Polisher** post-generation agent by Geechan
 - Built-in groups for the full preset, trackers only, and randomisers only
-- ST-style regex options for bundled and custom agents
-- Per-agent and global prompt-transform toast notifications
+- ST-style regex options for custom agents
+- Toast notifications while prompt-transform agents run
 - Inline run-order editing directly from the agent cards
-- Prompt-transform greeting protection: greeting messages are intentionally left alone
+- Fullscreen prompt editors and click-to-edit agent cards
 
-**Bundled defaults in v1.3.2:**
+**Bundled defaults in v1.3.3:**
 
 - Bundled trackers are set up for **post-generation prompt append**
-- Bundled regex-backed helpers default to **post-generation**
-- `Anti-Slop Regex` remains the exception and stays a straightforward cleanup tool
+- Agents use the main connection profile by default, with separate profile support when explicitly selected
+- Agent connection profiles default to **8192 max tokens**
+- Prose Polisher is pickable by default as a post-generation pass that can rewrite the current message
+- Prompt transforms can target edited or user-supplied text, not only freshly generated AI messages
 - Pura's Director Preset now ships in **two versions**:
   - **SillyTavern** version: includes the Toggle and Randomiser prompts
   - **SillyBunny** version: keeps the Main, Primary Toggles, and Prefill Toggles, because Agents cover the optional toggles and randomisers
@@ -192,57 +197,120 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 ## UI preview
 
-These screenshots show the `v1.3.2` shell on desktop and mobile.
+These screenshots show the `v1.3.3` shell across Navigate, Customize, Agents, and Characters on desktop and mobile, plus the same views with Moonlit Echoes enabled.
 
-#### Desktop
+#### Default shell
 
-![SillyBunny desktop home](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-home-v1.2.8.png)
+##### Desktop
 
-![SillyBunny desktop customization](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-customize-v1.2.8.png)
+![SillyBunny desktop Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-navigate-v1.3.3.png)
 
-#### Mobile
+![SillyBunny desktop Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-customize-v1.3.3.png)
 
-![SillyBunny mobile home](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-home-v1.2.8.png)
+![SillyBunny desktop Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-agents-v1.3.3.png)
 
-![SillyBunny mobile customization](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-customize-v1.2.8.png)
+![SillyBunny desktop Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-characters-v1.3.3.png)
+
+##### Mobile
+
+![SillyBunny mobile Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-navigate-v1.3.3.png)
+
+![SillyBunny mobile Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-customize-v1.3.3.png)
+
+![SillyBunny mobile Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-agents-v1.3.3.png)
+
+![SillyBunny mobile Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-characters-v1.3.3.png)
+
+#### Moonlit Echoes enabled
+
+##### Desktop
+
+![SillyBunny Moonlit desktop Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-desktop-navigate-v1.3.3.png)
+
+![SillyBunny Moonlit desktop Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-desktop-customize-v1.3.3.png)
+
+![SillyBunny Moonlit desktop Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-desktop-agents-v1.3.3.png)
+
+![SillyBunny Moonlit desktop Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-desktop-characters-v1.3.3.png)
+
+##### Mobile
+
+![SillyBunny Moonlit mobile Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-mobile-navigate-v1.3.3.png)
+
+![SillyBunny Moonlit mobile Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-mobile-customize-v1.3.3.png)
+
+![SillyBunny Moonlit mobile Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-mobile-agents-v1.3.3.png)
+
+![SillyBunny Moonlit mobile Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-moonlit-mobile-characters-v1.3.3.png)
 
 ---
 
 ## Changelog
 
-### v1.3.2 (2026-04-13)
+### v1.3.3 (2026-04-14)
 
-**UI/UX overhaul**
+**Shell and responsive UI**
 
 - Redesigned shell panels: centered on screen, narrower (900px max), horizontal tab bar at top instead of vertical sidebar
-- Centered shell animations: all shells now open with a scale+fade from center, replacing the directional slide-in
+- Centered shell animations: Navigate, Customize, and Characters now open with a scale-and-fade from center
 - Rearranged top bar: Navigate + Customize on the left, Home + Characters on the right, removed duplicate API button
 - Added customizable quick-access shortcut buttons in the top bar (configurable in Settings)
+- Added desktop corner resizing for Navigate and Customize, with saved panel sizes after refresh
+- Drawer open/closed state now persists across refreshes
 - Removed the optional chatbar overlay; integrated chat management (select, new, rename, delete) into the bottom bar
-- Added persona quick-access bubble next to the chat input with popup picker
+- Added persona quick-access bubble next to the chat input with popup picker and automatic selected-persona highlighting
+- Added a dedicated persona-list scroll area so the persona editor stays reachable
 - Added bottom bar size slider (replaces the desktop top bar size slider)
-- Home screen defaults to First Steps tab with launchpad collapsed; renamed "Replay Tutorial" to "Show Launchpad"
+- Rebalanced desktop, lower-resolution desktop, and mobile spacing so shell menus, World Info, prompt editors, and bottom-bar controls flex more consistently
+- Aligned flat and bubble chat layouts so User and Assistant labels sit cleanly
+
+**Home, Launchpad, and starter pack**
+
+- Home screen defaults to First Steps with the Launchpad collapsed until opened
+- Renamed "Replay Tutorial" to "Open Launchpad"
 - Added "Chat with Assistant Nahida" button on the home screen alongside "Open Assistant"
 - Assistant Nahida is now created at app startup so she appears in the character list by default
 - Starter pack split into "Pre-installed" and "Optional installs" sections with clearer wording
 - Added Summary Sharder and Guided Generations (forked) to the optional installs in the starter pack
 - Bundled Memory Sharding Quick Reply preset for chat summarisation
+- Updated the Geechan starter-pack card to credit Assistant Nahida and Prose Polisher
+- Replaced the README screenshots with fresh Navigate, Customize, Agents, and Characters screenshots for desktop, mobile, and Moonlit Echoes
 
-**Agent mode changes**
+**Agents**
 
 - Removed Agent Mode orchestration (retrieval/memory/lorebook services) to match the "intentionally lightweight" philosophy
-- Kept In-Chat Agents as a standalone tab with its own settings panel
+- Removed the extra In-Chat Agents drawer so the Agents page opens directly into the standalone agent interface
 - Recommended Summary Sharder extension as the memory solution in the starter pack
+- Curated the bundled agent list down to Tracker, Randomizer, Content, and Custom categories
+- Moved Direction Menu and CYOA Choices into Tracker and made generated choices clickable into the message box
+- Bundled Geechan's Prose Polisher as a default post-generation "Rewrite current message" agent
+- Credited bundled agents to Purachina, with Prose Polisher credited to Geechan
+- Added running-agent toast notifications and clearer manual robot-button wording
+- Fixed disabled agent buttons still being selectable
+- Fixed Default/main connection profile handling for agents, including separate profile runs and 8192 default max tokens
+- Fixed agents silently failing on edited or user-supplied text that was not freshly generated by the AI
+- Agent cards now open in the editor when clicked, not only through the pencil icon
+- Added fullscreen buttons to text editors
 
-**Bug fixes**
+**Connection and extension fixes**
 
 - Fixed stop generation button: `onStopStreaming()` now properly sets `isStopped` flag to prevent generation from appearing to complete normally
 - Fixed story branching performance: replaced deep `structuredClone` of entire chat with shallow copy, only deep-cloning the target message when swipe selection requires it
 - Fixed `applyBundledOptInDefaults()` always returning true (`return true || changed` → `return changed`)
 - Fixed CLIENT_VERSION format: removed `v` prefix so `versionCompare()` works correctly with extensions that specify `minimum_client_version`
 - Fixed circular dependency TDZ errors in GuidedGenerations, TunnelVision, Quick Reply, and TTS extensions
+- Fixed OpenRouter connection state being forgotten after page reload
+- Fixed TunnelVision settings not saving and lorebook search failing
+- Fixed extension drawer state and extension enable/disable persistence across refreshes
+- Aligned the Extensions panel update-notification checkbox and label
 - Fixed duplicate TTS settings panel by adding init guard
 - Fixed shell search results showing generic "Extensions" label instead of actual extension/section names
+- Fixed persona search duplicate results
+- Fixed the greeting/first message edit button
+- Fixed double-clicking message action dots selecting the Home button
+- Added custom OpenAI-compatible model-name auto-detection for matching provider icons
+- Fixed current chat not auto-selecting in chat pickers
+- Fixed prompt alignment for prompts that can and cannot be sent to in-chat agents
 - Added single-dropdown-at-a-time enforcement via `closeAllDropdowns()`
 
 **Platform support**

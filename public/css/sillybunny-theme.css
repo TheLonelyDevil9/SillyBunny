@@ -132,6 +132,29 @@ body {
     text-rendering: optimizeLegibility;
 }
 
+.mes_text .pura-choice,
+.mes_text .pura-direction {
+    cursor: pointer;
+    transition:
+        transform var(--sb-transition-fast),
+        background-color var(--sb-transition-fast),
+        box-shadow var(--sb-transition-fast),
+        border-color var(--sb-transition-fast);
+}
+
+.mes_text .pura-choice:hover,
+.mes_text .pura-direction:hover {
+    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--sb-button-hover) 54%, rgba(255, 255, 255, 0.06)) !important;
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--SmartThemeShadowColor) 18%, transparent);
+}
+
+.mes_text .pura-choice:active,
+.mes_text .pura-direction:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--SmartThemeShadowColor) 12%, transparent);
+}
+
 body::before {
     content: '';
     position: fixed;
@@ -615,7 +638,7 @@ body.bubblechat .mes[is_user='true']::before {
 body.flatchat .mes[is_user='true'] .mes_block,
 body.bubblechat .mes[is_user='true'] .mes_block {
     border-left: 0;
-    padding-left: 0;
+    padding-left: 10px;
 }
 
 @media screen and (max-width: 1000px) {
@@ -1476,6 +1499,15 @@ input[type='range']::-moz-range-thumb {
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
 }
 
+#persona_management_list_scroller {
+    width: 100%;
+    min-height: 0;
+    max-height: clamp(16rem, 40vh, 30rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
 #user_avatar_block {
     display: flex;
     flex-direction: column;
@@ -1484,6 +1516,13 @@ input[type='range']::-moz-range-thumb {
     justify-content: flex-start;
     gap: 12px;
     padding: 0;
+}
+
+#user_avatar_block.gridView {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
 }
 
 #user_avatar_block:not(.gridView) .avatar-container {
@@ -1762,6 +1801,13 @@ input[type='range']::-moz-range-thumb {
     #PersonaManagement .persona-management-browser > #persona_sort_order,
     #PersonaManagement .persona-management-browser > #persona_grid_toggle {
         width: 100%;
+    }
+
+    #persona_management_list_scroller {
+        max-height: none;
+        overflow-y: visible;
+        overscroll-behavior: auto;
+        scrollbar-gutter: auto;
     }
 }
 

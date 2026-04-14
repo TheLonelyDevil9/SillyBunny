@@ -116,7 +116,7 @@
     --sb-mobile-tools-section-title-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-section-title-scale-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-status-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-status-scale-base) * var(--sb-topbar-scale-active));
     --sb-topbar-stack-height: calc(var(--sb-topbar-primary-height) + var(--sb-chatbar-height) + var(--sb-topbar-stack-gap));
-    --sb-topbar-layout-offset: var(--sb-topbar-primary-height);
+    --sb-topbar-layout-offset: var(--sb-topbar-stack-height);
     --sb-topbar-max-width: min(calc(var(--sheldWidth) + 220px), calc(100vw - 20px));
 }
 
@@ -167,6 +167,19 @@ body.sb-topbar-dragging {
     grid-template-rows: var(--sb-topbar-primary-height) minmax(var(--sb-chatbar-height), auto);
     gap: var(--sb-topbar-stack-gap);
     contain: layout style;
+}
+
+body.sb-topbar-compact {
+    --sb-topbar-layout-offset: var(--sb-topbar-primary-height);
+}
+
+body.sb-topbar-compact #sb-topbar-stack {
+    grid-template-rows: var(--sb-topbar-primary-height);
+    gap: 0;
+}
+
+body.sb-topbar-compact #sb-chatbar-layer {
+    display: none;
 }
 
 #sb-chatbar-layer {
@@ -1040,6 +1053,11 @@ body:not(.movingUI) .drawer-content.maximized {
     transform-origin: center;
 }
 
+#right-nav-panel.openDrawer {
+    animation: sbShellReveal 240ms ease;
+    transform-origin: center;
+}
+
 .sb-shell-root.openDrawer .sb-shell-nav {
     animation: sbShellContentReveal 280ms ease both;
 }
@@ -1048,7 +1066,18 @@ body:not(.movingUI) .drawer-content.maximized {
     animation: sbShellContentReveal 320ms ease both;
 }
 
+#right-nav-panel.openDrawer > #CharListButtonAndHotSwaps,
+#right-nav-panel.openDrawer > #rm_PinAndTabs {
+    animation: sbShellContentReveal 280ms ease both;
+}
+
+#right-nav-panel.openDrawer > .scrollableInner,
+#right-nav-panel.openDrawer > .scrollableInnerFull {
+    animation: sbShellContentReveal 320ms ease both;
+}
+
 .sb-shell-frame {
+    position: relative;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -1056,6 +1085,46 @@ body:not(.movingUI) .drawer-content.maximized {
     flex-direction: column;
     align-items: stretch;
     overflow: hidden;
+}
+
+.sb-shell-resize-handle {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 3;
+    display: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 0 0 var(--sb-radius-button, 14px) 0;
+    pointer-events: auto;
+    cursor: nwse-resize;
+    touch-action: none;
+    opacity: 0.74;
+}
+
+.sb-shell-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+        linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 48% 54%, transparent 54% 68%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 68% 74%, transparent 74% 88%, color-mix(in srgb, var(--sb-shell-border) 86%, transparent) 88% 94%, transparent 94% 100%);
+    opacity: 0.92;
+}
+
+.sb-shell-root.sb-shell-can-resize.openDrawer .sb-shell-resize-handle {
+    display: block;
+}
+
+.sb-shell-root.sb-shell-resize-active .sb-shell-resize-handle,
+.sb-shell-resize-handle:hover {
+    opacity: 1;
+}
+
+body.sb-shell-resizing,
+body.sb-shell-resizing * {
+    cursor: nwse-resize !important;
+    user-select: none !important;
 }
 
 .sb-shell-nav {
@@ -2105,6 +2174,51 @@ body:not(.movingUI) .drawer-content.maximized {
     max-width: 640px;
 }
 
+.sb-shortcut-rows {
+    display: grid;
+    gap: 10px;
+    margin-top: 2px;
+}
+
+.sb-shortcut-row {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.sb-shortcut-label {
+    display: flex;
+    align-items: center;
+    min-height: 30px;
+    margin: 0;
+    font-size: calc(var(--mainFontSize) * 0.85);
+    line-height: 1.2;
+    opacity: 0.8;
+}
+
+.sb-shortcut-select {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    min-height: 30px;
+    margin: 0;
+    padding: 0 10px;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: calc(var(--mainFontSize) * 0.85);
+    color: var(--SmartThemeBodyColor);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
+    border-radius: 10px;
+}
+
+.sb-shortcut-select:focus {
+    outline: 2px solid var(--color-primary, #f1b285);
+    outline-offset: -1px;
+}
+
 /* Bottom chat management bar */
 #sb-bottom-chat-bar {
     display: flex;
@@ -2113,7 +2227,7 @@ body:not(.movingUI) .drawer-content.maximized {
     padding: 4px 10px;
     border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent);
     background: transparent;
-    min-height: 32px;
+    min-height: 30px;
 }
 
 #sb-bottom-chat-bar:empty {
@@ -2123,19 +2237,23 @@ body:not(.movingUI) .drawer-content.maximized {
 #sb-bottom-chat-select {
     flex: 1;
     min-width: 0;
-    height: 28px;
-    padding: 0 8px;
+    height: 26px;
+    margin: 0;
+    padding: 0 10px;
+    box-sizing: border-box;
     font: inherit;
     font-size: calc(var(--mainFontSize) * 0.85);
+    line-height: 1.1;
     color: var(--SmartThemeBodyColor);
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 60%, transparent);
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
-    border-radius: 14px;
+    border-radius: 13px;
     appearance: none;
     cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    align-self: center;
 }
 
 #sb-bottom-chat-select:focus {
@@ -2150,7 +2268,13 @@ body:not(.movingUI) .drawer-content.maximized {
     color: var(--SmartThemeBodyColor);
     opacity: 0.7;
     cursor: pointer;
-    padding: 4px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    margin: 0;
+    padding: 2px 6px;
+    box-sizing: border-box;
     border-radius: 6px;
     font-size: calc(var(--mainFontSize) * 0.9);
     transition: opacity 180ms ease, background-color 180ms ease;
@@ -2462,12 +2586,15 @@ body:not(.movingUI) .drawer-content.maximized {
     }
 
     .sb-shell-nav {
-        width: min(200px, 36%);
-        min-width: 156px;
+        width: 100%;
+        min-width: 0;
+        justify-content: center;
     }
 
     .sb-shell-tab {
-        padding: 12px;
+        flex: 0 0 auto;
+        min-width: max-content;
+        padding: 10px 12px;
     }
 
     .sb-theme-option-row,
@@ -2735,6 +2862,10 @@ body:not(.movingUI) .drawer-content.maximized {
 
     .sb-shell-frame {
         flex-direction: column;
+    }
+
+    .sb-shell-resize-handle {
+        display: none !important;
     }
 
     .sb-shell-nav {

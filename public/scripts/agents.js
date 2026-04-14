@@ -2826,6 +2826,42 @@ function insertTurnUxSuggestionIntoChatInput(suggestion) {
     $textarea.trigger('focus');
 }
 
+function normalizeInteractiveAgentOptionText(rawText) {
+    const normalizedLines = String(rawText ?? '')
+        .split('\n')
+        .map(line => line.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+    if (normalizedLines.length === 0) {
+        return '';
+    }
+
+    normalizedLines[0] = normalizedLines[0].replace(/^(?:\d+|[A-Z])\.\s*/, '').trim();
+    return normalizedLines.join('\n').trim();
+}
+
+function bindInteractiveAgentOptionClicks() {
+    const optionSelector = '.mes_text .pura-choice, .mes_text .pura-direction';
+
+    $(document).off('click.sbInteractiveAgentOptions', optionSelector);
+    $(document).on('click.sbInteractiveAgentOptions', optionSelector, function (event) {
+        const optionElement = event.target instanceof Element
+            ? event.target.closest(optionSelector)
+            : null;
+
+        if (!(optionElement instanceof HTMLElement)) {
+            return;
+        }
+
+        const suggestion = normalizeInteractiveAgentOptionText(optionElement.textContent);
+        if (!suggestion) {
+            return;
+        }
+
+        insertTurnUxSuggestionIntoChatInput(suggestion);
+    });
+}
+
 function renderTurnUxPanel(turnUxState) {
     const normalizedTurnUxState = normalizeTurnUxState(turnUxState);
     const $suggestions = $('#agent_turn_ux_suggestions');
@@ -3114,6 +3150,7 @@ export function initAgents() {
     ensureAgentSettings();
     ensureAgentChatState();
     bindAgentPanel();
+    bindInteractiveAgentOptionClicks();
 
     eventSource.on(event_types.CHAT_CHANGED, renderAgentPanelDebounced);
     eventSource.on(event_types.SETTINGS_LOADED_AFTER, renderAgentPanelDebounced);

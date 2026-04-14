@@ -3,14 +3,14 @@
     "name": "Grounded Prose",
     "description": "Anti-slop rules: avoid purple prose, cliches, and AI writing tics",
     "icon": "",
-    "category": "guard",
+    "category": "custom",
     "tags": [
         "anti-slop",
         "quality",
         "prose"
     ],
     "version": 1,
-    "author": "SillyBunny",
+    "author": "Purachina",
     "prompt": "### Grounded Prose Rules\n- Each beat must alter pressure, leverage, focus, relation, or access.\n- Sensory detail only where it has material relevance to the scene.\n- Replace abstraction and statistical phrasing with observable detail.\n- Sparse dialogue tags when speaker and tone are already legible. After dialogue, move through action, reaction, or a new beat.\n- Default to contractions in dialogue; preserve character-appropriate formality.\n- Fresh, concrete phrasing. Render emphasis through behavior, timing, syntax, and consequence.\n- State what something is, does, or changes. Direct positive construction.\n- Similes rare, exact, and materially specific.\n- Replace every banned construction below with something narratively consistent:\n\n**Banned constructions:** \"not X,\" \"not X but Y,\" \"not quite X,\" synthetic negative parallelisms, flat-affect comparisons to weather or groceries, \"and yet,\" \"a beat,\" \"say that again,\" \"somewhere, X...,\" \"they don't X,\" \"that does it,\" \"that lands,\" \"that lands X,\" \"not a question,\" \"not really a question,\" \"not quite a question,\" \"statement than question,\" \"really looks at,\" \"like a physical blow,\" \"like a stone into still water,\" \"blood rushing,\" \"a sound between X and Y,\" \"dust motes,\" \"predator and prey\" constructions\n\n**Banned tics:** jaw-clenching, jaw-tightening, mouth open-close cycling, breath-catching, knuckle-whitening, knuckles turning pale, cheeks burning\n\n**Banned scents:** ozone, sandalwood, cedar, cardamom\n\n**Banned nicknames:** gremlin, goblin\n\n- If introducing a new unnamed character this turn, their name must start with: {{random::A::B::C::D::E::F::G::H::I::J::K::L::M::N::O::P::R::S::T::V::W::Y}} and/or {{random::A::B::C::D::E::F::G::H::I::J::K::L::M::N::O::P::R::S::T::V::W::Y}}. Create new NPCs sparingly.",
     "phase": "pre",
     "injection": {

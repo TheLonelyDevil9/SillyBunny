@@ -113,7 +113,7 @@ const WELCOME_TUTORIAL_STEPS = Object.freeze([
         title: 'Ask the bunny when stuck',
         body: 'The default welcome assistant is a beginner-friendly bunny guide. It can explain LLM basics, SillyBunny concepts, and SillyTavern terms without assuming you already know the jargon.',
         hint: 'A good first question is the difference between providers, models, presets, personas, and world info.',
-        chips: ['LLM basics', 'SillyBunny tips', 'SillyTavern terms', 'Show Launchpad'],
+        chips: ['LLM basics', 'SillyBunny tips', 'SillyTavern terms', 'Open Launchpad'],
         actionLabel: 'Prefill a beginner question',
         actionType: 'assistant-prompt',
         actionValue: 'Explain the difference between providers, models, presets, personas, and world info in simple terms.',
@@ -150,10 +150,10 @@ const WELCOME_GUIDE_CARDS = Object.freeze([
     },
     {
         title: 'What to do when confused',
-        body: 'Show the Launchpad, ask the bunny guide a plain-English question, or open the docs. You should not need to memorize the whole interface to start using it.',
-        chips: ['Show Launchpad', 'Bunny guide', 'Docs', 'Start small'],
+        body: 'Open the Launchpad, ask the bunny guide a plain-English question, or open the docs. You should not need to memorize the whole interface to start using it.',
+        chips: ['Open Launchpad', 'Bunny guide', 'Docs', 'Start small'],
         icon: 'fa-life-ring',
-        actionLabel: 'Show Launchpad',
+        actionLabel: 'Open Launchpad',
         actionType: 'replay-tutorial',
         actionValue: '',
     },
@@ -718,9 +718,9 @@ function buildSiteStarterPackItem() {
 function buildGeechanStarterPackItem() {
     return buildLinkStarterPackItem({
         title: 'Geechan',
-        body: 'Geechan\'s Rentry highlights his well-written Genshin character cards and sampler guide, and he is also the one who made the bundled Assistant Nahida card. SillyBunny now includes his Universal Roleplay v5.0 set across Chat Completions plus the matching Text Completions context, system prompt, and instruct pieces.',
+        body: 'Geechan\'s Rentry highlights his well-written Genshin character cards and sampler guide, and he is also the one who made the bundled Assistant Nahida card and Prose Polisher agent. SillyBunny now includes his Universal Roleplay v5.0 set across Chat Completions plus the matching Text Completions context, system prompt, and instruct pieces.',
         icon: 'fa-leaf',
-        chips: ['Genshin cards', 'Assistant Nahida', 'Sampler guide', 'Rentry'],
+        chips: ['Genshin cards', 'Assistant Nahida', 'Prose Polisher', 'Rentry'],
         statusLabel: 'Preset pack',
         statusTone: 'warm',
         actionLabel: 'Visit Geechan',
@@ -914,7 +914,7 @@ function setWelcomeDeckCollapsed(root, collapsed, { persist = true } = {}) {
 
     if (toggleButton instanceof HTMLButtonElement) {
         toggleButton.setAttribute('aria-expanded', String(!collapsed));
-        toggleButton.setAttribute('title', collapsed ? 'Show Launchpad' : 'Close Launchpad');
+        toggleButton.setAttribute('title', collapsed ? 'Open Launchpad' : 'Close Launchpad');
     }
 
     if (persist) {
@@ -1046,6 +1046,12 @@ async function handleWelcomeAction(button, sendTextArea) {
             }
             if (tutorialPanel instanceof HTMLElement) {
                 setTutorialUiState(tutorialPanel, 0, true);
+            }
+            break;
+        case 'open-launchpad':
+            if (welcomePanel instanceof HTMLElement) {
+                setWelcomeDeckView(welcomePanel, welcomePanel.dataset.activeDeckView || getInitialDeckView());
+                setWelcomeDeckCollapsed(welcomePanel, false);
             }
             break;
         case 'close-guide':

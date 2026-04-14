@@ -2242,6 +2242,7 @@ export function initChatUtilities() {
             textarea.dataset.macrosAutocompleteStyle = 'expanded'; // Use expanded autocomplete style
         }
         textarea.value = String(contentEditable ? bro[0].innerText : bro.val());
+        textarea.readOnly = !contentEditable && (bro.prop('readonly') || bro.prop('disabled'));
         textarea.classList.add('height100p', 'wide100p', 'maximized_textarea');
         bro.hasClass('monospace') && textarea.classList.add('monospace');
         bro.hasClass('mdHotkeys') && textarea.classList.add('mdHotkeys');

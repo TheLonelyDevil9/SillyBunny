@@ -1,4 +1,5 @@
 import { getRequestHeaders } from '../../../script.js';
+import { extension_settings } from '../../extensions.js';
 import { uuidv4 } from '../../utils.js';
 import {
     AGENT_REGEX_PLACEMENT,
@@ -48,7 +49,7 @@ import {
  * @property {string} name
  * @property {string} description
  * @property {string} icon
- * @property {'directive'|'formatting'|'content'|'tracker'|'randomizer'|'guard'|'custom'} category
+ * @property {'content'|'tracker'|'randomizer'|'custom'} category
  * @property {string[]} tags
  * @property {number} version
  * @property {string} author
@@ -94,16 +95,70 @@ export function setGlobalSettings(update) {
     Object.assign(globalSettings, update);
 }
 
+function normalizeConnectionProfileId(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+export function getDefaultConnectionProfile() {
+    const globalProfileId = normalizeConnectionProfileId(globalSettings.connectionProfile);
+    if (globalProfileId) {
+        return globalProfileId;
+    }
+
+    const selectedConnectionManagerProfile = normalizeConnectionProfileId(
+        extension_settings?.connectionManager?.selectedProfile,
+    );
+    return selectedConnectionManagerProfile || '';
+}
+
+export function resolveConnectionProfile(profileId = '') {
+    const explicitProfileId = normalizeConnectionProfileId(profileId);
+    if (explicitProfileId) {
+        return explicitProfileId;
+    }
+
+    return getDefaultConnectionProfile();
+}
+
+export const LEGACY_AGENT_MAX_TOKENS = 2000;
+export const DEFAULT_AGENT_MAX_TOKENS = 8192;
+
+const TRACKER_CATEGORY_TEMPLATE_IDS = new Set([
+    'tpl-cyoa-choices',
+    'tpl-direction-menu',
+]);
+
+const TRACKER_CATEGORY_NAMES = new Set([
+    'cyoa choices',
+    'direction menu',
+]);
+
+export function normalizeAgentCategory(category = '', sourceTemplateId = '', name = '') {
+    const normalizedTemplateId = typeof sourceTemplateId === 'string' ? sourceTemplateId.trim() : '';
+    if (TRACKER_CATEGORY_TEMPLATE_IDS.has(normalizedTemplateId)) {
+        return 'tracker';
+    }
+
+    const normalizedName = typeof name === 'string' ? name.trim().toLowerCase() : '';
+    if (TRACKER_CATEGORY_NAMES.has(normalizedName)) {
+        return 'tracker';
+    }
+
+    const normalizedCategory = typeof category === 'string' ? category.trim().toLowerCase() : '';
+    if (['content', 'tracker', 'randomizer', 'custom'].includes(normalizedCategory)) {
+        return normalizedCategory;
+    }
+
+    return 'custom';
+}
+
 /**
  * Category display order and labels.
  */
 export const AGENT_CATEGORIES = {
-    directive: { label: 'Directive', icon: 'fa-compass' },
-    formatting: { label: 'Formatting', icon: 'fa-align-left' },
-    content: { label: 'Content', icon: 'fa-film' },
     tracker: { label: 'Tracker', icon: 'fa-chart-line' },
     randomizer: { label: 'Randomizer', icon: 'fa-dice' },
-    guard: { label: 'Guard', icon: 'fa-shield-halved' },
+    content: { label: 'Content', icon: 'fa-film' },
     custom: { label: 'Custom', icon: 'fa-puzzle-piece' },
 };
 
@@ -196,7 +251,7 @@ export function createDefaultAgent() {
             promptTransformEnabled: false,
             promptTransformShowNotifications: true,
             promptTransformMode: 'rewrite',
-            promptTransformMaxTokens: 2000,
+            promptTransformMaxTokens: DEFAULT_AGENT_MAX_TOKENS,
         },
         regexScripts: [],
         enabled: false,
@@ -226,7 +281,7 @@ export function normalizeAgent(rawAgent = {}) {
         name: typeof rawAgent.name === 'string' ? rawAgent.name : defaults.name,
         description: typeof rawAgent.description === 'string' ? rawAgent.description : defaults.description,
         icon: typeof rawAgent.icon === 'string' ? rawAgent.icon : defaults.icon,
-        category: Object.hasOwn(AGENT_CATEGORIES, rawAgent.category) ? rawAgent.category : defaults.category,
+        category: normalizeAgentCategory(rawAgent.category, rawAgent.sourceTemplateId, rawAgent.name),
         tags: Array.isArray(rawAgent.tags)
             ? rawAgent.tags.map(tag => String(tag ?? '').trim()).filter(Boolean)
             : defaults.tags,

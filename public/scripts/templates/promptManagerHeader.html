@@ -11,8 +11,18 @@
             <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
         </div>
         <div class="inline-drawer-content {{prefix}}prompt_manager_drawer_content" style="display:none;">
-            <ul id="{{prefix}}prompt_manager_list" class="text_pole"></ul>
-            <div class="{{prefix}}prompt_manager_footer_slot"></div>
+            <div class="{{prefix}}prompt_manager_workspace sb-workspace-split">
+                <div class="{{prefix}}prompt_manager_list_pane sb-workspace-pane sb-workspace-list-pane">
+                    <ul id="{{prefix}}prompt_manager_list" class="text_pole"></ul>
+                    <div class="{{prefix}}prompt_manager_footer_slot"></div>
+                </div>
+                <aside class="{{prefix}}prompt_manager_editor_pane sb-workspace-pane sb-workspace-editor-pane" aria-live="polite">
+                    <div class="{{prefix}}prompt_manager_editor_empty sb-workspace-empty" data-i18n="Select a prompt to edit or inspect">
+                        Select a prompt to edit or inspect
+                    </div>
+                    <div class="{{prefix}}prompt_manager_editor_host"></div>
+                </aside>
+            </div>
         </div>
     </div>
 </div>

@@ -313,7 +313,7 @@ body.bubblechat .mes {
 
 body.bubblechat .mes[is_user="true"] {
     background-color: var(--SmartThemeUserMesBlurTintColor);
-    align-items: center;
+    align-items: flex-start;
 }
 
 

@@ -1,6 +1,8 @@
 const SB_STORAGE_KEYS = Object.freeze({
     leftTab: 'sb-left-tab',
     rightTab: 'sb-right-tab',
+    leftShellSize: 'sb-left-shell-size',
+    rightShellSize: 'sb-right-shell-size',
     theme: 'sb-theme',
     surfaceTransparency: 'sb-surface-transparency',
     topbarScaleDesktop: 'sb-topbar-scale-desktop',
@@ -32,6 +34,11 @@ const SB_SHORTCUT_DEFAULTS = Object.freeze({
     left: 'left:agents',
     right: 'right:persona',
 });
+const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
+const SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR = '.sb-openai-settings-drawer, .sb-openai-settings-subdrawer, [id$="prompt_manager_drawer"]';
+
+let sbInlineDrawerPersistenceObserver = null;
+let sbInlineDrawerPersistenceQueued = false;
 
 function getShortcutTarget(side) {
     const stored = safeGetItem(side === 'left' ? SB_STORAGE_KEYS.shortcutLeft : SB_STORAGE_KEYS.shortcutRight);
@@ -50,6 +57,12 @@ function safeGetItem(key) {
 function safeSetItem(key, value) {
     try { localStorage.setItem(key, value); } catch {
         // Ignore storage write failures.
+    }
+}
+
+function safeRemoveItem(key) {
+    try { localStorage.removeItem(key); } catch {
+        // Ignore storage removal failures.
     }
 }
 
@@ -95,6 +108,7 @@ const SB_CONSOLE_LOG_REFRESH_MS = 2500;
 const SB_CONSOLE_LOG_STICKY_THRESHOLD = 28;
 const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
 const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
+const SB_DESKTOP_SHELL_RESIZE_MEDIA_QUERY = '(hover: hover) and (pointer: fine)';
 const SB_DESKTOP_SHELL_LAYOUT = Object.freeze({
     minWidth: 600,
     maxWidth: 900,
@@ -106,6 +120,11 @@ const SB_DESKTOP_SHELL_LAYOUT = Object.freeze({
     gutterRatio: 0.04,
     gutterMax: 80,
     fullWidthMaxHeight: 860,
+});
+const SB_DESKTOP_SHELL_RESIZE = Object.freeze({
+    minWidth: 420,
+    minHeight: 320,
+    bottomGap: 16,
 });
 
 const SB_THEMES = Object.freeze([
@@ -315,6 +334,13 @@ const sbState = {
         windowBindingsAttached: false,
     },
     shells: {},
+    shellSizing: {
+        overrides: {
+            left: normalizeShellSize(safeGetItem(SB_STORAGE_KEYS.leftShellSize)),
+            right: normalizeShellSize(safeGetItem(SB_STORAGE_KEYS.rightShellSize)),
+        },
+        activeResize: null,
+    },
     chatbar: {
         desktop: null,
         sidebar: null,
@@ -431,6 +457,36 @@ function normalizeStoredBoolean(value, fallback = false) {
     }
 
     return fallback;
+}
+
+function normalizeShellSize(value) {
+    let source = value;
+
+    if (typeof source === 'string') {
+        const trimmedValue = source.trim();
+
+        if (!trimmedValue) {
+            return null;
+        }
+
+        try {
+            source = JSON.parse(trimmedValue);
+        } catch {
+            return null;
+        }
+    }
+
+    const width = Number(source?.width);
+    const height = Number(source?.height);
+
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+        return null;
+    }
+
+    return {
+        width: Math.max(0, Math.round(width)),
+        height: Math.max(0, Math.round(height)),
+    };
 }
 
 function normalizeSurfaceTransparency(value) {
@@ -686,6 +742,43 @@ function getSearchText(element, sectionLabel = '') {
     ].join(' '));
 }
 
+function getPersonaSearchAvatarId(element) {
+    if (!(element instanceof HTMLElement)) {
+        return '';
+    }
+
+    const directAvatarId = element.closest('.avatar-container[data-avatar-id], .avatar[data-avatar-id]')?.getAttribute('data-avatar-id');
+    if (directAvatarId) {
+        return directAvatarId;
+    }
+
+    if (!element.matches('.persona_name')) {
+        return '';
+    }
+
+    return document.querySelector('#user_avatar_block .avatar-container.selected[data-avatar-id]')?.getAttribute('data-avatar-id')
+        ?? '';
+}
+
+function getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element = null, avatarId = '' } = {}) {
+    const personaAvatarId = tabState.id === 'persona'
+        ? normalizeText(
+            avatarId
+            || getPersonaSearchAvatarId(element),
+        )
+        : '';
+
+    if (personaAvatarId) {
+        return `persona::${personaAvatarId}`;
+    }
+
+    return [
+        tabState.id,
+        normalizeText(sectionLabel),
+        normalizeText(displayText),
+    ].filter(Boolean).join('::');
+}
+
 function formatSearchExamples(examples) {
     const filteredExamples = Array.isArray(examples)
         ? examples.map(example => String(example ?? '').trim()).filter(Boolean)
@@ -764,6 +857,110 @@ function isMobileViewport() {
     return window.matchMedia(SB_MOBILE_MEDIA_QUERY).matches;
 }
 
+function canResizeDesktopShells() {
+    return !isMobileViewport() && window.matchMedia(SB_DESKTOP_SHELL_RESIZE_MEDIA_QUERY).matches;
+}
+
+function isDesktopResizableShell(shellKey) {
+    return shellKey === 'left' || shellKey === 'right';
+}
+
+function getShellAccountStorage() {
+    const storage = getSillyTavernContext()?.accountStorage;
+
+    if (!storage || typeof storage.getState !== 'function') {
+        return null;
+    }
+
+    try {
+        const snapshot = storage.getState();
+        return snapshot && Object.hasOwn(snapshot, SB_ACCOUNT_STORAGE_READY_MARKER) ? storage : null;
+    } catch {
+        return null;
+    }
+}
+
+function getPersistentStorageItem(key) {
+    if (!key) {
+        return null;
+    }
+
+    const localValue = safeGetItem(key);
+    const accountStorage = getShellAccountStorage();
+    const accountValue = accountStorage ? accountStorage.getItem(key) : null;
+
+    if (accountValue !== null) {
+        if (accountValue !== localValue) {
+            safeSetItem(key, accountValue);
+        }
+
+        return accountValue;
+    }
+
+    if (localValue !== null && accountStorage) {
+        accountStorage.setItem(key, localValue);
+    }
+
+    return localValue;
+}
+
+function setPersistentStorageItem(key, value) {
+    if (!key) {
+        return;
+    }
+
+    safeSetItem(key, value);
+    getShellAccountStorage()?.setItem(key, value);
+}
+
+function getPersistedShellSize(shellKey) {
+    const storageKey = getShellSizeStorageKey(shellKey);
+
+    if (!storageKey) {
+        return null;
+    }
+
+    const localSize = normalizeShellSize(safeGetItem(storageKey));
+    const accountStorage = getShellAccountStorage();
+    const accountSize = accountStorage ? normalizeShellSize(accountStorage.getItem(storageKey)) : null;
+
+    if (accountSize) {
+        if (!areShellSizesEqual(localSize, accountSize)) {
+            safeSetItem(storageKey, JSON.stringify(accountSize));
+        }
+
+        return accountSize;
+    }
+
+    if (localSize && accountStorage) {
+        accountStorage.setItem(storageKey, JSON.stringify(localSize));
+    }
+
+    return localSize;
+}
+
+function hydratePersistedShellSizes() {
+    for (const shellKey of ['left', 'right']) {
+        const persistedSize = getPersistedShellSize(shellKey);
+
+        if (persistedSize) {
+            sbState.shellSizing.overrides[shellKey] = persistedSize;
+        }
+    }
+}
+
+function getShellSizeStorageKey(shellKey) {
+    if (shellKey === 'left') {
+        return SB_STORAGE_KEYS.leftShellSize;
+    }
+
+    if (shellKey === 'right') {
+        return SB_STORAGE_KEYS.rightShellSize;
+    }
+
+    return '';
+}
+
 function getDesktopShellDimensions() {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
@@ -802,18 +999,228 @@ function getDesktopShellDimensions() {
     };
 }
 
-function syncDesktopShellSizing() {
-    const { width, maxWidth } = getDesktopShellDimensions();
+function getDesktopShellResizeBounds() {
+    const viewportWidth = Math.max(0, Math.round(window.innerWidth));
+    const topbarOffset = Number.parseFloat(
+        window.getComputedStyle(document.documentElement).getPropertyValue('--sb-topbar-layout-offset'),
+    );
+    const resolvedTopbarOffset = Number.isFinite(topbarOffset) ? topbarOffset : 0;
+    const defaultDimensions = getDesktopShellDimensions();
+    const maxHeight = Math.max(0, Math.round(window.innerHeight - resolvedTopbarOffset - SB_DESKTOP_SHELL_RESIZE.bottomGap));
 
-    for (const rootId of [getShellConfig('left').rootPanelId, getShellConfig('right').rootPanelId]) {
-        const root = document.getElementById(rootId);
+    return {
+        defaultWidth: Math.max(0, Math.round(defaultDimensions.width)),
+        defaultHeight: maxHeight,
+        minWidth: Math.min(SB_DESKTOP_SHELL_RESIZE.minWidth, viewportWidth),
+        maxWidth: viewportWidth,
+        minHeight: Math.min(SB_DESKTOP_SHELL_RESIZE.minHeight, maxHeight),
+        maxHeight,
+    };
+}
+
+function clampShellSize(size, bounds = getDesktopShellResizeBounds()) {
+    const normalizedSize = normalizeShellSize(size);
+
+    if (!normalizedSize) {
+        return null;
+    }
+
+    return {
+        width: clampNumber(normalizedSize.width, bounds.minWidth, bounds.maxWidth),
+        height: clampNumber(normalizedSize.height, bounds.minHeight, bounds.maxHeight),
+    };
+}
+
+function areShellSizesEqual(left, right) {
+    return Boolean(left) && Boolean(right)
+        && left.width === right.width
+        && left.height === right.height;
+}
+
+function getShellSizeOverride(shellKey) {
+    return isDesktopResizableShell(shellKey) ? sbState.shellSizing.overrides[shellKey] ?? null : null;
+}
+
+function setShellSizeOverride(shellKey, size, { persist = true } = {}) {
+    if (!isDesktopResizableShell(shellKey)) {
+        return null;
+    }
+
+    const storageKey = getShellSizeStorageKey(shellKey);
+    const nextSize = clampShellSize(size);
+
+    sbState.shellSizing.overrides[shellKey] = nextSize;
+
+    if (!persist || !storageKey) {
+        return nextSize;
+    }
+
+    const accountStorage = getShellAccountStorage();
+
+    if (nextSize) {
+        const serializedSize = JSON.stringify(nextSize);
+        safeSetItem(storageKey, serializedSize);
+        accountStorage?.setItem(storageKey, serializedSize);
+    } else {
+        safeRemoveItem(storageKey);
+        accountStorage?.removeItem(storageKey);
+    }
+
+    return nextSize;
+}
+
+function applyDesktopShellSize(root, size) {
+    root.style.setProperty('width', `${size.width}px`, 'important');
+    root.style.setProperty('max-width', `${size.width}px`, 'important');
+    root.style.setProperty('height', `${size.height}px`, 'important');
+    root.style.setProperty('max-height', `${size.height}px`, 'important');
+}
+
+function syncDesktopShellSizing() {
+    hydratePersistedShellSizes();
+
+    const { width, maxWidth } = getDesktopShellDimensions();
+    const bounds = getDesktopShellResizeBounds();
+    const resizingEnabled = canResizeDesktopShells();
+
+    for (const shellKey of ['left', 'right']) {
+        const root = document.getElementById(getShellConfig(shellKey).rootPanelId);
         if (!(root instanceof HTMLElement)) {
             continue;
         }
 
-        root.style.setProperty('width', `${width}px`, 'important');
-        root.style.setProperty('max-width', `${maxWidth}px`, 'important');
+        if (isMobileViewport()) {
+            root.style.setProperty('width', `${width}px`, 'important');
+            root.style.setProperty('max-width', `${maxWidth}px`, 'important');
+            root.style.removeProperty('height');
+            root.style.removeProperty('max-height');
+            root.classList.remove('sb-shell-can-resize');
+            continue;
+        }
+
+        let sizeToApply = {
+            width,
+            height: bounds.defaultHeight,
+        };
+
+        const storedOverride = getShellSizeOverride(shellKey);
+        if (resizingEnabled && storedOverride) {
+            const clampedOverride = clampShellSize(storedOverride, bounds);
+            if (clampedOverride) {
+                sizeToApply = clampedOverride;
+
+                if (!areShellSizesEqual(storedOverride, clampedOverride)) {
+                    setShellSizeOverride(shellKey, clampedOverride);
+                } else {
+                    sbState.shellSizing.overrides[shellKey] = clampedOverride;
+                }
+            }
+        }
+
+        applyDesktopShellSize(root, sizeToApply);
+        root.classList.toggle('sb-shell-can-resize', resizingEnabled);
     }
+}
+
+function beginShellResize(shellKey, event) {
+    if (!canResizeDesktopShells() || !isDesktopResizableShell(shellKey) || event.button !== 0) {
+        return;
+    }
+
+    const root = document.getElementById(getShellConfig(shellKey).rootPanelId);
+    if (!(root instanceof HTMLElement) || !root.classList.contains('openDrawer')) {
+        return;
+    }
+
+    if (typeof sbState.shellSizing.activeResize?.cleanup === 'function') {
+        sbState.shellSizing.activeResize.cleanup();
+    }
+
+    const handle = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const bounds = getDesktopShellResizeBounds();
+    const startRect = root.getBoundingClientRect();
+    const startSize = clampShellSize({
+        width: startRect.width || bounds.defaultWidth,
+        height: startRect.height || bounds.defaultHeight,
+    }, bounds);
+
+    if (!startSize) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    document.body.classList.add('sb-shell-resizing');
+    root.classList.add('sb-shell-resize-active');
+    setShellSizeOverride(shellKey, startSize, { persist: false });
+
+    const cleanup = () => {
+        if (handle && typeof handle.releasePointerCapture === 'function') {
+            try {
+                handle.releasePointerCapture(event.pointerId);
+            } catch {
+                // Ignore pointer capture cleanup failures.
+            }
+        }
+
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        window.removeEventListener('pointercancel', onPointerUp);
+        document.body.classList.remove('sb-shell-resizing');
+        root.classList.remove('sb-shell-resize-active');
+
+        if (sbState.shellSizing.activeResize?.pointerId === event.pointerId) {
+            sbState.shellSizing.activeResize = null;
+        }
+    };
+
+    const onPointerMove = moveEvent => {
+        if (moveEvent.pointerId !== event.pointerId) {
+            return;
+        }
+
+        moveEvent.preventDefault();
+        const nextSize = clampShellSize({
+            width: startSize.width + (moveEvent.clientX - event.clientX),
+            height: startSize.height + (moveEvent.clientY - event.clientY),
+        });
+
+        if (!nextSize) {
+            return;
+        }
+
+        sbState.shellSizing.overrides[shellKey] = nextSize;
+        applyDesktopShellSize(root, nextSize);
+    };
+
+    const onPointerUp = endEvent => {
+        if (endEvent.pointerId !== event.pointerId) {
+            return;
+        }
+
+        const activeSize = getShellSizeOverride(shellKey) ?? startSize;
+        cleanup();
+        setShellSizeOverride(shellKey, activeSize);
+        syncDesktopShellSizing();
+    };
+
+    sbState.shellSizing.activeResize = {
+        shellKey,
+        pointerId: event.pointerId,
+        cleanup,
+    };
+
+    if (handle && typeof handle.setPointerCapture === 'function') {
+        try {
+            handle.setPointerCapture(event.pointerId);
+        } catch {
+            // Ignore pointer capture failures.
+        }
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
 }
 
 function ensureShellReady(shellKey) {
@@ -1366,6 +1773,14 @@ function updateTopbarUtilityButtons() {
     }
 }
 
+function syncTopbarLayoutState() {
+    const stack = document.getElementById('sb-topbar-stack');
+    const hasVisibleChatbar = stack?.querySelector('#sb-chatbar-layer') instanceof HTMLElement
+        && getChatbarState().visible;
+
+    document.body.classList.toggle('sb-topbar-compact', !hasVisibleChatbar);
+}
+
 function setChatbarVisible(shouldShow, { persist = true } = {}) {
     const nextVisible = Boolean(shouldShow);
     const state = getChatbarState();
@@ -1382,6 +1797,7 @@ function setChatbarVisible(shouldShow, { persist = true } = {}) {
     }
 
     updateTopbarUtilityButtons();
+    syncTopbarLayoutState();
     scheduleChatbarRefresh(0);
 }
 
@@ -1650,6 +2066,10 @@ async function waitForAuthorizedRequestHeaders(timeoutMs = 15000) {
     return getRequestHeadersFromContext();
 }
 
+function normalizeChatFileName(value) {
+    return String(value ?? '').replace(/\.jsonl$/i, '').trim();
+}
+
 function getChatUiContext() {
     const context = getSillyTavernContext();
 
@@ -1672,7 +2092,7 @@ function getChatUiContext() {
     const character = context.characterId !== undefined && context.characterId !== null
         ? context.characters?.[context.characterId] ?? null
         : null;
-    const chatId = String(context.getCurrentChatId?.() ?? '').trim();
+    const chatId = normalizeChatFileName(context.getCurrentChatId?.() ?? context.chatId ?? '');
     const canBrowseChats = Boolean(group || character);
 
     return {
@@ -1727,7 +2147,7 @@ function formatChatPreview(value) {
 
 function normalizeChatInfo(chatInfo) {
     const rawFileName = chatInfo?.file_name ?? chatInfo?.id ?? chatInfo?.chat_id ?? chatInfo ?? '';
-    const fileName = String(rawFileName).replace(/\.jsonl$/i, '').trim();
+    const fileName = normalizeChatFileName(rawFileName);
 
     return {
         fileName,
@@ -1830,7 +2250,7 @@ async function getChatFilesForContext(chatContext = getChatUiContext()) {
 }
 
 async function openChatById(chatId, { closeMobileTools = false } = {}) {
-    const nextChatId = String(chatId ?? '').trim();
+    const nextChatId = normalizeChatFileName(chatId);
     const chatContext = getChatUiContext();
 
     if (!nextChatId || !chatContext.context) {
@@ -2069,7 +2489,7 @@ function buildChatSidebar() {
 
     root.id = 'sb-chat-sidebar';
     root.classList.add('sb-chat-sidebar');
-    root.style.top = 'calc(var(--sb-topbar-stack-height) + 18px)';
+    root.style.top = 'calc(var(--sb-topbar-layout-offset) + 18px)';
     root.style.right = '16px';
     root.style.left = 'auto';
     root.style.bottom = 'auto';
@@ -3468,6 +3888,7 @@ function buildTopBar() {
     bindTopBarBrand();
     updateTopBarBrand();
     updateTopbarUtilityButtons();
+    syncTopbarLayoutState();
 }
 
 function hideHostToggles() {
@@ -4914,20 +5335,23 @@ function createShortcutSettingsGroup() {
     const rows = createElement('div', {
         className: 'sb-shortcut-rows',
     });
-    rows.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 8px;';
 
     for (const side of ['left', 'right']) {
-        const row = createElement('div', {});
-        row.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+        const selectId = `sb-shortcut-${side}-select`;
+        const row = createElement('div', { className: 'sb-shortcut-row' });
 
-        const label = createElement('label', {});
-        label.style.cssText = 'flex-shrink: 0; font-size: calc(var(--mainFontSize) * 0.85); opacity: 0.8; min-width: 56px;';
+        const label = createElement('label', {
+            className: 'sb-shortcut-label',
+            attrs: {
+                for: selectId,
+            },
+        });
         label.textContent = side === 'left' ? 'Left' : 'Right';
 
         const select = createElement('select', {
-            id: `sb-shortcut-${side}-select`,
+            id: selectId,
+            className: 'sb-shortcut-select',
         });
-        select.style.cssText = 'flex: 1; height: 28px; padding: 0 8px; font: inherit; font-size: calc(var(--mainFontSize) * 0.85); border-radius: 8px; background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 60%, transparent); border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent); color: var(--SmartThemeBodyColor);';
 
         const currentTarget = getShortcutTarget(side);
         for (const target of SB_SHORTCUT_TARGETS) {
@@ -5192,7 +5616,7 @@ function createSearchIndex(tabState) {
         const sectionLabel = getSearchSectionLabel(element, tabState.label);
         const searchText = getSearchText(element, sectionLabel);
         const displayText = getSearchDisplayText(element, sectionLabel);
-        const dedupeKey = `${sectionLabel}::${displayText}`;
+        const dedupeKey = getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element });
 
         if (searchText.length < 3 || seen.has(dedupeKey)) {
             continue;
@@ -5206,6 +5630,7 @@ function createSearchIndex(tabState) {
             sectionLabel,
             tabId: tabState.id,
             tabLabel: tabState.label,
+            dedupeKey,
         });
     }
 
@@ -5220,20 +5645,32 @@ function createSearchIndex(tabState) {
 function getPersonaSearchEntries(tabState) {
     const context = getSillyTavernContext();
     const personas = context?.powerUserSettings?.personas ?? {};
+    const personaDescriptions = context?.powerUserSettings?.persona_descriptions ?? {};
+    const defaultPersona = context?.powerUserSettings?.default_persona ?? '';
     const entries = [];
 
     for (const [avatarId, name] of Object.entries(personas)) {
         if (!name || name === '[Unnamed Persona]') continue;
-        const normalizedName = normalizeText(name);
-        if (normalizedName.length < 2) continue;
+        const personaDescription = personaDescriptions[avatarId]?.description ?? '';
+        const personaTitle = personaDescriptions[avatarId]?.title ?? '';
+        const searchText = normalizeText([
+            name,
+            avatarId,
+            personaTitle,
+            personaDescription,
+            avatarId === defaultPersona ? 'default persona' : '',
+        ].join(' '));
+
+        if (searchText.length < 2) continue;
 
         entries.push({
             element: null,
-            searchText: normalizedName,
+            searchText,
             displayText: name,
             sectionLabel: 'Persona',
             tabId: tabState.id,
             tabLabel: tabState.label,
+            dedupeKey: getSearchEntryDedupeKey(tabState, 'Persona', name, { avatarId }),
             action: () => {
                 // Activate the persona tab and trigger ST's own persona search
                 openShell('right', 'persona');
@@ -5305,7 +5742,7 @@ function renderSearchResults(shellKey, query) {
     }
 
     const searchTerms = normalizedQuery.split(' ').filter(Boolean);
-    const matches = [];
+    const matches = new Map();
 
     for (const tabState of shellState.tabs.values()) {
         // Build index once; it's invalidated when the tab activates (content may have changed)
@@ -5323,15 +5760,29 @@ function renderSearchResults(shellKey, query) {
 
             const startsWithQuery = entry.searchText.startsWith(normalizedQuery);
             const exactMatch = entry.searchText === normalizedQuery;
-
-            matches.push({
+            const match = {
                 ...entry,
                 score: Number(exactMatch) * 100 + Number(startsWithQuery) * 10 - entry.displayText.length / 1000,
-            });
+            };
+            const matchKey = entry.dedupeKey || [
+                entry.tabId,
+                normalizeText(entry.sectionLabel),
+                normalizeText(entry.displayText),
+            ].filter(Boolean).join('::');
+            const existingMatch = matches.get(matchKey);
+            const shouldReplaceMatch = !existingMatch
+                || match.score > existingMatch.score
+                || (match.score === existingMatch.score
+                    && typeof match.action === 'function'
+                    && typeof existingMatch.action !== 'function');
+
+            if (shouldReplaceMatch) {
+                matches.set(matchKey, match);
+            }
         }
     }
 
-    matches
+    Array.from(matches.values())
         .sort((left, right) => right.score - left.score)
         .slice(0, 10)
         .forEach(match => {
@@ -5472,6 +5923,10 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     }
 
     activeTab.onActivate?.();
+    const shellRoot = document.getElementById(shellConfig.rootPanelId);
+    if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
+        dispatchShellTabActivated(shellKey, activeTab);
+    }
 
     if (shellState.searchInput instanceof HTMLInputElement && shellState.searchInput.value.trim()) {
         renderSearchResults(shellKey, shellState.searchInput.value);
@@ -5546,6 +6001,7 @@ function buildShell(shellKey) {
     }
 
     shellRoot.dataset.sbShellReady = 'true';
+    shellRoot.dataset.sbShellKey = shellKey;
     shellRoot.classList.add('sb-shell-root', `sb-shell-root-${shellKey}`);
 
     if (shellKey === 'right') {
@@ -5592,15 +6048,24 @@ function buildShell(shellKey) {
     const searchHint = createElement('p', { className: 'sb-shell-search-note' });
     const searchResults = createElement('div', { className: 'sb-search-results' });
     const panelBody = createElement('div', { className: 'sb-shell-body' });
+    const resizeHandle = createElement('div', {
+        className: 'sb-shell-resize-handle',
+        attrs: {
+            'aria-hidden': 'true',
+            title: `Resize ${shellConfig.title}`,
+        },
+    });
 
     closeButton.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
     closeButton.addEventListener('click', () => closeShell(shellKey));
+    stopProxyPointerPropagation(resizeHandle);
+    resizeHandle.addEventListener('pointerdown', event => beginShellResize(shellKey, event));
 
     searchWrap.append(searchIcon, searchInput);
     searchHint.hidden = true;
     header.append(closeButton, eyebrow, title, subtitle, shellDescription, searchWrap, searchHint, searchResults);
     main.append(header, panelBody);
-    frame.append(nav, main);
+    frame.append(nav, main, resizeHandle);
     shellRoot.appendChild(frame);
 
     const shellState = {
@@ -5613,6 +6078,7 @@ function buildShell(shellKey) {
         searchHint,
         searchResults,
         root: shellRoot,
+        resizeHandle,
     };
 
     sbState.shells[shellKey] = shellState;
@@ -5629,7 +6095,9 @@ function buildShell(shellKey) {
 
         if (isOpen) {
             closeMobileNav();
-            shellState.tabs.get(shellState.activeTabId)?.onActivate?.();
+            const activeTab = shellState.tabs.get(shellState.activeTabId);
+            activeTab?.onActivate?.();
+            dispatchShellTabActivated(shellKey, activeTab);
             return;
         }
 
@@ -5781,6 +6249,20 @@ function routeDrawerTarget(targetId) {
 
     openShell(route.shell, route.tab);
     return true;
+}
+
+function dispatchShellTabActivated(shellKey, tabState) {
+    if (!tabState) {
+        return;
+    }
+
+    document.dispatchEvent(new CustomEvent('sb:shell-tab-activated', {
+        detail: {
+            shellKey,
+            tabId: tabState.id,
+            label: tabState.label,
+        },
+    }));
 }
 
 function interceptDrawerOpeners() {
@@ -6085,7 +6567,7 @@ function setInlineDrawerExpanded(drawer, expand) {
     content.style.display = expand ? 'block' : 'none';
 }
 
-function getSettingsDrawerStorageKey(drawer) {
+function getLegacySettingsDrawerStorageKey(drawer) {
     const root = document.getElementById('user-settings-block-content');
     if (!(root instanceof HTMLElement) || !(drawer instanceof HTMLElement) || !root.contains(drawer)) {
         return null;
@@ -6100,30 +6582,139 @@ function getSettingsDrawerStorageKey(drawer) {
     return index === -1 ? null : `${SB_STORAGE_KEYS.settingsDrawerStatePrefix}:${index}`;
 }
 
-function getStoredSettingsDrawerExpanded(drawer) {
-    const storageKey = getSettingsDrawerStorageKey(drawer);
-    if (!storageKey) {
+function sanitizeInlineDrawerStorageSegment(value, fallback = 'drawer') {
+    const normalizedValue = normalizeText(value)
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64);
+
+    return normalizedValue || fallback;
+}
+
+function getInlineDrawerHeaderText(drawer) {
+    if (!(drawer instanceof HTMLElement)) {
+        return '';
+    }
+
+    return drawer.querySelector(':scope > .inline-drawer-header b, :scope > .inline-drawer-header strong, :scope > .inline-drawer-header')
+        ?.textContent
+        ?? '';
+}
+
+function getInlineDrawerContextSegment(element) {
+    if (!(element instanceof HTMLElement)) {
+        return '';
+    }
+
+    const elementId = String(element.id || '').trim();
+    if (elementId && !elementId.startsWith('select2-') && !/^ui-id-\d+$/i.test(elementId)) {
+        return `id:${sanitizeInlineDrawerStorageSegment(elementId, 'scope')}`;
+    }
+
+    const worldEntryUid = element.classList.contains('world_entry')
+        ? String(element.getAttribute('uid') || element.dataset.uid || '').trim()
+        : '';
+    if (worldEntryUid) {
+        return `world-entry:${sanitizeInlineDrawerStorageSegment(worldEntryUid, 'entry')}`;
+    }
+
+    const promptIdentifier = String(element.dataset.pmIdentifier || '').trim();
+    if (promptIdentifier) {
+        return `prompt:${sanitizeInlineDrawerStorageSegment(promptIdentifier, 'prompt')}`;
+    }
+
+    if (element.classList.contains('extension_container')) {
+        const extensionName = element.querySelector(':scope > .extension_name, .extension_name')?.textContent ?? '';
+        if (extensionName) {
+            return `extension:${sanitizeInlineDrawerStorageSegment(extensionName, 'extension')}`;
+        }
+    }
+
+    return '';
+}
+
+function shouldPersistInlineDrawer(drawer) {
+    return drawer instanceof HTMLElement
+        && !drawer.matches(SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR)
+        && !drawer.closest('[data-sb-drawer-persistence="off"]');
+}
+
+function getInlineDrawerStorageKey(drawer) {
+    if (!shouldPersistInlineDrawer(drawer)) {
         return null;
     }
 
-    const storedValue = safeGetItem(storageKey);
-    return storedValue === null ? null : normalizeStoredBoolean(storedValue, false);
-}
-
-function bindSettingsDrawerPersistence() {
-    const root = document.getElementById('user-settings-block-content');
-    if (!(root instanceof HTMLElement)) {
-        return;
+    const contextSegments = [];
+    for (let current = drawer.parentElement; current && current !== document.body; current = current.parentElement) {
+        const segment = getInlineDrawerContextSegment(current);
+        if (segment) {
+            contextSegments.unshift(segment);
+        }
     }
 
-    const drawers = Array.from(root.querySelectorAll('.inline-drawer'));
-    for (const drawer of drawers) {
-        const storageKey = getSettingsDrawerStorageKey(drawer);
-        if (!storageKey) {
+    if (!contextSegments.length) {
+        return null;
+    }
+
+    if (drawer.id) {
+        return `${SB_STORAGE_KEYS.settingsDrawerStatePrefix}:${contextSegments.join('/')}:drawer-id:${sanitizeInlineDrawerStorageSegment(drawer.id)}`;
+    }
+
+    const siblingInlineDrawers = drawer.parentElement
+        ? Array.from(drawer.parentElement.children).filter(element => element instanceof HTMLElement && element.classList.contains('inline-drawer'))
+        : [];
+    const drawerIndex = Math.max(0, siblingInlineDrawers.indexOf(drawer));
+    const drawerLabel = sanitizeInlineDrawerStorageSegment(getInlineDrawerHeaderText(drawer));
+
+    return `${SB_STORAGE_KEYS.settingsDrawerStatePrefix}:${contextSegments.join('/')}:drawer:${drawerLabel}:${drawerIndex}`;
+}
+
+function getStoredInlineDrawerExpanded(drawer) {
+    const storageKey = getInlineDrawerStorageKey(drawer);
+    const storedValue = storageKey ? getPersistentStorageItem(storageKey) : null;
+
+    if (storedValue !== null) {
+        return normalizeStoredBoolean(storedValue, false);
+    }
+
+    const legacyStorageKey = getLegacySettingsDrawerStorageKey(drawer);
+    if (!legacyStorageKey || legacyStorageKey === storageKey) {
+        return null;
+    }
+
+    const legacyStoredValue = getPersistentStorageItem(legacyStorageKey);
+    if (legacyStoredValue === null) {
+        return null;
+    }
+
+    if (storageKey) {
+        setPersistentStorageItem(storageKey, legacyStoredValue);
+    }
+
+    return normalizeStoredBoolean(legacyStoredValue, false);
+}
+
+function getInlineDrawers(root = document) {
+    const drawers = [];
+
+    if (root instanceof HTMLElement && root.classList.contains('inline-drawer')) {
+        drawers.push(root);
+    }
+
+    if ('querySelectorAll' in root) {
+        drawers.push(...root.querySelectorAll('.inline-drawer'));
+    }
+
+    return drawers;
+}
+
+function bindInlineDrawerPersistence(root = document) {
+    for (const drawer of getInlineDrawers(root)) {
+        if (!(drawer instanceof HTMLElement) || !shouldPersistInlineDrawer(drawer)) {
             continue;
         }
 
-        const storedExpanded = getStoredSettingsDrawerExpanded(drawer);
+        const storedExpanded = getStoredInlineDrawerExpanded(drawer);
         if (storedExpanded !== null) {
             setInlineDrawerExpanded(drawer, storedExpanded);
         }
@@ -6134,33 +6725,66 @@ function bindSettingsDrawerPersistence() {
 
         drawer.addEventListener('inline-drawer-toggle', () => {
             const icon = drawer.querySelector(':scope > .inline-drawer-header .inline-drawer-icon');
-            if (!(icon instanceof HTMLElement)) {
+            const storageKey = getInlineDrawerStorageKey(drawer);
+            if (!(icon instanceof HTMLElement) || !storageKey) {
                 return;
             }
 
-            safeSetItem(storageKey, String(icon.classList.contains('up')));
+            setPersistentStorageItem(storageKey, String(icon.classList.contains('up')));
         });
 
         drawer.dataset.sbDrawerPersistenceBound = 'true';
     }
 }
 
+function queueInlineDrawerPersistenceBind() {
+    if (sbInlineDrawerPersistenceQueued) {
+        return;
+    }
+
+    sbInlineDrawerPersistenceQueued = true;
+    window.requestAnimationFrame(() => {
+        sbInlineDrawerPersistenceQueued = false;
+        bindInlineDrawerPersistence(document.body);
+    });
+}
+
+function getInlineDrawerPersistenceRoots() {
+    return [
+        document.getElementById('left-nav-panel'),
+        document.getElementById('user-settings-block-content'),
+        document.getElementById('WorldInfo'),
+        document.getElementById('right-nav-panel'),
+    ].filter(element => element instanceof HTMLElement);
+}
+
+function ensureInlineDrawerPersistenceObserver() {
+    if (sbInlineDrawerPersistenceObserver) {
+        return;
+    }
+
+    const roots = getInlineDrawerPersistenceRoots();
+    if (!roots.length) {
+        return;
+    }
+
+    sbInlineDrawerPersistenceObserver = new MutationObserver(() => queueInlineDrawerPersistenceBind());
+    for (const root of roots) {
+        sbInlineDrawerPersistenceObserver.observe(root, { childList: true, subtree: true });
+    }
+}
+
 function applyDefaultDrawerStates() {
-    bindSettingsDrawerPersistence();
+    bindInlineDrawerPersistence(document.body);
 
     for (const drawerId of ['AppearanceSection', 'ChatCharactersSection']) {
         const drawer = document.getElementById(drawerId);
-        if (drawer instanceof HTMLElement && getStoredSettingsDrawerExpanded(drawer) === null) {
+        if (drawer instanceof HTMLElement && getStoredInlineDrawerExpanded(drawer) === null) {
             setInlineDrawerExpanded(drawer, false);
         }
     }
 
-    // Re-bind when extensions add drawers later (e.g. In-Chat Agents)
-    const root = document.getElementById('user-settings-block-content');
-    if (root instanceof HTMLElement) {
-        new MutationObserver(() => bindSettingsDrawerPersistence())
-            .observe(root, { childList: true, subtree: true });
-    }
+    ensureInlineDrawerPersistenceObserver();
 }
 
 function syncMobileViewportState() {
@@ -6378,7 +7002,12 @@ async function refreshBottomChatSelect() {
         return;
     }
 
-    const currentChatName = context.getCurrentChatDetails?.()?.sessionName || '';
+    const currentChatName = normalizeChatFileName(
+        context.getCurrentChatId?.()
+        ?? context.chatId
+        ?? document.getElementById('selected_chat_pole')?.value
+        ?? '',
+    );
     const character = context.characters?.[context.characterId];
 
     chatSelect.replaceChildren();
@@ -6407,7 +7036,7 @@ async function refreshBottomChatSelect() {
         const data = await response.json();
         const chats = Object.values(data)
             .sort((a, b) => (b.last_mes || '').localeCompare(a.last_mes || ''))
-            .map(c => c.file_name?.replace('.jsonl', ''));
+            .map(c => normalizeChatFileName(c.file_name));
 
         chatSelect.replaceChildren();
 
@@ -6440,19 +7069,32 @@ function updatePersonaBubble(bubble) {
         return;
     }
 
-    const context = getSillyTavernContext();
-    const personas = context?.powerUserSettings?.personas ?? {};
-    const currentName = context?.name1 || 'You';
+    const { context, currentAvatarId, currentName } = getCurrentPersonaSelection();
+    const avatarUrl = currentAvatarId
+        ? (context?.getThumbnailUrl?.('persona', currentAvatarId) || `/User Avatars/${currentAvatarId}`)
+        : '';
 
-    // Find the avatar ID whose persona name matches the current name1
-    const currentAvatarId = Object.entries(personas).find(([, name]) => name === currentName)?.[0] || '';
-
-    if (currentAvatarId) {
-        bubble.style.backgroundImage = `url("/User Avatars/${currentAvatarId}")`;
+    if (avatarUrl) {
+        bubble.style.backgroundImage = `url("${avatarUrl}")`;
     } else {
         bubble.style.backgroundImage = 'none';
     }
     bubble.setAttribute('title', `Persona: ${currentName}`);
+}
+
+function getCurrentPersonaSelection(context = getSillyTavernContext()) {
+    const personas = context?.powerUserSettings?.personas ?? {};
+    const currentAvatarId = String(context?.userAvatar ?? '').trim()
+        || Object.entries(personas).find(([, name]) => name === (context?.name1 || ''))?.[0]
+        || '';
+    const currentName = personas[currentAvatarId] || context?.name1 || 'You';
+
+    return {
+        context,
+        personas,
+        currentAvatarId,
+        currentName,
+    };
 }
 
 function togglePersonaPicker() {
@@ -6465,15 +7107,13 @@ function togglePersonaPicker() {
     const context = getSillyTavernContext();
     if (!context) return;
 
-    const currentName = context.name1 || 'You';
+    const { personas, currentAvatarId } = getCurrentPersonaSelection(context);
     const picker = createElement('div', { id: 'sb-persona-picker' });
 
-    // powerUserSettings is the correct context property (not power_user)
-    const personas = context.powerUserSettings?.personas ?? {};
     const keys = Object.keys(personas).filter(avatarId => {
         const name = personas[avatarId];
         // Skip auto-created unnamed entries; always show the active persona
-        const isActive = name === currentName;
+        const isActive = avatarId === currentAvatarId;
         return isActive || (name && name !== '[Unnamed Persona]');
     });
 
@@ -6484,7 +7124,7 @@ function togglePersonaPicker() {
     } else {
         for (const avatarId of keys) {
             const name = personas[avatarId] || avatarId;
-            const isActive = name === currentName;
+            const isActive = avatarId === currentAvatarId;
             addPersonaOption(picker, avatarId, name, isActive, context);
         }
     }

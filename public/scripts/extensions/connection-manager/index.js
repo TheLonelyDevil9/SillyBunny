@@ -492,10 +492,43 @@ async function renderDetailsContent(detailsContent) {
     const profiles = document.getElementById('connection_profiles');
     renderConnectionProfiles(profiles);
 
+    /**
+     * Applies a real disabled state to an action icon.
+     * @param {HTMLElement | null} button
+     * @param {boolean} disabled
+     */
+    function setActionButtonDisabled(button, disabled) {
+        if (!button) {
+            return;
+        }
+
+        button.classList.toggle('disabled', disabled);
+        button.toggleAttribute('disabled', disabled);
+        button.setAttribute('aria-disabled', String(disabled));
+    }
+
+    /**
+     * Checks whether an action icon is disabled.
+     * @param {HTMLElement | null} button
+     * @returns {boolean}
+     */
+    function isActionButtonDisabled(button) {
+        return !button
+            || button.classList.contains('disabled')
+            || button.hasAttribute('disabled')
+            || button.getAttribute('aria-disabled') === 'true';
+    }
+
     function toggleProfileSpecificButtons() {
         const profileId = extension_settings.connectionManager.selectedProfile;
-        const profileSpecificButtons = ['update_connection_profile', 'reload_connection_profile', 'delete_connection_profile'];
-        profileSpecificButtons.forEach(id => document.getElementById(id).classList.toggle('disabled', !profileId));
+        const profileSpecificButtons = [
+            'view_connection_profile',
+            'update_connection_profile',
+            'edit_connection_profile',
+            'reload_connection_profile',
+            'delete_connection_profile',
+        ];
+        profileSpecificButtons.forEach(id => setActionButtonDisabled(document.getElementById(id), !profileId));
     }
     toggleProfileSpecificButtons();
 
@@ -533,6 +566,10 @@ async function renderDetailsContent(detailsContent) {
 
     const reloadButton = document.getElementById('reload_connection_profile');
     reloadButton.addEventListener('click', async () => {
+        if (isActionButtonDisabled(reloadButton)) {
+            return;
+        }
+
         const selectedProfile = extension_settings.connectionManager.selectedProfile;
         const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
@@ -556,12 +593,17 @@ async function renderDetailsContent(detailsContent) {
         saveSettingsDebounced();
         renderConnectionProfiles(profiles);
         await renderDetailsContent(detailsContent);
+        toggleProfileSpecificButtons();
         await eventSource.emit(event_types.CONNECTION_PROFILE_CREATED, profile);
         await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, profile.name);
     });
 
     const updateButton = document.getElementById('update_connection_profile');
     updateButton.addEventListener('click', async () => {
+        if (isActionButtonDisabled(updateButton)) {
+            return;
+        }
+
         const selectedProfile = extension_settings.connectionManager.selectedProfile;
         const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
@@ -579,14 +621,23 @@ async function renderDetailsContent(detailsContent) {
 
     const deleteButton = document.getElementById('delete_connection_profile');
     deleteButton.addEventListener('click', async () => {
+        if (isActionButtonDisabled(deleteButton)) {
+            return;
+        }
+
         await deleteConnectionProfile();
         renderConnectionProfiles(profiles);
         await renderDetailsContent(detailsContent);
+        toggleProfileSpecificButtons();
         await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, NONE);
     });
 
     const editButton = document.getElementById('edit_connection_profile');
     editButton.addEventListener('click', async () => {
+        if (isActionButtonDisabled(editButton)) {
+            return;
+        }
+
         const selectedProfile = extension_settings.connectionManager.selectedProfile;
         const profile = extension_settings.connectionManager.profiles.find(p => p.id === selectedProfile);
         if (!profile) {
@@ -664,6 +715,10 @@ async function renderDetailsContent(detailsContent) {
     const viewDetails = document.getElementById('view_connection_profile');
     const detailsContent = document.getElementById('connection_profile_details_content');
     viewDetails.addEventListener('click', async () => {
+        if (isActionButtonDisabled(viewDetails)) {
+            return;
+        }
+
         viewDetails.classList.toggle('active');
         detailsContent.classList.toggle('hidden');
         await renderDetailsContent(detailsContent);
@@ -772,6 +827,7 @@ async function renderDetailsContent(detailsContent) {
             saveSettingsDebounced();
             renderConnectionProfiles(profiles);
             await renderDetailsContent(detailsContent);
+            toggleProfileSpecificButtons();
             await eventSource.emit(event_types.CONNECTION_PROFILE_CREATED, profile);
             return profile.name;
         },
