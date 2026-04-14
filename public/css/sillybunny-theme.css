@@ -228,13 +228,13 @@ body::before {
 body.firefox-macos #top-bar {
     background:
         linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-header-glow) 80%, transparent), transparent 110%),
-        var(--sb-topbar-surface-bg);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+        var(--sb-topbar-surface-bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 body.firefox-macos #top-bar::before {
-    display: none;
+    display: none !important;
 }
 
 /*
@@ -244,11 +244,11 @@ body.firefox-macos #top-bar::before {
  */
 body.firefox-macos #sb-topbar-stack,
 body.firefox-macos #sb-chatbar-layer {
-    contain: none;
+    contain: none !important;
 }
 
 body.firefox-macos #sb-chatbar-layer {
-    will-change: auto;
+    will-change: auto !important;
 }
 
 /* Safari on macOS can show a sub-pixel border artifact with backdrop-filter. */
@@ -265,7 +265,7 @@ body.safari-macos #top-bar {
  */
 body.safari-macos #sb-topbar-stack,
 body.safari-macos #sb-chatbar-layer {
-    contain: none;
+    contain: none !important;
 }
 
 /*
@@ -275,22 +275,22 @@ body.safari-macos #sb-chatbar-layer {
 body.chrome-macos #top-bar {
     background:
         linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-header-glow) 80%, transparent), transparent 110%),
-        var(--sb-topbar-surface-bg);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+        var(--sb-topbar-surface-bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 body.chrome-macos #top-bar::before {
-    display: none;
+    display: none !important;
 }
 
 body.chrome-macos #sb-topbar-stack,
 body.chrome-macos #sb-chatbar-layer {
-    contain: none;
+    contain: none !important;
 }
 
 body.chrome-macos #sb-chatbar-layer {
-    will-change: auto;
+    will-change: auto !important;
 }
 
 hr {
