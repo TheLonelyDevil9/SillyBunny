@@ -170,6 +170,12 @@ body::before {
     contain: layout style paint;
 }
 
+@media (pointer: fine) and (hover: hover) {
+    body::before {
+        inset-top: 0;
+    }
+}
+
 :root[data-sb-theme='modern-glass'][data-sb-surface-tone='light'] body::before {
     opacity: 0.46;
 }
@@ -251,6 +257,40 @@ body.safari-macos #top-bar {
     box-shadow:
         0 1px 0 color-mix(in srgb, var(--sb-shell-border) 90%, transparent),
         0 12px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 16%, transparent);
+}
+
+/*
+ * Safari on macOS can mispaint contained/transformed descendants in
+ * the top-bar stack, similar to the Firefox-macOS issue above.
+ */
+body.safari-macos #sb-topbar-stack,
+body.safari-macos #sb-chatbar-layer {
+    contain: none;
+}
+
+/*
+ * Chrome on macOS can also mispaint the fixed header surface pseudo-element
+ * and contained/transformed descendants in the top-bar stack.
+ */
+body.chrome-macos #top-bar {
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-header-glow) 80%, transparent), transparent 110%),
+        var(--sb-topbar-surface-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.chrome-macos #top-bar::before {
+    display: none;
+}
+
+body.chrome-macos #sb-topbar-stack,
+body.chrome-macos #sb-chatbar-layer {
+    contain: none;
+}
+
+body.chrome-macos #sb-chatbar-layer {
+    will-change: auto;
 }
 
 hr {

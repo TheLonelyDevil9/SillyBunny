@@ -84,6 +84,16 @@ function addFirefoxPatch() {
     }
 }
 
+function addChromePatch() {
+    const userAgent = getParsedUA();
+    const isDesktopChrome = userAgent?.browser?.name === 'Chrome' && userAgent?.platform?.type === 'desktop';
+    const isMacChrome = isDesktopChrome && userAgent?.os?.name === 'macOS';
+
+    if (isMacChrome) {
+        document.body.classList.add('chrome-macos');
+    }
+}
+
 function applyBrowserFixes() {
     if (isFirefox()) {
         sanitizeInlineQuotationOnCopy();
@@ -101,6 +111,7 @@ function applyBrowserFixes() {
 
     addSafariPatch();
     addFirefoxPatch();
+    addChromePatch();
 }
 
 export { isFirefox, applyBrowserFixes };

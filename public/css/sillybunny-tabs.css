@@ -153,6 +153,12 @@
     overflow: visible;
 }
 
+@media (pointer: fine) and (hover: hover) {
+    #top-bar {
+        padding-top: 0 !important;
+    }
+}
+
 #top-bar * {
     pointer-events: auto;
 }
