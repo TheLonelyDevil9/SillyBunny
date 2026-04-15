@@ -44,6 +44,11 @@
                 </select>
             </label>
         </div>
+        <div class="ica--editor-row">
+            <label>Model Override <small>(optional model name to use instead of the profile's default model, e.g., "claude-sonnet-4-6" or "gpt-4")</small>
+                <input type="text" id="ica--editor-modelOverride" class="text_pole" placeholder="Leave empty to use profile default" />
+            </label>
+        </div>
         <textarea id="ica--editor-prompt" class="text_pole textarea_compact" rows="8" placeholder="Write your agent prompt here. Supports macros: {{char}}, {{user}}, {{random::a::b::c}}, etc."></textarea>
     </div>
 

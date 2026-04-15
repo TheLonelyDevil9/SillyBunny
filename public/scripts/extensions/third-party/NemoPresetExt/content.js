@@ -196,6 +196,13 @@ function schedulePromptRefresh() {
         promptRefreshFrame = null;
         refreshPromptSections();
     });
+
+    // Prompt Manager can do a follow-up rebuild shortly after the first paint.
+    // Run one delayed pass as well so section headers survive that second render.
+    promptRefreshTimer = window.setTimeout(() => {
+        promptRefreshTimer = null;
+        refreshPromptSections();
+    }, 140);
 }
 
 function injectPromptToolbar(promptList) {
@@ -270,6 +277,11 @@ function getPromptRows() {
 }
 
 function getPromptRowName(row) {
+    const promptName = String(getPromptRowData(row)?.name || '').trim();
+    if (promptName) {
+        return promptName;
+    }
+
     const inspectLink = row.querySelector('.prompt-manager-inspect-action');
     if (inspectLink) {
         return String(inspectLink.getAttribute('title') || inspectLink.textContent || '').trim();
@@ -279,9 +291,17 @@ function getPromptRowName(row) {
     return String(nameContainer?.textContent || '').trim();
 }
 
-function getPromptSearchText(row) {
+function getPromptRowData(row) {
     const identifier = row.dataset.pmIdentifier;
-    const prompt = identifier ? promptManager?.getPromptById?.(identifier) : null;
+    return identifier ? promptManager?.getPromptById?.(identifier) : null;
+}
+
+function hasPromptRowContent(row) {
+    return String(getPromptRowData(row)?.content || '').trim().length > 0;
+}
+
+function getPromptSearchText(row) {
+    const prompt = getPromptRowData(row);
     return `${getPromptRowName(row)}\n${prompt?.content || ''}`.toLowerCase();
 }
 
@@ -349,10 +369,79 @@ function cleanupPromptSections() {
     promptListElement.querySelectorAll('.nemo-sb-section-row').forEach(row => row.remove());
 
     getPromptRows().forEach(row => {
-        row.classList.remove('nemo-sb-section-item', 'nemo-sb-divider-row');
+        row.classList.remove('nemo-sb-section-item', 'nemo-sb-divider-row', 'nemo-sb-divider-source', 'nemo-sb-divider-structural');
         row.style.display = '';
         delete row.dataset.sectionId;
     });
+}
+
+function applySectionRowStyles(row, isOpen) {
+    if (!(row instanceof HTMLElement)) {
+        return;
+    }
+
+    row.style.setProperty('display', 'block', 'important');
+    row.style.setProperty('width', '100%', 'important');
+    row.style.setProperty('min-height', '48px', 'important');
+    row.style.boxSizing = 'border-box';
+    row.style.padding = '0';
+    row.style.margin = '8px 0 4px';
+    row.style.listStyle = 'none';
+    row.style.overflow = 'hidden';
+    row.style.position = 'relative';
+    row.style.isolation = 'isolate';
+    row.style.border = '1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent)';
+    row.style.borderRadius = '14px';
+    row.style.background = 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, transparent)';
+    row.style.opacity = isOpen ? '1' : '0.92';
+
+    const trigger = row.querySelector('.nemo-sb-section-trigger');
+    if (trigger instanceof HTMLElement) {
+        trigger.style.setProperty('display', 'flex', 'important');
+        trigger.style.setProperty('align-items', 'center', 'important');
+        trigger.style.setProperty('width', '100%', 'important');
+        trigger.style.setProperty('grid-column', '1 / -1', 'important');
+        trigger.style.setProperty('min-height', '48px', 'important');
+        trigger.style.setProperty('gap', '10px', 'important');
+        trigger.style.setProperty('padding', '10px 12px', 'important');
+        trigger.style.border = '0';
+        trigger.style.borderRadius = 'inherit';
+        trigger.style.background = 'transparent';
+        trigger.style.color = 'inherit';
+        trigger.style.font = 'inherit';
+        trigger.style.textAlign = 'left';
+        trigger.style.cursor = 'pointer';
+        trigger.style.touchAction = 'manipulation';
+        trigger.style.appearance = 'none';
+        trigger.style.webkitAppearance = 'none';
+    }
+
+    const toggle = row.querySelector('.nemo-sb-section-toggle');
+    if (toggle instanceof HTMLElement) {
+        toggle.style.display = 'flex';
+        toggle.style.flex = '0 0 auto';
+        toggle.style.alignItems = 'center';
+        toggle.style.justifyContent = 'center';
+        toggle.style.width = '28px';
+        toggle.style.height = '28px';
+        toggle.style.borderRadius = '999px';
+        toggle.style.background = 'color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent)';
+        toggle.style.color = 'var(--SmartThemeBodyColor)';
+    }
+
+    const title = row.querySelector('.nemo-sb-section-title');
+    if (title instanceof HTMLElement) {
+        title.style.flex = '1 1 auto';
+        title.style.fontWeight = '700';
+        title.style.letterSpacing = '0.01em';
+    }
+
+    const count = row.querySelector('.nemo-sb-section-count');
+    if (count instanceof HTMLElement) {
+        count.style.color = 'var(--SmartThemeEmColor)';
+        count.style.fontSize = '0.9em';
+        count.style.whiteSpace = 'nowrap';
+    }
 }
 
 function createSectionRow(sectionId, title, sectionName, isOpen) {
@@ -369,6 +458,7 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
             <span class="nemo-sb-section-count"></span>
         </button>
     `;
+    applySectionRowStyles(row, isOpen);
     row.querySelector('.nemo-sb-section-title').textContent = title;
     const toggleSection = () => {
         const settings = ensureSettings();
@@ -446,10 +536,10 @@ function refreshPromptSections() {
                 const isOpen = getPromptSectionOpenState(settings, sectionId, promptName);
                 const sectionTitle = stripDividerPrefix(promptName, dividerRegex);
                 const sectionRow = createSectionRow(sectionId, sectionTitle, promptName, isOpen);
+                const isSourcePrompt = hasPromptRowContent(row);
 
                 row.before(sectionRow);
                 row.classList.add('nemo-sb-divider-row');
-                row.style.display = 'none';
 
                 currentSection = {
                     id: sectionId,
@@ -459,6 +549,19 @@ function refreshPromptSections() {
                     prompts: [],
                 };
                 sections.push(currentSection);
+
+                if (isSourcePrompt) {
+                    row.classList.add('nemo-sb-section-item', 'nemo-sb-divider-source');
+                    row.dataset.sectionId = currentSection.id;
+                    currentSection.prompts.push(row);
+                } else {
+                    // Keep structural divider prompts available inside expanded sections
+                    // so they do not disappear permanently from the prompt list/editor flow.
+                    row.classList.add('nemo-sb-section-item', 'nemo-sb-divider-structural');
+                    row.dataset.sectionId = currentSection.id;
+                    currentSection.prompts.push(row);
+                }
+
                 return;
             }
 
@@ -472,6 +575,7 @@ function refreshPromptSections() {
         sections.forEach(section => {
             const titleMatches = query.length > 0 && section.title.toLowerCase().includes(query);
             let matchedCount = 0;
+            const countablePrompts = section.prompts.filter(row => !row.classList.contains('nemo-sb-divider-structural'));
 
             section.prompts.forEach(row => {
                 const matches = !query || titleMatches || getPromptSearchText(row).includes(query);
@@ -479,15 +583,17 @@ function refreshPromptSections() {
                     matchedCount += 1;
                 }
 
-                const shouldShow = matches && (query.length > 0 || section.isOpen);
+                const isStructuralDivider = row.classList.contains('nemo-sb-divider-structural');
+                const shouldShow = !isStructuralDivider && matches && (query.length > 0 || section.isOpen);
                 row.style.display = shouldShow ? '' : 'none';
             });
 
-            const enabledCount = section.prompts.filter(row => row.querySelector('.prompt-manager-toggle-action.fa-toggle-on')).length;
-            section.row.querySelector('.nemo-sb-section-count').textContent = `${enabledCount}/${section.prompts.length}`;
+            const enabledCount = countablePrompts.filter(row => row.querySelector('.prompt-manager-toggle-action.fa-toggle-on')).length;
+            section.row.querySelector('.nemo-sb-section-count').textContent = `${enabledCount}/${countablePrompts.length}`;
             section.row.style.display = query.length === 0 || titleMatches || matchedCount > 0 ? '' : 'none';
             section.row.classList.toggle('is-collapsed', !section.isOpen && query.length === 0);
             section.row.querySelector('.nemo-sb-section-trigger')?.setAttribute('aria-expanded', String(section.isOpen || query.length > 0));
+            applySectionRowStyles(section.row, section.isOpen || query.length > 0);
 
             const icon = section.row.querySelector('.nemo-sb-section-toggle i');
             icon.className = `fa-solid ${section.isOpen || query.length > 0 ? 'fa-chevron-down' : 'fa-chevron-right'}`;
@@ -499,6 +605,16 @@ function refreshPromptSections() {
                 const matches = !query || getPromptSearchText(row).includes(query);
                 row.style.display = matches ? '' : 'none';
             });
+
+        if (!sections.length) {
+            const dividerCandidates = rows
+                .map(row => getPromptRowName(row))
+                .filter(name => /^(?:=+|-{3,}|\*{3,}|[^\w\s]*[─—-]\+)/u.test(String(name).trim()));
+
+            if (dividerCandidates.length) {
+                console.warn('[NemoPresetExt] Divider prompts were detected but no collapsible sections were rendered.', dividerCandidates);
+            }
+        }
     } finally {
         isRefreshingPromptSections = false;
 

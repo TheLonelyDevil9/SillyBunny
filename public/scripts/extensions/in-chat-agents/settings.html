@@ -2,6 +2,17 @@
     <div class="ica--inner">
         <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation; 30 bundled agents across 4 categories (trackers; randomizers; content helpers; tools); plus room for your own. Click <b>Templates</b> to browse and install all bundled agents. Toggle them on, tweak their prompts, or use the robot button on a card to manually apply that agent to the last assistant reply.</p>
 
+        <div class="ica--templates-callout">
+            <div class="ica--templates-callout-copy">
+                <strong>Bundled trackers live in Templates</strong>
+                <span>Click <b>Templates</b> to browse and install the full built-in tracker library. They do not all appear in your list automatically.</span>
+            </div>
+            <button type="button" id="ica--templatesCallout" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-book-open"></i>
+                <span>Open Templates</span>
+            </button>
+        </div>
+
         <div class="ica--toolbar">
             <div class="ica--toolbar-actions">
                 <div id="ica--addAgent" class="menu_button menu_button_icon" title="Create a new agent from scratch">
@@ -77,6 +88,13 @@
                 <span>Default Connection Profile</span>
                 <select id="ica--connectionProfile" class="text_pole" title="Which connection profile to use when an agent does not have its own editor profile override. Leave this on the selected Connection Manager profile to follow the active profile.">
                     <option value="">Use selected connection profile</option>
+                </select>
+            </label>
+            <label class="ica--profile-label">
+                <span>Append Agents Execution</span>
+                <select id="ica--appendAgentsExecutionMode" class="text_pole" title="Run append-mode agents in parallel (faster, may hit rate limits) or sequentially (slower, avoids rate limits).">
+                    <option value="parallel">Parallel (faster)</option>
+                    <option value="sequential">Sequential (rate-limit friendly)</option>
                 </select>
             </label>
             <label class="checkbox_label" title="Master switch for prompt pass toasts. Per-agent notification checkboxes still decide which agents can show them.">

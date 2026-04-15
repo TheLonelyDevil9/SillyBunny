@@ -20,6 +20,45 @@
     line-height: 1.4;
 }
 
+.ica--templates-callout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 55%, transparent);
+    background:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 16%, transparent),
+            color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 72%, transparent));
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 14%, transparent);
+}
+
+.ica--templates-callout-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ica--templates-callout-copy strong {
+    font-size: calc(var(--mainFontSize) * 0.98);
+}
+
+.ica--templates-callout-copy span {
+    font-size: calc(var(--mainFontSize) * 0.8);
+    line-height: 1.4;
+    opacity: 0.86;
+}
+
+#ica--templatesCallout {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 24%, transparent);
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 48%, transparent);
+}
+
 /* Toolbar */
 .ica--toolbar {
     display: flex;
@@ -133,6 +172,21 @@
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 30%, transparent);
     transition: border-color 0.15s;
     cursor: pointer;
+}
+
+.ica--category-items.ui-sortable .ica--agent-card {
+    touch-action: manipulation;
+}
+
+.ica--agent-card-placeholder {
+    min-height: 126px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 58%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 10%, transparent);
+}
+
+.ui-sortable-helper.ica--agent-card {
+    box-shadow: 0 18px 36px color-mix(in srgb, #000 24%, transparent);
 }
 
 .ica--agent-card:hover {
@@ -704,6 +758,18 @@
     text-overflow: ellipsis;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+@media (max-width: 720px) {
+    .ica--templates-callout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #ica--templatesCallout {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 /* ── Tool Agent (Pathfinder) ────────────────────────── */

@@ -1,18 +1,42 @@
-import { getSettings, getTree, findNodeById } from './tree-store.js';
-import { createEntry } from './entry-manager.js';
-import { getActiveTunnelVisionBooks, getReadableBooks } from './pathfinder-tool-bridge.js';
+import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
+import { ARGUMENT_TYPE, SlashCommandArgument } from '../../../slash-commands/SlashCommandArgument.js';
+import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 
-const COMMAND_PREFIX = '/tv';
+import { getTree, findNodeById } from './tree-store.js';
+import { createEntry } from './entry-manager.js';
+import { getActiveTunnelVisionBooks } from './pathfinder-tool-bridge.js';
+
+function buildCommand(props) {
+    return SlashCommand.fromProps({
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: props.argumentDescription,
+                typeList: [ARGUMENT_TYPE.STRING],
+                isRequired: true,
+            }),
+        ],
+        ...props,
+    });
+}
 
 export function initCommands(registerSlashCommand) {
-    if (typeof registerSlashCommand !== 'function') return;
+    const registerCommand = (command) => {
+        if (typeof SlashCommandParser?.addCommandObject === 'function') {
+            SlashCommandParser.addCommandObject(command);
+            return;
+        }
 
-    registerSlashCommand({
+        if (typeof registerSlashCommand === 'function') {
+            registerSlashCommand(command.name, command.callback, command.aliases, command.helpString);
+        }
+    };
+
+    registerCommand(buildCommand({
         name: 'pf-remember',
-        description: 'Force Pathfinder to save something to memory.',
-        args: [{ name: 'content', type: 'string', description: 'Content to remember', required: true }],
-        callback: async (args) => {
-            const content = String(args.content || '').trim();
+        helpString: 'Force Pathfinder to save something to memory.',
+        argumentDescription: 'Content to remember',
+        callback: async (_, content) => {
+            content = String(content || '').trim();
             if (!content) return 'Nothing to remember.';
             const books = getActiveTunnelVisionBooks();
             if (books.length === 0) return 'No Pathfinder-enabled lorebooks.';
@@ -24,14 +48,14 @@ export function initCommands(registerSlashCommand) {
                 return `Error: ${err.message}`;
             }
         },
-    });
+    }));
 
-    registerSlashCommand({
+    registerCommand(buildCommand({
         name: 'pf-search',
-        description: 'Force Pathfinder to search the waypoint map.',
-        args: [{ name: 'query', type: 'string', description: 'Search query', required: true }],
-        callback: async (args) => {
-            const query = String(args.query || '').trim();
+        helpString: 'Force Pathfinder to search the waypoint map.',
+        argumentDescription: 'Search query',
+        callback: async (_, query) => {
+            query = String(query || '').trim();
             if (!query) return 'No search query.';
             const results = [];
             for (const bookName of getActiveTunnelVisionBooks()) {
@@ -42,5 +66,5 @@ export function initCommands(registerSlashCommand) {
             }
             return results.length > 0 ? results.join('\n') : 'No waypoints found matching query.';
         },
-    });
+    }));
 }

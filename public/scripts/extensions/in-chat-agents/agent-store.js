@@ -72,6 +72,7 @@ import {
  * @property {AgentPostProcess} postProcess
  * @property {AgentRegexScript[]} regexScripts
  * @property {string} connectionProfile
+ * @property {string} modelOverride - Optional model name to use instead of profile default
  * @property {string} sourceTemplateId
  * @property {boolean} enabled
  * @property {AgentConditions} conditions
@@ -93,11 +94,12 @@ let customGroups = [];
 let globalSettings = {
     connectionProfile: '',
     promptTransformShowNotifications: true,
+    appendAgentsExecutionMode: 'parallel',
 };
 
 /**
  * Returns the global settings.
- * @returns {{ connectionProfile: string, promptTransformShowNotifications: boolean }}
+ * @returns {{ connectionProfile: string, promptTransformShowNotifications: boolean, appendAgentsExecutionMode: 'parallel'|'sequential' }}
  */
 export function getGlobalSettings() {
     return globalSettings;
@@ -248,6 +250,7 @@ export function createDefaultAgent() {
         prompt: '',
         phase: 'pre',
         connectionProfile: '',
+        modelOverride: '',
         sourceTemplateId: '',
         injection: {
             position: 1,
@@ -328,6 +331,7 @@ export function normalizeAgent(rawAgent = {}) {
         prompt: typeof rawAgent.prompt === 'string' ? rawAgent.prompt : defaults.prompt,
         phase: ['pre', 'post', 'both'].includes(rawAgent.phase) ? rawAgent.phase : defaults.phase,
         connectionProfile: typeof rawAgent.connectionProfile === 'string' ? rawAgent.connectionProfile : defaults.connectionProfile,
+        modelOverride: typeof rawAgent.modelOverride === 'string' ? rawAgent.modelOverride : defaults.modelOverride,
         sourceTemplateId: typeof rawAgent.sourceTemplateId === 'string' ? rawAgent.sourceTemplateId : defaults.sourceTemplateId,
         injection: {
             ...defaults.injection,

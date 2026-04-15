@@ -35,6 +35,11 @@ const PROMPT_RUNS_EXTRA_KEY = 'inChatAgentPromptRuns';
 const pendingRefreshTimeouts = new Map();
 const DEFAULT_PROMPT_TRANSFORM_MAX_TOKENS = DEFAULT_AGENT_MAX_TOKENS;
 const GREETING_GENERATION_TYPE = 'first_message';
+const PREPEND_PROMPT_TRANSFORM_TEMPLATE_IDS = new Set([
+    'tpl-scene-tracker',
+    'tpl-time-tracker',
+]);
+const PREPEND_PROMPT_TRANSFORM_TAG_RE = /\[(?:SCENE|TIME)\|/;
 
 /** @type {{ generationType: string, activeAgentIds: string[] } | null} */
 let pendingGenerationSnapshot = null;
@@ -471,7 +476,7 @@ function updatePromptTransformRuns(message, runs) {
         return false;
     }
 
-    message.extra[PROMPT_RUNS_EXTRA_KEY] = runs;
+    message.extra[PROMPT_RUNS_EXTRA_KEY] = runs.map(result => sanitizePromptTransformRunForStorage(result));
     return true;
 }
 
@@ -515,6 +520,84 @@ function appendPromptTransformOutput(originalText, appendedText) {
     return `${baseText}\n\n${addition}`;
 }
 
+function joinPromptTransformText(leftText, rightText) {
+    const left = String(leftText ?? '');
+    const right = String(rightText ?? '');
+
+    if (!left) {
+        return right;
+    }
+
+    if (!right) {
+        return left;
+    }
+
+    if (left.endsWith('\n\n') || right.startsWith('\n\n')) {
+        return left + right;
+    }
+
+    if (left.endsWith('\n') || right.startsWith('\n')) {
+        return `${left}\n${right}`;
+    }
+
+    return `${left}\n\n${right}`;
+}
+
+function shouldPrependPromptTransformOutput(agent, outputText = '') {
+    const templateId = String(agent?.sourceTemplateId ?? '').trim();
+    if (PREPEND_PROMPT_TRANSFORM_TEMPLATE_IDS.has(templateId)) {
+        return true;
+    }
+
+    return PREPEND_PROMPT_TRANSFORM_TAG_RE.test(String(outputText ?? ''));
+}
+
+function sanitizePromptTransformRunForStorage(result) {
+    if (!result || typeof result !== 'object') {
+        return result;
+    }
+
+    const { outputText, nextMessageText, ...storedResult } = result;
+    return storedResult;
+}
+
+function consolidateAppendPromptTransformOutputs(baseText, agents, results) {
+    const prependSegments = [];
+    const appendSegments = [];
+    const seenSegments = new Set();
+    const agentMap = new Map((Array.isArray(agents) ? agents : []).map(agent => [agent.id, agent]));
+
+    for (const result of Array.isArray(results) ? results : []) {
+        const outputText = String(result?.outputText ?? '').trim();
+        if (!outputText) {
+            continue;
+        }
+
+        const agent = agentMap.get(result.agentId);
+        const shouldPrepend = shouldPrependPromptTransformOutput(agent, outputText);
+        const dedupeKey = `${shouldPrepend ? 'prepend' : 'append'}:${outputText}`;
+        if (seenSegments.has(dedupeKey)) {
+            continue;
+        }
+
+        seenSegments.add(dedupeKey);
+        (shouldPrepend ? prependSegments : appendSegments).push(outputText);
+    }
+
+    let mergedText = String(baseText ?? '');
+    if (prependSegments.length > 0) {
+        mergedText = joinPromptTransformText(prependSegments.join('\n\n'), mergedText);
+    }
+    if (appendSegments.length > 0) {
+        mergedText = joinPromptTransformText(mergedText, appendSegments.join('\n\n'));
+    }
+
+    return {
+        text: mergedText,
+        changed: mergedText !== String(baseText ?? ''),
+    };
+}
+
 function extractProfileResponseText(response) {
     if (typeof response === 'string') {
         return response;
@@ -531,13 +614,17 @@ function buildFallbackPromptText(promptMessages) {
         .join('\n\n');
 }
 
-async function requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens) {
+async function requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens, modelOverride = '') {
     const requestOptions = {
         extractData: true,
         includePreset: true,
         includeInstruct: true,
         stream: false,
     };
+
+    if (modelOverride && modelOverride.trim()) {
+        requestOptions.modelOverride = modelOverride.trim();
+    }
 
     try {
         const primaryResponse = await CMRS.sendRequest(profileId, promptMessages, maxTokens, requestOptions);
@@ -566,12 +653,18 @@ async function requestProfilePromptTransform(CMRS, profileId, promptMessages, ma
         fallbackPrompt = buildFallbackPromptText(promptMessages);
     }
 
-    const fallbackResponse = await CMRS.sendRequest(profileId, fallbackPrompt, maxTokens, {
+    const fallbackOptions = {
         extractData: true,
         includePreset: true,
         includeInstruct: false,
         stream: false,
-    });
+    };
+
+    if (modelOverride && modelOverride.trim()) {
+        fallbackOptions.modelOverride = modelOverride.trim();
+    }
+
+    const fallbackResponse = await CMRS.sendRequest(profileId, fallbackPrompt, maxTokens, fallbackOptions);
 
     return {
         output: extractProfileResponseText(fallbackResponse),
@@ -582,6 +675,7 @@ async function requestProfilePromptTransform(CMRS, profileId, promptMessages, ma
 
 async function requestPromptTransform(agent, promptMessages, maxTokens) {
     const profileId = resolveAgentConnectionProfile(agent);
+    const modelOverride = typeof agent.modelOverride === 'string' ? agent.modelOverride.trim() : '';
     const context = getContext();
     const CMRS = context?.ConnectionManagerRequestService;
 
@@ -590,7 +684,7 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
             throw new Error(`Connection profile "${profileId}" is set, but Connection Manager is unavailable.`);
         }
 
-        return await requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens);
+        return await requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens, modelOverride);
     }
 
     const quietPrompt = promptMessages
@@ -625,7 +719,8 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
     }
 }
 
-async function runPromptTransformAgent(agent, message, generationType, messageTextOverride = null, messageIndex = null) {
+async function runPromptTransformAgent(agent, message, generationType, messageTextOverride = null, messageIndex = null, options = {}) {
+    const applyToMessage = options.applyToMessage !== false;
     const currentMessageText = messageTextOverride !== null ? String(messageTextOverride) : String(message?.mes ?? '');
     const normalizedGenerationType = normalizeGenerationType(generationType);
     const promptTransformMode = getPromptTransformMode(agent);
@@ -642,6 +737,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
             profileId,
             runner: 'none',
             timestamp: new Date().toISOString(),
+            outputText: '',
+            nextMessageText: currentMessageText,
         };
 
         return result;
@@ -663,6 +760,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
             profileId,
             runner: 'none',
             timestamp: new Date().toISOString(),
+            outputText: '',
+            nextMessageText: currentMessageText,
         };
 
         return result;
@@ -695,6 +794,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
                 profileId: response.profileId,
                 runner: response.runner,
                 timestamp: new Date().toISOString(),
+                outputText: '',
+                nextMessageText: currentMessageText,
             };
 
             if (showNotifications) {
@@ -708,7 +809,7 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
             ? appendPromptTransformOutput(currentMessageText, promptOutputText)
             : promptOutputText;
         const changed = nextMessageText !== currentMessageText;
-        if (changed) {
+        if (changed && applyToMessage) {
             message.mes = nextMessageText;
             syncPromptTransformMessageState(message, messageIndex);
         }
@@ -724,6 +825,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
             profileId: response.profileId,
             runner: response.runner,
             timestamp: new Date().toISOString(),
+            outputText: promptOutputText,
+            nextMessageText,
         };
 
         if (showNotifications) {
@@ -743,6 +846,8 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
             profileId,
             runner: 'error',
             timestamp: new Date().toISOString(),
+            outputText: '',
+            nextMessageText: currentMessageText,
         };
 
         if (showNotifications) {
@@ -753,6 +858,73 @@ async function runPromptTransformAgent(agent, message, generationType, messageTe
     } finally {
         clearPromptTransformRunningToast(runningToast);
     }
+}
+
+async function runPromptTransformAppendBatch(agents, message, generationType, messageTextOverride = null, messageIndex = null) {
+    const currentMessageText = messageTextOverride !== null ? String(messageTextOverride) : String(message?.mes ?? '');
+    const globalSettings = getGlobalSettings();
+    const executionMode = globalSettings.appendAgentsExecutionMode === 'sequential' ? 'sequential' : 'parallel';
+
+    let results = [];
+
+    if (executionMode === 'sequential') {
+        for (const agent of agents) {
+            try {
+                const result = await runPromptTransformAgent(agent, message, generationType, currentMessageText, messageIndex, {
+                    applyToMessage: false,
+                });
+                results.push(result);
+            } catch (error) {
+                results.push({
+                    agentId: agent.id,
+                    agentName: agent.name,
+                    changed: false,
+                    status: 'error',
+                    mode: getPromptTransformMode(agent),
+                    error: error instanceof Error ? error.message : String(error),
+                    runner: 'error',
+                    timestamp: new Date().toISOString(),
+                    outputText: '',
+                    nextMessageText: currentMessageText,
+                });
+            }
+        }
+    } else {
+        results = await Promise.all(
+            agents.map(async(agent) => {
+                try {
+                    return await runPromptTransformAgent(agent, message, generationType, currentMessageText, messageIndex, {
+                        applyToMessage: false,
+                    });
+                } catch (error) {
+                    return {
+                        agentId: agent.id,
+                        agentName: agent.name,
+                        changed: false,
+                        status: 'error',
+                        mode: getPromptTransformMode(agent),
+                        error: error instanceof Error ? error.message : String(error),
+                        runner: 'error',
+                        timestamp: new Date().toISOString(),
+                        outputText: '',
+                        nextMessageText: currentMessageText,
+                    };
+                }
+            }),
+        );
+    }
+
+    const consolidated = consolidateAppendPromptTransformOutputs(currentMessageText, agents, results);
+    if (consolidated.changed) {
+        message.mes = consolidated.text;
+        syncPromptTransformMessageState(message, messageIndex);
+    }
+
+    return {
+        results,
+        changed: consolidated.changed,
+        nextMessageText: consolidated.text,
+    };
 }
 
 async function refreshMessageAfterMutation(messageIndex, message) {
@@ -922,10 +1094,49 @@ async function processReceivedMessage(messageIndex, generationType) {
     let messageDisplayChanged = false;
 
     const promptRuns = [];
+    let currentPromptTransformText = String(message.mes ?? '');
+    let appendBatch = [];
+    const flushAppendBatch = async () => {
+        if (appendBatch.length === 0) {
+            return;
+        }
+
+        const batchAgents = appendBatch;
+        appendBatch = [];
+
+        const batchResult = await runPromptTransformAppendBatch(
+            batchAgents,
+            message,
+            generationType,
+            currentPromptTransformText,
+            messageIndex,
+        );
+        promptRuns.push(...batchResult.results);
+        currentPromptTransformText = batchResult.nextMessageText;
+
+        if (batchResult.changed) {
+            chatStateChanged = true;
+            messageDisplayChanged = true;
+        }
+    };
+
     for (const agent of promptTransformAgents) {
+        if (getPromptTransformMode(agent) === 'append') {
+            appendBatch.push(agent);
+            continue;
+        }
+
+        await flushAppendBatch();
+
         try {
-            const result = await runPromptTransformAgent(agent, message, generationType, null, messageIndex);
+            const result = await runPromptTransformAgent(agent, message, generationType, currentPromptTransformText, messageIndex);
             promptRuns.push(result);
+            currentPromptTransformText = result.nextMessageText;
+
+            if (result.changed) {
+                chatStateChanged = true;
+                messageDisplayChanged = true;
+            }
         } catch (error) {
             promptRuns.push({
                 agentId: agent.id,
@@ -940,12 +1151,7 @@ async function processReceivedMessage(messageIndex, generationType) {
         }
     }
 
-    for (const result of promptRuns) {
-        if (result.changed) {
-            chatStateChanged = true;
-            messageDisplayChanged = true;
-        }
-    }
+    await flushAppendBatch();
 
     if (updatePromptTransformRuns(message, promptRuns)) {
         chatStateChanged = true;
