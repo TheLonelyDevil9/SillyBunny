@@ -143,7 +143,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Agents can run **prompt transforms** in `rewrite` or `append` mode
 - Agents can be bundled into **Agent Groups** for one-click setup
 
-**What ships with v1.3.4:**
+**What ships with v1.3.5:**
 
 - **30 bundled agents** across Tracker (13), Randomizer (8), Content (6), and Tool (1) categories, plus Pathfinder (1), plus room for custom agents
 - Trackers: Achievements, CYOA Choices, Direction Menu, Event, Item, NPC Profiles, Parallel Off-Screen, Relationship, Reputation, Scene, Secrets, Status, Time, and World Detail
@@ -158,7 +158,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 - Inline run-order editing directly from the agent cards
 - Fullscreen prompt editors and click-to-edit agent cards
 
-**Bundled defaults in v1.3.4:**
+**Bundled defaults in v1.3.5:**
 
 - Bundled trackers, including CYOA Choices and Direction Menu, are set up for **post-generation prompt append**
 - All bundled tracker and menu agents use **User injection role** by default (better compatibility with models like GLM that de-prioritize System injections)
@@ -176,7 +176,7 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 ## UI preview
 
-These screenshots show the `v1.3.4` shell across Navigate, Customize, Agents, and Characters on desktop and mobile, plus the same views with Moonlit Echoes enabled.
+These screenshots show the `v1.3.5` shell across Navigate, Customize, Agents, and Characters on desktop and mobile, plus the same views with Moonlit Echoes enabled.
 
 #### Default shell
 
@@ -226,7 +226,7 @@ These screenshots show the `v1.3.4` shell across Navigate, Customize, Agents, an
 
 ## Changelog
 
-### v1.3.4 (2026-04-15)
+### v1.3.5 (2026-04-15)
 
 **Shell and panel fixes**
 
@@ -238,10 +238,16 @@ These screenshots show the `v1.3.4` shell across Navigate, Customize, Agents, an
 
 - Added Pathfinder, an agentic lorebook navigator with eight tools (Search, Remember, Update, Forget, Summarize, Reorganize, Merge/Split, Notebook) and a predictive pipeline system with LLM-powered tree building
 - Added the Tool agent category for agents that require API tool-calling support
+- Added per-agent model override field so different agents can call different models (e.g., Flash vs Sonnet) without creating separate connection profiles
+- Added sequential/parallel execution mode toggle for append agents (parallel is faster but may hit rate limits; sequential is rate-limit friendly)
 - Reassigned Grounded Prose, HTML Toggle, Difficulty Increase, Friction Mode, Don't Write for User, and Write for User to Content; NPC Profile Cards to Tracker
 - Removed the legacy Agent Mode drawer from Settings (In-Chat Agents remains)
 - Removed "Apply to Last Reply" and "Export" buttons from Pathfinder cards
 - Fixed a bug where clicking a category chevron in the Agents page on desktop with the edit panel open could make all agent categories disappear until the preset extension was disabled
+
+**Bunny Preset Tools**
+
+- Fixed collapsible section headers (e.g., "Main", "Bunny Preset Tools") appearing flattened or invisible in the prompt manager list by adding min-height constraints and grid-column spanning to prevent CSS cascade conflicts
 
 **Console logging**
 
