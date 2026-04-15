@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import express from 'express';
 import fetch from 'node-fetch';
 
-import { forwardFetchResponse, delay } from '../../util.js';
+import { forwardFetchResponse, delay, summarizeLlmPayloadForLog } from '../../util.js';
 import { getOverrideHeaders, setAdditionalHeaders, setAdditionalHeadersByType } from '../../additional-headers.js';
 import { TEXTGEN_TYPES } from '../../constants.js';
 
@@ -80,7 +80,7 @@ router.post('/generate', async function (request, response_generate) {
         }
     }
 
-    console.debug(this_settings);
+    console.debug('Kobold request:', summarizeLlmPayloadForLog(this_settings));
     const args = {
         body: JSON.stringify(this_settings),
         headers: Object.assign(
@@ -116,7 +116,7 @@ router.post('/generate', async function (request, response_generate) {
                 }
 
                 const data = await response.json();
-                console.debug('Endpoint response:', data);
+                console.debug('Endpoint response:', summarizeLlmPayloadForLog(data));
                 return response_generate.send(data);
             }
         } catch (error) {
@@ -230,7 +230,7 @@ router.post('/transcribe-audio', async function (request, response) {
         }
 
         const data = await result.json();
-        console.debug('KoboldCpp transcription response', data);
+        console.debug('KoboldCpp transcription response', summarizeLlmPayloadForLog(data));
         return response.json(data);
     } catch (error) {
         console.error('KoboldCpp transcription failed', error);

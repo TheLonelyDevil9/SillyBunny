@@ -1107,6 +1107,425 @@ export function setupLogLevel() {
     globalThis.console.error = logLevel <= LOG_LEVELS.ERROR ? console.error : () => { };
 }
 
+const LLM_LOG_SCALAR_KEYS = [
+    'id',
+    'object',
+    'type',
+    'model',
+    'stream',
+    'status',
+    'seed',
+    'n',
+    'temperature',
+    'top_p',
+    'top_k',
+    'presence_penalty',
+    'frequency_penalty',
+    'max_tokens',
+    'max_completion_tokens',
+    'max_output_tokens',
+];
+
+function addSummaryCount(target, key, amount = 1) {
+    if (!key) {
+        return;
+    }
+
+    const safeAmount = Number.isFinite(amount) ? amount : 1;
+    target[key] = (target[key] ?? 0) + safeAmount;
+}
+
+function mergeSummaryCounts(target, source) {
+    if (!source) {
+        return;
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+        addSummaryCount(target, key, Number(value) || 0);
+    }
+}
+
+function summarizePartsForLog(parts) {
+    const summary = { count: parts.length };
+    const types = {};
+    let textChars = 0;
+
+    for (const part of parts) {
+        if (typeof part === 'string') {
+            addSummaryCount(types, 'string');
+            textChars += part.length;
+            continue;
+        }
+
+        if (!part || typeof part !== 'object') {
+            addSummaryCount(types, typeof part);
+            continue;
+        }
+
+        if (typeof part.text === 'string') {
+            addSummaryCount(types, part.type ?? 'text');
+            textChars += part.text.length;
+        } else if (typeof part.type === 'string') {
+            addSummaryCount(types, part.type);
+        }
+
+        if (part.inlineData) {
+            addSummaryCount(types, 'inlineData');
+        }
+
+        if (part.functionCall) {
+            addSummaryCount(types, 'functionCall');
+        }
+
+        if (part.functionResponse) {
+            addSummaryCount(types, 'functionResponse');
+        }
+
+        if (part.image_url) {
+            addSummaryCount(types, 'image_url');
+        }
+
+        if (part.video_url) {
+            addSummaryCount(types, 'video_url');
+        }
+
+        if (part.audio_url) {
+            addSummaryCount(types, 'audio_url');
+        }
+
+        if (Array.isArray(part.tool_calls)) {
+            addSummaryCount(types, 'tool_calls', part.tool_calls.length || 1);
+        }
+
+        if (part.thought || part.thoughtSignature) {
+            addSummaryCount(types, 'thought');
+        }
+    }
+
+    if (textChars) {
+        summary.textChars = textChars;
+    }
+
+    if (Object.keys(types).length) {
+        summary.types = types;
+    }
+
+    return summary;
+}
+
+function summarizeMessagesForLog(messages) {
+    const summary = { count: messages.length };
+    const roles = {};
+    const partTypes = {};
+    let contentItems = 0;
+    let textChars = 0;
+    let namedMessages = 0;
+    let toolCalls = 0;
+    let toolResponses = 0;
+
+    for (const message of messages) {
+        if (!message || typeof message !== 'object') {
+            addSummaryCount(roles, typeof message);
+            continue;
+        }
+
+        addSummaryCount(roles, message.role ?? 'unknown');
+
+        if (message.name) {
+            namedMessages++;
+        }
+
+        if (typeof message.content === 'string') {
+            contentItems++;
+            textChars += message.content.length;
+            addSummaryCount(partTypes, 'text');
+        } else if (Array.isArray(message.content)) {
+            const contentSummary = summarizePartsForLog(message.content);
+            contentItems += contentSummary.count;
+            textChars += contentSummary.textChars ?? 0;
+            mergeSummaryCounts(partTypes, contentSummary.types);
+        }
+
+        if (Array.isArray(message.parts)) {
+            const partsSummary = summarizePartsForLog(message.parts);
+            contentItems += partsSummary.count;
+            textChars += partsSummary.textChars ?? 0;
+            mergeSummaryCounts(partTypes, partsSummary.types);
+        }
+
+        if (Array.isArray(message.tool_calls)) {
+            toolCalls += message.tool_calls.length;
+        }
+
+        if (message.tool_call_id) {
+            toolResponses++;
+        }
+    }
+
+    if (Object.keys(roles).length) {
+        summary.roles = roles;
+    }
+
+    if (namedMessages) {
+        summary.namedMessages = namedMessages;
+    }
+
+    if (contentItems) {
+        summary.contentItems = contentItems;
+    }
+
+    if (textChars) {
+        summary.textChars = textChars;
+    }
+
+    if (Object.keys(partTypes).length) {
+        summary.partTypes = partTypes;
+    }
+
+    if (toolCalls) {
+        summary.toolCalls = toolCalls;
+    }
+
+    if (toolResponses) {
+        summary.toolResponses = toolResponses;
+    }
+
+    return summary;
+}
+
+function summarizeChoicesForLog(choices) {
+    const summary = { count: choices.length };
+    const finishReasons = {};
+    const choiceMessages = [];
+    let textChars = 0;
+
+    for (const choice of choices) {
+        if (!choice || typeof choice !== 'object') {
+            addSummaryCount(finishReasons, typeof choice);
+            continue;
+        }
+
+        addSummaryCount(finishReasons, choice.finish_reason ?? choice.finishReason ?? 'unknown');
+
+        if (typeof choice.text === 'string') {
+            textChars += choice.text.length;
+        }
+
+        if (choice.message && typeof choice.message === 'object') {
+            choiceMessages.push(choice.message);
+        }
+
+        if (choice.delta && typeof choice.delta === 'object') {
+            choiceMessages.push(choice.delta);
+        }
+    }
+
+    if (Object.keys(finishReasons).length) {
+        summary.finishReasons = finishReasons;
+    }
+
+    if (choiceMessages.length) {
+        summary.messages = summarizeMessagesForLog(choiceMessages);
+    }
+
+    if (textChars) {
+        summary.textChars = textChars;
+    }
+
+    return summary;
+}
+
+function summarizeCandidatesForLog(candidates) {
+    const summary = { count: candidates.length };
+    const finishReasons = {};
+    const candidateMessages = [];
+    let textChars = 0;
+
+    for (const candidate of candidates) {
+        if (!candidate || typeof candidate !== 'object') {
+            addSummaryCount(finishReasons, typeof candidate);
+            continue;
+        }
+
+        addSummaryCount(finishReasons, candidate.finishReason ?? 'unknown');
+
+        const content = candidate.content ?? candidate.output;
+        if (typeof content === 'string') {
+            textChars += content.length;
+        } else if (content && typeof content === 'object' && Array.isArray(content.parts)) {
+            candidateMessages.push({ role: content.role ?? 'model', parts: content.parts });
+        }
+    }
+
+    if (Object.keys(finishReasons).length) {
+        summary.finishReasons = finishReasons;
+    }
+
+    if (candidateMessages.length) {
+        summary.messages = summarizeMessagesForLog(candidateMessages);
+    }
+
+    if (textChars) {
+        summary.textChars = textChars;
+    }
+
+    return summary;
+}
+
+function summarizeScalarObjectForLog(value) {
+    if (!value || typeof value !== 'object') {
+        return value;
+    }
+
+    const summary = {};
+
+    for (const [key, entry] of Object.entries(value)) {
+        if (entry === null || typeof entry === 'number' || typeof entry === 'boolean') {
+            summary[key] = entry;
+            continue;
+        }
+
+        if (typeof entry === 'string') {
+            summary[key] = entry.length <= 120 ? entry : { chars: entry.length };
+            continue;
+        }
+
+        if (Array.isArray(entry)) {
+            summary[key] = { count: entry.length };
+            continue;
+        }
+
+        if (typeof entry === 'object') {
+            summary[key] = { keys: Object.keys(entry) };
+        }
+    }
+
+    return summary;
+}
+
+/**
+ * Creates a compact, redacted summary of LLM payloads for debug logging.
+ * Keeps counts and scalar generation settings, but avoids dumping full prompt text.
+ * @param {any} payload Raw request or response payload
+ * @returns {any} Safe summary for console output
+ */
+export function summarizeLlmPayloadForLog(payload) {
+    if (payload === null || payload === undefined) {
+        return payload;
+    }
+
+    if (typeof payload === 'string') {
+        return { chars: payload.length };
+    }
+
+    if (typeof payload !== 'object') {
+        return payload;
+    }
+
+    if (Array.isArray(payload)) {
+        return summarizeMessagesForLog(payload);
+    }
+
+    const summary = {};
+
+    for (const key of LLM_LOG_SCALAR_KEYS) {
+        const value = payload[key];
+        if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            summary[key] = value;
+        }
+    }
+
+    if (typeof payload.prompt === 'string') {
+        summary.prompt = { chars: payload.prompt.length };
+    }
+
+    if (typeof payload.instructions === 'string') {
+        summary.instructions = { chars: payload.instructions.length };
+    }
+
+    if (Array.isArray(payload.messages)) {
+        summary.messages = summarizeMessagesForLog(payload.messages);
+    }
+
+    if (Array.isArray(payload.contents)) {
+        summary.contents = summarizeMessagesForLog(payload.contents);
+    }
+
+    if (Array.isArray(payload.input)) {
+        summary.input = summarizeMessagesForLog(payload.input);
+    }
+
+    if (Array.isArray(payload.choices)) {
+        summary.choices = summarizeChoicesForLog(payload.choices);
+    }
+
+    if (Array.isArray(payload.candidates)) {
+        summary.candidates = summarizeCandidatesForLog(payload.candidates);
+    }
+
+    if (Array.isArray(payload.content)) {
+        summary.content = summarizePartsForLog(payload.content);
+    }
+
+    if (payload.responseContent && typeof payload.responseContent === 'object' && Array.isArray(payload.responseContent.parts)) {
+        summary.responseContent = summarizeMessagesForLog([{ role: payload.responseContent.role ?? 'model', parts: payload.responseContent.parts }]);
+    }
+
+    if (payload.systemInstruction && typeof payload.systemInstruction === 'object' && Array.isArray(payload.systemInstruction.parts)) {
+        summary.systemInstruction = summarizeMessagesForLog([{ role: 'system', parts: payload.systemInstruction.parts }]);
+    }
+
+    if (payload.system_instruction && typeof payload.system_instruction === 'object' && Array.isArray(payload.system_instruction.parts)) {
+        summary.system_instruction = summarizeMessagesForLog([{ role: 'system', parts: payload.system_instruction.parts }]);
+    }
+
+    if (Array.isArray(payload.stop)) {
+        summary.stop = {
+            count: payload.stop.length,
+            chars: payload.stop.reduce((total, entry) => total + (typeof entry === 'string' ? entry.length : 0), 0),
+        };
+    }
+
+    if (Array.isArray(payload.tools)) {
+        summary.tools = { count: payload.tools.length };
+    }
+
+    if (Array.isArray(payload.safetySettings)) {
+        summary.safetySettings = { count: payload.safetySettings.length };
+    }
+
+    if (payload.generationConfig && typeof payload.generationConfig === 'object') {
+        summary.generationConfig = summarizeScalarObjectForLog(payload.generationConfig);
+    }
+
+    if (payload.reasoning && typeof payload.reasoning === 'object') {
+        summary.reasoning = summarizeScalarObjectForLog(payload.reasoning);
+    }
+
+    if (payload.output_config && typeof payload.output_config === 'object') {
+        summary.output_config = summarizeScalarObjectForLog(payload.output_config);
+    }
+
+    if (payload.response_format && typeof payload.response_format === 'object') {
+        summary.response_format = { keys: Object.keys(payload.response_format) };
+    }
+
+    if (payload.usage && typeof payload.usage === 'object') {
+        summary.usage = summarizeScalarObjectForLog(payload.usage);
+    }
+
+    if (payload.usage_metadata && typeof payload.usage_metadata === 'object') {
+        summary.usage_metadata = summarizeScalarObjectForLog(payload.usage_metadata);
+    }
+
+    const otherKeys = Object.keys(payload).filter(key => !(key in summary) && !LLM_LOG_SCALAR_KEYS.includes(key)).sort();
+    if (otherKeys.length) {
+        summary.otherKeys = otherKeys;
+    }
+
+    return summary;
+}
+
 /**
  * MemoryLimitedMap class that limits the memory usage of string values.
  */

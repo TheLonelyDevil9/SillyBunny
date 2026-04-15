@@ -1,6 +1,5 @@
 /* eslint-disable dot-notation */
 import process from 'node:process';
-import util from 'node:util';
 import express from 'express';
 import fetch from 'node-fetch';
 import urlJoin from 'url-join';
@@ -30,6 +29,7 @@ import {
     color,
     trimTrailingSlash,
     flattenSchema,
+    summarizeLlmPayloadForLog,
 } from '../../util.js';
 import {
     convertClaudeMessages,
@@ -356,7 +356,7 @@ async function sendClaudeRequest(request, response) {
             additionalHeaders['anthropic-beta'] = betaHeaders.join(',');
         }
 
-        console.debug('Claude request:', requestBody);
+        console.debug('Claude request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/messages', {
             method: 'POST',
@@ -383,7 +383,7 @@ async function sendClaudeRequest(request, response) {
             /** @type {any} */
             const generateResponseJson = await generateResponse.json();
             const responseText = generateResponseJson?.content?.[0]?.text || '';
-            console.debug('Claude response:', generateResponseJson);
+            console.debug('Claude response:', summarizeLlmPayloadForLog(generateResponseJson));
 
             // Wrap it back to OAI format + save the original content
             const reply = { choices: [{ 'message': { 'content': responseText } }], content: generateResponseJson.content };
@@ -609,7 +609,7 @@ async function sendMakerSuiteRequest(request, response) {
     }
 
     const body = getGeminiBody();
-    console.debug(`${apiName} request:`, body);
+    console.debug(`${apiName} request:`, summarizeLlmPayloadForLog(body));
 
     try {
         const controller = new AbortController();
@@ -713,7 +713,7 @@ async function sendMakerSuiteRequest(request, response) {
             const responseContent = candidates[0].content ?? candidates[0].output;
             const functionCall = (candidates?.[0]?.content?.parts ?? []).some(part => part.functionCall);
             const inlineData = (candidates?.[0]?.content?.parts ?? []).some(part => part.inlineData);
-            console.debug(`${apiName} response:`, util.inspect(generateResponseJson, { depth: 5, colors: true }));
+            console.debug(`${apiName} response:`, summarizeLlmPayloadForLog(generateResponseJson));
 
             const responseText = typeof responseContent === 'string' ? responseContent : responseContent?.parts?.filter(part => !part.thought)?.map(part => part.text)?.join('\n\n');
             if (!responseText && !functionCall && !inlineData) {
@@ -788,7 +788,7 @@ async function sendAI21Request(request, response) {
         signal: controller.signal,
     };
 
-    console.debug('AI21 request:', body);
+    console.debug('AI21 request:', summarizeLlmPayloadForLog(body));
 
     try {
         const generateResponse = await fetch(API_AI21 + '/chat/completions', options);
@@ -802,7 +802,7 @@ async function sendAI21Request(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('AI21 response:', generateResponseJson);
+            console.debug('AI21 response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -879,7 +879,7 @@ async function sendMistralAIRequest(request, response) {
             timeout: 0,
         };
 
-        console.debug('MisralAI request:', requestBody);
+        console.debug('MisralAI request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
         if (request.body.stream) {
@@ -892,7 +892,7 @@ async function sendMistralAIRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('MistralAI response:', generateResponseJson);
+            console.debug('MistralAI response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -965,7 +965,7 @@ async function sendCohereRequest(request, response) {
             };
         }
 
-        console.debug('Cohere request:', requestBody);
+        console.debug('Cohere request:', summarizeLlmPayloadForLog(requestBody));
 
         const config = {
             method: 'POST',
@@ -992,7 +992,7 @@ async function sendCohereRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('Cohere response:', generateResponseJson);
+            console.debug('Cohere response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1088,7 +1088,7 @@ async function sendDeepSeekRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('DeepSeek request:', requestBody);
+        console.debug('DeepSeek request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
 
@@ -1102,7 +1102,7 @@ async function sendDeepSeekRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('DeepSeek response:', generateResponseJson);
+            console.debug('DeepSeek response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1194,7 +1194,7 @@ async function sendXaiRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('xAI request:', requestBody);
+        console.debug('xAI request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
 
@@ -1208,7 +1208,7 @@ async function sendXaiRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('xAI response:', generateResponseJson);
+            console.debug('xAI response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1299,7 +1299,7 @@ async function sendAimlapiRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('AI/ML API request:', requestBody);
+        console.debug('AI/ML API request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
 
@@ -1313,7 +1313,7 @@ async function sendAimlapiRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('AI/ML API response:', generateResponseJson);
+            console.debug('AI/ML API response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1411,7 +1411,7 @@ async function sendElectronHubRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('Electron Hub request:', requestBody);
+        console.debug('Electron Hub request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
 
@@ -1425,7 +1425,7 @@ async function sendElectronHubRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('Electron Hub response:', generateResponseJson);
+            console.debug('Electron Hub response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1512,7 +1512,7 @@ async function sendChutesRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('Chutes request:', requestBody);
+        console.debug('Chutes request:', summarizeLlmPayloadForLog(requestBody));
 
         const generateResponse = await fetch(apiUrl + '/chat/completions', config);
 
@@ -1526,7 +1526,7 @@ async function sendChutesRequest(request, response) {
                 return response.status(500).send(errorJson);
             }
             const generateResponseJson = await generateResponse.json();
-            console.debug('Chutes response:', generateResponseJson);
+            console.debug('Chutes response:', summarizeLlmPayloadForLog(generateResponseJson));
             return response.send(generateResponseJson);
         }
     } catch (error) {
@@ -1607,7 +1607,7 @@ async function sendAzureOpenAIRequest(request, response) {
     };
 
     console.info(`Sending request to Azure OpenAI: ${endpointUrl}`);
-    console.debug('Azure OpenAI Request Body:', apiRequestBody);
+    console.debug('Azure OpenAI Request Body:', summarizeLlmPayloadForLog(apiRequestBody));
     try {
         const fetchResponse = await fetch(endpointUrl, config);
 
@@ -1618,7 +1618,7 @@ async function sendAzureOpenAIRequest(request, response) {
         if (fetchResponse.ok) {
             /** @type {any} */
             const json = await fetchResponse.json();
-            console.debug('Azure OpenAI response:', json);
+            console.debug('Azure OpenAI response:', summarizeLlmPayloadForLog(json));
             return response.send(json);
         }
 
@@ -1814,7 +1814,7 @@ router.post('/status', async function (request, statusResponse) {
                 const modelId = /** @type {any} */ (modelResponse)?.model;
                 if (!modelId) {
                     console.warn('Azure status check succeeded but could not find a model ID in the response.');
-                    console.debug('Azure Response Body:', modelResponse);
+                    console.debug('Azure Response Body:', summarizeLlmPayloadForLog(modelResponse));
                     // Keep a benign success to avoid UX disruption in the UI
                     return statusResponse.send({ data: [] });
                 }
@@ -2339,7 +2339,7 @@ async function sendOpenAIResponsesRequest(request, response) {
             signal: controller.signal,
         };
 
-        console.debug('OpenAI Responses API request:', requestBody);
+        console.debug('OpenAI Responses API request:', summarizeLlmPayloadForLog(requestBody));
 
         const fetchResponse = await fetch(endpointUrl, config);
 
@@ -2350,7 +2350,7 @@ async function sendOpenAIResponsesRequest(request, response) {
 
         if (fetchResponse.ok) {
             const json = await fetchResponse.json();
-            console.debug('OpenAI Responses API response:', json);
+            console.debug('OpenAI Responses API response:', summarizeLlmPayloadForLog(json));
             const transformed = transformResponsesApiResponse(json);
             return response.send(transformed);
         } else {
@@ -2763,7 +2763,7 @@ router.post('/generate', async function (request, response) {
             signal: controller.signal,
         };
 
-        console.debug('Chat Completion request:', requestBody);
+        console.debug('Chat Completion request:', summarizeLlmPayloadForLog(requestBody));
 
         const fetchResponse = await fetch(endpointUrl, config);
 
@@ -2775,7 +2775,7 @@ router.post('/generate', async function (request, response) {
         if (fetchResponse.ok) {
             /** @type {any} */
             const json = await fetchResponse.json();
-            console.debug('Chat Completion response:', json);
+            console.debug('Chat Completion response:', summarizeLlmPayloadForLog(json));
             return response.send(json);
         } else {
             const responseText = await fetchResponse.text();

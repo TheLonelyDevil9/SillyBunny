@@ -13,7 +13,7 @@ import {
     FEATHERLESS_KEYS,
     OPENAI_KEYS,
 } from '../../constants.js';
-import { forwardFetchResponse, trimV1, getConfigValue } from '../../util.js';
+import { forwardFetchResponse, trimV1, getConfigValue, summarizeLlmPayloadForLog } from '../../util.js';
 import { setAdditionalHeaders } from '../../additional-headers.js';
 import { createHash } from 'node:crypto';
 
@@ -105,7 +105,7 @@ router.post('/status', async function (request, response) {
             request.body.api_server = request.body.api_server.replace('localhost', '127.0.0.1');
         }
 
-        console.debug('Trying to connect to API', request.body);
+        console.debug('Trying to connect to API', summarizeLlmPayloadForLog(request.body));
         const baseUrl = trimV1(request.body.api_server);
 
         const args = {
@@ -279,7 +279,7 @@ router.post('/generate', async function (request, response) {
 
         const apiType = request.body.api_type;
         const baseUrl = request.body.api_server;
-        console.debug(request.body);
+        console.debug('Text completion request:', summarizeLlmPayloadForLog(request.body));
 
         const controller = new AbortController();
         request.socket.removeAllListeners('close');
@@ -411,7 +411,7 @@ router.post('/generate', async function (request, response) {
             if (completionsReply.ok) {
                 /** @type {any} */
                 const data = await completionsReply.json();
-                console.debug('Endpoint response:', data);
+                console.debug('Endpoint response:', summarizeLlmPayloadForLog(data));
 
                 // Map InfermaticAI response to OAI completions format
                 if (apiType === TEXTGEN_TYPES.INFERMATICAI) {
@@ -478,7 +478,7 @@ ollama.post('/caption-image', async function (request, response) {
             return response.sendStatus(400);
         }
 
-        console.debug('Ollama caption request:', request.body);
+        console.debug('Ollama caption request:', summarizeLlmPayloadForLog(request.body));
         const baseUrl = trimV1(request.body.server_url);
 
         const fetchResponse = await fetch(`${baseUrl}/api/generate`, {
@@ -500,7 +500,7 @@ ollama.post('/caption-image', async function (request, response) {
 
         /** @type {any} */
         const data = await fetchResponse.json();
-        console.debug('Ollama caption response:', data);
+        console.debug('Ollama caption response:', summarizeLlmPayloadForLog(data));
 
         const caption = data?.response || '';
 
@@ -524,7 +524,7 @@ llamacpp.post('/props', async function (request, response) {
             return response.sendStatus(400);
         }
 
-        console.debug('LlamaCpp props request:', request.body);
+        console.debug('LlamaCpp props request:', summarizeLlmPayloadForLog(request.body));
         const baseUrl = trimV1(request.body.server_url);
 
         const fetchResponse = await fetch(`${baseUrl}/props`, {
@@ -537,7 +537,7 @@ llamacpp.post('/props', async function (request, response) {
         }
 
         const data = await fetchResponse.json();
-        console.debug('LlamaCpp props response:', data);
+        console.debug('LlamaCpp props response:', summarizeLlmPayloadForLog(data));
 
         return response.send(data);
     } catch (error) {
@@ -555,7 +555,7 @@ llamacpp.post('/slots', async function (request, response) {
             return response.sendStatus(400);
         }
 
-        console.debug('LlamaCpp slots request:', request.body);
+        console.debug('LlamaCpp slots request:', summarizeLlmPayloadForLog(request.body));
         const baseUrl = trimV1(request.body.server_url);
 
         let fetchResponse;
@@ -586,7 +586,7 @@ llamacpp.post('/slots', async function (request, response) {
         }
 
         const data = await fetchResponse.json();
-        console.debug('LlamaCpp slots response:', data);
+        console.debug('LlamaCpp slots response:', summarizeLlmPayloadForLog(data));
 
         return response.send(data);
     } catch (error) {
