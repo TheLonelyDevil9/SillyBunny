@@ -921,15 +921,24 @@ async function processReceivedMessage(messageIndex, generationType) {
     let chatStateChanged = false;
     let messageDisplayChanged = false;
 
-    const originalMessageText = String(message.mes ?? '');
-    const settledRuns = await Promise.allSettled(
-        promptTransformAgents.map(agent => runPromptTransformAgent(agent, message, generationType, originalMessageText, messageIndex)),
-    );
-    const promptRuns = settledRuns.map(r =>
-        r.status === 'fulfilled'
-            ? r.value
-            : { status: 'error', changed: false, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
-    );
+    const promptRuns = [];
+    for (const agent of promptTransformAgents) {
+        try {
+            const result = await runPromptTransformAgent(agent, message, generationType, null, messageIndex);
+            promptRuns.push(result);
+        } catch (error) {
+            promptRuns.push({
+                agentId: agent.id,
+                agentName: agent.name,
+                changed: false,
+                status: 'error',
+                mode: getPromptTransformMode(agent),
+                error: error instanceof Error ? error.message : String(error),
+                runner: 'error',
+                timestamp: new Date().toISOString(),
+            });
+        }
+    }
 
     for (const result of promptRuns) {
         if (result.changed) {
@@ -1032,6 +1041,62 @@ function onMessageEdited(messageIndex) {
 
     message.extra[MESSAGE_EXTRA_KEY].edited = true;
     saveChatDebounced();
+}
+
+async function onImpersonateReady() {
+    if (internalPromptTransformDepth > 0) {
+        return;
+    }
+
+    if (!pendingGenerationSnapshot) {
+        return;
+    }
+
+    const messageIndex = chat.length - 1;
+    const message = chat[messageIndex];
+    if (!message || message.is_user || message.is_system) {
+        return;
+    }
+
+    const generationType = pendingGenerationSnapshot.generationType ?? 'impersonate';
+
+    if (isStreamingMessageStillActive(messageIndex)) {
+        deferPostProcessing(messageIndex, generationType);
+        return;
+    }
+
+    if (wasStreamingMessageStopped(messageIndex)) {
+        if (deferredPostProcessing?.messageIndex === messageIndex) {
+            clearDeferredPostProcessing();
+        }
+        return;
+    }
+
+    if (deferredPostProcessing?.messageIndex === messageIndex) {
+        clearDeferredPostProcessing();
+    }
+
+    await processReceivedMessage(messageIndex, generationType);
+}
+
+async function onMessageSwiped(data) {
+    if (internalPromptTransformDepth > 0) {
+        return;
+    }
+
+    const messageIndex = typeof data === 'object' && data !== null
+        ? Number(data.messageId ?? data.message_index ?? chat.length - 1)
+        : chat.length - 1;
+    const message = chat[messageIndex];
+    if (!message || message.is_user || message.is_system) {
+        return;
+    }
+
+    if (pendingGenerationSnapshot) {
+        return;
+    }
+
+    await processReceivedMessage(messageIndex, 'normal');
 }
 
 /**
@@ -1148,6 +1213,14 @@ export function initAgentRunner() {
     eventSource.on(event_types.GENERATION_STOPPED, onGenerationStopped);
     eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(event_types.MESSAGE_EDITED, onMessageEdited);
+
+    if (event_types.IMPERSONATE_READY) {
+        eventSource.on(event_types.IMPERSONATE_READY, onImpersonateReady);
+    }
+
+    if (event_types.MESSAGE_SWIPED) {
+        eventSource.on(event_types.MESSAGE_SWIPED, onMessageSwiped);
+    }
 
     if (event_types.CHAT_COMPLETION_SETTINGS_READY) {
         eventSource.on(event_types.CHAT_COMPLETION_SETTINGS_READY, onChatCompletionSettingsReady);

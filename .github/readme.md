@@ -145,11 +145,12 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 **What ships with v1.3.4:**
 
-- **30 bundled templates** based on Pura's Director Preset ecosystem
-- Trackers, randomisers, content helpers, tool agents, and custom prompt toggles
-- Four categories: **Tracker**, **Randomizer**, **Content**, and **Tool** (plus Custom for user-created agents)
+- **30 bundled agents** across Tracker (13), Randomizer (8), Content (6), and Tool (1) categories, plus Pathfinder (1), plus room for custom agents
+- Trackers: Achievements, CYOA Choices, Direction Menu, Event, Item, NPC Profiles, Parallel Off-Screen, Relationship, Reputation, Scene, Secrets, Status, Time, and World Detail
+- Randomizers: Chaos Mode, Combined Director's Cut, Dead Dove Escalation, Genre, Grounded Complication, Intimacy & Kink, Scene Driving Force, and Scene Pressure Cocktail
+- Content: Difficulty Increase, Don't Write for User, Friction Mode, Grounded Prose, HTML Toggle, Prose Polisher, and Write for User
+- Direction Menu and CYOA Choices now use **post-generation prompt append** (clickable options injected after each response)
 - **Pathfinder** agentic lorebook navigator with 8 tools for retrieval, memory maintenance, and tree building
-- Direction Menu and CYOA Choices live in Tracker and their generated options can be clicked into the message box
 - Bundled **Prose Polisher** post-generation agent by Geechan
 - Built-in groups for the full preset, trackers only, and randomisers only
 - ST-style regex options for custom agents
@@ -159,7 +160,8 @@ Think of them like a mini prompt pipeline builder inside the Agents page:
 
 **Bundled defaults in v1.3.4:**
 
-- Bundled trackers are set up for **post-generation prompt append**
+- Bundled trackers, including CYOA Choices and Direction Menu, are set up for **post-generation prompt append**
+- All bundled tracker and menu agents use **User injection role** by default (better compatibility with models like GLM that de-prioritize System injections)
 - Agents use the main connection profile by default, with separate profile support when explicitly selected
 - Agent connection profiles default to **8192 max tokens**
 - Prose Polisher is pickable by default as a post-generation pass that can rewrite the current message

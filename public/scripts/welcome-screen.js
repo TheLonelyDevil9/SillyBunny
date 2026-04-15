@@ -70,6 +70,10 @@ const STARTER_PACK_EXTENSIONS = Object.freeze({
         id: 'third-party/GuidedGenerations-Extension',
         repoUrl: 'https://github.com/platberlitz/GuidedGenerations-Extension',
     }),
+    cssSnippets: Object.freeze({
+        id: 'third-party/SillyBunny-CssSnippets',
+        repoUrl: 'https://github.com/platberlitz/SillyBunny-CssSnippets',
+    }),
 });
 
 const WELCOME_TUTORIAL_STEPS = Object.freeze([
@@ -779,6 +783,13 @@ function buildStarterPackItems() {
                 icon: 'fa-compass',
                 chips: ['Extension', 'Generation', 'Opt-in'],
                 extensionName: STARTER_PACK_EXTENSIONS.guidedGenerations.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'CSS Snippets',
+                body: 'Manage custom CSS snippets from User Settings. Link snippets to specific themes or chats for per-character styling.',
+                icon: 'fa-palette',
+                chips: ['Extension', 'Styling', 'Opt-in'],
+                extensionName: STARTER_PACK_EXTENSIONS.cssSnippets.id,
             }),
         ],
     };

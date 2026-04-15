@@ -821,3 +821,50 @@
 .ica--diagnostics-output .diag-info {
     color: var(--SmartThemeQuoteColor, #88c3e8);
 }
+
+/* Bulk edit popup */
+.ica--bulk-edit-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--black50a) 60%, transparent);
+}
+
+.ica--bulk-edit-popup-content {
+    background: var(--SmartThemeBlurTintColor, #1a1a1a);
+    border: 1px solid var(--SmartThemeBorderColor, #333);
+    border-radius: 8px;
+    padding: 16px;
+    max-width: 480px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ica--bulk-edit-popup-content strong {
+    font-size: 1.1em;
+}
+
+.ica--bulk-edit-popup-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+/* Drag-and-drop visual feedback */
+.ica--agent-card.ica--dragging {
+    opacity: 0.4;
+}
+
+.ica--drop-indicator {
+    height: 3px;
+    margin: 2px 0;
+    background: var(--SmartThemeQuoteColor, #88c3e8);
+    border-radius: 2px;
+    pointer-events: none;
+}

@@ -89,8 +89,8 @@
     padding-left: 18px;
 }
 
-.completion_prompt_manager_prompt.nemo-sb-divider-row {
-    display: none !important;
+.completion_prompt_manager_prompt.nemo-sb-divider-row:not(.nemo-header-item) {
+    display: none;
 }
 
 #nemo-animated-bg-layer {

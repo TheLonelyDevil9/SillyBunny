@@ -16,7 +16,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -135,11 +135,11 @@
     "version": 1,
     "author": "Purachina",
     "prompt": "### CYOA Choices\nEnd EVERY response with the EXACT formatting with no modifications and without leaving out any tags. Place this after every single other formatting when applicable at the very end of the scene message. This is strictly from {{user}}’s perspective.\n\n3-7 numbered options:\n[CHOICES]\n1. Action description\n2. Action description\n3. Action description\n[/CHOICES]",
-    "phase": "pre",
+    "phase": "post",
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -151,7 +151,11 @@
       "regexFlags": "g",
       "appendText": "",
       "extractPattern": "",
-      "extractVariable": ""
+      "extractVariable": "",
+      "promptTransformEnabled": true,
+      "promptTransformShowNotifications": true,
+      "promptTransformMode": "append",
+      "promptTransformMaxTokens": 8192
     },
     "enabled": false,
     "conditions": {
@@ -259,11 +263,11 @@
     "version": 1,
     "author": "Purachina",
     "prompt": "### Direction Menu\nEnd every response with exactly 4 plot-direction prompts for {{user}}.\n\nThese are dramatic pivots, not safe continuations. Each option names a distinct, compelling way the next beat could escalate, rupture, complicate, or transform the scene.\n\nStructure:\n- A and B are grounded pivots. They develop naturally from the current scene but must still create meaningful pressure, change, or revelation. Never \"the scene continues in a similar tone.\" Each one must introduce a new problem, power shift, uncomfortable truth, forced decision, or irreversible development.\n- C and D are wildcard pivots. These must be the options that make {{user}} most tempted to pick them: dangerous, funny, volatile, bizarre, dramatically ironic, or genuinely unexpected, while still rooted in current context. Worst timing, strangest coincidence, most embarrassing outcome, sharpest reversal, or most disruptive intrusion.\n\nEvery option must change the scene in a way that cannot be easily walked back. Prefer options that force characters into new positions, expose something hidden, break something that was working, introduce an absent element, or create lasting fallout.\n\nForbidden:\n- Options that amount to \"the conversation shifts tone slightly\"\n- Options where intensity stays the same\n- Options that are different angles on the same development\n- Polite, measured, responsible directions\n- Options about what {{user}} will or would do; all choices concern environment, plot, and/or genre exclusively\n- Boring options; every one must be interesting, some out of the blue, truly unique and creative\n\nRules:\n- Exactly 4 options labeled A, B, C, and D.\n- Every option is plot-directional, not action-by-action.\n- Every option promises a meaningfully different scene than the others.\n- C and D must be bolder, stranger, and more dramatically charged than A and B.\n- C and D must be tempting enough that choosing A or B feels cautious.\n- All 4 options stay connected to the current scene.\n- One or two short lines maximum per option.\n- Vivid, specific, and charged.\n- Place this block at the absolute end of the response after all other formatting.\n- Use this EXACT format:\n\n[DIRECTIONS]\nA. A grounded pivot that creates new, irreversible pressure.\nB. Another grounded pivot that forces a different kind of change.\nC. A wildcard turn that makes the scene volatile and harder to control.\nD. Another wildcard that introduces something unexpected and dramatically charged.\n[/DIRECTIONS]",
-    "phase": "both",
+    "phase": "post",
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -275,7 +279,11 @@
       "regexFlags": "g",
       "appendText": "",
       "extractPattern": "\\[DIRECTIONS\\][\\s\\S]*?\\[/DIRECTIONS\\]",
-      "extractVariable": "direction_data"
+      "extractVariable": "direction_data",
+      "promptTransformEnabled": true,
+      "promptTransformShowNotifications": true,
+      "promptTransformMode": "append",
+      "promptTransformMaxTokens": 8192
     },
     "enabled": false,
     "conditions": {
@@ -345,7 +353,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -684,7 +692,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -725,7 +733,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -767,7 +775,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -808,7 +816,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -849,7 +857,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -972,7 +980,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -1014,7 +1022,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -1055,7 +1063,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -1096,7 +1104,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },
@@ -1138,7 +1146,7 @@
     "injection": {
       "position": 0,
       "depth": 4,
-      "role": 0,
+      "role": 1,
       "order": 100,
       "scan": false
     },

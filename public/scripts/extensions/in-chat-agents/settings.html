@@ -1,6 +1,6 @@
 <div id="ica--settings" class="ica--settings">
     <div class="ica--inner">
-        <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation. Toggle them on, tweak their prompts, add your own, or use the robot button on a card to manually apply that agent to the last assistant reply.</p>
+        <p class="ica--subtitle">Modular prompt helpers that inject into your RP generation; 30 bundled agents across 4 categories (trackers; randomizers; content helpers; tools); plus room for your own. Click <b>Templates</b> to browse and install all bundled agents. Toggle them on, tweak their prompts, or use the robot button on a card to manually apply that agent to the last assistant reply.</p>
 
         <div class="ica--toolbar">
             <div class="ica--toolbar-actions">
@@ -40,6 +40,15 @@
                 </button>
                 <button type="button" id="ica--bulkDisable" class="menu_button menu_button_icon" title="Disable selected agents">
                     <i class="fa-solid fa-toggle-off"></i> Disable
+                </button>
+                <button type="button" id="ica--bulkRoleSystem" class="menu_button menu_button_icon" title="Set injection role to System for all selected agents">
+                    <i class="fa-solid fa-server"></i> System
+                </button>
+                <button type="button" id="ica--bulkRoleUser" class="menu_button menu_button_icon" title="Set injection role to User for all selected agents">
+                    <i class="fa-solid fa-user"></i> User
+                </button>
+                <button type="button" id="ica--bulkEditProps" class="menu_button menu_button_icon" title="Bulk-edit properties for selected agents">
+                    <i class="fa-solid fa-sliders"></i> Edit
                 </button>
                 <button type="button" id="ica--bulkDelete" class="menu_button menu_button_icon caution" title="Delete selected agents">
                     <i class="fa-solid fa-trash"></i> Delete
@@ -81,5 +90,70 @@
         </div>
 
         <input type="file" id="ica--importFile" accept=".json" style="display:none" />
+    </div>
+</div>
+
+<div id="ica--bulkEditPopup" class="ica--bulk-edit-popup" style="display:none">
+    <div class="ica--bulk-edit-popup-content">
+        <strong>Bulk Edit Selected Agents</strong>
+        <p class="ica--regex-note">Choose which properties to change. Set a value to apply it; leave a field at its default to skip it.</p>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Injection Role
+                <select id="ica--bulkEdit-role" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="0">System</option>
+                    <option value="1">User</option>
+                    <option value="2">Assistant</option>
+                </select>
+            </label>
+            <label class="flex1">Phase
+                <select id="ica--bulkEdit-phase" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="pre">Pre-generation</option>
+                    <option value="post">Post-generation</option>
+                    <option value="both">Both</option>
+                </select>
+            </label>
+        </div>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Prompt Pass Mode
+                <select id="ica--bulkEdit-promptMode" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="rewrite">Rewrite</option>
+                    <option value="append">Append</option>
+                </select>
+            </label>
+            <label class="flex1">Prompt Pass Enabled
+                <select id="ica--bulkEdit-promptEnabled" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </label>
+        </div>
+        <div class="ica--editor-row flex-container flexGap5">
+            <label class="flex1">Utility Post-Process Enabled
+                <select id="ica--bulkEdit-ppEnabled" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </label>
+            <label class="flex1">Scan World Info
+                <select id="ica--bulkEdit-scan" class="text_pole">
+                    <option value="" selected>Don't change</option>
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </label>
+        </div>
+        <div class="ica--bulk-edit-popup-actions">
+            <button type="button" id="ica--bulkEditApply" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-check"></i> Apply
+            </button>
+            <button type="button" id="ica--bulkEditCancel" class="menu_button menu_button_icon">
+                <i class="fa-solid fa-xmark"></i> Cancel
+            </button>
+        </div>
     </div>
 </div>

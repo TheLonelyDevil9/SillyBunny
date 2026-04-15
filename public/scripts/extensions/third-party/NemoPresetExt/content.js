@@ -337,8 +337,8 @@ function setPromptSectionOpenState(settings, sectionId, sectionName, isOpen) {
     settings.openSectionStates[sectionName] = isOpen;
 }
 
-function isDividerPrompt(promptName, dividerRegex, settings) {
-    return dividerRegex.test(promptName) || Object.prototype.hasOwnProperty.call(settings.openSectionStates, promptName);
+function isDividerPrompt(promptName, dividerRegex, _settings) {
+    return dividerRegex.test(promptName);
 }
 
 function cleanupPromptSections() {
@@ -437,6 +437,11 @@ function refreshPromptSections() {
             const promptName = getPromptRowName(row);
 
             if (isDividerPrompt(promptName, dividerRegex, settings)) {
+                if (row.classList.contains('nemo-header-item') || row.closest('details.nemo-engine-section')) {
+                    currentSection = null;
+                    return;
+                }
+
                 const sectionId = row.dataset.pmIdentifier || promptName || `nemo-section-${sections.length}`;
                 const isOpen = getPromptSectionOpenState(settings, sectionId, promptName);
                 const sectionTitle = stripDividerPrefix(promptName, dividerRegex);

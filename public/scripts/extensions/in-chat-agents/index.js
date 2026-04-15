@@ -53,6 +53,7 @@ let autoSeededTemplateIds = new Set();
 
 const DEFAULT_BUNDLED_TEMPLATE_IDS = new Set([
     'tpl-prose-polisher',
+    'tpl-pathfinder',
 ]);
 
 /** Whether the agent list is in multi-select mode. */
@@ -76,10 +77,7 @@ const REMOVED_BUNDLED_GROUP_IDS = new Set([
     'grp-pura-director',
 ]);
 
-const TRACKER_CATEGORY_MENU_TEMPLATE_IDS = new Set([
-    'tpl-cyoa-choices',
-    'tpl-direction-menu',
-]);
+const TRACKER_CATEGORY_MENU_TEMPLATE_IDS = new Set();
 
 const BUNDLED_REGEX_POST_DEFAULT_EXCLUDED_TEMPLATE_IDS = new Set();
 
@@ -461,7 +459,12 @@ function shouldMigrateBundledTrackerPromptPass(agent, template) {
     const mergedDefaults = mergeTemplateDefaults(template);
     const desiredPhase = mergedDefaults.phase ?? 'pre';
     const desiredRole = mergedDefaults.injection?.role ?? 1;
-    return String(agent?.phase ?? '') !== desiredPhase || Number(agent?.injection?.role ?? 0) !== desiredRole;
+    const desiredPromptTransformEnabled = Boolean(mergedDefaults.postProcess?.promptTransformEnabled);
+    const desiredPromptTransformMode = mergedDefaults.postProcess?.promptTransformMode === 'append' ? 'append' : 'rewrite';
+    return String(agent?.phase ?? '') !== desiredPhase
+        || Number(agent?.injection?.role ?? 0) !== desiredRole
+        || Boolean(agent?.postProcess?.promptTransformEnabled) !== desiredPromptTransformEnabled
+        || (agent?.postProcess?.promptTransformMode ?? 'rewrite') !== desiredPromptTransformMode;
 }
 
 async function migrateBundledTrackerPromptPassesToSavedAgents() {
@@ -908,6 +911,101 @@ function exitSelectMode() {
     selectedAgentIds.clear();
     updateBulkBar();
     renderAgentList();
+}
+
+function openBulkEditPopup() {
+    const popup = document.getElementById('ica--bulkEditPopup');
+    if (!popup) return;
+    $('#ica--bulkEdit-role').val('');
+    $('#ica--bulkEdit-phase').val('');
+    $('#ica--bulkEdit-promptMode').val('');
+    $('#ica--bulkEdit-promptEnabled').val('');
+    $('#ica--bulkEdit-ppEnabled').val('');
+    $('#ica--bulkEdit-scan').val('');
+    popup.style.display = '';
+}
+
+function closeBulkEditPopup() {
+    const popup = document.getElementById('ica--bulkEditPopup');
+    if (popup) popup.style.display = 'none';
+}
+
+async function applyBulkEdit() {
+    const role = $('#ica--bulkEdit-role').val();
+    const phase = $('#ica--bulkEdit-phase').val();
+    const promptMode = $('#ica--bulkEdit-promptMode').val();
+    const promptEnabled = $('#ica--bulkEdit-promptEnabled').val();
+    const ppEnabled = $('#ica--bulkEdit-ppEnabled').val();
+    const scan = $('#ica--bulkEdit-scan').val();
+
+    if (!role && !phase && !promptMode && !promptEnabled && !ppEnabled && !scan) {
+        toastr.info('No properties selected to change.');
+        return;
+    }
+
+    let changed = 0;
+    for (const id of selectedAgentIds) {
+        const agent = getAgentById(id);
+        if (!agent) continue;
+        let dirty = false;
+
+        if (role !== '') {
+            const r = Number(role);
+            if (agent.injection.role !== r) {
+                agent.injection.role = r;
+                dirty = true;
+            }
+        }
+        if (phase !== '') {
+            if (agent.phase !== phase) {
+                agent.phase = phase;
+                dirty = true;
+            }
+        }
+        if (promptMode !== '') {
+            agent.postProcess = agent.postProcess || {};
+            if (agent.postProcess.promptTransformMode !== promptMode) {
+                agent.postProcess.promptTransformMode = promptMode;
+                dirty = true;
+            }
+        }
+        if (promptEnabled !== '') {
+            agent.postProcess = agent.postProcess || {};
+            const val = promptEnabled === 'true';
+            if (Boolean(agent.postProcess.promptTransformEnabled) !== val) {
+                agent.postProcess.promptTransformEnabled = val;
+                dirty = true;
+            }
+        }
+        if (ppEnabled !== '') {
+            agent.postProcess = agent.postProcess || {};
+            const val = ppEnabled === 'true';
+            if (Boolean(agent.postProcess.enabled) !== val) {
+                agent.postProcess.enabled = val;
+                dirty = true;
+            }
+        }
+        if (scan !== '') {
+            const val = scan === 'true';
+            if (Boolean(agent.injection.scan) !== val) {
+                agent.injection.scan = val;
+                dirty = true;
+            }
+        }
+
+        if (dirty) {
+            await saveAgent(agent);
+            changed++;
+        }
+    }
+
+    closeBulkEditPopup();
+    if (changed > 0) {
+        toastr.success(`Updated ${changed} agent(s).`);
+    } else {
+        toastr.info('No agents needed updating.');
+    }
+    exitSelectMode();
 }
 
 /**
@@ -2220,6 +2318,40 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
             }
             exitSelectMode();
         }
+    });
+    $('#ica--bulkRoleSystem').on('click', async () => {
+        if (selectedAgentIds.size === 0) return;
+        for (const id of selectedAgentIds) {
+            const agent = getAgentById(id);
+            if (agent && agent.injection.role !== 0) {
+                agent.injection.role = 0;
+                await saveAgent(agent);
+            }
+        }
+        toastr.success(`Set ${selectedAgentIds.size} agent(s) to System role.`);
+        exitSelectMode();
+    });
+    $('#ica--bulkRoleUser').on('click', async () => {
+        if (selectedAgentIds.size === 0) return;
+        for (const id of selectedAgentIds) {
+            const agent = getAgentById(id);
+            if (agent && agent.injection.role !== 1) {
+                agent.injection.role = 1;
+                await saveAgent(agent);
+            }
+        }
+        toastr.success(`Set ${selectedAgentIds.size} agent(s) to User role.`);
+        exitSelectMode();
+    });
+    $('#ica--bulkEditProps').on('click', () => {
+        if (selectedAgentIds.size === 0) return;
+        openBulkEditPopup();
+    });
+    $('#ica--bulkEditApply').on('click', async () => {
+        await applyBulkEdit();
+    });
+    $('#ica--bulkEditCancel').on('click', () => {
+        closeBulkEditPopup();
     });
 
     // Wire up filter
