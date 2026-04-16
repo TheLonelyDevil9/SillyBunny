@@ -190,7 +190,7 @@ This feature is currently in beta. These are designed to fill the gap between fu
 - In-Chat Agent prompt-transform notifications now show the Connection Manager profile display name instead of the raw internal profile id, so running-agent toasts read the exact profile name you picked
 - Restored short text previews in Google AI Studio debug logs while keeping the safer summarized logging format, so requests and responses show enough visible content to debug prompts again without dumping full payloads
 
-[Find other changelogs in the our Releases.](https://github.com/platberlitz/SillyBunny/releases)
+[Find other changelogs in our Releases.](https://github.com/platberlitz/SillyBunny/releases)
 
 ---
 
