@@ -49,12 +49,16 @@ These screenshots show the new shell-based UI across Navigate, Customize, Agents
 
 ## Quick start
 
+[Grab the latest release here.](https://github.com/platberlitz/SillyBunny/releases/latest)
+
+Or run:
+
 ```bash
 git clone https://github.com/platberlitz/SillyBunny.git
 cd SillyBunny
 ```
 
-Then run the launcher for your OS, which auto-installs all dependencies, checks for updates, and starts a server instance. You can also open `http://127.0.0.1:4444` manually in your browser.
+Then, run the appropriate launcher for your OS, which auto-installs all dependencies, checks for updates, and starts a server instance. You can also open `http://127.0.0.1:4444` manually in your browser.
 
 | Platform | Command |
 |----------|---------|
