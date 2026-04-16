@@ -2058,11 +2058,11 @@ function getCsrfTokenFromHeaders(headers) {
     return token;
 }
 
-async function waitForAuthorizedRequestHeaders(timeoutMs = 15000) {
+async function waitForAuthorizedRequestHeaders(timeoutMs = 15000, context = getSillyTavernContext()) {
     const timeoutAt = Date.now() + timeoutMs;
 
     while (Date.now() < timeoutAt) {
-        const headers = getRequestHeadersFromContext();
+        const headers = getRequestHeadersFromContext(context);
 
         if (getCsrfTokenFromHeaders(headers)) {
             return headers;
@@ -2071,7 +2071,12 @@ async function waitForAuthorizedRequestHeaders(timeoutMs = 15000) {
         await wait(50);
     }
 
-    return getRequestHeadersFromContext();
+    return getRequestHeadersFromContext(context);
+}
+
+async function getAuthorizedRequestHeadersOrNull(timeoutMs = 1500, context = getSillyTavernContext()) {
+    const headers = await waitForAuthorizedRequestHeaders(timeoutMs, context);
+    return getCsrfTokenFromHeaders(headers) ? headers : null;
 }
 
 function normalizeChatFileName(value) {
@@ -2185,9 +2190,14 @@ async function fetchCharacterChatFiles(chatContext) {
     }
 
     try {
+        const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
+        if (!headers) {
+            return [];
+        }
+
         const response = await fetch('/api/characters/chats', {
             method: 'POST',
-            headers: getRequestHeadersFromContext(chatContext.context),
+            headers,
             body: JSON.stringify({ avatar_url: avatarUrl }),
         });
 
@@ -2215,9 +2225,12 @@ async function fetchGroupChatFiles(chatContext) {
         return [];
     }
 
-    const headers = getRequestHeadersFromContext(chatContext.context);
-
     try {
+        const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
+        if (!headers) {
+            return [];
+        }
+
         const chats = await Promise.all(groupChats.map(async chatId => {
             try {
                 const response = await fetch('/api/chats/group/info', {
@@ -7143,9 +7156,14 @@ async function refreshBottomChatSelect() {
     }
 
     try {
+        const headers = await getAuthorizedRequestHeadersOrNull(2000, context);
+        if (!headers) {
+            return;
+        }
+
         const response = await fetch('/api/characters/chats', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...context.getRequestHeaders?.() },
+            headers,
             body: JSON.stringify({ avatar_url: character.avatar, simple: true }),
         });
 
