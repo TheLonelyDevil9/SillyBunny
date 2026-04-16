@@ -4369,7 +4369,12 @@ async function requestServerAdmin(endpoint, body = {}) {
     }
 
     if (!response.ok) {
-        throw new Error(data?.error || data?.message || text || `Request failed with status ${response.status}.`);
+        const message = response.status === 403
+            ? 'Server tools are only available after an admin session is ready.'
+            : data?.error || data?.message || text || `Request failed with status ${response.status}.`;
+        const error = new Error(message);
+        error.status = response.status;
+        throw error;
     }
 
     return data;
@@ -4654,10 +4659,13 @@ async function refreshServerAdminPanel({ includeConfig = false, forceConfig = fa
             }
         } catch (error) {
             state.configLoaded = false;
-            refs.configState.textContent = 'Unavailable';
-            refs.configState.dataset.state = 'danger';
-            setServerAdminMessage(refs.configNote, error.message || 'Failed to load config.yaml.', 'danger');
-            console.error('Failed to load config.yaml.', error);
+            const tone = error?.status === 403 ? 'warn' : 'danger';
+            refs.configState.textContent = error?.status === 403 ? 'Admin Only' : 'Unavailable';
+            refs.configState.dataset.state = tone;
+            setServerAdminMessage(refs.configNote, error.message || 'Failed to load config.yaml.', tone);
+            if (error?.status !== 403) {
+                console.error('Failed to load config.yaml.', error);
+            }
         }
     }
 
@@ -4665,10 +4673,13 @@ async function refreshServerAdminPanel({ includeConfig = false, forceConfig = fa
         const statusData = await statusPromise;
         renderServerAdminStatus(statusData);
     } catch (error) {
-        console.error('Failed to refresh server admin panel.', error);
+        const tone = error?.status === 403 ? 'warn' : 'danger';
+        if (error?.status !== 403) {
+            console.error('Failed to refresh server admin panel.', error);
+        }
         getServerAdminRefs()?.statusGrid.replaceChildren();
-        setServerAdminPill(getServerAdminRefs()?.statusPill, 'Unavailable', 'danger');
-        setServerAdminMessage(getServerAdminRefs()?.statusNote, error.message || 'Failed to load server tools.', 'danger');
+        setServerAdminPill(getServerAdminRefs()?.statusPill, error?.status === 403 ? 'Admin Only' : 'Unavailable', tone);
+        setServerAdminMessage(getServerAdminRefs()?.statusNote, error.message || 'Failed to load server tools.', tone);
     } finally {
         state.busy = false;
         updateServerAdminInteractivity();
@@ -4944,6 +4955,10 @@ function buildServerAdminPanel() {
         saveConfigRestartButton,
         configNote,
     };
+    setServerAdminPill(statusPill, 'Idle', 'neutral');
+    setServerAdminMessage(statusNote, 'Open this tab to load server status and update controls.', 'neutral');
+    configState.textContent = 'Not loaded';
+    configState.dataset.state = 'neutral';
 
     refreshButton.addEventListener('click', () => refreshServerAdminPanel({ includeConfig: false }));
     updateButton.addEventListener('click', handleServerAdminUpdate);
@@ -4967,17 +4982,20 @@ function buildServerAdminPanel() {
         }
         refs.configEditor.dispatchEvent(new Event('input'));
     });
-
-    window.requestAnimationFrame(() => {
-        void refreshServerAdminPanel({ includeConfig: true, forceConfig: true });
-    });
+    updateServerAdminInteractivity();
 
     return {
         id: 'server',
         panel,
         button: null,
         searchRoot: column,
-        onActivate: () => refreshServerAdminPanel({ includeConfig: !getServerAdminState().configLoaded }),
+        onActivate: () => {
+            if (!isShellOpen('right')) {
+                return;
+            }
+
+            void refreshServerAdminPanel({ includeConfig: !getServerAdminState().configLoaded });
+        },
     };
 }
 
