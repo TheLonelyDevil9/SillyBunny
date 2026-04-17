@@ -201,7 +201,6 @@ function loadSettingsIntoUI() {
     // Pipeline settings
     settingsEl.find('#pf--enable-pipeline').prop('checked', s.pipelineEnabled || false);
     settingsEl.find('#pf--pipeline-type').val(s.pipelineId || 'default');
-    settingsEl.find('#pf--skip-filter').prop('checked', s.skipSecondPass || false);
     settingsEl.find('#pf--content-mode').val(s.entryContentMode || 'full');
     settingsEl.find('#pf--truncate-length').val(s.truncateLength || 500);
     settingsEl.find('#pf--max-candidates').val(s.maxCandidates || 20);
@@ -277,13 +276,6 @@ function bindEvents(onSave) {
     settingsEl.find('#pf--pipeline-type').on('change', function () {
         const s = getPathfinderSettings();
         s.pipelineId = $(this).val();
-        setPathfinderSettings(s);
-        updateAgentSettings();
-    });
-
-    settingsEl.find('#pf--skip-filter').on('change', function () {
-        const s = getPathfinderSettings();
-        s.skipSecondPass = $(this).prop('checked');
         setPathfinderSettings(s);
         updateAgentSettings();
     });

@@ -435,7 +435,7 @@ export let isChatSaving = false;
 let firstRun = false;
 export let settingsReady = false;
 let currentVersion = '0.0.0';
-const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.6';
+const SILLYBUNNY_UI_VERSION = 'SillyBunny v1.3.7';
 
 export let displayVersion = SILLYBUNNY_UI_VERSION;
 
@@ -452,7 +452,7 @@ export const default_avatar = 'img/ai4.png';
 export const system_avatar = 'img/sillybunny-pixel-logo.png';
 export const comment_avatar = 'img/quill.png';
 export const default_user_avatar = 'img/user-default.png';
-export let CLIENT_VERSION = 'SillyBunny:v1.3.6:platberlitz'; // For Horde header
+export let CLIENT_VERSION = 'SillyBunny:v1.3.7:platberlitz'; // For Horde header
 let optionsPopper = Popper.createPopper(document.getElementById('options_button'), document.getElementById('options'), {
     placement: 'top-start',
 });

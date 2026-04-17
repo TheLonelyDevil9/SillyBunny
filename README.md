@@ -184,6 +184,28 @@ SillyBunny includes some extras by default to help you get started right away:
 
 ## Latest Update
 
+### v1.3.7 (2026-04-17)
+
+**Tokenizer and compatibility**
+
+- Fixed DeepSeek tokenizer throwing `ERR_INVALID_ARG_VALUE` by converting Node.js Buffer to UTF-8 string before passing to `Tokenizer.fromJSON()`
+- Spoofed SillyTavern client version to ensure ST extension imports work (SillyBunny now reports as compatible with ST 1.13.x requirements)
+
+**Mobile UX**
+
+- Fixed Settings, Extensions, and Pathfinder modals not scrolling on mobile (overflow and max-height constraints added for viewports under 1000px and 600px)
+- Fixed mobile tab access in Navigate and Customize panels on 1080×2400px devices
+
+**Pathfinder and agents**
+
+- Fixed Gemini tool registration showing 0/8 tools — diagnostics now checks for API/model support, enabled agents, and event-driven tool re-registration on settings changes
+- Removed the confusing duplicate "Skip second filter pass" checkbox from the prompt editor (use the single-pass pipeline type instead)
+
+**UI and reliability**
+
+- Added reasoning tokens inline badge (💭 count) next to message token counts for models that report reasoning tokens
+- Fixed slow-start race condition where the top bar could fail to load on VPS environments (added `APP_READY` fallback initialization)
+
 ### v1.3.6 (2026-04-16)
 
 **Startup and shell reliability**

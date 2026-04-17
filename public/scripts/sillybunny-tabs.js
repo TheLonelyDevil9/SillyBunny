@@ -6153,6 +6153,7 @@ function buildShell(shellKey) {
     originalContent.querySelector('#settingsSearch')?.classList.add('sb-legacy-search-hidden');
 
     const frame = createElement('div', { className: 'sb-shell-frame' });
+    const navWrapper = createElement('div', { className: 'sb-shell-nav-wrapper' });
     const nav = createElement('nav', {
         className: 'sb-shell-nav',
         attrs: {
@@ -6161,6 +6162,20 @@ function buildShell(shellKey) {
             'aria-orientation': 'horizontal',
         },
     });
+    navWrapper.appendChild(nav);
+    
+    const updateNavScrollIndicators = () => {
+        const canScrollLeft = nav.scrollLeft > 0;
+        const canScrollRight = Math.ceil(nav.scrollLeft + nav.clientWidth) < nav.scrollWidth;
+        navWrapper.classList.toggle('sb-can-scroll-left', canScrollLeft);
+        navWrapper.classList.toggle('sb-can-scroll-right', canScrollRight);
+    };
+    
+    nav.addEventListener('scroll', updateNavScrollIndicators, { passive: true });
+    window.addEventListener('resize', updateNavScrollIndicators, { passive: true });
+    
+    setTimeout(updateNavScrollIndicators, 100);
+
     const main = createElement('div', { className: 'sb-shell-main' });
     const header = createElement('div', { className: 'sb-shell-header' });
     const closeButton = createElement('button', {
@@ -6205,7 +6220,7 @@ function buildShell(shellKey) {
     searchHint.hidden = true;
     header.append(closeButton, eyebrow, title, subtitle, shellDescription, searchWrap, searchHint, searchResults);
     main.append(header, panelBody);
-    frame.append(nav, main, resizeHandle);
+    frame.append(navWrapper, main, resizeHandle);
     shellRoot.appendChild(frame);
 
     const shellState = {
@@ -6238,6 +6253,7 @@ function buildShell(shellKey) {
             const activeTab = shellState.tabs.get(shellState.activeTabId);
             activeTab?.onActivate?.();
             dispatchShellTabActivated(shellKey, activeTab);
+            updateNavScrollIndicators();
             return;
         }
 

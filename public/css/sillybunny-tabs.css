@@ -1070,7 +1070,7 @@ body:not(.movingUI) .drawer-content.maximized {
     transform-origin: center;
 }
 
-.sb-shell-root.openDrawer .sb-shell-nav {
+.sb-shell-root.openDrawer .sb-shell-nav-wrapper {
     animation: sbShellContentReveal 280ms ease both;
 }
 
@@ -1144,6 +1144,44 @@ body.sb-shell-resizing,
 body.sb-shell-resizing * {
     cursor: nwse-resize !important;
     user-select: none !important;
+}
+
+.sb-shell-nav-wrapper {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.sb-shell-nav-wrapper::before,
+.sb-shell-nav-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 32px;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 200ms ease;
+}
+
+.sb-shell-nav-wrapper::before {
+    left: 0;
+    background: linear-gradient(to right, color-mix(in srgb, var(--SmartThemeShadowColor, #000) 40%, transparent), transparent);
+}
+
+.sb-shell-nav-wrapper::after {
+    right: 0;
+    background: linear-gradient(to left, color-mix(in srgb, var(--SmartThemeShadowColor, #000) 40%, transparent), transparent);
+}
+
+.sb-shell-nav-wrapper.sb-can-scroll-left::before {
+    opacity: 1;
+}
+
+.sb-shell-nav-wrapper.sb-can-scroll-right::after {
+    opacity: 1;
 }
 
 .sb-shell-nav {
@@ -2929,14 +2967,14 @@ body.sb-shell-resizing * {
     }
 
     .sb-shell-tab {
-        flex: 0 0 clamp(136px, 42vw, 168px);
+        flex: 0 0 auto;
         width: auto;
-        min-width: clamp(136px, 42vw, 168px);
+        min-width: max-content;
         max-width: calc(100vw - 12px);
-        min-height: 42px;
-        padding: 6px 8px;
+        min-height: 48px;
+        padding: 8px 16px;
         border-radius: var(--sb-radius-sm, 10px);
-        gap: 4px;
+        gap: 6px;
         align-items: center;
         scroll-snap-align: start;
     }
@@ -2952,8 +2990,8 @@ body.sb-shell-resizing * {
     }
 
     .sb-shell-tab-copy strong {
-        font-size: calc(var(--mainFontSize) * 0.74);
-        white-space: normal;
+        font-size: calc(var(--mainFontSize) * 0.8);
+        white-space: nowrap;
         overflow: visible;
         text-overflow: clip;
         line-height: 1.15;
