@@ -690,6 +690,12 @@
 
 /* Responsive */
 @media (max-width: 600px) {
+    .pf--settings {
+        max-height: calc(100dvh - 120px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .pf--mode-cards {
         grid-template-columns: 1fr;
     }

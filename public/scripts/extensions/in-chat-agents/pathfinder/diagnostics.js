@@ -1,5 +1,6 @@
 import { getSettings, getTree, findNodeById, getAllEntryUids, isLorebookEnabled } from './tree-store.js';
 import { ALL_TOOL_NAMES, getActiveTunnelVisionBooks } from './pathfinder-tool-bridge.js';
+import { getEnabledToolAgents } from '../agent-store.js';
 
 export async function runDiagnostics() {
     const results = {};
@@ -54,22 +55,58 @@ export async function runDiagnostics() {
 
     // Check tool registration
     const ToolManager = window?.SillyTavern?.getContext?.()?.ToolManager;
-    if (ToolManager && s.sidecarEnabled) {
+    const isToolCallingSupported = ToolManager?.isToolCallingSupported?.() ?? false;
+
+    if (s.sidecarEnabled) {
+        const enabledAgents = getEnabledToolAgents();
         const registeredTools = ALL_TOOL_NAMES.filter(name =>
-            ToolManager.tools?.find(t => t.name === name)
+            ToolManager?.tools?.find(t => t.name === name)
         );
-        results['Tool Registration'] = {
-            ok: registeredTools.length === ALL_TOOL_NAMES.length,
-            message: registeredTools.length === ALL_TOOL_NAMES.length
-                ? `All ${ALL_TOOL_NAMES.length} tools registered`
-                : `${registeredTools.length}/${ALL_TOOL_NAMES.length} tools registered`,
-        };
+
+        if (registeredTools.length === ALL_TOOL_NAMES.length) {
+            if (isToolCallingSupported) {
+                results['Tool Registration'] = {
+                    ok: true,
+                    message: `All ${ALL_TOOL_NAMES.length} tools registered and active`,
+                };
+            } else {
+                results['Tool Registration'] = {
+                    ok: false,
+                    message: `${registeredTools.length} tools registered, but tool calling is not supported for the current API/settings. Enable "Function Calling" in OpenAI settings and ensure the current model supports tools.`,
+                };
+            }
+        } else if (enabledAgents.length === 0) {
+            results['Tool Registration'] = {
+                ok: false,
+                message: 'No tool agents are enabled. Enable at least one agent in the Agents section.',
+            };
+        } else if (registeredTools.length === 0) {
+            results['Tool Registration'] = {
+                ok: false,
+                message: isToolCallingSupported
+                    ? 'Tools are configured but not registered with ToolManager. Try reloading the extension or switching API sources.'
+                    : 'Tool calling is not supported for the current API/settings. Enable "Function Calling" in OpenAI settings and ensure the current model supports tools.',
+            };
+        } else {
+            results['Tool Registration'] = {
+                ok: false,
+                message: `Partial: ${registeredTools.length}/${ALL_TOOL_NAMES.length} tools registered. Some tool agents may be disabled.`,
+            };
+        }
     } else {
         results['Tool Registration'] = {
             ok: true,
-            message: s.sidecarEnabled
-                ? 'ToolManager not available - tools may not work'
-                : 'Tool mode disabled - skipped',
+            message: 'Tool mode disabled - skipped',
+        };
+    }
+
+    // Check tool calling support
+    if (s.sidecarEnabled && ToolManager) {
+        results['Tool Calling'] = {
+            ok: isToolCallingSupported,
+            message: isToolCallingSupported
+                ? 'Tool calling is supported for the current API/settings'
+                : 'Tool calling is NOT supported. Enable "Function Calling" in OpenAI settings and ensure the current model supports tools.',
         };
     }
 

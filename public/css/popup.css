@@ -69,6 +69,12 @@ dialog {
     flex-grow: 1;
 }
 
+@media screen and (max-width: 1000px) {
+    .popup .popup-content {
+        overflow-y: auto;
+    }
+}
+
 .popup .popup-content h3:first-child {
     /* No double spacing for the first heading needed, the .popup-content already has margin */
     margin-top: 0px;

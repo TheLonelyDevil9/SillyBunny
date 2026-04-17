@@ -6918,3 +6918,15 @@ body:not(.movingUI) .drawer-content.maximized {
         border-width: 2px;
     }
 }
+
+.reasoning-tokens-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(128, 0, 128, 0.15);
+    color: #b080d0;
+    font-size: 0.75em;
+    cursor: default;
+    white-space: nowrap;
+}

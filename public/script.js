@@ -2734,6 +2734,19 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     messageElement.find('.timestamp').text(timestamp).attr('title', `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`);
     messageElement.find('.mesIDDisplay').text(`#${messageId}`);
     tokenCount && messageElement.find('.tokenCounterDisplay').text(`${tokenCount}t`);
+    
+    const reasoningTokens = mes.extra?.reasoning_tokens;
+    if (reasoningTokens && reasoningTokens > 0) {
+        let badge = messageElement.find('.reasoning-tokens-badge');
+        if (!badge.length) {
+            badge = $('<span class="reasoning-tokens-badge"></span>');
+            messageElement.find('.tokenCounterDisplay').after(badge);
+        }
+        badge.text(`💭 ${reasoningTokens}`);
+    } else {
+        messageElement.find('.reasoning-tokens-badge').remove();
+    }
+
     mes.title && messageElement.attr('title', mes.title);
     timerValue && messageElement.find('.mes_timer').attr('title', timerTitle).text(timerValue);
     bookmarkLink && updateBookmarkDisplay(messageElement);
@@ -3755,6 +3768,7 @@ class StreamingProcessor {
                 chat[messageId].extra = {};
             }
             chat[messageId].extra.time_to_first_token = this.timeToFirstToken;
+            chat[messageId].extra.reasoning_tokens = this.reasoningTokens || 0;
 
             // Update reasoning
             await this.reasoningHandler.process(messageId, mesChanged, this.promptReasoning);
@@ -3972,6 +3986,7 @@ class StreamingProcessor {
                 this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
                 this.images = state?.images ?? [];
                 this.reasoningSignature = state?.signature ?? null;
+                this.reasoningTokens = state?.reasoning_tokens ?? 0;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
                 await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
             }
@@ -5622,9 +5637,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         } else {
             // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
             if (originalType !== 'continue') {
-                ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature, reasoningTokens: data.reasoningTokens }));
             } else {
-                ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature, reasoningTokens: data.reasoningTokens }));
             }
 
             // This relies on `saveReply` having been called to add the message to the chat, so it must be last.
@@ -6725,16 +6740,17 @@ async function processImageAttachment(message, { imageUrls }) {
  * @property {string} [reasoning] Message reasoning
  * @property {string[]} [imageUrls] Links to images
  * @property {string?} [reasoningSignature] Encrypted signature of the reasoning text
+ * @property {number} [reasoningTokens] Number of reasoning tokens
  *
  * @typedef {object} SaveReplyResult
  * @property {string} type Type of generation
  * @property {string} getMessage Generated message
  */
-export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
+export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null, reasoningTokens = 0 }) {
     // Backward compatibility
     if (arguments.length > 1 && typeof arguments[0] !== 'object') {
         console.trace('saveReply called with positional arguments. Please use an object instead.');
-        [type, getMessage, fromStreaming, title, swipes, reasoning, imageUrls, reasoningSignature] = arguments;
+        [type, getMessage, fromStreaming, title, swipes, reasoning, imageUrls, reasoningSignature, reasoningTokens] = arguments;
     }
 
     const lastMessage = chat[chat.length - 1];
@@ -6773,6 +6789,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             lastMessage.extra.reasoning = reasoning;
             lastMessage.extra.reasoning_duration = null;
             lastMessage.extra.reasoning_signature = reasoningSignature;
+            lastMessage.extra.reasoning_tokens = reasoningTokens;
             await processImageAttachment(lastMessage, { imageUrls });
             if (power_user.message_token_count_enabled) {
                 const tokenCountText = (reasoning || '') + lastMessage.mes;
@@ -6842,6 +6859,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         newMessage.extra.reasoning = reasoning;
         newMessage.extra.reasoning_duration = null;
         newMessage.extra.reasoning_signature = reasoningSignature;
+        newMessage.extra.reasoning_tokens = reasoningTokens;
         if (power_user.trim_spaces) {
             getMessage = getMessage.trim();
         }

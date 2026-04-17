@@ -2665,4 +2665,23 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         renderAgentList();
         toastr.success(`Created agent "${agent.name}" from prompt.`);
     });
+    // Sync tool agents when API settings change
+    const apiSettingsEvents = [
+        event_types.MAIN_API_CHANGED,
+        event_types.CHATCOMPLETION_SOURCE_CHANGED,
+        event_types.CHATCOMPLETION_MODEL_CHANGED,
+        event_types.OAI_PRESET_CHANGED_AFTER,
+        event_types.SETTINGS_UPDATED,
+    ].filter(Boolean);
+
+    for (const eventName of apiSettingsEvents) {
+        eventSource.on(eventName, syncToolAgentRegistrations);
+    }
+
+    // Sync tool agents when the agents panel is opened
+    document.addEventListener('sb:shell-tab-activated', (event) => {
+        if (event.detail?.tabId === 'agents') {
+            syncToolAgentRegistrations();
+        }
+    });
 })();

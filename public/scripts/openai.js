@@ -3897,7 +3897,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             let text = '';
             const swipes = [];
             const toolCalls = [];
-            const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
+            const state = { reasoning: '', reasoning_tokens: 0, images: [], signature: '', toolSignatures: {} };
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) return;
@@ -3905,6 +3905,10 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                 if (rawData === '[DONE]') return;
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
+
+                if (parsed.usage?.completion_tokens_details?.reasoning_tokens) {
+                    state.reasoning_tokens = parsed.usage.completion_tokens_details.reasoning_tokens;
+                }
 
                 if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;
@@ -3936,6 +3940,10 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             // Delay is required to allow the active message to be updated to
             // the one we are generating (happens right after sendOpenAIRequest)
             delay(1).then(() => saveLogprobsForActiveMessage(logprobs, null));
+        }
+
+        if (data.usage?.completion_tokens_details?.reasoning_tokens) {
+            data.reasoningTokens = data.usage.completion_tokens_details.reasoning_tokens;
         }
 
         return data;

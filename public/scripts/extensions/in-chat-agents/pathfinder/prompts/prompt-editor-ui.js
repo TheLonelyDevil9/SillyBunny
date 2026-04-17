@@ -101,14 +101,6 @@ const EDITOR_HTML = `
             </select>
         </div>
 
-        <div class="prompt-field">
-            <label class="checkbox_label">
-                <input type="checkbox" id="pf-skip-second-pass" />
-                <span>Skip Second Pass</span>
-            </label>
-            <div class="prompt-help">Use candidates from first pass directly (faster, less precise)</div>
-        </div>
-
         <div class="prompt-field-row">
             <div class="prompt-field">
                 <label for="pf-entry-content-mode">Entry Content Mode</label>
@@ -292,7 +284,6 @@ function bindEditorEvents() {
     // Pipeline settings
     document.getElementById('pf-pipeline-enabled')?.addEventListener('change', savePipelineSettings);
     document.getElementById('pf-pipeline-id')?.addEventListener('change', savePipelineSettings);
-    document.getElementById('pf-skip-second-pass')?.addEventListener('change', savePipelineSettings);
     document.getElementById('pf-entry-content-mode')?.addEventListener('change', savePipelineSettings);
     document.getElementById('pf-truncate-length')?.addEventListener('change', savePipelineSettings);
     document.getElementById('pf-max-candidates')?.addEventListener('change', savePipelineSettings);
@@ -425,14 +416,12 @@ function loadPipelineSettings() {
 
     const pipelineEnabled = document.getElementById('pf-pipeline-enabled');
     const pipelineId = document.getElementById('pf-pipeline-id');
-    const skipSecondPass = document.getElementById('pf-skip-second-pass');
     const entryContentMode = document.getElementById('pf-entry-content-mode');
     const truncateLength = document.getElementById('pf-truncate-length');
     const maxCandidates = document.getElementById('pf-max-candidates');
 
     if (pipelineEnabled) pipelineEnabled.checked = s.pipelineEnabled ?? false;
     if (pipelineId) pipelineId.value = s.pipelineId ?? 'default';
-    if (skipSecondPass) skipSecondPass.checked = s.skipSecondPass ?? false;
     if (entryContentMode) entryContentMode.value = s.entryContentMode ?? 'full';
     if (truncateLength) truncateLength.value = s.truncateLength ?? 500;
     if (maxCandidates) maxCandidates.value = s.maxCandidates ?? 20;
@@ -443,7 +432,6 @@ function savePipelineSettings() {
 
     s.pipelineEnabled = document.getElementById('pf-pipeline-enabled')?.checked ?? false;
     s.pipelineId = document.getElementById('pf-pipeline-id')?.value ?? 'default';
-    s.skipSecondPass = document.getElementById('pf-skip-second-pass')?.checked ?? false;
     s.entryContentMode = document.getElementById('pf-entry-content-mode')?.value ?? 'full';
     s.truncateLength = parseInt(document.getElementById('pf-truncate-length')?.value) || 500;
     s.maxCandidates = parseInt(document.getElementById('pf-max-candidates')?.value) || 20;

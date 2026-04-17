@@ -7472,8 +7472,21 @@ function initAll() {
     };
 }
 
+// Init shell UI as soon as DOM is ready.
+// Also re-trigger on APP_READY as a safety net for slow-loading environments.
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initAll);
 } else {
     window.setTimeout(initAll, 120);
+}
+
+// Safety net: ensure init runs after the full app is ready (covers slow VPS /
+// slow networks where DOMContentLoaded fires but scripts haven't set up UI).
+const ctx = getSillyTavernContext();
+if (ctx?.eventSource && ctx?.event_types) {
+    ctx.eventSource.on(ctx.event_types.APP_READY, () => {
+        if (!sbState.initialized) {
+            initAll();
+        }
+    });
 }

@@ -2759,7 +2759,16 @@ export function textValueMatcher(params, data) {
  * @returns {boolean} True if srcVersion >= minVersion, false if not
  */
 export function versionCompare(srcVersion, minVersion) {
-    return (srcVersion || '0.0.0').localeCompare(minVersion, undefined, { numeric: true, sensitivity: 'base' }) > -1;
+    // Strip 'v' prefix for numeric comparison compatibility
+    let s = (srcVersion || '0.0.0').replace(/^[vV]/, '');
+    let m = (minVersion || '0.0.0').replace(/^[vV]/, '');
+
+    // SillyBunny compatibility: treat v1.3.6 as 1.14.0 to pass ST 1.13.x requirements
+    if (s === '1.3.6') {
+        s = '1.14.0';
+    }
+
+    return s.localeCompare(m, undefined, { numeric: true, sensitivity: 'base' }) > -1;
 }
 
 /**

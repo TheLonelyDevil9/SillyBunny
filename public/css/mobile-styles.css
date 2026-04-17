@@ -16,6 +16,17 @@
 
 /*will apply to anything 1000px or less. this catches ipads, horizontal phones, and vertical phones)*/
 @media screen and (max-width: 1000px) {
+    .popup .popup-content {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(100dvh - 80px);
+    }
+
+    .popup .popup-body {
+        overflow-y: auto;
+        max-height: 95dvh;
+    }
+
 
     #UI-Theme-Block,
     #UI-Customization,

@@ -240,14 +240,15 @@ class WebTokenizer {
             return this.#instance;
         }
 
+        let pathToModel = '';
         try {
-            const pathToModel = await getPathToTokenizer(this.#model, this.#fallbackModel);
+            pathToModel = await getPathToTokenizer(this.#model, this.#fallbackModel);
             const fileBuffer = await fs.promises.readFile(pathToModel);
-            this.#instance = await Tokenizer.fromJSON(fileBuffer);
+            this.#instance = await Tokenizer.fromJSON(fileBuffer.toString('utf-8'));
             console.info('Instantiated the tokenizer for', path.parse(pathToModel).name);
             return this.#instance;
         } catch (error) {
-            console.error('Web tokenizer failed to load: ' + this.#model, error);
+            console.error(`Web tokenizer failed to load model '${this.#model}' from path '${pathToModel}':`, error);
             return null;
         }
     }
