@@ -174,20 +174,6 @@ This feature is currently in beta. These are designed to fill the gap between fu
 * Built-in groups are available for the full preset, trackers only, and randomizers only.
 * Custom agents support ST-style regex options.
 
-### Feature Docs
-
-Detailed documentation for SillyBunny-exclusive features:
-
-| Feature | Description |
-|---------|-------------|
-| [Shell Tabs](docs/shell-tabs.md) | Navigate/Customize tab shell system, mobile scroll indicators |
-| [In-Chat Agents](docs/agentic/README.md) | Agent pipeline, prompt transforms, transform history with undo/redo |
-| [Pathfinder](docs/pathfinder.md) | Tool-calling bridge for agentic lorebook navigation |
-| [Model Dropdowns](docs/model-dropdowns.md) | Dynamic /v1/models dropdowns with text input fallback for all providers |
-| [Reasoning Tokens](docs/reasoning-tokens.md) | 💭 inline badge showing reasoning token counts |
-| [Mobile UX](docs/mobile-ux.md) | Mobile fixes: tab scroll indicators, modal scrolling, touch targets |
-| [Version Compatibility](docs/version-compat.md) | How SillyBunny stays compatible with SillyTavern extensions |
-
 ### Bundled Goodies & Tutorials
 SillyBunny includes some extras by default to help you get started right away:
 * A tutorial that guides you through the SillyBunny interface.
