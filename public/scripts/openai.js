@@ -3219,6 +3219,164 @@ function saveModelList(data) {
 
         $('#model_moonshot_select').val(oai_settings.moonshot_model).trigger('change');
     }
+
+    // Claude - hybrid approach: keep static optgroups, add dynamic to "Other" optgroup
+    if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
+        // Clear only dynamic models from "Other" optgroup
+        $('#claude_other_models').empty();
+        
+        // Get static model option values to avoid duplicates
+        const staticClaudeModels = [];
+        $('#model_claude_select option').each(function() {
+            staticClaudeModels.push($(this).val());
+        });
+        
+        // Add dynamic models not already in static list
+        model_list.forEach((model) => {
+            if (!staticClaudeModels.includes(model.id)) {
+                $('#claude_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+        
+        // If no models loaded, static list remains as fallback
+        if (model_list.length > 0) {
+            const selectedModel = [...staticClaudeModels, ...model_list.map(m => m.id)].includes(oai_settings.claude_model)
+                ? oai_settings.claude_model
+                : model_list[0]?.id || oai_settings.claude_model;
+            $('#model_claude_select').val(selectedModel).trigger('change');
+            $('#claude_model_id').val(selectedModel);
+        }
+    }
+
+    // AI21 - hybrid approach
+    if (oai_settings.chat_completion_source == chat_completion_sources.AI21) {
+        $('#ai21_other_models').empty();
+        const staticAI21Models = [];
+        $('#model_ai21_select option').each(function() {
+            staticAI21Models.push($(this).val());
+        });
+        model_list.forEach((model) => {
+            if (!staticAI21Models.includes(model.id)) {
+                $('#ai21_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+        if (model_list.length > 0) {
+            const selectedModel = [...staticAI21Models, ...model_list.map(m => m.id)].includes(oai_settings.ai21_model)
+                ? oai_settings.ai21_model
+                : model_list[0]?.id || oai_settings.ai21_model;
+            $('#model_ai21_select').val(selectedModel).trigger('change');
+            $('#ai21_model_id').val(selectedModel);
+        }
+    }
+
+    // Cohere - hybrid approach
+    if (oai_settings.chat_completion_source == chat_completion_sources.COHERE) {
+        $('#cohere_other_models').empty();
+        const staticCohereModels = [];
+        $('#model_cohere_select option').each(function() {
+            staticCohereModels.push($(this).val());
+        });
+        model_list.forEach((model) => {
+            if (!staticCohereModels.includes(model.id)) {
+                $('#cohere_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+        if (model_list.length > 0) {
+            const selectedModel = [...staticCohereModels, ...model_list.map(m => m.id)].includes(oai_settings.cohere_model)
+                ? oai_settings.cohere_model
+                : model_list[0]?.id || oai_settings.cohere_model;
+            $('#model_cohere_select').val(selectedModel).trigger('change');
+            $('#cohere_model_id').val(selectedModel);
+        }
+    }
+
+    // Perplexity - hybrid approach
+    if (oai_settings.chat_completion_source == chat_completion_sources.PERPLEXITY) {
+        $('#perplexity_other_models').empty();
+        const staticPerplexityModels = [];
+        $('#model_perplexity_select option').each(function() {
+            staticPerplexityModels.push($(this).val());
+        });
+        model_list.forEach((model) => {
+            if (!staticPerplexityModels.includes(model.id)) {
+                $('#perplexity_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+        if (model_list.length > 0) {
+            const selectedModel = [...staticPerplexityModels, ...model_list.map(m => m.id)].includes(oai_settings.perplexity_model)
+                ? oai_settings.perplexity_model
+                : model_list[0]?.id || oai_settings.perplexity_model;
+            $('#model_perplexity_select').val(selectedModel).trigger('change');
+            $('#perplexity_model_id').val(selectedModel);
+        }
+    }
+
+    // ZAI - hybrid approach
+    if (oai_settings.chat_completion_source == chat_completion_sources.ZAI) {
+        $('#zai_other_models').empty();
+        const staticZAIModels = [];
+        $('#model_zai_select option').each(function() {
+            staticZAIModels.push($(this).val());
+        });
+        model_list.forEach((model) => {
+            if (!staticZAIModels.includes(model.id)) {
+                $('#zai_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+        if (model_list.length > 0) {
+            const selectedModel = [...staticZAIModels, ...model_list.map(m => m.id)].includes(oai_settings.zai_model)
+                ? oai_settings.zai_model
+                : model_list[0]?.id || oai_settings.zai_model;
+            $('#model_zai_select').val(selectedModel).trigger('change');
+            $('#zai_model_id').val(selectedModel);
+        }
+    }
+
+    // VertexAI - hybrid approach: keep static optgroups, add dynamic to "From API" optgroup
+    if (oai_settings.chat_completion_source === chat_completion_sources.VERTEXAI) {
+        // Clear only dynamic models from "From API" optgroup
+        $('#vertexai_other_models').empty();
+
+        // Get static model option values to avoid duplicates
+        const staticVertexAIModels = [];
+        $('#model_vertexai_select option').each(function() {
+            staticVertexAIModels.push($(this).val());
+        });
+
+        // Add dynamic models not already in static list
+        model_list.forEach((model) => {
+            if (!staticVertexAIModels.includes(model.id)) {
+                $('#vertexai_other_models').append(
+                    $('<option>', { value: model.id, text: model.id })
+                );
+            }
+        });
+
+        // Merge static models into model_list for selection
+        staticVertexAIModels.forEach(modelId => {
+            if (!model_list.some(model => model.id === modelId)) {
+                model_list.push({ id: modelId });
+            }
+        });
+
+        if (model_list.length > 0) {
+            const selectedModel = [...staticVertexAIModels, ...model_list.map(m => m.id)].includes(oai_settings.vertexai_model)
+                ? oai_settings.vertexai_model
+                : model_list[0]?.id || oai_settings.vertexai_model;
+            $('#model_vertexai_select').val(selectedModel).trigger('change');
+            $('#vertexai_model_id').val(selectedModel);
+        }
+    }
 }
 
 function appendOpenRouterOptions(model_list, groupModels = false, sort = false) {
@@ -6123,6 +6281,43 @@ async function onModelChange() {
     // Skip setting the context size for sources that get it from external APIs
     const hasModelsLoaded = Array.isArray(model_list) && model_list.length > 0;
 
+    if ($(this).is('#claude_model_id')) {
+        if (value) {
+            oai_settings.claude_model = value;
+            $('#model_claude_select').val(value);
+        }
+    }
+    if ($(this).is('#ai21_model_id')) {
+        if (value) {
+            oai_settings.ai21_model = value;
+            $('#model_ai21_select').val(value);
+        }
+    }
+    if ($(this).is('#cohere_model_id')) {
+        if (value) {
+            oai_settings.cohere_model = value;
+            $('#model_cohere_select').val(value);
+        }
+    }
+    if ($(this).is('#perplexity_model_id')) {
+        if (value) {
+            oai_settings.perplexity_model = value;
+            $('#model_perplexity_select').val(value);
+        }
+    }
+    if ($(this).is('#zai_model_id')) {
+        if (value) {
+            oai_settings.zai_model = value;
+            $('#model_zai_select').val(value);
+        }
+    }
+    if ($(this).is('#vertexai_model_id')) {
+        if (value) {
+            oai_settings.vertexai_model = value;
+            $('#model_vertexai_select').val(value);
+        }
+    }
+
     if ($(this).is('#model_claude_select')) {
         if (value.includes('-v')) {
             value = value.replace('-v', '-');
@@ -6132,6 +6327,7 @@ async function onModelChange() {
         console.log('Claude model changed to', value);
         oai_settings.claude_model = value;
         $('#model_claude_select').val(oai_settings.claude_model);
+        $('#claude_model_id').val(value);
     }
 
     if ($(this).is('#model_openai_select')) {
@@ -6158,6 +6354,7 @@ async function onModelChange() {
 
         console.log('AI21 model changed to', value);
         oai_settings.ai21_model = value;
+        $('#ai21_model_id').val(value);
     }
 
     if ($(this).is('#model_google_select')) {
@@ -6173,6 +6370,7 @@ async function onModelChange() {
     if ($(this).is('#model_vertexai_select')) {
         console.log('Vertex AI model changed to', value);
         oai_settings.vertexai_model = value;
+        $('#vertexai_model_id').val(value);
     }
 
     if ($(this).is('#model_mistralai_select')) {
@@ -6188,11 +6386,13 @@ async function onModelChange() {
     if ($(this).is('#model_cohere_select')) {
         console.log('Cohere model changed to', value);
         oai_settings.cohere_model = value;
+        $('#cohere_model_id').val(value);
     }
 
     if ($(this).is('#model_perplexity_select')) {
         console.log('Perplexity model changed to', value);
         oai_settings.perplexity_model = value;
+        $('#perplexity_model_id').val(value);
     }
 
     if ($(this).is('#model_groq_select')) {
@@ -6318,6 +6518,7 @@ async function onModelChange() {
     if ($(this).is('#model_zai_select')) {
         console.log('ZAI model changed to', value);
         oai_settings.zai_model = value;
+        $('#zai_model_id').val(value);
     }
 
     if ([chat_completion_sources.MAKERSUITE, chat_completion_sources.VERTEXAI].includes(oai_settings.chat_completion_source)) {
@@ -7726,6 +7927,31 @@ export function initOpenAI() {
 
     $('#custom_model_id').on('input', function () {
         oai_settings.custom_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#claude_model_id').on('input', function () {
+        oai_settings.claude_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+    $('#ai21_model_id').on('input', function () {
+        oai_settings.ai21_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+    $('#cohere_model_id').on('input', function () {
+        oai_settings.cohere_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+    $('#perplexity_model_id').on('input', function () {
+        oai_settings.perplexity_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+    $('#zai_model_id').on('input', function () {
+        oai_settings.zai_model = String($(this).val());
+        saveSettingsDebounced();
+    });
+    $('#vertexai_model_id').on('input', function () {
+        oai_settings.vertexai_model = String($(this).val());
         saveSettingsDebounced();
     });
 

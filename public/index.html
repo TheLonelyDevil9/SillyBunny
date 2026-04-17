@@ -3135,7 +3135,11 @@
                                 For privacy reasons, your API key will be hidden after you click 'Connect'.
                             </div>
                             <div>
-                                <h4 data-i18n="Claude Model">Claude Model</h4>
+                                <h4 data-i18n="Model ID">Model ID</h4>
+                                <div class="flex-container">
+                                    <input id="claude_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: claude-sonnet-4-5" placeholder="Example: claude-sonnet-4-5">
+                                </div>
+                                <h4 data-i18n="Available Models">Available Models</h4>
                                 <select id="model_claude_select">
                                     <optgroup label="Versions">
                                         <option value="claude-opus-4-6">claude-opus-4-6</option>
@@ -3162,6 +3166,7 @@
                                         <option value="claude-3-opus-20240229">claude-3-opus-20240229</option>
                                         <option value="claude-3-haiku-20240307">claude-3-haiku-20240307</option>
                                     </optgroup>
+                                    <optgroup id="claude_other_models" label="From API"></optgroup>
                                 </select>
                             </div>
                         </form>
@@ -3261,7 +3266,11 @@
                                 For privacy reasons, your API key will be hidden after you click 'Connect'.
                             </div>
                             <div>
-                                <h4 data-i18n="AI21 Model">AI21 Model</h4>
+                                <h4 data-i18n="Model ID">Model ID</h4>
+                                <div class="flex-container">
+                                    <input id="ai21_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: jamba-large" placeholder="Example: jamba-large">
+                                </div>
+                                <h4 data-i18n="Available Models">Available Models</h4>
                                 <select id="model_ai21_select">
                                     <optgroup label="Jamba (Latest)">
                                         <option value="jamba-mini">jamba-mini</option>
@@ -3271,6 +3280,7 @@
                                         <option value="jamba-1.7-mini">jamba-1.7-mini</option>
                                         <option value="jamba-1.7-large">jamba-1.7-large</option>
                                     </optgroup>
+                                    <optgroup id="ai21_other_models" label="From API"></optgroup>
                                 </select>
                             </div>
                         </form>
@@ -3461,7 +3471,11 @@
 
                             <!-- Model Selection -->
                             <div>
-                                <h4 data-i18n="Google Model">Google Model</h4>
+                                <h4 data-i18n="Model ID">Model ID</h4>
+                                <div class="flex-container">
+                                    <input id="vertexai_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: gemini-2.5-pro" placeholder="Example: gemini-2.5-pro">
+                                </div>
+                                <h4 data-i18n="Available Models">Available Models</h4>
                                 <select id="model_vertexai_select">
                                     <!-- data-mode="full" is for models that require a service account -->
                                     <optgroup label="Gemini 3.1">
@@ -3488,6 +3502,7 @@
                                         <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
                                         <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
                                     </optgroup>
+                                    <optgroup id="vertexai_other_models" label="From API"></optgroup>
                                 </select>
                             </div>
                         </div>
@@ -3716,7 +3731,11 @@
                             <div data-for="api_key_perplexity" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
                                 For privacy reasons, your API key will be hidden after you click 'Connect'.
                             </div>
-                            <h4 data-i18n="Perplexity Model">Perplexity Model</h4>
+                            <h4 data-i18n="Model ID">Model ID</h4>
+                            <div class="flex-container">
+                                <input id="perplexity_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: sonar-pro" placeholder="Example: sonar-pro">
+                            </div>
+                            <h4 data-i18n="Available Models">Available Models</h4>
                             <select id="model_perplexity_select">
                                 <optgroup label="Perplexity Sonar Models">
                                     <option value="sonar">sonar</option>
@@ -3728,6 +3747,7 @@
                                 <optgroup label="Offline Models">
                                     <option value="r1-1776">r1-1776</option>
                                 </optgroup>
+                                <optgroup id="perplexity_other_models" label="From API"></optgroup>
                             </select>
                         </div>
                         <form id="cohere_form" data-source="cohere" action="javascript:void(null);" method="post" enctype="multipart/form-data">
@@ -3740,7 +3760,11 @@
                                 For privacy reasons, your API key will be hidden after you click 'Connect'.
                             </div>
                             <div>
-                                <h4 data-i18n="Cohere Model">Cohere Model</h4>
+                                <h4 data-i18n="Model ID">Model ID</h4>
+                                <div class="flex-container">
+                                    <input id="cohere_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: command-r-plus" placeholder="Example: command-r-plus">
+                                </div>
+                                <h4 data-i18n="Available Models">Available Models</h4>
                                 <select id="model_cohere_select">
                                     <optgroup label="Stable">
                                         <option value="c4ai-aya-23-8b">c4ai-aya-23-8b</option>
@@ -3763,6 +3787,7 @@
                                         <option value="command-light-nightly">command-light-nightly</option>
                                         <option value="command-nightly">command-nightly</option>
                                     </optgroup>
+                                    <optgroup id="cohere_other_models" label="From API"></optgroup>
                                 </select>
                             </div>
                         </form>
@@ -3905,26 +3930,33 @@
                                 <option value="common" data-i18n="Common API">Common API</option>
                                 <option value="coding" data-i18n="Coding API">Coding API</option>
                             </select>
-                            <h4 data-i18n="Z.AI Model">Z.AI Model</h4>
+                            <h4 data-i18n="Model ID">Model ID</h4>
+                            <div class="flex-container">
+                                <input id="zai_model_id" class="text_pole wide100p" value="" autocomplete="off" data-i18n="[placeholder]Example: zai-1" placeholder="Example: zai-1">
+                            </div>
+                            <h4 data-i18n="Available Models">Available Models</h4>
                             <select id="model_zai_select">
-                                <option value="glm-5-turbo">glm-5-turbo</option>
-                                <option value="glm-5.1">glm-5.1</option>
-                                <option value="glm-5">glm-5</option>
-                                <option value="glm-4.7">glm-4.7</option>
-                                <option value="glm-4.7-flash">glm-4.7-flash</option>
-                                <option value="glm-4.7-flashx">glm-4.7-flashx</option>
-                                <option value="glm-4.6">glm-4.6</option>
-                                <option value="glm-4.6v">glm-4.6v</option>
-                                <option value="glm-4.6v-flash">glm-4.6v-flash</option>
-                                <option value="glm-4.6v-flashx">glm-4.6v-flashx</option>
-                                <option value="glm-4.5v">glm-4.5v</option>
-                                <option value="glm-4.5">glm-4.5</option>
-                                <option value="glm-4.5-air">glm-4.5-air</option>
-                                <option value="glm-4.5-x">glm-4.5-x</option>
-                                <option value="glm-4.5-airx">glm-4.5-airx</option>
-                                <option value="glm-4.5-flash">glm-4.5-flash</option>
-                                <option value="glm-4-32b-0414-128k">glm-4-32b-0414-128k</option>
-                                <option value="autoglm-phone-multilingual">autoglm-phone-multilingual</option>
+                                <optgroup label="GLM Models">
+                                    <option value="glm-5-turbo">glm-5-turbo</option>
+                                    <option value="glm-5.1">glm-5.1</option>
+                                    <option value="glm-5">glm-5</option>
+                                    <option value="glm-4.7">glm-4.7</option>
+                                    <option value="glm-4.7-flash">glm-4.7-flash</option>
+                                    <option value="glm-4.7-flashx">glm-4.7-flashx</option>
+                                    <option value="glm-4.6">glm-4.6</option>
+                                    <option value="glm-4.6v">glm-4.6v</option>
+                                    <option value="glm-4.6v-flash">glm-4.6v-flash</option>
+                                    <option value="glm-4.6v-flashx">glm-4.6v-flashx</option>
+                                    <option value="glm-4.5v">glm-4.5v</option>
+                                    <option value="glm-4.5">glm-4.5</option>
+                                    <option value="glm-4.5-air">glm-4.5-air</option>
+                                    <option value="glm-4.5-x">glm-4.5-x</option>
+                                    <option value="glm-4.5-airx">glm-4.5-airx</option>
+                                    <option value="glm-4.5-flash">glm-4.5-flash</option>
+                                    <option value="glm-4-32b-0414-128k">glm-4-32b-0414-128k</option>
+                                    <option value="autoglm-phone-multilingual">autoglm-phone-multilingual</option>
+                                </optgroup>
+                                <optgroup id="zai_other_models" label="From API"></optgroup>
                             </select>
                         </div>
                         <div id="azure_openai_settings" data-source="azure_openai">
