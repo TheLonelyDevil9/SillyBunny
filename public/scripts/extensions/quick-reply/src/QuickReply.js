@@ -12,7 +12,7 @@ import { SlashCommandParserError } from '../../../slash-commands/SlashCommandPar
 import { SlashCommandScope } from '../../../slash-commands/SlashCommandScope.js';
 import { accountStorage } from '../../../util/AccountStorage.js';
 import { debounce, delay, getSortableDelay, showFontAwesomePicker } from '../../../utils.js';
-import { log, quickReplyApi, warn } from '../index.js';
+import { log, warn } from './shared.js';
 import { QuickReplyContextLink } from './QuickReplyContextLink.js';
 import { QuickReplySet } from './QuickReplySet.js';
 import { ContextMenu } from './ui/ctx/ContextMenu.js';
@@ -443,12 +443,12 @@ export class QuickReply {
                             setItem.classList.add('qr--modal-switcherItem');
                             setItem.addEventListener('click', () => {
                                 list.innerHTML = '';
-                                for (const qrs of quickReplyApi.listSets()) {
+                                for (const qrs of globalThis.quickReplyApi.listSets()) {
                                     const item = document.createElement('li'); {
                                         item.classList.add('qr--modal-switcherItem');
                                         item.addEventListener('click', () => {
                                             list.innerHTML = '';
-                                            makeList(quickReplyApi.getSetByName(qrs));
+                                            makeList(globalThis.quickReplyApi.getSetByName(qrs));
                                         });
                                         const lbl = document.createElement('div'); {
                                             lbl.classList.add('qr--label');
@@ -478,7 +478,7 @@ export class QuickReply {
                         const addItem = document.createElement('li'); {
                             addItem.classList.add('qr--modal-switcherItem');
                             addItem.addEventListener('click', () => {
-                                const qr = quickReplyApi.getSetByQr(this).addQuickReply();
+                                const qr = globalThis.quickReplyApi.getSetByQr(this).addQuickReply();
                                 this.editorPopup.completeAffirmative();
                                 qr.showEditor();
                             });
@@ -525,7 +525,7 @@ export class QuickReply {
                             }
                         }
                     };
-                    makeList(quickReplyApi.getSetByQr(this));
+                    makeList(globalThis.quickReplyApi.getSetByQr(this));
                 }
                 label.parentElement.append(list);
             });

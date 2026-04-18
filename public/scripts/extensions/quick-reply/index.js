@@ -9,15 +9,12 @@ import { QuickReplySettings } from './src/QuickReplySettings.js';
 import { SlashCommandHandler } from './src/SlashCommandHandler.js';
 import { ButtonUi } from './src/ui/ButtonUi.js';
 import { SettingsUi } from './src/ui/SettingsUi.js';
-import { debounceAsync } from '../../utils.js';
 import { selected_group } from '../../group-chats.js';
-export { debounceAsync };
-
-
-const _VERBOSE = true;
-export const debug = (...msg) => _VERBOSE ? console.debug('[QR2]', ...msg) : null;
-export const log = (...msg) => _VERBOSE ? console.log('[QR2]', ...msg) : null;
-export const warn = (...msg) => _VERBOSE ? console.warn('[QR2]', ...msg) : null;
+import { debounceAsync, debug, log, warn } from './src/shared.js';
+// Re-exported so that any existing `from '.../quick-reply/index.js'` imports
+// keep working. Internally the other src/ modules should import from
+// './shared.js' directly to avoid a circular back-edge — see shared.js.
+export { debounceAsync, debug, log, warn };
 
 
 const defaultConfig = {

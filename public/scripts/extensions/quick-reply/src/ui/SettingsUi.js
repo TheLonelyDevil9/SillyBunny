@@ -1,6 +1,6 @@
 import { Popup } from '../../../../popup.js';
 import { getSortableDelay } from '../../../../utils.js';
-import { log, warn } from '../../index.js';
+import { log, warn } from '../shared.js';
 import { QuickReply } from '../QuickReply.js';
 import { QuickReplySet } from '../QuickReplySet.js';
 import { QuickReplySettings } from '../QuickReplySettings.js';

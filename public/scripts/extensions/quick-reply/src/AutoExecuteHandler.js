@@ -1,4 +1,4 @@
-import { warn } from '../index.js';
+import { warn } from './shared.js';
 import { QuickReply } from './QuickReply.js';
 import { QuickReplySettings } from './QuickReplySettings.js';
 
