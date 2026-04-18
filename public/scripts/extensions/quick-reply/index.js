@@ -230,7 +230,18 @@ const finalizeInit = async () => {
     isReady = true;
     debug('READY');
 };
-await init();
+// Fire-and-forget init — using top-level await here creates a circular
+// top-level-await deadlock on slow boots: init() awaits a dynamic import of
+// ./src/QuickReply.js, but that module statically imports from this file via
+// `import { log, quickReplyApi, warn } from '../index.js'`. With top-level
+// await the module resolver must wait for this file to finish evaluating
+// before QuickReply.js can resolve — while this file is waiting on that
+// import. The isReady flag + executeQueue pattern below already handles the
+// case where event handlers fire before init completes.
+init().catch(err => {
+    console.error('[QR2] init failed:', err);
+    try { toastr?.error(err?.message ?? String(err), 'Quick Reply init failed'); } catch { /* noop */ }
+});
 
 const purgeCharacterQuickReplySets = ({ character }) => {
     // Remove the character's Quick Reply Sets from the settings.
