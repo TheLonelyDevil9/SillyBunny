@@ -1402,7 +1402,14 @@ function updateThemeBadge() {
 }
 
 function getSillyTavernContext() {
-    return globalThis.SillyTavern?.getContext?.() ?? null;
+    // SillyTavern.getContext() throws a TDZ ReferenceError on slow boots when
+    // it is called before script.js finishes initializing its module-level
+    // `chat` binding. Treat that the same as "context not ready yet".
+    try {
+        return globalThis.SillyTavern?.getContext?.() ?? null;
+    } catch {
+        return null;
+    }
 }
 
 function hasActiveTopBarChat(context = getSillyTavernContext()) {
