@@ -28,27 +28,21 @@ You can find additional extras here: [platberlitz.github.io](https://platberlitz
 
 These screenshots show the new shell-based UI across Navigate, Customize, Agents, and Characters on desktop and mobile.
 
-#### Default shell
+#### Desktop
 
-##### Desktop
+| Navigation Menu | Customize Menu |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-navigate-v1.3.6.png" alt="Desktop Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-customize-v1.3.6.png" alt="Desktop Customize Menu" width="100%"> |
 
-![SillyBunny desktop Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-navigate-v1.3.6.png)
+| Agents Menu | Characters Menu |
+| :---: | :---: |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-agents-v1.3.6.png" alt="Desktop Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-characters-v1.3.6.png" alt="Desktop Characters Menu" width="100%"> |
 
-![SillyBunny desktop Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-customize-v1.3.6.png)
+#### Mobile
 
-![SillyBunny desktop Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-agents-v1.3.6.png)
-
-![SillyBunny desktop Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-desktop-characters-v1.3.6.png)
-
-##### Mobile
-
-![SillyBunny mobile Navigate](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-navigate-v1.3.6.png)
-
-![SillyBunny mobile Customize](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-customize-v1.3.6.png)
-
-![SillyBunny mobile Agents](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-agents-v1.3.6.png)
-
-![SillyBunny mobile Characters](https://raw.githubusercontent.com/platberlitz/SillyBunny/main/docs/assets/readme/sillybunny-ui-mobile-characters-v1.3.6.png)
+| Navigation Menu | Customize Menu | Agents Menu | Characters Menu |
+| :---: | :---: | :---: | :---: |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-navigate-v1.3.6.png" alt="Mobile Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-customize-v1.3.6.png" alt="Mobile Customize Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-agents-v1.3.6.png" alt="Mobile Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-characters-v1.3.6.png" alt="Mobile Characters Menu" width="100%"> |
 
 ---
 
