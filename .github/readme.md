@@ -194,7 +194,10 @@ SillyBunny includes some extras by default to help you get started right away:
 - Changed default UI theme to Dark V1.0 (from Default (Dark) 1.7.1)
 - Changed default shell style to Clean Minimal (from Modern Glass)
 - Removed Forest Dusk, Forest Dawn, and Rose Glow theme preset buttons
+- Added accent color preset buttons (Forest, Rose, Amber) for quick color adjustments
+- Added Custom RGB Accent toggle with color pickers for full accent customization
 - Reset button now resets theme colors to Dark V1.0
+- Fixed extension containers showing brown colors by updating default CSS variables to match Dark V1.0
 
 **Bug fixes**
 
