@@ -16,6 +16,7 @@ const SB_STORAGE_KEYS = Object.freeze({
     shortcutLeft: 'sb-shortcut-left',
     shortcutRight: 'sb-shortcut-right',
     bottomBarScale: 'sb-bottom-bar-scale',
+    mobileButtonScale: 'sb-mobile-button-scale',
     settingsDrawerAutoClose: 'sb-settings-drawer-auto-close',
 });
 
@@ -319,6 +320,8 @@ const sbState = {
     inlineDrawerAutoClose: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.settingsDrawerAutoClose), false),
     theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
     surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
+    bottomBarScale: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.bottomBarScale)),
+    mobileButtonScale: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.mobileButtonScale)),
     topbarScale: {
         desktop: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop)),
         mobile: normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile)),
@@ -562,12 +565,21 @@ function seedTopbarScaleDefaults() {
     if (safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile) === null) {
         safeSetItem(SB_STORAGE_KEYS.topbarScaleMobile, String(SB_TOPBAR_SCALE.defaultValue));
     }
+
+    if (safeGetItem(SB_STORAGE_KEYS.bottomBarScale) === null) {
+        safeSetItem(SB_STORAGE_KEYS.bottomBarScale, String(SB_TOPBAR_SCALE.defaultValue));
+    }
+
+    if (safeGetItem(SB_STORAGE_KEYS.mobileButtonScale) === null) {
+        safeSetItem(SB_STORAGE_KEYS.mobileButtonScale, String(SB_TOPBAR_SCALE.defaultValue));
+    }
 }
 
 function restorePersistedTopbarState() {
     sbState.topbarScale.desktop = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleDesktop));
     sbState.topbarScale.mobile = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.topbarScaleMobile));
     sbState.bottomBarScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.bottomBarScale));
+    sbState.mobileButtonScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.mobileButtonScale));
     sbState.topbarLabel.desktopParts = safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts) === null
         ? ['char']
         : normalizeTopbarLabelParts(safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts), []);
@@ -662,6 +674,20 @@ function setBottomBarScale(value, { persist = true } = {}) {
 
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.bottomBarScale, String(nextScale));
+    }
+
+    updateThemePickerUi();
+}
+
+function setMobileButtonScale(value, { persist = true } = {}) {
+    const nextScale = normalizeTopbarScale(value);
+    const scaleFactor = Number((nextScale / 100).toFixed(2)).toString();
+
+    sbState.mobileButtonScale = nextScale;
+    document.documentElement.style.setProperty('--sb-mobile-button-scale', scaleFactor);
+
+    if (persist) {
+        safeSetItem(SB_STORAGE_KEYS.mobileButtonScale, String(nextScale));
     }
 
     updateThemePickerUi();
@@ -5577,6 +5603,18 @@ function injectThemePicker() {
         caption: 'Resize the bottom chat bar, send form, and action buttons without editing CSS.',
         onInput: nextValue => setBottomBarScale(nextValue),
     });
+    const mobileButtonSliderGroup = createThemeSliderGroup({
+        title: 'Mobile Button Size',
+        valueId: 'sb-mobile-button-scale-value',
+        inputId: 'sb-mobile-button-scale-input',
+        value: sbState.mobileButtonScale,
+        min: SB_TOPBAR_SCALE.min,
+        max: SB_TOPBAR_SCALE.max,
+        step: SB_TOPBAR_SCALE.step,
+        ariaLabel: 'Mobile button size',
+        caption: 'Increase or decrease the mobile nav and mobile chat tool buttons without changing desktop controls.',
+        onInput: nextValue => setMobileButtonScale(nextValue),
+    });
     const topbarLabelSettingsGroup = createTopbarLabelSettingsGroup();
     const shortcutSettingsGroup = createShortcutSettingsGroup();
     header.append(title, description);
@@ -5602,7 +5640,7 @@ function injectThemePicker() {
     getMessageStyleSelect()?.addEventListener('change', updateThemePickerUi);
     document.addEventListener('sb:chat-style-updated', updateThemePickerUi);
 
-    card.append(header, optionRow, surfaceSliderGroup, bottomBarSliderGroup, topbarLabelSettingsGroup, shortcutSettingsGroup);
+    card.append(header, optionRow, surfaceSliderGroup, bottomBarSliderGroup, mobileButtonSliderGroup, topbarLabelSettingsGroup, shortcutSettingsGroup);
     themeBlock.prepend(card);
     updateThemePickerUi();
 }
@@ -5614,6 +5652,8 @@ function updateThemePickerUi() {
     const desktopTopbarScaleValue = document.getElementById('sb-topbar-scale-desktop-value');
     const bottomBarScaleInput = document.getElementById('sb-bottom-bar-scale-input');
     const bottomBarScaleValue = document.getElementById('sb-bottom-bar-scale-value');
+    const mobileButtonScaleInput = document.getElementById('sb-mobile-button-scale-input');
+    const mobileButtonScaleValue = document.getElementById('sb-mobile-button-scale-value');
     const customTextInput = document.getElementById('sb-topbar-custom-text-input');
 
     for (const button of document.querySelectorAll('[data-sb-theme-option]')) {
@@ -5645,6 +5685,14 @@ function updateThemePickerUi() {
 
     if (bottomBarScaleValue instanceof HTMLElement) {
         bottomBarScaleValue.textContent = formatTopbarScale(sbState.bottomBarScale);
+    }
+
+    if (mobileButtonScaleInput instanceof HTMLInputElement) {
+        mobileButtonScaleInput.value = String(sbState.mobileButtonScale);
+    }
+
+    if (mobileButtonScaleValue instanceof HTMLElement) {
+        mobileButtonScaleValue.textContent = formatTopbarScale(sbState.mobileButtonScale);
     }
 
     for (const input of document.querySelectorAll('[data-sb-topbar-label-mode][data-sb-topbar-label-part]')) {
@@ -7405,6 +7453,7 @@ function initAll() {
     setTopbarScale('desktop', sbState.topbarScale.desktop, { persist: false });
     setTopbarScale('mobile', sbState.topbarScale.mobile, { persist: false });
     setBottomBarScale(sbState.bottomBarScale, { persist: false });
+    setMobileButtonScale(sbState.mobileButtonScale, { persist: false });
     syncDesktopShellSizing();
     buildTopBar();
     buildBottomChatBar();
@@ -7446,6 +7495,9 @@ function initAll() {
         setTopbarScale(mode, value) {
             setTopbarScale(mode, value);
         },
+        setMobileButtonScale(value) {
+            setMobileButtonScale(value);
+        },
         setMessageStyle,
         openChatTools() {
             if (isMobileViewport()) {
@@ -7475,6 +7527,9 @@ function initAll() {
             return mode === 'mobile'
                 ? sbState.topbarScale.mobile
                 : sbState.topbarScale.desktop;
+        },
+        getMobileButtonScale() {
+            return sbState.mobileButtonScale;
         },
     };
 }

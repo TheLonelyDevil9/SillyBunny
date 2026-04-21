@@ -5,6 +5,7 @@
 :root {
     --sb-topbar-scale-desktop: 1;
     --sb-topbar-scale-mobile: 1;
+    --sb-mobile-button-scale: 1;
     --sb-topbar-scale-active: var(--sb-topbar-scale-desktop);
     --sb-topbar-primary-height-base: var(--topBarBlockSize);
     --sb-topbar-padding-x-base: 10px;
@@ -93,8 +94,8 @@
     --sb-proxy-label-size: calc(var(--mainFontSize) * var(--sb-proxy-label-scale-base));
     --sb-proxy-underline-inset: var(--sb-proxy-underline-inset-base);
     --sb-proxy-underline-bottom: var(--sb-proxy-underline-bottom-base);
-    --sb-mobile-toggle-size: var(--sb-mobile-toggle-size-base);
-    --sb-home-toggle-min-width: var(--sb-home-toggle-min-width-base);
+    --sb-mobile-toggle-size: calc(var(--sb-mobile-toggle-size-base) * var(--sb-mobile-button-scale));
+    --sb-home-toggle-min-width: calc(var(--sb-home-toggle-min-width-base) * var(--sb-mobile-button-scale));
     --sb-topbar-compact-icon-size: calc(var(--mainFontSize) * var(--sb-topbar-compact-icon-scale-base));
     --sb-topbar-primary-min-height: max(var(--sb-proxy-button-height), var(--sb-mobile-toggle-size));
     --sb-topbar-primary-height: max(calc(var(--sb-topbar-primary-height-base) * var(--sb-topbar-scale-active)), var(--sb-topbar-primary-min-height));
@@ -105,8 +106,8 @@
     --sb-mobile-tools-gap: calc(var(--sb-mobile-tools-gap-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-header-gap: calc(var(--sb-mobile-tools-header-gap-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-actions-gap: calc(var(--sb-mobile-tools-actions-gap-base) * var(--sb-topbar-scale-active));
-    --sb-mobile-tools-button-size: calc(var(--sb-mobile-tools-button-size-base) * var(--sb-topbar-scale-active));
-    --sb-mobile-tools-button-radius: calc(var(--sb-mobile-tools-button-radius-base) * var(--sb-topbar-scale-active));
+    --sb-mobile-tools-button-size: calc(var(--sb-mobile-tools-button-size-base) * var(--sb-topbar-scale-active) * var(--sb-mobile-button-scale));
+    --sb-mobile-tools-button-radius: calc(var(--sb-mobile-tools-button-radius-base) * var(--sb-topbar-scale-active) * var(--sb-mobile-button-scale));
     --sb-mobile-tools-field-height: calc(var(--sb-mobile-tools-field-height-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-field-padding-x: calc(var(--sb-mobile-tools-field-padding-x-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-field-icon-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-field-icon-scale-base) * var(--sb-topbar-scale-active));
