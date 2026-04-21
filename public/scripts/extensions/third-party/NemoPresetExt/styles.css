@@ -284,26 +284,12 @@ body.nemo-animated-bg-active #bg1 {
     margin-top: 12px;
 }
 
-.nemo-presetext-settings-heading {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.nemo-presetext-settings-heading > b {
-    justify-content: flex-start;
-    padding-left: 0;
-    padding-right: 0;
-    text-align: left;
-}
-
 .nemo-presetext-settings-subtitle {
     color: var(--SmartThemeEmColor);
     font-size: 0.9em;
     line-height: 1.35;
     text-align: left;
+    margin-top: -2px;
 }
 
 #nemo-presetext-settings .inline-drawer-content {
