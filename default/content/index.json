@@ -680,6 +680,10 @@
         "type": "quick_replies"
     },
     {
+        "filename": "presets/quick-replies/Memory Sharding.json",
+        "type": "quick_replies"
+    },
+    {
         "filename": "presets/instruct/Llama-3-Instruct-Names.json",
         "type": "instruct"
     },
