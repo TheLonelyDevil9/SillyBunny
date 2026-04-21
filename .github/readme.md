@@ -180,7 +180,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 ## Latest Update
 
-### v1.3.9 (2026-04-21)
+### v1.3.8 (2026-04-21)
 
 **User Experience**
 
@@ -195,10 +195,6 @@ SillyBunny includes some extras by default to help you get started right away:
 - Changed default shell style to Clean Minimal (from Modern Glass)
 - Removed Forest Dusk, Forest Dawn, and Rose Glow theme preset buttons
 - Reset button now resets theme colors to Dark V1.0
-
----
-
-### v1.3.8 (2026-04-21)
 
 **Bug fixes**
 

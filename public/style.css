@@ -68,20 +68,20 @@
 
 
     /*Default Theme, will be changed by ToolCool Color Picker*/
-    --SmartThemeBodyColor: #f7efe7;
-    --SmartThemeEmColor: #d2beb0;
-    --SmartThemeUnderlineColor: #df8e70;
-    --SmartThemeQuoteColor: #f1b285;
-    --SmartThemeBlurTintColor: rgba(19, 15, 13, 0.92);
-    --SmartThemeChatTintColor: rgba(28, 21, 18, 0.82);
-    --SmartThemeUserMesBlurTintColor: rgba(77, 49, 43, 0.92);
-    --SmartThemeBotMesBlurTintColor: rgba(40, 30, 25, 0.92);
+    --SmartThemeBodyColor: rgba(207, 207, 197, 1);
+    --SmartThemeEmColor: rgba(145, 145, 145, 1);
+    --SmartThemeUnderlineColor: rgba(145, 145, 145, 1);
+    --SmartThemeQuoteColor: rgba(198, 193, 151, 1);
+    --SmartThemeBlurTintColor: rgba(29, 33, 40, 0.9);
+    --SmartThemeChatTintColor: rgba(29, 33, 40, 0.9);
+    --SmartThemeUserMesBlurTintColor: rgba(29, 33, 40, 0.9);
+    --SmartThemeBotMesBlurTintColor: rgba(29, 33, 40, 0.9);
     --SmartThemeBlurStrength: calc(var(--blurStrength) * 1px);
-    --SmartThemeShadowColor: rgba(8, 4, 3, 0.42);
-    --SmartThemeBorderColor: rgba(216, 167, 137, 0.24);
-    --SmartThemeCheckboxBgColorR: 247;
-    --SmartThemeCheckboxBgColorG: 239;
-    --SmartThemeCheckboxBgColorB: 231;
+    --SmartThemeShadowColor: rgba(0, 0, 0, 0.9);
+    --SmartThemeBorderColor: rgba(0, 0, 0, 1);
+    --SmartThemeCheckboxBgColorR: 207;
+    --SmartThemeCheckboxBgColorG: 207;
+    --SmartThemeCheckboxBgColorB: 197;
 
     /* Purroleplay-inspired semantic color aliases */
     --color-primary: #f1b285;
