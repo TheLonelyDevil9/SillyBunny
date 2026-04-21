@@ -1873,10 +1873,16 @@ async function setNameCallback({ mode = 'all' }, name) {
 
     // If the name matches a persona avatar, or a name, auto-select it
     if (['lookup', 'all'].includes(mode)) {
-        let persona = Object.entries(power_user.personas).find(([avatar, _]) => avatar === name)?.[1];
-        if (!persona) persona = Object.entries(power_user.personas).find(([_, personaName]) => personaName.toLowerCase() === name.toLowerCase())?.[1];
-        if (persona) {
-            await autoSelectPersona(persona);
+        const avatarMatch = Object.entries(power_user.personas).find(([avatar, _]) => avatar === name);
+        if (avatarMatch) {
+            // Found by avatar ID - use the avatar ID directly to avoid duplicate name issues
+            await setUserAvatar(avatarMatch[0]);
+            return '';
+        }
+        // Fallback: search by persona name
+        const nameMatch = Object.entries(power_user.personas).find(([_, personaName]) => personaName.toLowerCase() === name.toLowerCase());
+        if (nameMatch) {
+            await autoSelectPersona(nameMatch[1]);
             return '';
         } else if (mode === 'lookup') {
             toastr.warning(`Persona ${name} not found`);
