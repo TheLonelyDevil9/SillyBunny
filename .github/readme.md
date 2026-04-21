@@ -191,6 +191,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Fixed auto-cache refresh not fully clearing cached assets by using hard reload instead of soft reload
 - Reduced Import Folder and Sync Extensions button sizes on mobile for better fit
 - Removed bloated search hint text and tab descriptions on mobile for cleaner UI
+- Added reinstall button for third-party extensions to quickly fix corrupted extensions by deleting and reinstalling from repository
 
 **Reasoning and provider compatibility**
 
