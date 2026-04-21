@@ -194,6 +194,7 @@ SillyBunny includes some extras by default to help you get started right away:
 **Themes and Appearance**
 
 - Changed default UI theme to Dark V1.0 (from Default (Dark) 1.7.1)
+- Fresh installs now seed Dark V 1.0 on first run instead of briefly landing on Dark Lite until a manual reset
 - Changed default shell style to Clean Minimal (from Modern Glass)
 - Removed Forest Dusk, Forest Dawn, and Rose Glow theme preset buttons
 - Added 9 accent color preset buttons (blue, cyan, green, yellow, orange, red, pink, purple, gray) for quick color adjustments
