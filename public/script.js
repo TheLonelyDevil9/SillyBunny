@@ -292,7 +292,6 @@ import { addChatBackupsBrowser } from './scripts/chat-backups.js';
 import { onboardingExperimentalMacroEngine } from './scripts/macros/engine/MacroDiagnostics.js';
 import { compressRequest, setRequestCompressionConfig } from './scripts/request-compression.js';
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
-import { initAgents, runPostGenerationAgents, runPreGenerationAgents } from './scripts/agents.js';
 
 // API OBJECT FOR EXTERNAL WIRING
 globalThis.SillyTavern = {
@@ -789,7 +788,6 @@ async function firstLoadInit() {
         await initPresetManager();
         await initSystemMessages();
         await getSettings(initLoaderHandle);
-        initAgents();
         initKeyboard();
         initDynamicStyles();
         initTags();
@@ -4859,16 +4857,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         mesExamplesArray = [];
     }
 
-    let generationExtensionPrompts = extension_prompts;
-    if (main_api === 'openai') {
-        const agentPromptAdditions = await runPreGenerationAgents({ dryRun, depth });
-        if (agentPromptAdditions && Object.keys(agentPromptAdditions).length > 0) {
-            generationExtensionPrompts = {
-                ...extension_prompts,
-                ...agentPromptAdditions,
-            };
-        }
-    }
+    const generationExtensionPrompts = extension_prompts;
 
     // Inject all Depth prompts. Chat Completion does it separately
     let injectedIndices = [];
@@ -5708,7 +5697,6 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         console.debug('/api/chats/save called by /Generate');
         await saveChatConditional();
-        await runPostGenerationAgents({ depth, generationType: originalType });
         unblockGeneration(type);
         streamingProcessor = null;
 
