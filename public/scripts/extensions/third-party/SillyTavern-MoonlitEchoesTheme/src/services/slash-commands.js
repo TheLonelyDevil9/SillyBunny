@@ -1,19 +1,21 @@
 import { t } from '../../../../../i18n.js';
-import { getSettings as getExtensionSettings } from './settings-service.js';
+
+let slashCommandsInitialized = false;
 
 /**
- * Initialize slash commands - only when theme is enabled.
+ * Initialize slash commands for Moonlit Echoes chat styles.
  * Register various chat style slash commands for Moonlit Echoes Theme.
  */
 export function initializeSlashCommands() {
-    const context = SillyTavern.getContext();
-    const settings = getExtensionSettings(context);
-
-    if (!settings?.enabled) {
+    if (slashCommandsInitialized) {
         return;
     }
 
-    const { SlashCommandParser, SlashCommand } = context;
+    const context = SillyTavern.getContext();
+    const { SlashCommandParser, SlashCommand } = context ?? {};
+    if (!SlashCommandParser || !SlashCommand) {
+        return;
+    }
 
     function switchChatStyle(styleName, styleValue) {
         try {
@@ -86,4 +88,6 @@ export function initializeSlashCommands() {
         callback: () => switchChatStyle('documentstyle', '2'),
         helpString: t`Switch to Document chat style by Moonlit Echoes Theme`,
     }));
+
+    slashCommandsInitialized = true;
 }

@@ -1,6 +1,6 @@
 import { t } from '../../../../../i18n.js';
 import { EXTENSION_FOLDER_PATH } from '../config/theme-info.js';
-import { themeCustomSettings } from '../config/theme-settings.js';
+import { isMoonlitChatStyleSetting, themeCustomSettings } from '../config/theme-settings.js';
 import { getSettings as getExtensionSettings, saveSettings as saveExtensionSettings } from '../services/settings-service.js';
 import { rgbaToHex, getAlphaFromRgba } from '../utils/color.js';
 
@@ -540,6 +540,7 @@ function createTextareaInput(container, setting, settings) {
 function createCheckbox(container, setting, settings) {
     const context = SillyTavern.getContext();
     const { varId, default: defaultValue, displayText, cssBlock, cssFile, description } = setting;
+    const canApplyWithoutTheme = isMoonlitChatStyleSetting(setting);
 
     const checkboxContainer = document.createElement('div');
     checkboxContainer.classList.add('checkbox-container');
@@ -571,7 +572,7 @@ function createCheckbox(container, setting, settings) {
     }
 
     function updateInlineCssBlock(enabled) {
-        if (!settings.enabled) {
+        if (!settings.enabled && !canApplyWithoutTheme) {
             styleElement.textContent = '';
             return;
         }
@@ -582,7 +583,7 @@ function createCheckbox(container, setting, settings) {
     }
 
     async function loadExternalCss(enabled) {
-        if (!settings.enabled || !enabled || !cssFile) {
+        if ((!settings.enabled && !canApplyWithoutTheme) || !enabled || !cssFile) {
             if (styleElement) {
                 styleElement.textContent = '';
             }

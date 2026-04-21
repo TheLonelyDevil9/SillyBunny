@@ -11,7 +11,7 @@ export { THEME_VERSION } from './src/config/theme-info.js';
 import { dragElement } from '../../../RossAscends-mods.js';
 import { loadMovingUIState, power_user } from '../../../power-user.js';
 import { t } from '../../../i18n.js';
-import { tabMappings, themeCustomSettings } from './src/config/theme-settings.js';
+import { isMoonlitChatStyleSetting, tabMappings, themeCustomSettings } from './src/config/theme-settings.js';
 import { settingsKey, getSettings as getExtensionSettings, saveSettings as saveExtensionSettings } from './src/services/settings-service.js';
 import { initializeSlashCommands } from './src/services/slash-commands.js';
 import { initExtension } from './src/bootstrap/init-extension.js';
@@ -438,6 +438,7 @@ return new Promise((resolve) => {
  */
 export function toggleCss(shouldLoad) {
     // Get existing <link> elements
+    ensureChatStyleCss();
     const existingLinkStyle = document.getElementById('MoonlitEchosTheme-style');
     const existingLinkExt = document.getElementById('MoonlitEchosTheme-extension');
 
@@ -484,12 +485,31 @@ export function toggleCss(shouldLoad) {
     }
 }
 
+function ensureChatStyleCss() {
+    if (document.getElementById('MoonlitEchosTheme-chat-styles')) {
+        return;
+    }
+
+    const baseUrl = getBaseUrl();
+    const linkChatStyles = document.createElement('link');
+    linkChatStyles.id = 'MoonlitEchosTheme-chat-styles';
+    linkChatStyles.rel = 'stylesheet';
+    linkChatStyles.href = `${baseUrl}/chat-styles.css?v=20260422a`;
+    document.head.append(linkChatStyles);
+}
+
 /**
  * Clear all CSS styles added by checkboxes
  */
 function clearAllCheckboxStyles() {
     // Find all style elements created by checkboxes
     document.querySelectorAll('style[id^="css-block-"]').forEach(element => {
+        const varId = element.id.replace('css-block-', '');
+        const setting = themeCustomSettings.find(item => item.varId === varId);
+        if (isMoonlitChatStyleSetting(setting)) {
+            return;
+        }
+
         element.textContent = '';
     });
 }
@@ -499,11 +519,6 @@ function clearAllCheckboxStyles() {
  * @param {boolean} extensionEnabled - Whether the extension is enabled
  */
 function updateAllCheckboxStyles(extensionEnabled) {
-    if (!extensionEnabled) {
-        clearAllCheckboxStyles();
-        return;
-    }
-
     // Get settings
     const context = SillyTavern.getContext();
     const settings = getExtensionSettings(context);
@@ -514,9 +529,10 @@ function updateAllCheckboxStyles(extensionEnabled) {
             const varId = setting.varId;
             const enabled = settings[varId] === true;
             const styleElement = document.getElementById(`css-block-${varId}`);
+            const canApplyWithoutTheme = isMoonlitChatStyleSetting(setting);
 
             if (styleElement) {
-                if (setting.cssBlock && enabled) {
+                if (setting.cssBlock && enabled && (extensionEnabled || canApplyWithoutTheme)) {
                     styleElement.textContent = setting.cssBlock;
                 } else {
                     styleElement.textContent = '';

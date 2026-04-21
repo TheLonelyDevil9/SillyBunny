@@ -25,6 +25,21 @@ export const tabMappings = {
     ]
 };
 
+const persistentChatStyleCategories = new Set([
+    'chat-style',
+    'chat-echo',
+    'chat-whisper',
+    'chat-ripple',
+]);
+
+export function isMoonlitChatStyleSetting(settingOrCategory) {
+    const category = typeof settingOrCategory === 'string'
+        ? settingOrCategory
+        : settingOrCategory?.category;
+
+    return typeof category === 'string' && persistentChatStyleCategories.has(category);
+}
+
 /**
  * Theme settings configuration
  * Reorganized into more logical categories

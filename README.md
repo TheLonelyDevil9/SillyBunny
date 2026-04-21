@@ -213,6 +213,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
 - Recent Chats now clips cleanly with corrected corner rounding
 - Expanded the Prompt Manager editor pane and widened its dropdown controls in the workspace shell so menu fields no longer feel cramped on desktop
+- Moonlit Echoes chat layouts now stay available with Moonlit Echoes itself turned off, including Echo, Whisper, Hush, Ripple, Tide, and their chat-style toggles
 
 **Bug fixes**
 

@@ -204,6 +204,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
 - Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
 - Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
+- Moonlit Echoes chat layouts now stay available with Moonlit Echoes itself turned off, including Echo, Whisper, Hush, Ripple, Tide, and their chat-style toggles
 
 **Bug fixes**
 
