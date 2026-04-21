@@ -26,6 +26,7 @@ const SB_SHORTCUT_TARGETS = Object.freeze([
     { value: 'left:advanced-formatting', label: 'Adv. Formatting', icon: 'fa-font' },
     { value: 'left:world-info', label: 'World Info', icon: 'fa-book-atlas' },
     { value: 'left:agents', label: 'Agents', icon: 'fa-robot' },
+    { value: 'action:search', label: 'Search', icon: 'fa-magnifying-glass' },
     { value: 'right:settings', label: 'Settings', icon: 'fa-sliders' },
     { value: 'right:extensions', label: 'Extensions', icon: 'fa-cubes' },
     { value: 'right:persona', label: 'Persona', icon: 'fa-face-smile' },
@@ -34,7 +35,7 @@ const SB_SHORTCUT_TARGETS = Object.freeze([
 
 const SB_SHORTCUT_DEFAULTS = Object.freeze({
     left: 'left:agents',
-    right: 'right:persona',
+    right: 'action:search',
 });
 const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
 const SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR = '.sb-openai-settings-drawer, .sb-openai-settings-subdrawer, [id$="prompt_manager_drawer"]';
@@ -50,6 +51,36 @@ function getShortcutTarget(side) {
 
 function getShortcutConfig(target) {
     return SB_SHORTCUT_TARGETS.find(t => t.value === target) || SB_SHORTCUT_TARGETS[0];
+}
+
+function isSearchShortcutTarget(target) {
+    return target === 'action:search';
+}
+
+function activateShortcutTarget(target) {
+    if (isSearchShortcutTarget(target)) {
+        const searchState = getUniversalSearchState();
+
+        if (searchState.expanded) {
+            setUniversalSearchOpenState(false);
+
+            if (searchState.input instanceof HTMLInputElement && document.activeElement === searchState.input) {
+                searchState.input.blur();
+            }
+
+            return;
+        }
+
+        closeAllDropdowns({ except: 'search' });
+        setUniversalSearchOpenState(true, { focusInput: true });
+        return;
+    }
+
+    const [shell, tab] = String(target).split(':');
+
+    if (shell && tab) {
+        toggleShellPanel(shell, tab);
+    }
 }
 
 function safeGetItem(key) {
@@ -852,6 +883,8 @@ function setUniversalSearchOpenState(isOpen, { focusInput = false } = {}) {
     if (focusInput && searchState.input instanceof HTMLInputElement) {
         searchState.input.focus({ preventScroll: true });
     }
+
+    syncShortcutButtonActiveStates();
 }
 
 function clearUniversalSearch({ blur = false } = {}) {
@@ -3815,11 +3848,7 @@ function buildTopBar() {
             title: `Quick access: ${leftShortcutConfig.label}`,
             className: 'sb-proxy-button-icon-only',
         },
-        () => {
-            const target = getShortcutTarget('left');
-            const [shell, tab] = target.split(':');
-            toggleShellPanel(shell, tab);
-        },
+        () => activateShortcutTarget(getShortcutTarget('left')),
     );
 
     const rightShortcutConfig = getShortcutConfig(getShortcutTarget('right'));
@@ -3831,11 +3860,7 @@ function buildTopBar() {
             title: `Quick access: ${rightShortcutConfig.label}`,
             className: 'sb-proxy-button-icon-only',
         },
-        () => {
-            const target = getShortcutTarget('right');
-            const [shell, tab] = target.split(':');
-            toggleShellPanel(shell, tab);
-        },
+        () => activateShortcutTarget(getShortcutTarget('right')),
     );
 
     centerGroup.innerHTML = `
@@ -3856,6 +3881,8 @@ function buildTopBar() {
     bindTopBarBrand();
     updateTopBarBrand();
     updateTopbarUtilityButtons();
+    updateShortcutButton('left');
+    updateShortcutButton('right');
     syncTopbarLayoutState();
     queueLandingPageStateSync();
 }
@@ -5694,7 +5721,7 @@ function createShortcutSettingsGroup() {
     });
 
     const heading = createElement('div', { className: 'sb-theme-slider-label' });
-    heading.innerHTML = '<strong>Quick Access Shortcuts</strong><br><small>Assign a shell tab to each shortcut button in the top bar.</small>';
+    heading.innerHTML = '<strong>Quick Access Shortcuts</strong><br><small>Assign a shell tab or universal search to each shortcut button in the top bar.</small>';
     group.appendChild(heading);
 
     const rows = createElement('div', {
@@ -5759,6 +5786,23 @@ function updateShortcutButton(side) {
     }
     button.title = `Quick access: ${config.label}`;
     button.setAttribute('aria-label', `Quick access: ${config.label}`);
+    syncShortcutButtonActiveStates();
+}
+
+function syncShortcutButtonActiveStates() {
+    const searchExpanded = getUniversalSearchState().expanded;
+
+    for (const side of ['left', 'right']) {
+        const buttonId = side === 'left' ? 'sb-shortcut-left' : 'sb-shortcut-right';
+        const button = document.getElementById(buttonId);
+
+        if (!(button instanceof HTMLButtonElement)) {
+            continue;
+        }
+
+        const target = getShortcutTarget(side);
+        setButtonPressed(button, isSearchShortcutTarget(target) && searchExpanded);
+    }
 }
 
 function createTopbarLabelSettingsGroup() {
