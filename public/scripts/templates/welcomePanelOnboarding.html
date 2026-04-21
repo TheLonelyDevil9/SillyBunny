@@ -12,14 +12,17 @@
                     </div>
                 </div>
                 <div class="welcomePanelToggles">
-                    <button class="mes_button welcomePanelModeToggle welcomePanelModeToggle--full" title="Show full Home panel" aria-label="Show full Home panel" aria-pressed="{{#if welcomePanelFull}}true{{else}}false{{/if}}" data-i18n="[title]Show full Home panel;[aria-label]Show full Home panel" data-welcome-panel-mode-target="full">
-                        <i class="fa-solid fa-window-maximize fa-fw"></i>
+                    <button class="menu_button menu_button_icon welcomePanelModeToggle welcomePanelModeToggle--full" title="Show full Home panel" aria-label="Show full Home panel" aria-pressed="{{#if welcomePanelFull}}true{{else}}false{{/if}}" data-i18n="[title]Show full Home panel;[aria-label]Show full Home panel" data-welcome-panel-mode-target="full">
+                        <i class="fa-solid fa-window-maximize"></i>
+                        <span>Full Home</span>
                     </button>
-                    <button class="mes_button welcomePanelModeToggle welcomePanelModeToggle--compact" title="Minimize Home panel" aria-label="Minimize Home panel" aria-pressed="{{#if welcomePanelCompact}}true{{else}}false{{/if}}" data-i18n="[title]Minimize Home panel;[aria-label]Minimize Home panel" data-welcome-panel-mode-target="compact">
-                        <i class="fa-solid fa-compress fa-fw"></i>
+                    <button class="menu_button menu_button_icon welcomePanelModeToggle welcomePanelModeToggle--compact" title="Minimize Home panel" aria-label="Minimize Home panel" aria-pressed="{{#if welcomePanelCompact}}true{{else}}false{{/if}}" data-i18n="[title]Minimize Home panel;[aria-label]Minimize Home panel" data-welcome-panel-mode-target="compact">
+                        <i class="fa-solid fa-compress"></i>
+                        <span>Compact</span>
                     </button>
-                    <button class="mes_button welcomePanelModeToggle welcomePanelModeToggle--list" title="Show only recent chats" aria-label="Show only recent chats" aria-pressed="{{#if welcomePanelListOnly}}true{{else}}false{{/if}}" data-i18n="[title]Show only recent chats;[aria-label]Show only recent chats" data-welcome-panel-mode-target="list">
-                        <i class="fa-solid fa-rectangle-list fa-fw"></i>
+                    <button class="menu_button menu_button_icon welcomePanelModeToggle welcomePanelModeToggle--list" title="Show only recent chats" aria-label="Show only recent chats" aria-pressed="{{#if welcomePanelListOnly}}true{{else}}false{{/if}}" data-i18n="[title]Show only recent chats;[aria-label]Show only recent chats" data-welcome-panel-mode-target="list">
+                        <i class="fa-solid fa-rectangle-list"></i>
+                        <span>List only</span>
                     </button>
                     <button class="mes_button showRecentChats" title="Show recent chats" data-i18n="[title]Show recent chats">
                         <i class="fa-solid fa-list-ul fa-fw"></i>
