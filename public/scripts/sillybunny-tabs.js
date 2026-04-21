@@ -1880,69 +1880,6 @@ function getTopbarDragPoint(event) {
     return null;
 }
 
-function isPrimaryTopbarDragStart(event) {
-    if (!event) {
-        return false;
-    }
-
-    if (event.type?.startsWith?.('mouse')) {
-        return event.button === 0;
-    }
-
-    if (typeof event.pointerType === 'string' && event.pointerType === 'mouse') {
-        return event.button === 0;
-    }
-
-    return true;
-}
-
-function beginTopbarDrag(event) {
-    if (!(event.currentTarget instanceof HTMLElement) || !isPrimaryTopbarDragStart(event)) {
-        return;
-    }
-
-    const dragKey = getTopbarDragKey(event);
-    const point = getTopbarDragPoint(event);
-    if (!dragKey || !point) {
-        return;
-    }
-
-    const state = getChatbarState();
-    const dragSurface = document.getElementById('sb-chatbar-layer');
-
-    if (!(dragSurface instanceof HTMLElement)) {
-        return;
-    }
-
-    if (state.dragging?.key === dragKey) {
-        event.preventDefault();
-        return;
-    }
-
-    const startOffset = getRenderedTopbarOffset();
-    state.dragging = {
-        key: dragKey,
-        pointerId: event.pointerId,
-        originX: point.clientX,
-        originY: point.clientY,
-        startX: startOffset.x,
-        startY: startOffset.y,
-    };
-
-    dragSurface.classList.add('is-dragging');
-    document.body.classList.add('sb-topbar-dragging');
-
-    if (Number.isFinite(event.pointerId)) {
-        try {
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-        } catch {
-            // Touch fallback events may not have an active pointer capture target.
-        }
-    }
-
-    event.preventDefault();
-}
-
 function updateTopbarDrag(event) {
     const state = getChatbarState();
     const point = getTopbarDragPoint(event);
@@ -2571,21 +2508,6 @@ function toggleChatSidebar() {
     setChatSidebarOpenState(!isChatSidebarOpen());
 }
 
-function handleRecentChatsToggle() {
-    const chatContext = getChatUiContext();
-
-    if (!chatContext.canBrowseChats) {
-        return;
-    }
-
-    if (isMobileViewport()) {
-        openMobileChatTools();
-        return;
-    }
-
-    toggleChatSidebar();
-}
-
 function buildMobileChatTools() {
     const existingMobileTools = getChatMobileRefs();
     if (existingMobileTools) {
@@ -2765,200 +2687,6 @@ function toggleMobileChatTools() {
     setMobileChatToolsOpenState(!getChatbarState().mobileToolsOpen);
 }
 
-function buildConnectionStrip() {
-    const strip = createElement('div', { id: 'sb-connection-strip' });
-    const selectField = createChatField({
-        id: 'sb-connection-strip-field',
-        icon: 'fa-plug',
-        title: 'Switch connection profile',
-        className: 'is-connection',
-    });
-    const select = createElement('select', {
-        id: 'sb-connection-strip-select',
-        className: 'text_pole',
-        attrs: {
-            'aria-label': 'Switch connection profile',
-        },
-    });
-    const status = createElement('div', { id: 'sb-connection-strip-status', className: 'sb-connection-strip-status' });
-    const connectButton = createElement('button', {
-        id: 'sb-connection-strip-connect',
-        className: 'sb-connection-strip-connect',
-        attrs: {
-            type: 'button',
-            title: 'Connect the current API',
-            'aria-label': 'Connect the current API',
-        },
-        html: '<i class="fa-solid fa-plug" aria-hidden="true"></i><span>Connect</span>',
-    });
-
-    strip.style.setProperty('background-color', 'color-mix(in srgb, var(--sb-shell-main-bg) 98%, black 2%)', 'important');
-    strip.style.setProperty(
-        'background-image',
-        'linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent), transparent 24%), linear-gradient(180deg, color-mix(in srgb, var(--sb-shell-main-bg) 99%, black 1%), color-mix(in srgb, var(--sb-shell-main-bg) 96%, black 4%))',
-        'important',
-    );
-    strip.style.setProperty('backdrop-filter', 'blur(20px) saturate(128%)', 'important');
-    strip.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(128%)', 'important');
-
-    selectField.appendChild(select);
-    strip.append(selectField, status, connectButton);
-
-    select.addEventListener('change', () => {
-        syncConnectionProfileSelection(select.value);
-    });
-    stopProxyPointerPropagation(connectButton);
-    connectButton.addEventListener('click', handleConnectionStripConnectClick);
-
-    return { strip, select, status, connectButton };
-}
-
-function buildChatBar() {
-    const layer = createElement('div', { id: 'sb-chatbar-layer' });
-    const row = createElement('div', { id: 'sb-chatbar' });
-    const leading = createElement('div', { className: 'sb-chatbar-cluster sb-chatbar-leading' });
-    const chatSelectField = createChatField({
-        id: 'sb-chatbar-select-field',
-        icon: 'fa-comments',
-        title: 'Switch chat',
-    });
-    const chatSelect = createElement('select', {
-        id: 'sb-chatbar-select',
-        className: 'text_pole',
-        attrs: {
-            'aria-label': 'Switch chat',
-        },
-    });
-    const searchField = createChatField({
-        id: 'sb-chatbar-search-field',
-        icon: 'fa-magnifying-glass',
-        title: 'Search current chat',
-    });
-    const searchInput = createElement('input', {
-        id: 'sb-chatbar-search',
-        className: 'text_pole',
-        attrs: {
-            type: 'search',
-            placeholder: 'Search this chat...',
-            'aria-label': 'Search this chat',
-        },
-    });
-    const searchStatus = createElement('small', { className: 'sb-chatbar-search-status' });
-
-    searchStatus.hidden = true;
-    const trailing = createElement('div', { className: 'sb-chatbar-cluster sb-chatbar-actions' });
-
-    const toggleSidebarButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-sidebar-toggle',
-            icon: 'fa-box-archive',
-            title: 'Toggle recent chats sidebar',
-        },
-        handleRecentChatsToggle,
-    );
-    const toggleConnectionButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-connection-toggle',
-            icon: 'fa-plug',
-            title: 'Show connection profiles',
-        },
-        handleConnectionProfilesToggle,
-    );
-    const dragHandleButton = createTopBarIconButton(
-        {
-            id: 'sb-topbar-drag-handle',
-            icon: 'fa-grip-lines',
-            title: 'Drag to move the chat info bar. Double-click to reset.',
-        },
-        () => { },
-    );
-    const managerButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-files',
-            icon: 'fa-address-book',
-            title: 'View chat files',
-        },
-        handleChatManagerClick,
-    );
-    const newButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-new',
-            icon: 'fa-comments',
-            title: 'Start a new chat',
-        },
-        handleNewChat,
-    );
-    const renameButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-rename',
-            icon: 'fa-pen',
-            title: 'Rename this chat',
-        },
-        () => { void handleRenameChat(); },
-    );
-    const deleteButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-delete',
-            icon: 'fa-trash',
-            title: 'Delete this chat',
-        },
-        () => { void handleDeleteChat(); },
-    );
-    const closeButton = createTopBarIconButton(
-        {
-            id: 'sb-chatbar-close',
-            icon: 'fa-xmark',
-            title: 'Close this chat',
-        },
-        () => { void handleCloseChat(); },
-    );
-
-    chatSelectField.appendChild(chatSelect);
-    searchField.append(searchInput, searchStatus);
-    leading.append(toggleSidebarButton, toggleConnectionButton, dragHandleButton);
-    trailing.append(managerButton, newButton, renameButton, deleteButton, closeButton);
-    row.append(leading, chatSelectField, searchField, trailing);
-
-    const connectionStrip = buildConnectionStrip();
-    layer.append(row, connectionStrip.strip);
-
-    chatSelect.addEventListener('change', () => {
-        void openChatById(chatSelect.value);
-    });
-    searchInput.addEventListener('input', () => setChatSearchQuery(searchInput.value, { source: searchInput }));
-    dragHandleButton.addEventListener('pointerdown', beginTopbarDrag);
-    dragHandleButton.addEventListener('mousedown', beginTopbarDrag);
-    dragHandleButton.addEventListener('touchstart', beginTopbarDrag, { passive: false });
-    dragHandleButton.addEventListener('dblclick', event => {
-        event.preventDefault();
-        setTopbarOffset({ x: 0, y: 0 });
-    });
-
-    getChatbarState().desktop = {
-        root: layer,
-        row,
-        chatSelect,
-        searchInput,
-        searchStatus,
-        toggleSidebarButton,
-        toggleConnectionButton,
-        dragHandleButton,
-        managerButton,
-        newButton,
-        renameButton,
-        deleteButton,
-        closeButton,
-        connectionStrip: connectionStrip.strip,
-        connectionSelect: connectionStrip.select,
-        connectionStatus: connectionStrip.status,
-        connectionConnectButton: connectionStrip.connectButton,
-    };
-
-    return {
-        layer,
-    };
-}
-
 function syncConnectionProfileSelection(value) {
     const sourceSelect = document.getElementById('connection_profiles');
 
@@ -2993,17 +2721,6 @@ function setConnectionStripOpenState(shouldOpen) {
     setButtonPressed(desktopRefs.toggleConnectionButton, nextState);
 }
 
-function toggleConnectionStrip() {
-    const desktopRefs = getChatDesktopRefs();
-
-    if (!(desktopRefs?.toggleConnectionButton instanceof HTMLElement) || desktopRefs.toggleConnectionButton.hidden) {
-        return;
-    }
-
-    setChatSidebarOpenState(false);
-    setConnectionStripOpenState(!isConnectionStripOpen());
-}
-
 function getCurrentMainApiValue() {
     const mainApiSelect = document.getElementById('main_api');
 
@@ -3032,32 +2749,6 @@ function resolveActiveApiConnectButton() {
 
     const button = document.querySelector(selector);
     return button instanceof HTMLElement ? button : null;
-}
-
-function handleConnectionStripConnectClick() {
-    const connectButton = resolveActiveApiConnectButton();
-
-    if (!connectButton) {
-        openShell('left', 'api');
-        return;
-    }
-
-    connectButton.click();
-}
-
-function handleConnectionProfilesToggle() {
-    const connectionProfilesSource = document.getElementById('connection_profiles');
-
-    if (!(connectionProfilesSource instanceof HTMLSelectElement)) {
-        return;
-    }
-
-    if (isMobileViewport()) {
-        openMobileChatTools();
-        return;
-    }
-
-    toggleConnectionStrip();
 }
 
 function getSearchTerms(query = getChatbarState().searchQuery) {
@@ -3819,24 +3510,6 @@ function toggleShellPanel(shellKey, tabId = null) {
     openShell(shellKey, tabId);
 }
 
-function openApiShellTab() {
-    if (!ensureShellReady('left')) {
-        return;
-    }
-
-    if (isShellTabOpen('left', 'api')) {
-        closeShell('left');
-        return;
-    }
-
-    closeMobileNav();
-    closeMobileChatTools();
-    setConnectionStripOpenState(false);
-    closeShell('right');
-    closeCharacterPanel();
-    openShell('left', 'api');
-}
-
 function isLandingPageVisible() {
     return isActuallyVisible(document.querySelector('.welcomePanel'));
 }
@@ -4387,13 +4060,6 @@ async function requestServerAdmin(endpoint, body = {}) {
     }
 
     return data;
-}
-
-function getMultipartRequestHeaders(context = getSillyTavernContext()) {
-    const headers = { ...getRequestHeadersFromContext(context) };
-    delete headers['Content-Type'];
-    delete headers['content-type'];
-    return headers;
 }
 
 async function requestUserPrivateAction(endpoint, { body = {}, useFormData = false } = {}) {
@@ -6172,17 +5838,17 @@ function buildShell(shellKey) {
         },
     });
     navWrapper.appendChild(nav);
-    
+
     const updateNavScrollIndicators = () => {
         const canScrollLeft = nav.scrollLeft > 0;
         const canScrollRight = Math.ceil(nav.scrollLeft + nav.clientWidth) < nav.scrollWidth;
         navWrapper.classList.toggle('sb-can-scroll-left', canScrollLeft);
         navWrapper.classList.toggle('sb-can-scroll-right', canScrollRight);
     };
-    
+
     nav.addEventListener('scroll', updateNavScrollIndicators, { passive: true });
     window.addEventListener('resize', updateNavScrollIndicators, { passive: true });
-    
+
     setTimeout(updateNavScrollIndicators, 100);
 
     const main = createElement('div', { className: 'sb-shell-main' });

@@ -54,6 +54,7 @@ import { countOccurrences, debounce, delay, download, getFileText, getSanitizedF
 import { FILTER_TYPES } from './filters.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
+import { PARSER_FLAG } from './slash-commands/SlashCommandParser.js';
 import { AUTOCOMPLETE_SELECT_KEY, AUTOCOMPLETE_STATE, AUTOCOMPLETE_WIDTH } from './autocomplete/AutoComplete.js';
 import { SlashCommandEnumValue, enumTypes } from './slash-commands/SlashCommandEnumValue.js';
 import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCommonEnumsProvider.js';
@@ -1389,21 +1390,6 @@ function isMediaDisplayReloadNeeded() {
     return hasUnprocessedMediaMessages;
 }
 
-/**
- * Shows a toast notification prompting the user to reload the chat if media display settings have changed
- * and there are messages with media attachments that haven't been processed with the new display format.
- */
-function showMediaDisplayReloadPrompt() {
-    if (!isMediaDisplayReloadNeeded()) {
-        return;
-    }
-    toastr.info(
-        t`Reload the chat to apply the changes. Click here to reload.`,
-        t`Media Style changed`,
-        { onclick: () => void reloadCurrentChat() },
-    );
-}
-
 function applyTheme(name) {
     const theme = themes.find(x => x.name == name);
 
@@ -1538,7 +1524,6 @@ function getExampleMessagesBehavior() {
 
 //MARK: loadPowerUser
 export async function loadPowerUserSettings(settings, data) {
-    const { PARSER_FLAG, SlashCommandParser } = await import('./slash-commands/SlashCommandParser.js');
     const defaultStscript = JSON.parse(JSON.stringify(power_user.stscript));
     // Load from settings.json
     if (settings.power_user !== undefined) {

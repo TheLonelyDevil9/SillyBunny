@@ -488,7 +488,7 @@ function createSectionRow(sectionId, title, sectionName, isOpen) {
 }
 
 function stripDividerPrefix(title, dividerRegex) {
-    const cleaned = String(title).replace(dividerRegex, '').replace(/^[\s:|~>\-]+/, '').trim();
+    const cleaned = String(title).replace(dividerRegex, '').replace(/^[\s:|~>-]+/, '').trim();
     return cleaned || String(title).trim();
 }
 
