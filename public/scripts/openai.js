@@ -193,6 +193,7 @@ const textCompletionModels = [
 let biasCache = undefined;
 export let model_list = [];
 let openAiStaticModelGroups = null;
+let hasShownPresetConnectionBindingReminder = false;
 
 export const chat_completion_sources = {
     OPENAI: 'openai',
@@ -514,7 +515,7 @@ const default_settings = {
     request_image_resolution: '',
     seed: -1,
     n: 1,
-    bind_preset_to_connection: true,
+    bind_preset_to_connection: false,
     extensions: {},
     model_favorites: {},
 };
@@ -5261,6 +5262,7 @@ function loadOpenAISettings(data, settings) {
 
     $(`#settings_preset_openai option[value="${openai_setting_names[oai_settings.preset_settings_openai]}"]`).prop('selected', true);
     $('#bind_preset_to_connection').prop('checked', oai_settings.bind_preset_to_connection);
+    updateBindPresetToConnectionHelp();
     $('#openai_external_category').toggle(oai_settings.show_external_models);
     $('.reverse_proxy_warning').toggle(oai_settings.reverse_proxy !== '');
 
@@ -5298,6 +5300,41 @@ function loadOpenAISettings(data, settings) {
     updateOpenAISettingsGroupVisibility();
     $('#chat_completion_source').trigger('change');
     scheduleOpenAIUiRefresh();
+}
+
+function updateBindPresetToConnectionHelp() {
+    const copy = document.getElementById('bind_preset_to_connection_copy');
+    const tip = document.getElementById('bind_preset_to_connection_tip');
+
+    if (!(copy instanceof HTMLElement) || !(tip instanceof HTMLElement)) {
+        return;
+    }
+
+    if (oai_settings.bind_preset_to_connection) {
+        copy.textContent = t`Linked mode: choosing a preset can also switch the provider, model, and other connection-specific options saved inside that preset.`;
+        tip.textContent = t`Use this when each preset is meant for one exact API setup.`;
+        return;
+    }
+
+    copy.textContent = t`Independent mode: choosing a preset keeps your current provider and model, so one preset can be reused across multiple connections.`;
+    tip.textContent = t`Recommended for most setups and especially for shared preset libraries.`;
+}
+
+function maybeShowPresetConnectionBindingReminder(previousPresetName, nextPresetName) {
+    if (hasShownPresetConnectionBindingReminder || !oai_settings.bind_preset_to_connection) {
+        return;
+    }
+
+    if (!previousPresetName || previousPresetName === nextPresetName) {
+        return;
+    }
+
+    hasShownPresetConnectionBindingReminder = true;
+    toastr.info(
+        t`This preset is linked to your API and model settings. Turn off "Keep API/model linked to preset" if you want one preset to stay reusable across multiple connections.`,
+        t`Preset switch also changes the connection setup`,
+        { timeOut: 9000 },
+    );
 }
 
 function setNamesBehaviorControls() {
@@ -5894,6 +5931,7 @@ function onSettingsPresetChange() {
     const preset = structuredClone(openai_settings[openai_setting_names[oai_settings.preset_settings_openai]]);
 
     migrateChatCompletionSettings(preset);
+    maybeShowPresetConnectionBindingReminder(presetNameBefore, presetName);
 
     const updateInput = (selector, value) => $(selector).val(value).trigger('input', { source: 'preset' });
     const updateCheckbox = (selector, value) => $(selector).prop('checked', value).trigger('input', { source: 'preset' });
@@ -8178,6 +8216,7 @@ export function initOpenAI() {
 
     $('#bind_preset_to_connection').on('input', function () {
         oai_settings.bind_preset_to_connection = !!$(this).prop('checked');
+        updateBindPresetToConnectionHelp();
         saveSettingsDebounced();
     });
 
