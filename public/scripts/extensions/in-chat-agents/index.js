@@ -29,9 +29,6 @@ import {
     saveGroup,
     deleteGroup,
     createDefaultGroup,
-    isToolAgent,
-    getEnabledToolAgents,
-    normalizeToolDef,
 } from './agent-store.js';
 import { initAgentRunner, runAgentOnMessage, syncToolAgentRegistrations, undoPromptTransform, redoPromptTransform, PROMPT_TRANSFORM_HISTORY_KEY } from './agent-runner.js';
 import {
@@ -40,7 +37,7 @@ import {
     createDefaultRegexScript,
     normalizeRegexScript,
 } from './regex-scripts.js';
-import { initPathfinder, getPathfinderToolDefinitions, runDiagnostics as runPathfinderDiagnostics, buildPathfinderTree, getPathfinderSettings, setPathfinderSettings } from './pathfinder-init.js';
+import { initPathfinder } from './pathfinder-init.js';
 import { openPathfinderSettings, isPathfinderAgent } from './pathfinder-settings-ui.js';
 
 const MODULE_NAME = 'in-chat-agents';
@@ -115,18 +112,6 @@ function restoreAutoSeededTemplateIds(savedState) {
 function stopEvent(event) {
     event.preventDefault();
     event.stopPropagation();
-}
-
-function stopEventPropagation(event) {
-    event.stopPropagation();
-}
-
-function normalizeAgentOrderValue(value, fallback = 100) {
-    if (!Number.isFinite(Number(value))) {
-        return fallback;
-    }
-
-    return Math.max(0, Math.min(999, Math.round(Number(value))));
 }
 
 function getConnectionManagerRequestService() {
@@ -538,11 +523,11 @@ function shouldMigrateBundledRegexPostDefaults(agent, template) {
         return true;
     }
 
-    if (!Boolean(desiredTemplate?.postProcess?.promptTransformEnabled)) {
+    if (!desiredTemplate?.postProcess?.promptTransformEnabled) {
         return false;
     }
 
-    if (!Boolean(agent?.postProcess?.promptTransformEnabled)) {
+    if (!agent?.postProcess?.promptTransformEnabled) {
         return true;
     }
 
@@ -562,7 +547,7 @@ async function migrateBundledRegexPostDefaultsToSavedAgents() {
         agent.phase = String(desiredTemplate.phase ?? 'post');
         agent.sourceTemplateId = agent.sourceTemplateId || template.id;
 
-        if (Boolean(desiredTemplate?.postProcess?.promptTransformEnabled)) {
+        if (desiredTemplate?.postProcess?.promptTransformEnabled) {
             agent.postProcess.promptTransformEnabled = true;
             agent.postProcess.promptTransformShowNotifications = Object.hasOwn(desiredTemplate.postProcess ?? {}, 'promptTransformShowNotifications')
                 ? Boolean(desiredTemplate.postProcess.promptTransformShowNotifications)
@@ -779,156 +764,6 @@ function hasMatchingAgentSnapshot(snapshot, existingAgents = getAgents()) {
 }
 
 // ===================== Panel Rendering =====================
-
-/**
- * Attaches touch-based drag-and-drop to a card element for mobile support.
- * The HTML5 drag API is not available on touch devices, so we use pointer events.
- * @param {HTMLElement} cardEl
- * @param {HTMLElement} itemsEl
- * @param {string} agentId
- */
-function shouldInsertCardBeforeTarget(draggedEl, targetEl, clientX, clientY) {
-    const targetRect = targetEl.getBoundingClientRect();
-    const fallbackInsertBefore = clientY < targetRect.top + (targetRect.height / 2);
-
-    if (!(draggedEl instanceof HTMLElement)) {
-        return fallbackInsertBefore;
-    }
-
-    const draggedRect = draggedEl.getBoundingClientRect();
-    const draggedMidY = draggedRect.top + (draggedRect.height / 2);
-    const targetMidY = targetRect.top + (targetRect.height / 2);
-    const sameRowThreshold = Math.min(draggedRect.height, targetRect.height) * 0.6;
-    const isSameVisualRow = Math.abs(draggedMidY - targetMidY) <= sameRowThreshold;
-
-    if (isSameVisualRow) {
-        return clientX < targetRect.left + (targetRect.width / 2);
-    }
-
-    return fallbackInsertBefore;
-}
-
-function attachTouchDrag(cardEl, itemsEl, agentId) {
-    let touchDragActive = false;
-    let longPressTimer = null;
-    let ghost = null;
-    let ghostOffsetY = 0;
-
-    function getCardAtPoint(x, y) {
-        if (ghost) ghost.style.display = 'none';
-        const el = document.elementFromPoint(x, y);
-        if (ghost) ghost.style.display = '';
-        return el ? el.closest('.ica--agent-card') : null;
-    }
-
-    function updateDropIndicator(clientX, clientY) {
-        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
-        const target = getCardAtPoint(clientX, clientY);
-        if (!target || target === cardEl) return;
-        const indicator = document.createElement('div');
-        indicator.className = 'ica--drop-indicator';
-        if (shouldInsertCardBeforeTarget(cardEl, target, clientX, clientY)) {
-            target.before(indicator);
-        } else {
-            target.after(indicator);
-        }
-    }
-
-    function cancelLongPress() {
-        if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-    }
-
-    function cleanup() {
-        cancelLongPress();
-        touchDragActive = false;
-        cardEl.classList.remove('ica--dragging');
-        if (ghost) {
-            ghost.remove();
-            ghost = null;
-        }
-        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
-    }
-
-    cardEl.addEventListener('touchstart', (event) => {
-        if (event.touches.length !== 1) return;
-        const touch = event.touches[0];
-        const startX = touch.clientX;
-        const startY = touch.clientY;
-
-        cancelLongPress();
-        longPressTimer = setTimeout(() => {
-            longPressTimer = null;
-            touchDragActive = true;
-            cardEl.classList.add('ica--dragging');
-
-            ghost = cardEl.cloneNode(true);
-            ghost.classList.add('ica--drag-ghost');
-            ghost.style.cssText = `
-                position: fixed;
-                left: ${cardEl.getBoundingClientRect().left}px;
-                top: ${cardEl.getBoundingClientRect().top}px;
-                width: ${cardEl.offsetWidth}px;
-                opacity: 0.8;
-                pointer-events: none;
-                z-index: 9999;
-                transform: scale(1.02);
-            `;
-            ghostOffsetY = startY - cardEl.getBoundingClientRect().top;
-            document.body.appendChild(ghost);
-
-            // Haptic feedback if available
-            if (navigator.vibrate) navigator.vibrate(30);
-        }, 500);
-    }, { passive: true });
-
-    cardEl.addEventListener('touchmove', (event) => {
-        if (event.touches.length !== 1) { cleanup(); return; }
-        const touch = event.touches[0];
-
-        if (!touchDragActive) {
-            // User is scrolling — cancel the long-press timer
-            cancelLongPress();
-            return;
-        }
-
-        event.preventDefault();
-        ghost.style.top = `${touch.clientY - ghostOffsetY}px`;
-        updateDropIndicator(touch.clientX, touch.clientY);
-    }, { passive: false });
-
-    cardEl.addEventListener('touchend', async (event) => {
-        cancelLongPress();
-        if (!touchDragActive) return;
-        touchDragActive = false;
-        cardEl.classList.remove('ica--dragging');
-
-        if (ghost) {
-            ghost.remove();
-            ghost = null;
-        }
-
-        itemsEl.querySelectorAll('.ica--drop-indicator').forEach(el => el.remove());
-
-        const touch = event.changedTouches[0];
-        const target = getCardAtPoint(touch.clientX, touch.clientY);
-        if (!target || target === cardEl || !itemsEl.contains(target)) return;
-
-        const insertBefore = shouldInsertCardBeforeTarget(cardEl, target, touch.clientX, touch.clientY);
-        if (insertBefore) {
-            itemsEl.insertBefore(cardEl, target);
-        } else {
-            target.after(cardEl);
-        }
-
-        const orderedIds = Array.from(itemsEl.querySelectorAll('.ica--agent-card')).map(el => el.dataset.agentId);
-        await reorderAgentsInGroup(orderedIds);
-    });
-
-    cardEl.addEventListener('touchcancel', cleanup);
-}
 
 async function reorderAgentsInGroup(orderedIds) {
     const normalizedOrderedIds = Array.from(new Set(
@@ -1556,6 +1391,14 @@ async function openEditor(agentId = null) {
     editorEl.find('#ica--editor-type-impersonate').prop('checked', agent.conditions.generationTypes.includes('impersonate'));
     editorEl.find('#ica--editor-type-quiet').prop('checked', agent.conditions.generationTypes.includes('quiet'));
 
+    function updateTrackerBuilderVisibility() {
+        const category = editorEl.find('#ica--editor-category').val()?.toString() || '';
+        editorEl.find('#ica--tracker-builder-section').toggle(category === 'tracker');
+    }
+
+    editorEl.find('#ica--editor-category').on('change', updateTrackerBuilderVisibility);
+    updateTrackerBuilderVisibility();
+
     // Show/hide sections based on phase
     function updatePhaseVisibility() {
         const phase = editorEl.find('#ica--editor-phase').val();
@@ -1579,6 +1422,102 @@ async function openEditor(agentId = null) {
     }
     editorEl.find('#ica--editor-pp-promptEnabled, #ica--editor-pp-enabled, #ica--editor-pp-type').on('change', updatePPVisibility);
     updatePPVisibility();
+
+    editorEl.find('#ica--tracker-builder-generate').on('click', async () => {
+        const formatText = editorEl.find('#ica--tracker-builder-format').val()?.toString() ?? '';
+        if (!parseTrackerFormat(formatText)) {
+            toastr.warning('Paste a tracker example with at least one opening tag like [TRACKER|Field].');
+            return;
+        }
+
+        const currentPrompt = editorEl.find('#ica--editor-prompt').val()?.toString() ?? '';
+        const agentName = editorEl.find('#ica--editor-name').val()?.toString().trim() ?? '';
+        const description = editorEl.find('#ica--editor-description').val()?.toString().trim() ?? '';
+        const rulesText = editorEl.find('#ica--tracker-builder-rules').val()?.toString() ?? '';
+        const styleNotes = editorEl.find('#ica--tracker-builder-style').val()?.toString() ?? '';
+        const connectionProfile = editorEl.find('#ica--editor-connectionProfile').val()?.toString() || '';
+
+        toastr.info('Generating tracker kit...', '', { timeOut: 0, extendedTimeOut: 0 });
+
+        let generatedKit;
+        try {
+            generatedKit = await generateTrackerKitWithAI({
+                agentName,
+                description,
+                currentPrompt,
+                formatText,
+                rulesText,
+                styleNotes,
+                connectionProfile,
+            });
+        } catch (error) {
+            toastr.clear();
+            toastr.error(`Tracker generation failed: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+        }
+
+        toastr.clear();
+
+        const regexItems = generatedKit.regexScripts
+            .map(script => `<li><strong>${escapeHtml(script.scriptName || 'Regex Script')}</strong><br><code>${escapeHtml(script.findRegex || '')}</code></li>`)
+            .join('');
+        const previewHtml = $(`
+            <div class="ica--regex-editor">
+                ${generatedKit.usedFallback ? '<div class="ica--regex-note"><strong>Fallback scaffold used.</strong> The builder produced a safe starter kit locally because the AI response was unavailable or invalid. You can still apply and tweak it.</div>' : ''}
+                <div class="ica--editor-section ica--regex-subsection">
+                    <strong>Prompt</strong>
+                    <pre style="white-space:pre-wrap;max-height:220px;overflow-y:auto;padding:10px;border:1px solid var(--SmartThemeBorderColor);border-radius:8px;">${escapeHtml(generatedKit.prompt)}</pre>
+                </div>
+                <div class="ica--editor-section ica--regex-subsection">
+                    <strong>Extraction</strong>
+                    <div class="ica--regex-note"><b>Variable:</b> <code>${escapeHtml(generatedKit.postProcess.extractVariable)}</code></div>
+                    <pre style="white-space:pre-wrap;max-height:120px;overflow-y:auto;padding:10px;border:1px solid var(--SmartThemeBorderColor);border-radius:8px;">${escapeHtml(generatedKit.postProcess.extractPattern)}</pre>
+                </div>
+                <div class="ica--editor-section ica--regex-subsection">
+                    <strong>Regex Beautifiers</strong>
+                    <ul style="margin:0;padding-left:18px">${regexItems || '<li>No regex scripts generated.</li>'}</ul>
+                </div>
+            </div>
+        `);
+
+        const previewResult = await new Popup(previewHtml, POPUP_TYPE.CONFIRM, '', {
+            okButton: 'Apply',
+            cancelButton: 'Discard',
+            wide: true,
+            large: true,
+        }).show();
+
+        if (previewResult !== POPUP_RESULT.AFFIRMATIVE) {
+            return;
+        }
+
+        if (!agentName && generatedKit.name) {
+            editorEl.find('#ica--editor-name').val(generatedKit.name);
+        }
+
+        if (!description && generatedKit.description) {
+            editorEl.find('#ica--editor-description').val(generatedKit.description);
+        }
+
+        editorEl.find('#ica--editor-category').val('tracker').trigger('change');
+        editorEl.find('#ica--editor-phase').val(generatedKit.phase).trigger('change');
+        editorEl.find('#ica--editor-prompt').val(generatedKit.prompt);
+        editorEl.find('#ica--editor-pp-promptEnabled').prop('checked', false);
+        editorEl.find('#ica--editor-pp-enabled').prop('checked', true);
+        editorEl.find('#ica--editor-pp-type').val('extract');
+        editorEl.find('#ica--editor-pp-extractPattern').val(generatedKit.postProcess.extractPattern);
+        editorEl.find('#ica--editor-pp-extractVariable').val(generatedKit.postProcess.extractVariable);
+        editorEl.find('#ica--editor-pp-appendText').val('');
+        regexScripts = generatedKit.regexScripts.map(script => normalizeRegexScript(structuredClone(script)));
+        updatePPVisibility();
+        renderRegexList();
+
+        toastr.success(
+            generatedKit.usedFallback
+                ? 'Built a starter tracker kit. Review and tweak it before saving.'
+                : 'Applied generated tracker kit. Review and save when ready.',
+        );
+    });
 
     function renderRegexList() {
         const list = editorEl.find('#ica--regex-list');
@@ -2085,6 +2024,238 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function normalizeMultilineInput(value) {
+    return String(value ?? '').replace(/\r\n?/g, '\n').trim();
+}
+
+function toTitleCase(value) {
+    return String(value ?? '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function slugifyIdentifier(value, fallback = 'tracker_data') {
+    const slug = String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/^agent_/i, '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
+    return slug || fallback;
+}
+
+function escapeRegexPattern(value) {
+    return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseTrackerFormat(formatText) {
+    const normalized = normalizeMultilineInput(formatText);
+    if (!normalized) {
+        return null;
+    }
+
+    const lines = normalized
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+
+    const openLine = lines.find(line => /^\[[^\]]+\]$/.test(line) && !/^\[\/[^\]]+\]$/.test(line));
+    if (!openLine) {
+        return null;
+    }
+
+    const closeLine = [...lines].reverse().find(line => /^\[\/[^\]]+\]$/.test(line)) ?? '';
+    const openInner = openLine.slice(1, -1).trim();
+    const openParts = openInner.split('|').map(part => part.trim());
+    const tagToken = openParts[0] ?? '';
+    const closeTag = closeLine
+        ? closeLine.slice(2, -1).trim()
+        : (tagToken.includes(':') ? tagToken.split(':')[0].trim() : tagToken);
+    const baseTag = (closeTag || tagToken.split(':')[0] || tagToken || 'TRACKER').trim();
+
+    return {
+        normalized,
+        lines,
+        openLine,
+        closeLine,
+        tagToken,
+        closeTag,
+        baseTag,
+        headerFields: openParts.slice(1).filter(Boolean),
+        bodyLines: lines.filter(line => line !== openLine && (!closeLine || line !== closeLine)),
+    };
+}
+
+function buildTrackerPromptScaffold(agentName, description, definition, rulesText) {
+    const title = agentName?.trim() || `${toTitleCase(definition.baseTag)} Tracker`;
+    const descriptionText = description?.trim()
+        || `Track ${toTitleCase(definition.baseTag).toLowerCase()} changes when they become relevant.`;
+    const customRules = normalizeMultilineInput(rulesText)
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.startsWith('-') ? line : `- ${line}`);
+
+    const ruleLines = [
+        '- Keep the opening and closing tags exactly as shown.',
+        definition.headerFields.length > 0
+            ? `- Keep the pipe-separated field order exactly as shown: ${definition.headerFields.join(' | ')}.`
+            : '',
+        definition.bodyLines.length > 0
+            ? '- Preserve any extra body lines or labels exactly as shown, and do not leave required lines empty.'
+            : '',
+        '- Only emit this tracker when it becomes relevant or meaningfully changes.',
+        ...customRules,
+    ].filter(Boolean);
+
+    return [
+        `### ${title}`,
+        descriptionText,
+        'Use this EXACT format:',
+        definition.normalized,
+        'Rules:',
+        ...ruleLines,
+    ].join('\n');
+}
+
+function buildGenericTrackerRegexScript(definition, trackerTitle) {
+    const openToken = escapeRegexPattern(definition.tagToken);
+    const closeToken = escapeRegexPattern(definition.closeTag || definition.baseTag);
+    const headerCaptures = definition.headerFields.map(() => '([^|\\]]+)').join('\\|');
+    const openPattern = definition.headerFields.length > 0
+        ? `\\[${openToken}\\|${headerCaptures}\\]`
+        : `\\[${openToken}\\]`;
+    const bodyPattern = definition.closeLine
+        ? `\\n*([\\s\\S]*?)(?:\\n*\\[\\/${closeToken}\\])(?=\\n|$)`
+        : '(?:\\n*([\\s\\S]*?))?(?=\\n|$)';
+    const bodyGroupIndex = definition.headerFields.length + 1;
+    const bodyLabel = definition.bodyLines.find(line => line.includes(':'))?.split(':')[0]?.trim() || 'Details';
+    const summaryValue = definition.headerFields.length > 0
+        ? '<span style="opacity:0.82">·</span> <span style="color:#f8f8f2">$1</span>'
+        : '';
+    const fieldGrid = definition.headerFields.length > 0
+        ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin-bottom:${definition.bodyLines.length > 0 ? '10px' : '0'}">${definition.headerFields.map((field, index) => `
+                <div style="padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(159,195,239,0.18);border-radius:8px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9fc3ef;margin-bottom:4px">${escapeHtml(field)}</div>
+                    <div style="color:#f8f8f2;font-size:11px">$${index + 1}</div>
+                </div>
+            `).join('')}</div>`
+        : '';
+    const bodyBlock = `
+        <div style="padding:9px 11px;background:rgba(255,255,255,0.04);border-left:3px solid #7ba3d4;border-radius:8px;white-space:pre-line">
+            <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9fc3ef;margin-bottom:4px">${escapeHtml(bodyLabel)}</div>
+            <div style="color:#f8f8f2">$${bodyGroupIndex}</div>
+        </div>
+    `;
+
+    return normalizeRegexScript({
+        scriptName: `Render ${trackerTitle}`,
+        findRegex: `/${openPattern}${bodyPattern}/g`,
+        replaceString: `<details style="margin:10px 0"><summary style="padding:10px 13px;background:linear-gradient(135deg,rgba(21,26,34,0.97),rgba(43,78,126,0.68));border-radius:12px;border:1px solid rgba(123,163,212,0.5);box-shadow:0 10px 24px rgba(0,0,0,0.28);color:#9fc3ef;font-family:monospace;font-size:11px;cursor:pointer">${escapeHtml(trackerTitle)} ${summaryValue}</summary><div style="padding:13px;background:linear-gradient(180deg,rgba(20,22,28,0.97),rgba(34,37,46,0.96));border-radius:0 0 12px 12px;border:1px solid rgba(123,163,212,0.32);border-top:none;font-size:11px;line-height:1.68;color:#f8f8f2">${fieldGrid}${bodyBlock}</div></details>`,
+        placement: [AGENT_REGEX_PLACEMENT.AI_OUTPUT],
+        disabled: false,
+        markdownOnly: true,
+        promptOnly: false,
+        runOnEdit: true,
+        substituteRegex: AGENT_REGEX_SUBSTITUTE.NONE,
+        minDepth: null,
+        maxDepth: null,
+    });
+}
+
+function buildTrackerFallbackKit({ agentName, description, formatText, rulesText }) {
+    const definition = parseTrackerFormat(formatText);
+    if (!definition) {
+        return null;
+    }
+
+    const trackerTitle = agentName?.trim() || `${toTitleCase(definition.baseTag)} Tracker`;
+    const extractPattern = definition.closeLine
+        ? `\\[${escapeRegexPattern(definition.tagToken)}(?:\\|[^\\]]*)?\\][\\s\\S]*?\\[\\/${escapeRegexPattern(definition.closeTag || definition.baseTag)}\\]`
+        : `\\[${escapeRegexPattern(definition.tagToken)}(?:\\|[^\\]]*)?\\]`;
+
+    return {
+        name: trackerTitle,
+        description: description?.trim() || `Custom ${toTitleCase(definition.baseTag).toLowerCase()} tracker`,
+        phase: 'pre',
+        prompt: buildTrackerPromptScaffold(agentName, description, definition, rulesText),
+        postProcess: {
+            enabled: true,
+            type: 'extract',
+            extractPattern,
+            extractVariable: slugifyIdentifier(`${definition.baseTag}_data`),
+        },
+        regexScripts: [buildGenericTrackerRegexScript(definition, trackerTitle)],
+        usedFallback: true,
+    };
+}
+
+function extractJsonObject(text) {
+    const trimmed = String(text ?? '').trim();
+    if (!trimmed) {
+        return '';
+    }
+
+    const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fencedMatch?.[1]) {
+        return fencedMatch[1].trim();
+    }
+
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+        return trimmed.slice(start, end + 1).trim();
+    }
+
+    return trimmed;
+}
+
+function normalizeTrackerKitResponse(rawResult, fallbackKit) {
+    const rawPostProcess = rawResult?.postProcess && typeof rawResult.postProcess === 'object'
+        ? rawResult.postProcess
+        : {};
+    const normalizedScripts = Array.isArray(rawResult?.regexScripts)
+        ? rawResult.regexScripts
+            .map(script => normalizeRegexScript({
+                ...script,
+                placement: Array.isArray(script?.placement) && script.placement.length > 0
+                    ? script.placement
+                    : [AGENT_REGEX_PLACEMENT.AI_OUTPUT],
+                markdownOnly: script?.markdownOnly === undefined ? true : Boolean(script.markdownOnly),
+                promptOnly: Boolean(script?.promptOnly),
+                runOnEdit: script?.runOnEdit === undefined ? true : Boolean(script.runOnEdit),
+            }))
+            .filter(script => script.findRegex?.trim())
+        : [];
+
+    return {
+        ...fallbackKit,
+        name: typeof rawResult?.name === 'string' && rawResult.name.trim() ? rawResult.name.trim() : fallbackKit.name,
+        description: typeof rawResult?.description === 'string' && rawResult.description.trim() ? rawResult.description.trim() : fallbackKit.description,
+        phase: ['pre', 'post', 'both'].includes(String(rawResult?.phase)) ? String(rawResult.phase) : fallbackKit.phase,
+        prompt: typeof rawResult?.prompt === 'string' && rawResult.prompt.trim() ? rawResult.prompt.trim() : fallbackKit.prompt,
+        postProcess: {
+            ...fallbackKit.postProcess,
+            enabled: true,
+            type: 'extract',
+            extractPattern: typeof rawPostProcess.extractPattern === 'string' && rawPostProcess.extractPattern.trim()
+                ? rawPostProcess.extractPattern.trim()
+                : fallbackKit.postProcess.extractPattern,
+            extractVariable: slugifyIdentifier(
+                typeof rawPostProcess.extractVariable === 'string' && rawPostProcess.extractVariable.trim()
+                    ? rawPostProcess.extractVariable.trim()
+                    : fallbackKit.postProcess.extractVariable,
+                fallbackKit.postProcess.extractVariable,
+            ),
+        },
+        regexScripts: normalizedScripts.length > 0 ? normalizedScripts : fallbackKit.regexScripts,
+        usedFallback: false,
+    };
+}
+
 function buildPromptTransformDiffMarkup(beforeText, afterText) {
     const dmp = new DiffMatchPatch();
     const diffs = dmp.diff_main(String(beforeText ?? ''), String(afterText ?? ''));
@@ -2314,6 +2485,87 @@ async function refineLLMCall(systemPrompt, userPrompt, connectionProfile = '') {
     return extractProfileResponseText(fallbackResponse);
 }
 
+async function generateTrackerKitWithAI({
+    agentName,
+    description,
+    currentPrompt,
+    formatText,
+    rulesText,
+    styleNotes,
+    connectionProfile = '',
+}) {
+    const fallbackKit = buildTrackerFallbackKit({ agentName, description, formatText, rulesText });
+    if (!fallbackKit) {
+        throw new Error('Tracker format example is missing a valid opening tag.');
+    }
+
+    const systemPrompt = `You build custom tracker agent kits for SillyBunny's in-chat agents extension. Return strict JSON only, with no markdown fences and no explanation.
+
+The JSON shape must be:
+{
+  "name": "Tracker name",
+  "description": "Short description",
+  "phase": "pre",
+  "prompt": "Full tracker prompt text",
+  "postProcess": {
+    "enabled": true,
+    "type": "extract",
+    "extractPattern": "regex string",
+    "extractVariable": "snake_case_variable"
+  },
+  "regexScripts": [
+    {
+      "scriptName": "Human-readable name",
+      "findRegex": "/pattern/g",
+      "replaceString": "<details>...</details>",
+      "placement": [2],
+      "markdownOnly": true,
+      "promptOnly": false,
+      "runOnEdit": true,
+      "disabled": false
+    }
+  ]
+}
+
+Requirements:
+- This is a tracker, so phase should usually be "pre".
+- The prompt must instruct the model to use the exact tracker format and obey the supplied rules.
+- extractPattern must capture the full tracker block, including body lines and closing tags when present.
+- extractVariable must be snake_case and must not include the "agent_" prefix.
+- regexScripts must be valid ST-style regex scripts for AI output rendering.
+- Use inline HTML/CSS only in replaceString. No script tags.
+- Preserve the tracker's body text in the rendered output; do not drop note/detail lines.
+- Keep the rendered output compact, readable, and visually consistent with SillyBunny's existing tracker cards.
+- Prefer one regex script unless multiple variants are genuinely needed.
+- Escape backslashes correctly for JSON.`;
+
+    const userPrompt = [
+        `Agent name: ${agentName || '(blank)'}`,
+        `Description: ${description || '(blank)'}`,
+        '',
+        'Tracker format example:',
+        formatText,
+        '',
+        'Additional behavior rules:',
+        rulesText || '(none)',
+        '',
+        'HTML/style notes:',
+        styleNotes || '(none)',
+        '',
+        'Existing prompt text to preserve if useful:',
+        currentPrompt || '(none)',
+    ].join('\n');
+
+    try {
+        const rawResponse = await refineLLMCall(systemPrompt, userPrompt, connectionProfile);
+        const parsedResponse = JSON.parse(extractJsonObject(rawResponse));
+        return normalizeTrackerKitResponse(parsedResponse, fallbackKit);
+    } catch (error) {
+        console.warn('[InChatAgents] Custom tracker generation fell back to local scaffold.', error);
+        return fallbackKit;
+    }
+}
+
 /**
  * Opens a refinement mode picker and calls the LLM to refine the given prompt.
  * @param {string} currentPrompt - The current agent prompt text
@@ -2366,7 +2618,7 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         instruction = modes[Number(selectedVal)].instruction;
     }
 
-    const systemPrompt = `You are a prompt engineering assistant for a roleplay chat application. The user has written a prompt module that will be injected into an LLM's context during roleplay generation. Improve it based on their request. Use {{char}} and {{user}} macros where appropriate. Be concise -- every token counts. Output ONLY the improved prompt text, nothing else.`;
+    const systemPrompt = 'You are a prompt engineering assistant for a roleplay chat application. The user has written a prompt module that will be injected into an LLM\'s context during roleplay generation. Improve it based on their request. Use {{char}} and {{user}} macros where appropriate. Be concise -- every token counts. Output ONLY the improved prompt text, nothing else.';
 
     const userText = `Here is my current prompt:\n---\n${currentPrompt}\n---\nCategory: ${category}\nPhase: ${phase}\n\nRequest: ${instruction}`;
 

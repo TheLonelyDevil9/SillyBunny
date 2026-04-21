@@ -52,6 +52,34 @@
         <textarea id="ica--editor-prompt" class="text_pole textarea_compact" rows="8" placeholder="Write your agent prompt here. Supports macros: &#123;&#123;char&#125;&#125;, &#123;&#123;user&#125;&#125;, &#123;&#123;random::a::b::c&#125;&#125;, etc."></textarea>
     </div>
 
+    <div class="ica--editor-section" id="ica--tracker-builder-section" style="display:none">
+        <div class="ica--editor-section-header">
+            <strong>Custom Tracker Builder</strong>
+            <div class="ica--editor-section-actions">
+                <button type="button" id="ica--tracker-builder-generate" class="menu_button menu_button_icon">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Generate Kit</span>
+                </button>
+            </div>
+        </div>
+        <div class="ica--regex-note">Paste a tracker example and optional rules/style notes. SillyBunny will generate the prompt, extract pattern, and beautification regex for you.</div>
+        <div class="ica--editor-row">
+            <label>Tracker Format Example
+                <textarea id="ica--tracker-builder-format" class="text_pole textarea_compact" rows="7" placeholder="[TRACKER|Detail 1|Detail 2]&#10;note: describe what changed&#10;[/TRACKER]"></textarea>
+            </label>
+        </div>
+        <div class="ica--editor-row">
+            <label>Rules / Behavior Notes <small>(optional)</small>
+                <textarea id="ica--tracker-builder-rules" class="text_pole textarea_compact" rows="4" placeholder="When it should appear, what should count as a change, any mandatory fields, etc."></textarea>
+            </label>
+        </div>
+        <div class="ica--editor-row">
+            <label>HTML / Style Notes <small>(optional)</small>
+                <textarea id="ica--tracker-builder-style" class="text_pole textarea_compact" rows="4" placeholder="Example: soft blue card, compact badge chips, show the note body in a bordered block"></textarea>
+            </label>
+        </div>
+    </div>
+
     <div class="ica--editor-section" id="ica--injection-section">
         <strong>Injection Settings</strong>
         <div class="ica--editor-row flex-container flexGap5">
