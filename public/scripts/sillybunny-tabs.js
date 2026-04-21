@@ -6413,6 +6413,9 @@ function openShell(shellKey, tabId = null) {
 
     if (!shellRoot.classList.contains('openDrawer')) {
         triggerDrawerToggle(shellConfig.hostToggleSelector);
+        // Open managed shells immediately so cross-shell switches do not flash
+        // through a fully closed state before the legacy drawer handler settles.
+        forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
         window.requestAnimationFrame(() => {
             if (!isDrawerActuallyOpen(shellRoot)) {
                 forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
