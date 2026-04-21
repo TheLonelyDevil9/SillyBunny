@@ -935,6 +935,7 @@ function generateExtensionHtml(name, manifest, isActive, isDisabled, isExternal,
         `<input type="checkbox" title="Cannot enable extension" data-name="${name}" class="extension_missing ${checkboxClass}" disabled>`;
 
     let deleteButton = isExternal ? `<button class="btn_delete menu_button" data-name="${externalId}" data-i18n="[title]Delete" title="Delete"><i class="fa-fw fa-solid fa-trash-can"></i></button>` : '';
+    let reinstallButton = isExternal ? `<button class="btn_reinstall menu_button" data-name="${externalId}" data-i18n="[title]Reinstall" title="Reinstall"><i class="fa-fw fa-solid fa-rotate-right"></i></button>` : '';
     let updateButton = isExternal ? `<button class="btn_update menu_button displayNone" data-name="${externalId}" title="Update available"><i class="fa-solid fa-download fa-fw"></i></button>` : '';
     let moveButton = isExternal && isUserAdmin ? `<button class="btn_move menu_button" data-name="${externalId}" data-i18n="[title]Move" title="Move"><i class="fa-solid fa-folder-tree fa-fw"></i></button>` : '';
     let branchButton = isExternal && isUserAdmin ? `<button class="btn_branch menu_button" data-name="${externalId}" data-i18n="[title]Switch branch" title="Switch branch"><i class="fa-solid fa-code-branch fa-fw"></i></button>` : '';
@@ -980,6 +981,7 @@ function generateExtensionHtml(name, manifest, isActive, isDisabled, isExternal,
                 ${updateButton}
                 ${branchButton}
                 ${moveButton}
+                ${reinstallButton}
                 ${deleteButton}
             </div>
         </div>`;
@@ -1322,6 +1324,71 @@ async function onDeleteClick() {
     const confirmation = await callGenericPopup(t`Are you sure you want to delete ${extensionName}?`, POPUP_TYPE.CONFIRM, '', {});
     if (confirmation === POPUP_RESULT.AFFIRMATIVE) {
         await deleteExtension(extensionName);
+    }
+}
+
+async function onReinstallClick() {
+    const extensionName = $(this).data('name');
+    const isCurrentUserAdmin = isAdmin();
+    const isGlobal = getExtensionType(extensionName) === 'global';
+    if (isGlobal && !isCurrentUserAdmin) {
+        toastr.error(t`You don't have permission to reinstall global extensions.`);
+        return;
+    }
+
+    // Get the extension manifest to retrieve the repo URL
+    const manifest = manifests[extensionName];
+    if (!manifest) {
+        toastr.error(t`Cannot find extension manifest for ${extensionName}`);
+        return;
+    }
+
+    const repoUrl = manifest.homepage || manifest.homePage;
+    if (!repoUrl) {
+        toastr.error(t`Cannot find repository URL for ${extensionName}`);
+        return;
+    }
+
+    // Confirm with user
+    const confirmation = await callGenericPopup(
+        t`This will delete and reinstall ${extensionName} from ${repoUrl}. Any local changes will be lost. Continue?`,
+        POPUP_TYPE.CONFIRM,
+        '',
+        {}
+    );
+
+    if (confirmation !== POPUP_RESULT.AFFIRMATIVE) {
+        return;
+    }
+
+    try {
+        // Delete the extension
+        toastr.info(t`Deleting ${extensionName}...`, t`Reinstalling extension`);
+        await callExtensionHook(extensionName, 'delete');
+
+        const deleteResponse = await fetch('/api/extensions/delete', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                extensionName,
+                global: isGlobal,
+            }),
+        });
+
+        if (!deleteResponse.ok) {
+            const text = await deleteResponse.text();
+            throw new Error(text || deleteResponse.statusText);
+        }
+
+        // Reinstall the extension
+        toastr.info(t`Installing ${extensionName}...`, t`Reinstalling extension`);
+        await installExtension(repoUrl, isGlobal);
+
+        toastr.success(t`Extension ${extensionName} reinstalled successfully`);
+        delay(1000).then(() => location.reload());
+    } catch (error) {
+        console.error('Reinstall failed:', error);
+        toastr.error(t`Failed to reinstall ${extensionName}: ${error.message}`, t`Reinstall failed`);
     }
 }
 
@@ -1956,6 +2023,7 @@ export async function initExtensions() {
     $(document).on('click', '.extensions_info .extension_block .toggle_enable', onEnableExtensionClick);
     $(document).on('click', '.extensions_info .extension_block .btn_update', onUpdateClick);
     $(document).on('click', '.extensions_info .extension_block .btn_delete', onDeleteClick);
+    $(document).on('click', '.extensions_info .extension_block .btn_reinstall', onReinstallClick);
     $(document).on('click', '.extensions_info .extension_block .btn_move', onMoveClick);
     $(document).on('click', '.extensions_info .extension_block .btn_branch', onBranchClick);
 
