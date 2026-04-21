@@ -185,11 +185,13 @@ SillyBunny includes some extras by default to help you get started right away:
 - Added a separate "Show thought in chat" toggle so reasoning can be requested without forcing returned thought text to stay visible in chat
 - Fixed response text extraction for OpenAI-style and Gemini-style payloads so parts/content/candidates/tool-plan formats render correctly instead of collapsing into blank or broken output
 - Fixed Gemini thought-signature handling by reading `candidates[].content.parts` correctly and checking the `gemini.thoughtSignatures` config dynamically
+- Added clarification tooltip for "Request model reasoning" toggle explaining behavior for Custom OpenAI-compatible providers
 
 **Agents and message tools**
 
 - Fixed message metadata badges so reasoning-token counts and agent-change actions stay in sync during both initial render and later message updates
 - Upgraded in-chat agent transform history to show semantic diffs with insert/delete highlighting while keeping Undo/Redo actions
+- Updated agent transform diff styling to match recast-post-processing — more subtle colors with rgba transparency for cleaner visual appearance
 - Added a dedicated "View agent changes" message action and wired it to the same transform-history popup as the inline badge
 - Hardened agent error/result serialization for non-JSON values and updated adventure-helper status copy to be clearer in the UI
 
@@ -197,12 +199,16 @@ SillyBunny includes some extras by default to help you get started right away:
 
 - Fixed bottom-bar chat switching to use the shared chat-opening flow and added retry refresh logic so chat lists populate more reliably after startup and chat events
 - Fixed bottom-bar persona switching by preferring `/persona-set` with safely quoted avatar ids and improving active persona detection
+- Fixed persona switching when multiple personas share the same name — the bottom bar now correctly selects by avatar ID instead of always falling back to the first name match
+- Fixed bottom bar not loading on first page load in Node.js environments — added APP_READY state check and increased retry attempts from 8 to 30
 
 **UI polish**
 
 - Added persistent Full Home, Compact, and List only display modes for the Home welcome panel so recent chats can stay visible without the large onboarding card taking over the chat area
 - Tightened the World Info workspace layout so the entry list and editor pane fit better on desktop-sized windows
 - Improved checkbox alignment, mobile/editor layout behavior, and escaped macro braces in the in-chat agent prompt placeholder so template tokens display literally
+- Added branch switching dropdown to Server Admin panel — switch between main and staging with confirmation dialog, auto-stash option, and automatic restart
+- Added context size options at 4k increments — 12k, 20k, 24k, 28k, and 36k-60k now available to fill gaps between existing sizes
 
 ### v1.3.7 (2026-04-17)
 
