@@ -8240,6 +8240,9 @@ export async function getSettings(initLoaderHandle = null) {
         if (data.enable_extensions) {
             const enableAutoUpdate = Boolean(data.enable_extensions_auto_update);
             const isVersionChanged = settings.currentVersion !== currentVersion;
+            if (await maybeAutoClearCacheOnVersionChange(isVersionChanged)) {
+                return;
+            }
             await loadExtensionSettings(settings, isVersionChanged, enableAutoUpdate);
             await eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
         }
@@ -8324,32 +8327,36 @@ export async function saveSettings(loopCounter = 0) {
     }
 }
 
-async function clearAllCacheAndReload() {
-    const confirmation = await Popup.show.confirm(
-        t`Clear all cache?`,
-        t`This removes browser cache, temporary session data, and IndexedDB cache stores for SillyBunny, then reloads the page. Saved settings and account data stay intact.`,
-        {
-            okButton: t`Clear cache`,
-            cancelButton: t`Cancel`,
-        },
-    );
+async function clearFrontendCache({ skipConfirmation = false, saveBeforeClear = true } = {}) {
+    if (!skipConfirmation) {
+        const confirmation = await Popup.show.confirm(
+            t`Clear all cache?`,
+            t`This removes browser cache, temporary session data, and IndexedDB cache stores for SillyBunny, then reloads the page. Saved settings and account data stay intact.`,
+            {
+                okButton: t`Clear cache`,
+                cancelButton: t`Cancel`,
+            },
+        );
 
-    if (confirmation !== POPUP_RESULT.AFFIRMATIVE) {
-        return false;
+        if (confirmation !== POPUP_RESULT.AFFIRMATIVE) {
+            return false;
+        }
     }
 
     const cacheErrors = [];
 
-    try {
-        await saveChatConditional();
-    } catch (error) {
-        console.warn('Failed to save chat before clearing cache', error);
-    }
+    if (saveBeforeClear) {
+        try {
+            await saveChatConditional();
+        } catch (error) {
+            console.warn('Failed to save chat before clearing cache', error);
+        }
 
-    try {
-        await saveSettings();
-    } catch (error) {
-        console.warn('Failed to save settings before clearing cache', error);
+        try {
+            await saveSettings();
+        } catch (error) {
+            console.warn('Failed to save settings before clearing cache', error);
+        }
     }
 
     if ('caches' in globalThis) {
@@ -8385,7 +8392,36 @@ async function clearAllCacheAndReload() {
         return false;
     }
 
+    return true;
+}
+
+async function clearAllCacheAndReload() {
+    const didClear = await clearFrontendCache();
+
+    if (!didClear) {
+        return false;
+    }
+
     toastr.success(t`Cache cleared. Reloading SillyBunny...`, t`Cache cleared`);
+    window.setTimeout(() => window.location.reload(), 450);
+    return true;
+}
+
+async function maybeAutoClearCacheOnVersionChange(isVersionChanged) {
+    if (!isVersionChanged || !power_user.auto_clear_cache_on_update) {
+        return false;
+    }
+
+    const didClear = await clearFrontendCache({
+        skipConfirmation: true,
+        saveBeforeClear: false,
+    });
+
+    if (!didClear) {
+        return false;
+    }
+
+    toastr.info(t`SillyBunny updated. Clearing cached UI data and reloading...`, t`Update detected`);
     window.setTimeout(() => window.location.reload(), 450);
     return true;
 }
@@ -12990,6 +13026,10 @@ jQuery(async function () {
 
     $('.drawer-toggle').on('click', doNavbarIconClick);
     $('#clear_all_cache_button').on('click', handleClearAllCacheButtonClick);
+    $('#auto_clear_cache_on_update').on('input', function () {
+        power_user.auto_clear_cache_on_update = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
 
     $('html').on('touchstart mousedown', async function (e) {
         const clickTarget = $(e.target);
