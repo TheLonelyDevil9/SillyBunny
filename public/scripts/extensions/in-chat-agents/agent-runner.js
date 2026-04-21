@@ -620,7 +620,8 @@ function sanitizePromptTransformRunForStorage(result) {
     }
 
     // Keep beforeText and nextMessageText for diff/undo — only strip raw outputText
-    const { outputText, ...storedResult } = result;
+    const storedResult = { ...result };
+    delete storedResult.outputText;
     return storedResult;
 }
 
@@ -1035,7 +1036,7 @@ async function runPromptTransformAppendBatch(agents, message, generationType, me
         }
     } else {
         results = await Promise.all(
-            agents.map(async(agent) => {
+            agents.map(async (agent) => {
                 try {
                     return await runPromptTransformAgent(agent, message, generationType, currentMessageText, messageIndex, {
                         applyToMessage: false,

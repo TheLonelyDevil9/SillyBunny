@@ -1,4 +1,3 @@
-import { getSettings } from '../tree-store.js';
 import { forgetEntry } from '../entry-manager.js';
 import { getActiveTunnelVisionBooks, resolveTargetBook, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
@@ -7,7 +6,6 @@ import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../a
 const COMPACT_DESCRIPTION = 'Disable or delete a lorebook entry that is no longer relevant.';
 
 async function forgetAction(args) {
-    const s = getSettings();
     const uid = Number(args.uid);
     const bookName = String(args.book || '').trim();
     const hardDelete = Boolean(args.hard_delete);

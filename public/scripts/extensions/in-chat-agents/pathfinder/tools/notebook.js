@@ -1,12 +1,8 @@
-import { getSettings } from '../tree-store.js';
 import { getActiveTunnelVisionBooks, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
 import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../activity-feed.js';
 
 const NOTEBOOK_KEY = 'pathfinder_notebook';
-const NOTEBOOK_PROMPT_KEY = 'pathfinder_notebook_prompt';
-
-let notebookWriteGuard = false;
 
 const COMPACT_DESCRIPTION = 'Write to or read from a private AI scratchpad for plans, follow-ups, and narrative threads.';
 
@@ -102,7 +98,7 @@ async function notebookFormatter(args) {
 }
 
 export function resetNotebookWriteGuard() {
-    notebookWriteGuard = false;
+    // Retained for compatibility with existing call sites.
 }
 
 export function buildNotebookPrompt() {

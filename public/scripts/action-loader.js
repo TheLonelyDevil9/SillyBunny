@@ -584,7 +584,9 @@ export function cleanupActionLoaderArtifacts({ removePreloader = false, reason =
     // Close and remove any open loader dialog overlays
     for (const dlg of document.querySelectorAll('dialog[open]')) {
         if (dlg.querySelector('#loader, .splash-screen, #load-spinner')) {
-            try { dlg.close(); } catch {}
+            try { dlg.close(); } catch {
+                // Ignore dialog close failures before removing the element.
+            }
             dlg.remove();
         }
     }

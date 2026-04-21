@@ -475,7 +475,6 @@ export async function readAllChunks(readableStream) {
         });
 
         readableStream.on('end', () => {
-
             resolve(chunks);
         });
 

@@ -1,6 +1,6 @@
-import { getTree, findNodeById, getAllEntryUids, getSettings } from './tree-store.js';
+import { getTree, getSettings } from './tree-store.js';
 import { getActiveTunnelVisionBooks } from './pathfinder-tool-bridge.js';
-import { isSidecarConfigured, sidecarGenerate, getSidecarModelLabel } from './llm-sidecar.js';
+import { sidecarGenerate } from './llm-sidecar.js';
 import { logSidecarWrite } from './activity-feed.js';
 
 export async function runSidecarWriter() {

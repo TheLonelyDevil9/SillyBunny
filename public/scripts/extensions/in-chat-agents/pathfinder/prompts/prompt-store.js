@@ -217,7 +217,7 @@ export function initializePromptStore(defaultPrompts = {}, defaultPipelines = {}
     // Then overlay with saved (user-modified) versions
     for (const [id, prompt] of Object.entries(savedPrompts)) {
         // Preserve isDefault flag from the default if it exists
-        const isDefault = defaultPrompts[id] ? true : false;
+        const isDefault = !!defaultPrompts[id];
         promptCache.set(id, { ...prompt, isDefault });
     }
 
@@ -230,7 +230,7 @@ export function initializePromptStore(defaultPrompts = {}, defaultPipelines = {}
     }
 
     for (const [id, pipeline] of Object.entries(savedPipelines)) {
-        const isDefault = defaultPipelines[id] ? true : false;
+        const isDefault = !!defaultPipelines[id];
         pipelineCache.set(id, { ...pipeline, isDefault });
     }
 

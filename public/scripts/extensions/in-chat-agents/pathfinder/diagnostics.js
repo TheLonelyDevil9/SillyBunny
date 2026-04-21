@@ -1,4 +1,4 @@
-import { getSettings, getTree, findNodeById, getAllEntryUids, isLorebookEnabled } from './tree-store.js';
+import { getSettings, getTree, getAllEntryUids } from './tree-store.js';
 import { ALL_TOOL_NAMES, getActiveTunnelVisionBooks } from './pathfinder-tool-bridge.js';
 import { getEnabledToolAgents } from '../agent-store.js';
 
@@ -60,7 +60,7 @@ export async function runDiagnostics() {
     if (s.sidecarEnabled) {
         const enabledAgents = getEnabledToolAgents();
         const registeredTools = ALL_TOOL_NAMES.filter(name =>
-            ToolManager?.tools?.find(t => t.name === name)
+            ToolManager?.tools?.find(t => t.name === name),
         );
 
         if (registeredTools.length === ALL_TOOL_NAMES.length) {

@@ -159,7 +159,6 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
  * @returns {Promise<PipelineContext>}
  */
 async function buildPipelineContext(chatMessages, maxMessages) {
-    const settings = getSettings();
     const books = getReadableBooks();
 
     // Format chat history
@@ -317,7 +316,7 @@ function parseOutput(response, format, entriesByName) {
 
                 // Validate entries exist
                 const validEntries = entries.filter(name =>
-                    typeof name === 'string' && entriesByName.has(name)
+                    typeof name === 'string' && entriesByName.has(name),
                 );
 
                 return { entries: validEntries, reasoning };

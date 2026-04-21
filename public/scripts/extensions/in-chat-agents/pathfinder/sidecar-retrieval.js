@@ -1,8 +1,7 @@
 import { getTree, findNodeById, getAllEntryUids, getSettings } from './tree-store.js';
 import { getReadableBooks, getEntryContent } from './pathfinder-tool-bridge.js';
-import { separateConditions, hasEvaluableConditions, filterByProbability } from './conditions.js';
-import { isSidecarConfigured, sidecarGenerate, getSidecarModelLabel } from './llm-sidecar.js';
-import { logSidecarRetrieval, logConditionalEvaluations, logPipelineStart, logPipelineComplete, setSidecarActive } from './activity-feed.js';
+import { sidecarGenerate } from './llm-sidecar.js';
+import { logSidecarRetrieval, logPipelineStart, logPipelineComplete, setSidecarActive } from './activity-feed.js';
 import { runPipeline } from './prompts/pipeline-runner.js';
 
 const RETRIEVAL_PROMPT_KEY = 'pathfinder_sidecar_retrieval';
@@ -22,24 +21,6 @@ function formatCollapsedGuide(tree, bookName) {
         for (const child of node.children || []) walk(child, depth + 1);
     }
     walk(tree);
-    return lines.join('\n');
-}
-
-function formatTraversalGuide(tree, depth = 0, maxDepth = 0) {
-    if (!tree) return '';
-    const lines = [];
-    const indent = '  '.repeat(depth);
-    const entries = (tree.entries || []).length;
-    const subWaypoints = (tree.children || []).length;
-    let line = `${indent}${tree.name}`;
-    if (entries) line += ` (${entries} entries)`;
-    if (subWaypoints) line += ` [${subWaypoints} sub-waypoints]`;
-    lines.push(line);
-    if (depth < maxDepth || maxDepth === 0) {
-        for (const child of tree.children || []) {
-            lines.push(...formatTraversalGuide(child, depth + 1, maxDepth).split('\n'));
-        }
-    }
     return lines.join('\n');
 }
 
@@ -114,7 +95,7 @@ async function runPipelineRetrieval(setExtensionPrompt, extensionPromptTypes, ex
             extensionPromptTypes?.IN_PROMPT ?? 0,
             4,
             false,
-            extensionPromptRoles?.SYSTEM ?? 0
+            extensionPromptRoles?.SYSTEM ?? 0,
         );
 
         console.log(`[Pathfinder] Pipeline injected ${entryContents.length} entries`);
@@ -171,7 +152,7 @@ async function runLegacySidecarRetrieval(setExtensionPrompt, extensionPromptType
     }
 }
 
-export async function runSidecarRetrieval(getExtensionPrompt, setExtensionPrompt, extensionPromptTypes, extensionPromptRoles) {
+export async function runSidecarRetrieval(_getExtensionPrompt, setExtensionPrompt, extensionPromptTypes, extensionPromptRoles) {
     const s = getSettings();
     if (!s.sidecarEnabled) return;
 

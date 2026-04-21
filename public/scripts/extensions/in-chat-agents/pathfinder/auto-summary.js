@@ -20,8 +20,6 @@ export function initAutoSummary(eventSource, eventTypes) {
 }
 
 export function markAutoSummaryComplete() {
-    const s = getSettings();
-    const interval = s.autoSummaryInterval || 20;
     autoSummaryCount = 0;
 }
 

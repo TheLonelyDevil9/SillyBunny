@@ -1,13 +1,11 @@
-import { getTree, findNodeById, getSettings } from '../tree-store.js';
 import { moveEntry, createCategory } from '../entry-manager.js';
-import { getActiveTunnelVisionBooks, resolveTargetBook, getBookListWithDescriptions, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
+import { getActiveTunnelVisionBooks, resolveTargetBook, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
 import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../activity-feed.js';
 
 const COMPACT_DESCRIPTION = 'Move entries between waypoints or create new waypoints to reorganize the lorebook.';
 
 async function reorganizeAction(args) {
-    const s = getSettings();
     const action = String(args.action || '').trim().toLowerCase();
     const bookName = String(args.book || '').trim();
 
@@ -31,7 +29,7 @@ async function reorganizeAction(args) {
             const targetNodeId = String(args.target_node_id || '').trim();
             if (!uid && uid !== 0) return 'Error: "uid" required for move.';
             if (!targetNodeId) return 'Error: "target_node_id" required for move.';
-            const result = await moveEntry(targetBook, uid, targetNodeId);
+            await moveEntry(targetBook, uid, targetNodeId);
             logToolCallCompleted(TOOL_NAMES.REORGANIZE, `Moved UID:${uid} to ${targetNodeId}`);
             return `🔀 Moved entry UID:${uid} to waypoint ${targetNodeId} in "${targetBook}".`;
         }
@@ -55,7 +53,7 @@ async function reorganizeAction(args) {
 }
 
 async function reorganizeFormatter(args) {
-    return `🔀 Pathfinder: Reorganizing lorebook...`;
+    return '🔀 Pathfinder: Reorganizing lorebook...';
 }
 
 export function getDefinition() {

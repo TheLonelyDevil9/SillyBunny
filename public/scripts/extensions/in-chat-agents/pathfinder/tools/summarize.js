@@ -1,13 +1,12 @@
-import { getTree, findNodeById, createTreeNode, saveTree, getSettings } from '../tree-store.js';
+import { getTree, createTreeNode, saveTree } from '../tree-store.js';
 import { createEntry } from '../entry-manager.js';
-import { getActiveTunnelVisionBooks, resolveTargetBook, getBookListWithDescriptions, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
+import { getActiveTunnelVisionBooks, resolveTargetBook, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
 import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../activity-feed.js';
 
 const COMPACT_DESCRIPTION = 'Create a scene or event summary with significance level and optional narrative arc.';
 
 async function summarizeAction(args) {
-    const s = getSettings();
     const title = String(args.title || '').trim();
     const content = String(args.content || '').trim();
     const arc = String(args.arc || '').trim();

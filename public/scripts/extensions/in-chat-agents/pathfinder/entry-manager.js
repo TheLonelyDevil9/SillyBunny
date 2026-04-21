@@ -1,4 +1,4 @@
-import { getTree, saveTree, findNodeById, addEntryToNode, removeEntryFromTree, createTreeNode, isTrackerTitle, isTrackerUid, setTrackerUid } from './tree-store.js';
+import { getTree, saveTree, findNodeById, addEntryToNode, removeEntryFromTree, createTreeNode, isTrackerTitle, setTrackerUid } from './tree-store.js';
 
 let _loadWorldInfo = null;
 let _createWorldInfoEntry = null;

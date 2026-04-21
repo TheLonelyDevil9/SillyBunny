@@ -2,8 +2,8 @@
  * Prompt Editor UI - UI component for editing pipeline prompts in Pathfinder settings
  */
 
-import { getAllPrompts, getPrompt, savePrompt, isPromptModified, getAllPipelines, getPipeline } from './prompt-store.js';
-import { getDefaultPrompts, getDefaultPipelines } from './default-prompts.js';
+import { getAllPrompts, getPrompt, savePrompt, isPromptModified, getAllPipelines } from './prompt-store.js';
+import { getDefaultPrompts } from './default-prompts.js';
 import { getSettings, setSettings, listConnectionProfiles } from '../tree-store.js';
 
 const EDITOR_HTML = `

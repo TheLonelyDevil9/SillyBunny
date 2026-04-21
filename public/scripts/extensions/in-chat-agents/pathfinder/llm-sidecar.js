@@ -1,44 +1,4 @@
-import { getSettings, findConnectionProfile, listConnectionProfiles } from './tree-store.js';
-
-async function callOpenAI(messages, apiKey, model, apiUrl) {
-    const response = await fetch(apiUrl + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 2048 }),
-    });
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Sidecar API error ${response.status}: ${err}`);
-    }
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-}
-
-async function callAnthropic(messages, apiKey, model) {
-    const systemMsg = messages.find(m => m.role === 'system');
-    const userMsgs = messages.filter(m => m.role !== 'system');
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-            model,
-            max_tokens: 2048,
-            system: systemMsg?.content || 'You are a helpful assistant.',
-            messages: userMsgs,
-        }),
-    });
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Sidecar Anthropic error ${response.status}: ${err}`);
-    }
-    const data = await response.json();
-    return data.content?.[0]?.text || '';
-}
+import { getSettings } from './tree-store.js';
 
 /**
  * Generate using the default connection profile from settings

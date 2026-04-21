@@ -3,7 +3,6 @@ import { initEntryManagerAPIs } from './pathfinder/entry-manager.js';
 import { initActivityFeed } from './pathfinder/activity-feed.js';
 import { initAutoSummary } from './pathfinder/auto-summary.js';
 import { initCommands } from './pathfinder/commands.js';
-import { registerToolAction, registerToolFormatter } from './tool-action-registry.js';
 
 import { getDefinition as getSearchDef, registerActions as registerSearchActions } from './pathfinder/tools/search.js';
 import { getDefinition as getRememberDef, registerActions as registerRememberActions } from './pathfinder/tools/remember.js';

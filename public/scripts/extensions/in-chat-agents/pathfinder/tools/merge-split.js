@@ -1,4 +1,3 @@
-import { getSettings } from '../tree-store.js';
 import { mergeEntries, splitEntry } from '../entry-manager.js';
 import { getActiveTunnelVisionBooks, resolveTargetBook, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
@@ -7,7 +6,6 @@ import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../a
 const COMPACT_DESCRIPTION = 'Merge related entries together or split a long entry into two.';
 
 async function mergeSplitAction(args) {
-    const s = getSettings();
     const action = String(args.action || '').trim().toLowerCase();
     const bookName = String(args.book || '').trim();
 

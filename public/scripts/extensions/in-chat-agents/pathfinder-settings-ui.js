@@ -3,7 +3,7 @@
  */
 
 import { renderExtensionTemplateAsync, getContext } from '../../extensions.js';
-import { saveSettingsDebounced, getRequestHeaders } from '../../../script.js';
+import { saveSettingsDebounced } from '../../../script.js';
 import { world_names, loadWorldInfo } from '../../world-info.js';
 import {
     getPathfinderSettings,
@@ -11,15 +11,13 @@ import {
     runDiagnostics,
 } from './pathfinder-init.js';
 import {
-    getTree,
     saveTree,
     setLorebookEnabled,
-    isLorebookEnabled,
     listConnectionProfiles,
 } from './pathfinder/tree-store.js';
 import { buildTreeFromMetadata } from './pathfinder/tree-builder.js';
 import { syncToolAgentRegistrations } from './agent-runner.js';
-import { getPrompt, savePrompt, getAllPrompts } from './pathfinder/prompts/prompt-store.js';
+import { getPrompt, savePrompt } from './pathfinder/prompts/prompt-store.js';
 import { getDefaultPrompts } from './pathfinder/prompts/default-prompts.js';
 
 const MODULE_NAME = 'in-chat-agents';

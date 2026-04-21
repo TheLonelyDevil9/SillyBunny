@@ -1,6 +1,6 @@
 import { getSettings } from '../tree-store.js';
 import { createEntry } from '../entry-manager.js';
-import { getActiveTunnelVisionBooks, resolveTargetBook, getBookListWithDescriptions, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
+import { getActiveTunnelVisionBooks, resolveTargetBook, TOOL_NAMES } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
 import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../activity-feed.js';
 
@@ -22,7 +22,7 @@ function trigramSimilarity(a, b) {
 }
 
 async function rememberAction(args) {
-    const s = getSettings();
+    const settings = getSettings();
     const title = String(args.title || '').trim();
     const content = String(args.content || '').trim();
     const bookName = String(args.book || '').trim();
@@ -42,7 +42,7 @@ async function rememberAction(args) {
         return 'No Pathfinder-enabled lorebooks available for writing. Enable at least one lorebook.';
     }
 
-    if (s.dedupDetection) {
+    if (settings.dedupDetection) {
         try {
             const ctx = window?.SillyTavern?.getContext?.();
             const bookData = await ctx?.loadWorldInfo?.(targetBook);
@@ -50,7 +50,7 @@ async function rememberAction(args) {
                 for (const [, entry] of Object.entries(bookData.entries)) {
                     if (entry && !entry.disable) {
                         const sim = trigramSimilarity(entry.content || '', content);
-                        if (sim >= (s.dedupThreshold || 0.85)) {
+                        if (sim >= (settings.dedupThreshold || 0.85)) {
                             return `⚠️ Similar entry already exists: "${entry.comment || entry.key?.[0]}" (similarity: ${(sim * 100).toFixed(0)}%). Consider using the Update tool instead. Entry was still saved.`;
                         }
                     }

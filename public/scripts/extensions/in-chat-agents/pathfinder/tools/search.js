@@ -1,4 +1,4 @@
-import { getTree, findNodeById, getAllEntryUids, getSettings } from '../tree-store.js';
+import { getTree, findNodeById, getSettings } from '../tree-store.js';
 import { getReadableBooks, TOOL_NAMES, getBookListWithDescriptions } from '../pathfinder-tool-bridge.js';
 import { registerToolAction, registerToolFormatter } from '../../tool-action-registry.js';
 import { logToolCallStarted, logToolCallCompleted, logToolCallError } from '../activity-feed.js';
@@ -125,7 +125,9 @@ async function loadWorldInfoSafe(name) {
     try {
         const ctx = window?.SillyTavern?.getContext?.();
         return ctx?.loadWorldInfo?.(name);
-    } catch { return null; }
+    } catch {
+        return null;
+    }
 }
 
 function findEntrySafe(entries, uid) {
@@ -137,7 +139,7 @@ function findEntrySafe(entries, uid) {
 }
 
 async function searchFormatter(args) {
-    return `🔍 Pathfinder: Searching lorebook waypoints...`;
+    return '🔍 Pathfinder: Searching lorebook waypoints...';
 }
 
 export function getDefinition() {

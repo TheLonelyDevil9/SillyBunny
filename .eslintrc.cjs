@@ -7,7 +7,7 @@ module.exports = {
         'jsdoc',
     ],
     env: {
-        es6: true,
+        es2021: true,
     },
     parserOptions: {
         ecmaVersion: 'latest',
@@ -79,6 +79,7 @@ module.exports = {
         '**/*.min.js',
         'public/scripts/extensions/quick-reply/lib/**',
         'public/scripts/extensions/tts/lib/**',
+        'public/scripts/extensions/third-party/**',
     ],
     rules: {
         'jsdoc/no-undefined-types': ['warn', { disableReporting: true, markVariablesAsUsed: true }],
