@@ -209,6 +209,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Quick context shortcut buttons now render in a strict horizontal row for both Text Completions and Chat Completions
 - Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
 - Recent Chats now clips cleanly with corrected corner rounding
+- Expanded the Prompt Manager editor pane and widened its dropdown controls in the workspace shell so menu fields no longer feel cramped on desktop
 
 **Bug fixes**
 
