@@ -12,6 +12,8 @@
     --sb-topbar-stack-gap-base: 4px;
     --sb-topbar-bottom-padding-base: 4px;
     --sb-topbar-inline-gap-base: 10px;
+    --sb-topbar-search-row-height-base: 42px;
+    --sb-topbar-search-panel-gap-base: 8px;
     --sb-topbar-group-gap-base: 8px;
     --sb-chatbar-height-base: 40px;
     --sb-chatbar-gap-base: 6px;
@@ -65,6 +67,8 @@
     --sb-topbar-stack-gap: calc(var(--sb-topbar-stack-gap-base) * var(--sb-topbar-scale-active));
     --sb-topbar-bottom-padding: calc(var(--sb-topbar-bottom-padding-base) * var(--sb-topbar-scale-active));
     --sb-topbar-inline-gap: calc(var(--sb-topbar-inline-gap-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-search-row-height: calc(var(--sb-topbar-search-row-height-base) * var(--sb-topbar-scale-active));
+    --sb-topbar-search-panel-gap: calc(var(--sb-topbar-search-panel-gap-base) * var(--sb-topbar-scale-active));
     --sb-topbar-group-gap: calc(var(--sb-topbar-group-gap-base) * var(--sb-topbar-scale-active));
     --sb-chatbar-height: calc(var(--sb-chatbar-height-base) * var(--sb-topbar-scale-active));
     --sb-chatbar-gap: calc(var(--sb-chatbar-gap-base) * var(--sb-topbar-scale-active));
@@ -116,7 +120,12 @@
     --sb-mobile-tools-section-gap: calc(var(--sb-mobile-tools-section-gap-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-section-title-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-section-title-scale-base) * var(--sb-topbar-scale-active));
     --sb-mobile-tools-status-size: calc(var(--mainFontSize) * var(--sb-mobile-tools-status-scale-base) * var(--sb-topbar-scale-active));
-    --sb-topbar-stack-height: calc(var(--sb-topbar-primary-height) + var(--sb-chatbar-height) + var(--sb-topbar-stack-gap));
+    --sb-topbar-stack-height: calc(
+        var(--sb-topbar-primary-height)
+        + var(--sb-topbar-search-row-height)
+        + var(--sb-chatbar-height)
+        + (var(--sb-topbar-stack-gap) * 2)
+    );
     --sb-topbar-layout-offset: var(--sb-topbar-stack-height);
     --sb-topbar-max-width: min(calc(var(--sheldWidth) + 220px), calc(100vw - 20px));
 }
@@ -144,12 +153,12 @@
     top: 0 !important;
     left: 0;
     right: 0;
-    z-index: 3002;
+    z-index: 4100;
     pointer-events: none;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    height: var(--sb-topbar-primary-height);
+    height: var(--sb-topbar-layout-offset);
     padding: max(env(safe-area-inset-top), 0px) var(--sb-topbar-padding-x) 0;
     overflow: visible;
 }
@@ -177,18 +186,27 @@ body.sb-topbar-dragging {
 #sb-topbar-stack {
     width: min(100%, var(--sb-topbar-max-width));
     display: grid;
-    grid-template-rows: var(--sb-topbar-primary-height) minmax(var(--sb-chatbar-height), auto);
+    grid-template-rows:
+        var(--sb-topbar-primary-height)
+        var(--sb-topbar-search-row-height)
+        minmax(var(--sb-chatbar-height), auto);
     gap: var(--sb-topbar-stack-gap);
     contain: layout style;
 }
 
 body.sb-topbar-compact {
-    --sb-topbar-layout-offset: var(--sb-topbar-primary-height);
+    --sb-topbar-layout-offset: calc(
+        var(--sb-topbar-primary-height)
+        + var(--sb-topbar-search-row-height)
+        + var(--sb-topbar-stack-gap)
+    );
 }
 
 body.sb-topbar-compact #sb-topbar-stack {
-    grid-template-rows: var(--sb-topbar-primary-height);
-    gap: 0;
+    grid-template-rows:
+        var(--sb-topbar-primary-height)
+        var(--sb-topbar-search-row-height);
+    gap: var(--sb-topbar-stack-gap);
 }
 
 body.sb-topbar-compact #sb-chatbar-layer {
@@ -293,6 +311,97 @@ body.sb-topbar-compact #sb-chatbar-layer {
     min-width: 0;
     overflow: hidden;
     text-align: center;
+}
+
+#sb-topbar-search-row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    min-height: var(--sb-topbar-search-row-height);
+}
+
+.sb-universal-search {
+    position: relative;
+    width: min(100%, 560px);
+    min-width: min(100%, 240px);
+}
+
+.sb-universal-search-field {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--sb-topbar-search-row-height);
+    padding: 0 14px;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 88%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--SmartThemeBodyColor);
+    box-shadow: 0 12px 24px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
+    cursor: text;
+}
+
+.sb-universal-search-field::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--sb-chatbar-surface-bg, color-mix(in srgb, var(--sb-shell-main-bg) 94%, transparent));
+    opacity: var(--sb-shell-control-opacity);
+}
+
+.sb-universal-search-field i {
+    flex: 0 0 auto;
+    opacity: 0.72;
+    font-size: calc(var(--mainFontSize) * 0.8);
+}
+
+.sb-universal-search-field input {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: inherit;
+    min-height: 0 !important;
+    height: auto !important;
+}
+
+.sb-universal-search-field input:focus {
+    outline: none;
+}
+
+.sb-universal-search-field input::placeholder {
+    opacity: 0.62;
+}
+
+.sb-universal-search.is-open .sb-universal-search-field,
+.sb-universal-search-field:focus-within {
+    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 34%, var(--sb-shell-border) 66%);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 16%, transparent);
+}
+
+.sb-universal-search-panel {
+    position: absolute;
+    top: calc(100% + var(--sb-topbar-search-panel-gap));
+    left: 0;
+    right: 0;
+    z-index: 6;
+}
+
+.sb-universal-search:not(.is-open) .sb-universal-search-panel {
+    display: none;
+}
+
+.sb-universal-search .sb-search-results {
+    margin: 0;
+    pointer-events: auto;
 }
 
 #sb-chatbar {
@@ -2884,6 +2993,7 @@ body.sb-shell-resizing * {
         --sb-topbar-scale-active: var(--sb-topbar-scale-mobile);
         --sb-topbar-padding-x-base: 8px;
         --sb-topbar-inline-gap-base: 6px;
+        --sb-topbar-search-row-height-base: 36px;
         --sb-topbar-group-gap-base: 4px;
         --sb-chatbar-height-base: 38px;
         --sb-chatbar-button-size-base: 26px;
@@ -2929,12 +3039,15 @@ body.sb-shell-resizing * {
     }
 
     #top-bar {
-        height: var(--sb-topbar-primary-height);
+        height: var(--sb-topbar-layout-offset);
         padding: 0 var(--sb-topbar-padding-x);
     }
 
     #sb-topbar-stack {
-        grid-template-rows: var(--sb-topbar-primary-height) minmax(var(--sb-chatbar-height), auto);
+        grid-template-rows:
+            var(--sb-topbar-primary-height)
+            var(--sb-topbar-search-row-height)
+            minmax(var(--sb-chatbar-height), auto);
         gap: var(--sb-topbar-stack-gap);
         width: 100%;
     }
@@ -3044,6 +3157,20 @@ body.sb-shell-resizing * {
         text-align: center;
         width: 100%;
         padding: 0 2px;
+    }
+
+    .sb-universal-search {
+        width: 100%;
+    }
+
+    .sb-universal-search-field {
+        gap: 8px;
+        padding: 0 12px;
+    }
+
+    .sb-universal-search .sb-search-results {
+        max-height: min(300px, 44vh);
+        padding: 8px;
     }
 
     #sb-hamburger,

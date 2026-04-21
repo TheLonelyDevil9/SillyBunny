@@ -302,6 +302,12 @@ const SB_SEARCH_TARGET_SELECTOR = [
     '.ch_name',
 ].join(', ');
 
+const SB_UNIVERSAL_SEARCH_PLACEHOLDER = 'Search every setting, extension, or config';
+const SB_UNIVERSAL_SEARCH_IDLE_TITLE = 'Search every setting';
+const SB_UNIVERSAL_SEARCH_IDLE_HINT = 'Jump to any workspace or customization control from one place.';
+const SB_UNIVERSAL_SEARCH_EMPTY_HINT = 'Try a broader term or a different setting name.';
+const SB_UNIVERSAL_SEARCH_RESULT_LIMIT = 10;
+
 const sbState = {
     initialized: false,
     initRetryTimer: 0,
@@ -336,6 +342,13 @@ const sbState = {
         windowBindingsAttached: false,
     },
     shells: {},
+    universalSearch: {
+        root: null,
+        input: null,
+        results: null,
+        expanded: false,
+        dismissBound: false,
+    },
     shellSizing: {
         overrides: {
             left: normalizeShellSize(safeGetItem(SB_STORAGE_KEYS.leftShellSize)),
@@ -808,66 +821,55 @@ function getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element 
     ].filter(Boolean).join('::');
 }
 
-function formatSearchExamples(examples) {
-    const filteredExamples = Array.isArray(examples)
-        ? examples.map(example => String(example ?? '').trim()).filter(Boolean)
-        : [];
-
-    if (!filteredExamples.length) {
-        return '';
-    }
-
-    if (filteredExamples.length === 1) {
-        return `"${filteredExamples[0]}"`;
-    }
-
-    if (filteredExamples.length === 2) {
-        return `"${filteredExamples[0]}" or "${filteredExamples[1]}"`;
-    }
-
-    const leadingExamples = filteredExamples.slice(0, -1).map(example => `"${example}"`).join(', ');
-    return `${leadingExamples}, or "${filteredExamples.at(-1)}"`;
+function getUniversalSearchState() {
+    return sbState.universalSearch;
 }
 
-function getSearchAssistCopy(shellKey, tabState = null) {
-    const shellConfig = getShellConfig(shellKey);
-    const activeTab = tabState ?? getShellState(shellKey)?.tabs.get(getShellState(shellKey)?.activeTabId) ?? null;
-    const placeholder = activeTab?.searchPlaceholder || shellConfig?.searchPlaceholder || 'Search';
-    const hintPrefix = activeTab?.searchHint || shellConfig?.searchHint || '';
-    const exampleSource = Array.isArray(activeTab?.searchExamples) && activeTab.searchExamples.length
-        ? activeTab.searchExamples
-        : shellConfig?.searchExamples;
-    const exampleText = formatSearchExamples(exampleSource);
-    const hint = [hintPrefix, exampleText ? `Try ${exampleText}.` : '']
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+function renderSearchEmptyState(container, title, detail) {
+    container.replaceChildren();
 
-    return {
-        placeholder,
-        hint,
-        emptyHint: hint || 'Try a broader term.',
-    };
+    const empty = createElement('div', { className: 'sb-search-empty' });
+    const emptyTitle = createElement('strong', { text: title });
+    const emptyCopy = createElement('span', { text: detail });
+    empty.append(emptyTitle, emptyCopy);
+    container.appendChild(empty);
 }
 
-function updateShellSearchAssist(shellKey) {
-    const shellState = getShellState(shellKey);
+function setUniversalSearchOpenState(isOpen, { focusInput = false } = {}) {
+    const searchState = getUniversalSearchState();
+    const root = searchState.root;
+    const nextOpenState = Boolean(isOpen);
 
-    if (!shellState) {
-        return;
+    searchState.expanded = nextOpenState;
+    root?.classList.toggle('is-open', nextOpenState);
+
+    if (!nextOpenState) {
+        searchState.results?.classList.remove('is-visible');
+    } else {
+        renderUniversalSearchResults(searchState.input?.value ?? '');
     }
 
-    const assistCopy = getSearchAssistCopy(shellKey, shellState.tabs.get(shellState.activeTabId));
+    if (focusInput && searchState.input instanceof HTMLInputElement) {
+        searchState.input.focus({ preventScroll: true });
+    }
+}
 
-    if (shellState.searchInput instanceof HTMLInputElement) {
-        shellState.searchInput.placeholder = assistCopy.placeholder;
-        shellState.searchInput.setAttribute('aria-label', assistCopy.placeholder);
+function clearUniversalSearch({ blur = false } = {}) {
+    const searchState = getUniversalSearchState();
+
+    if (searchState.input instanceof HTMLInputElement) {
+        searchState.input.value = '';
+        if (blur && document.activeElement === searchState.input) {
+            searchState.input.blur();
+        }
     }
 
-    if (shellState.searchHint instanceof HTMLElement) {
-        shellState.searchHint.textContent = assistCopy.hint;
-        shellState.searchHint.hidden = !assistCopy.hint;
+    if (searchState.results instanceof HTMLElement) {
+        searchState.results.replaceChildren();
+        searchState.results.classList.remove('is-visible');
     }
+
+    setUniversalSearchOpenState(false);
 }
 
 function isActuallyVisible(element) {
@@ -1269,22 +1271,6 @@ function ensureMobileNavReady() {
 
     buildMobileNav();
     return document.getElementById('sb-mobile-nav');
-}
-
-function clearShellSearch(shellKey) {
-    const shellState = getShellState(shellKey);
-    if (!shellState) {
-        return;
-    }
-
-    if (shellState.searchInput instanceof HTMLInputElement) {
-        shellState.searchInput.value = '';
-    }
-
-    if (shellState.searchResults instanceof HTMLElement) {
-        shellState.searchResults.replaceChildren();
-        shellState.searchResults.classList.remove('is-visible');
-    }
 }
 
 function getThemeOption(themeId) {
@@ -3507,6 +3493,7 @@ function closeAllDropdowns({ except = '' } = {}) {
     if (except !== 'left') closeShell('left');
     if (except !== 'right') closeShell('right');
     if (except !== 'characters') closeCharacterPanel();
+    if (except !== 'search') setUniversalSearchOpenState(false);
     closeMobileNav();
     closeMobileChatTools();
     setConnectionStripOpenState(false);
@@ -3656,6 +3643,96 @@ function wasShellJustOpened(shellKey) {
     return (performance.now() - Number(shellState.lastOpenedAt || 0)) < SB_SHELL_TOGGLE_GUARD_MS;
 }
 
+function buildUniversalSearchRow() {
+    const row = createElement('div', { id: 'sb-topbar-search-row' });
+    const search = createElement('div', { id: 'sb-universal-search', className: 'sb-universal-search' });
+    const field = createElement('label', { className: 'sb-universal-search-field' });
+    const searchIcon = createElement('i', {
+        className: 'fa-solid fa-magnifying-glass',
+        attrs: {
+            'aria-hidden': 'true',
+        },
+    });
+    const searchInput = createElement('input', {
+        className: 'text_pole',
+        attrs: {
+            type: 'search',
+            placeholder: SB_UNIVERSAL_SEARCH_PLACEHOLDER,
+            'aria-label': SB_UNIVERSAL_SEARCH_PLACEHOLDER,
+            autocomplete: 'off',
+            enterkeyhint: 'search',
+            spellcheck: 'false',
+        },
+    });
+    const panel = createElement('div', { className: 'sb-universal-search-panel' });
+    const searchResults = createElement('div', {
+        className: 'sb-search-results',
+        attrs: {
+            role: 'listbox',
+            'aria-label': 'Universal search results',
+        },
+    });
+
+    field.append(searchIcon, searchInput);
+    panel.appendChild(searchResults);
+    search.append(field, panel);
+    row.appendChild(search);
+
+    sbState.universalSearch.root = search;
+    sbState.universalSearch.input = searchInput;
+    sbState.universalSearch.results = searchResults;
+    sbState.universalSearch.expanded = false;
+
+    stopProxyPointerPropagation(search);
+
+    field.addEventListener('click', () => {
+        setUniversalSearchOpenState(true, { focusInput: true });
+    });
+
+    searchInput.addEventListener('focus', () => {
+        setUniversalSearchOpenState(true);
+    });
+
+    searchInput.addEventListener('input', () => {
+        setUniversalSearchOpenState(true);
+    });
+
+    searchInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            const firstMatch = searchResults.querySelector('.sb-search-result');
+            if (firstMatch instanceof HTMLButtonElement) {
+                event.preventDefault();
+                firstMatch.click();
+            }
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            clearUniversalSearch({ blur: true });
+        }
+    });
+
+    if (!sbState.universalSearch.dismissBound) {
+        document.addEventListener('click', event => {
+            const searchState = getUniversalSearchState();
+
+            if (!searchState.expanded || !(searchState.root instanceof HTMLElement)) {
+                return;
+            }
+
+            if (event.target instanceof Node && searchState.root.contains(event.target)) {
+                return;
+            }
+
+            setUniversalSearchOpenState(false);
+        });
+
+        sbState.universalSearch.dismissBound = true;
+    }
+
+    return row;
+}
+
 function buildTopBar() {
     const topBar = document.getElementById('top-bar');
     if (!(topBar instanceof HTMLElement)) {
@@ -3666,6 +3743,7 @@ function buildTopBar() {
 
     const stack = createElement('div', { id: 'sb-topbar-stack' });
     const primaryRow = createElement('div', { id: 'sb-topbar-primary' });
+    const searchRow = buildUniversalSearchRow();
     const topBarInner = createElement('div', { id: 'sb-topbar-inner' });
     const leftGroup = createElement('div', { className: 'sb-topbar-group sb-topbar-group-left' });
     const centerGroup = createElement('div', { className: 'sb-topbar-brand' });
@@ -3769,7 +3847,7 @@ function buildTopBar() {
     topBarInner.append(leftGroup, centerGroup, rightGroup);
     primaryRow.appendChild(topBarInner);
 
-    stack.append(primaryRow);
+    stack.append(primaryRow, searchRow);
     topBar.append(stack);
 
     observeProxyButton('sb-left-shell-toggle', getShellConfig('left').hostIconSelector);
@@ -6030,114 +6108,132 @@ function getSearchSectionLabel(element, fallback) {
     return text || fallback;
 }
 
-function renderSearchResults(shellKey, query) {
-    const shellState = getShellState(shellKey);
-    if (!shellState) {
-        return;
-    }
-
+function collectGlobalSearchMatches(query) {
     const normalizedQuery = normalizeText(query);
-    const assistCopy = getSearchAssistCopy(shellKey, shellState.tabs.get(shellState.activeTabId));
-    shellState.searchResults.replaceChildren();
-
-    if (!(shellState.root instanceof HTMLElement) || !shellState.root.classList.contains('openDrawer')) {
-        shellState.searchResults.classList.remove('is-visible');
-        return;
-    }
 
     if (!normalizedQuery) {
-        shellState.searchResults.classList.remove('is-visible');
-        return;
+        return [];
     }
 
     const searchTerms = normalizedQuery.split(' ').filter(Boolean);
     const matches = new Map();
 
-    for (const tabState of shellState.tabs.values()) {
-        // Build index once; it's invalidated when the tab activates (content may have changed)
-        if (!tabState.searchIndex) {
-            tabState.searchIndex = createSearchIndex(tabState);
-        }
+    for (const [shellKey, shellState] of Object.entries(sbState.shells)) {
+        const shellLabel = getShellConfig(shellKey)?.title || shellKey;
 
-        // Supplement with persona data entries for the persona tab
-        const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : [];
-
-        for (const entry of [...tabState.searchIndex, ...extraEntries]) {
-            if (!searchTerms.every(term => entry.searchText.includes(term))) {
-                continue;
+        for (const tabState of shellState.tabs.values()) {
+            if (!tabState.searchIndex) {
+                tabState.searchIndex = createSearchIndex(tabState);
             }
 
-            const startsWithQuery = entry.searchText.startsWith(normalizedQuery);
-            const exactMatch = entry.searchText === normalizedQuery;
-            const match = {
-                ...entry,
-                score: Number(exactMatch) * 100 + Number(startsWithQuery) * 10 - entry.displayText.length / 1000,
-            };
-            const matchKey = entry.dedupeKey || [
-                entry.tabId,
-                normalizeText(entry.sectionLabel),
-                normalizeText(entry.displayText),
-            ].filter(Boolean).join('::');
-            const existingMatch = matches.get(matchKey);
-            const shouldReplaceMatch = !existingMatch
-                || match.score > existingMatch.score
-                || (match.score === existingMatch.score
-                    && typeof match.action === 'function'
-                    && typeof existingMatch.action !== 'function');
+            const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : [];
 
-            if (shouldReplaceMatch) {
-                matches.set(matchKey, match);
+            for (const entry of [...tabState.searchIndex, ...extraEntries]) {
+                if (!searchTerms.every(term => entry.searchText.includes(term))) {
+                    continue;
+                }
+
+                const startsWithQuery = entry.searchText.startsWith(normalizedQuery);
+                const exactMatch = entry.searchText === normalizedQuery;
+                const match = {
+                    ...entry,
+                    shellKey,
+                    shellLabel,
+                    score: Number(exactMatch) * 100 + Number(startsWithQuery) * 10 - entry.displayText.length / 1000,
+                };
+                const matchKey = [
+                    shellKey,
+                    entry.dedupeKey || [
+                        entry.tabId,
+                        normalizeText(entry.sectionLabel),
+                        normalizeText(entry.displayText),
+                    ].filter(Boolean).join('::'),
+                ].filter(Boolean).join('::');
+                const existingMatch = matches.get(matchKey);
+                const shouldReplaceMatch = !existingMatch
+                    || match.score > existingMatch.score
+                    || (match.score === existingMatch.score
+                        && typeof match.action === 'function'
+                        && typeof existingMatch.action !== 'function');
+
+                if (shouldReplaceMatch) {
+                    matches.set(matchKey, match);
+                }
             }
         }
     }
 
-    Array.from(matches.values())
+    return Array.from(matches.values())
         .sort((left, right) => right.score - left.score)
-        .slice(0, 10)
-        .forEach(match => {
-            const button = createElement('button', {
-                className: 'sb-search-result',
-                attrs: {
-                    type: 'button',
-                },
-            });
-            const detailText = normalizeText(match.displayText) === normalizeText(match.sectionLabel)
-                ? `Jump straight to this item in ${match.tabLabel}.`
-                : match.displayText;
+        .slice(0, SB_UNIVERSAL_SEARCH_RESULT_LIMIT);
+}
 
-            // When section label is the same as tab label, show the matched text as primary
-            const sectionDisplay = match.sectionLabel === match.tabLabel
-                ? match.displayText || match.tabLabel
-                : match.sectionLabel;
+function renderUniversalSearchResults(query) {
+    const searchState = getUniversalSearchState();
+    const results = searchState.results;
 
-            button.innerHTML = `
-                <strong>${sectionDisplay}</strong>
-                ${sectionDisplay !== match.displayText ? `<span>${detailText}</span>` : ''}
-                <small>${match.tabLabel}</small>
-            `;
-
-            button.addEventListener('click', () => {
-                shellState.searchInput.value = '';
-                shellState.searchResults.classList.remove('is-visible');
-                revealSearchMatch(shellKey, match);
-            });
-
-            shellState.searchResults.appendChild(button);
-        });
-
-    if (!shellState.searchResults.childElementCount) {
-        const empty = createElement('div', { className: 'sb-search-empty' });
-        const emptyTitle = createElement('strong', {
-            text: query.trim() ? `No matches for "${query.trim()}" yet.` : 'No matches yet.',
-        });
-        const emptyCopy = createElement('span', {
-            text: assistCopy.emptyHint,
-        });
-        empty.append(emptyTitle, emptyCopy);
-        shellState.searchResults.appendChild(empty);
+    if (!(results instanceof HTMLElement)) {
+        return;
     }
 
-    shellState.searchResults.classList.add('is-visible');
+    results.replaceChildren();
+
+    if (!searchState.expanded) {
+        results.classList.remove('is-visible');
+        return;
+    }
+
+    const trimmedQuery = String(query ?? '').trim();
+
+    if (!trimmedQuery) {
+        renderSearchEmptyState(results, SB_UNIVERSAL_SEARCH_IDLE_TITLE, SB_UNIVERSAL_SEARCH_IDLE_HINT);
+        results.classList.add('is-visible');
+        return;
+    }
+
+    const matches = collectGlobalSearchMatches(trimmedQuery);
+
+    for (const match of matches) {
+        const button = createElement('button', {
+            className: 'sb-search-result',
+            attrs: {
+                type: 'button',
+            },
+        });
+        const detailText = normalizeText(match.displayText) === normalizeText(match.sectionLabel)
+            ? `Jump straight to this item in ${match.tabLabel}.`
+            : match.displayText;
+        const sectionDisplay = match.sectionLabel === match.tabLabel
+            ? match.displayText || match.tabLabel
+            : match.sectionLabel;
+
+        button.appendChild(createElement('strong', { text: sectionDisplay }));
+
+        if (sectionDisplay !== match.displayText) {
+            button.appendChild(createElement('span', { text: detailText }));
+        }
+
+        button.appendChild(createElement('small', {
+            text: `${match.shellLabel} · ${match.tabLabel}`,
+        }));
+
+        button.addEventListener('click', () => {
+            clearUniversalSearch({ blur: true });
+            revealSearchMatch(match.shellKey, match);
+        });
+
+        results.appendChild(button);
+    }
+
+    if (!results.childElementCount) {
+        renderSearchEmptyState(
+            results,
+            `No matches for "${trimmedQuery}" yet.`,
+            SB_UNIVERSAL_SEARCH_EMPTY_HINT,
+        );
+    }
+
+    results.classList.add('is-visible');
 }
 
 function expandHiddenAccordions(target) {
@@ -6177,6 +6273,8 @@ function pulseSearchTarget(target) {
 }
 
 function revealSearchMatch(shellKey, match) {
+    closeAllDropdowns({ except: shellKey });
+
     // Entries with a custom action (e.g. persona results) bypass DOM scrolling
     if (typeof match.action === 'function') {
         match.action();
@@ -6221,7 +6319,6 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     const activeTab = shellState.tabs.get(tabId);
     shellState.headerTitle.textContent = activeTab.label;
     shellState.headerSubtitle.textContent = activeTab.description;
-    updateShellSearchAssist(shellKey);
     activeTab.button?.scrollIntoView({
         block: 'nearest',
         inline: 'nearest',
@@ -6241,10 +6338,6 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
     const shellRoot = document.getElementById(shellConfig.rootPanelId);
     if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
         dispatchShellTabActivated(shellKey, activeTab);
-    }
-
-    if (shellState.searchInput instanceof HTMLInputElement && shellState.searchInput.value.trim()) {
-        renderSearchResults(shellKey, shellState.searchInput.value);
     }
 }
 
@@ -6294,7 +6387,6 @@ function closeShell(shellKey) {
     }
 
     shellState?.tabs.get(shellState.activeTabId)?.onDeactivate?.();
-    clearShellSearch(shellKey);
 
     if (!isDrawerActuallyOpen(shellRoot)) {
         forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
@@ -6394,18 +6486,6 @@ function buildShell(shellKey) {
     const title = createElement('h2', { className: 'sb-shell-title', text: shellConfig.baseTab.label });
     const subtitle = createElement('p', { className: 'sb-shell-subtitle', text: shellConfig.baseTab.description });
     const shellDescription = createElement('p', { className: 'sb-shell-description', text: shellConfig.subtitle });
-    const searchWrap = createElement('label', { className: 'sb-shell-search' });
-    const searchIcon = createElement('i', { className: 'fa-solid fa-magnifying-glass' });
-    const searchInput = createElement('input', {
-        className: 'text_pole',
-        attrs: {
-            type: 'search',
-            placeholder: shellConfig.searchPlaceholder,
-            'aria-label': shellConfig.searchPlaceholder,
-        },
-    });
-    const searchHint = createElement('p', { className: 'sb-shell-search-note' });
-    const searchResults = createElement('div', { className: 'sb-search-results' });
     const panelBody = createElement('div', { className: 'sb-shell-body' });
     const resizeHandle = createElement('div', {
         className: 'sb-shell-resize-handle',
@@ -6420,9 +6500,7 @@ function buildShell(shellKey) {
     stopProxyPointerPropagation(resizeHandle);
     resizeHandle.addEventListener('pointerdown', event => beginShellResize(shellKey, event));
 
-    searchWrap.append(searchIcon, searchInput);
-    searchHint.hidden = true;
-    header.append(closeButton, eyebrow, title, subtitle, shellDescription, searchWrap, searchHint, searchResults);
+    header.append(closeButton, eyebrow, title, subtitle, shellDescription);
     main.append(header, panelBody);
     frame.append(navWrapper, main, resizeHandle);
     shellRoot.appendChild(frame);
@@ -6434,9 +6512,6 @@ function buildShell(shellKey) {
         nav,
         headerTitle: title,
         headerSubtitle: subtitle,
-        searchInput,
-        searchHint,
-        searchResults,
         root: shellRoot,
         resizeHandle,
         updateNavScrollIndicators,
@@ -6465,7 +6540,6 @@ function buildShell(shellKey) {
         }
 
         shellState.tabs.get(shellState.activeTabId)?.onDeactivate?.();
-        clearShellSearch(shellKey);
     }).observe(shellRoot, { attributes: true, attributeFilter: ['class'] });
 
     const basePanel = createShellPanel(shellConfig.baseTab);
@@ -6507,22 +6581,6 @@ function buildShell(shellKey) {
     const storedTabId = safeGetItem(shellConfig.storageKey);
     const nextActiveTab = shellState.tabs.has(storedTabId) ? storedTabId : shellConfig.defaultTabId;
     setActiveTab(shellKey, nextActiveTab);
-
-    searchInput.addEventListener('input', () => renderSearchResults(shellKey, searchInput.value));
-    searchInput.addEventListener('keydown', event => {
-        if (event.key === 'Enter') {
-            const firstMatch = searchResults.querySelector('.sb-search-result');
-            if (firstMatch instanceof HTMLElement) {
-                event.preventDefault();
-                firstMatch.click();
-            }
-        }
-
-        if (event.key === 'Escape') {
-            searchInput.value = '';
-            searchResults.classList.remove('is-visible');
-        }
-    });
 
     if (shellKey === 'right') {
         injectThemePicker();
