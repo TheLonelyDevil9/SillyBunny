@@ -86,6 +86,12 @@ const REGEX_PLACEMENT_LABELS = {
     [AGENT_REGEX_PLACEMENT.REASONING]: 'Reasoning',
 };
 
+const AGENT_PHASE_LABELS = {
+    pre: 'pre',
+    post: 'post',
+    both: 'pre + post',
+};
+
 function getTemplateAssetUrl(filename) {
     return `/scripts/extensions/${MODULE_NAME}/templates/${filename}?v=${encodeURIComponent(CLIENT_VERSION || 'dev')}`;
 }
@@ -112,6 +118,23 @@ function restoreAutoSeededTemplateIds(savedState) {
 function stopEvent(event) {
     event.preventDefault();
     event.stopPropagation();
+}
+
+function sortAgentsByOrder(agentList = []) {
+    return [...agentList].sort((a, b) => Number(a?.injection?.order ?? 0) - Number(b?.injection?.order ?? 0));
+}
+
+async function toggleAgentEnabled(agent) {
+    agent.enabled = !agent.enabled;
+    await saveAgent(agent);
+    syncToolAgentRegistrations();
+    renderAgentList();
+}
+
+async function toggleAgentFavorite(agent) {
+    agent.favorite = !agent.favorite;
+    await saveAgent(agent);
+    renderAgentList();
 }
 
 function getConnectionManagerRequestService() {
@@ -854,7 +877,7 @@ function setupCategorySortable(itemsEl) {
         delay: touchSortable ? 1500 : getSortableDelay(),
         distance: touchSortable ? 16 : 8,
         tolerance: 'pointer',
-        cancel: '.ica--card-actions, .ica--card-actions *, .ica--card-toggle, .ica--card-select',
+        cancel: '.ica--card-actions, .ica--card-actions *, .ica--card-toggle, .ica--card-select, .ica--card-favorite',
         placeholder: 'ica--agent-card-placeholder',
         forcePlaceholderSize: true,
         start: function (_event, ui) {
@@ -1034,11 +1057,11 @@ function renderAgentList() {
     const scrollState = captureAgentListScrollState(container[0]);
     container.empty();
     const profileNames = buildProfileNameMap();
+    const allAgents = sortAgentsByOrder(getAgents());
 
     const searchTerm = ($('#ica--search').val() || '').toString().toLowerCase();
     const categoryFilter = ($('#ica--categoryFilter').val() || '').toString();
-
-    let agents = getAgents().sort((a, b) => a.injection.order - b.injection.order);
+    let agents = [...allAgents];
 
     if (searchTerm) {
         agents = agents.filter(a =>
@@ -1052,6 +1075,64 @@ function renderAgentList() {
         agents = agents.filter(a => a.category === categoryFilter);
     }
 
+    if (!selectModeActive && allAgents.length > 0) {
+        const favoriteAgents = allAgents.filter(agent => agent.favorite);
+        const quickSection = $(`
+            <div class="ica--quick-section">
+                <div class="ica--quick-header">
+                    <div class="ica--quick-title">
+                        <i class="fa-solid fa-star"></i>
+                        <span>Quick Toggles</span>
+                    </div>
+                    <span class="ica--quick-count">${favoriteAgents.length} pinned</span>
+                </div>
+                <div class="ica--quick-subtitle">Pin the agents you use most often for one-tap enable and disable.</div>
+                <div class="ica--quick-grid"></div>
+            </div>
+        `);
+        const quickGrid = quickSection.find('.ica--quick-grid');
+
+        if (favoriteAgents.length === 0) {
+            quickGrid.append('<div class="ica--quick-empty">No pinned agents yet. Use the star button on an agent card or in the editor to keep it here.</div>');
+        } else {
+            for (const agent of favoriteAgents) {
+                const enabledClass = agent.enabled ? 'is-enabled' : '';
+                const categoryLabel = AGENT_CATEGORIES[agent.category]?.label ?? 'Custom';
+                const phaseLabel = AGENT_PHASE_LABELS[agent.phase] || agent.phase;
+                const quickItem = $(`
+                    <div class="ica--quick-chip ${enabledClass}">
+                        <button type="button" class="ica--quick-chip-main" title="${agent.enabled ? 'Disable agent' : 'Enable agent'}">
+                            <span class="ica--quick-chip-status">
+                                <i class="fa-solid ${agent.enabled ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                            </span>
+                            <span class="ica--quick-chip-copy">
+                                <span class="ica--quick-chip-name">${escapeHtml(agent.name || 'Untitled Agent')}</span>
+                                <span class="ica--quick-chip-meta">${escapeHtml(categoryLabel)} • ${escapeHtml(phaseLabel)}</span>
+                            </span>
+                        </button>
+                        <button type="button" class="ica--quick-chip-pin is-active" title="Remove from Quick Toggles">
+                            <i class="fa-solid fa-star"></i>
+                        </button>
+                    </div>
+                `);
+
+                quickItem.find('.ica--quick-chip-main').on('click', async event => {
+                    stopEvent(event);
+                    await toggleAgentEnabled(agent);
+                });
+
+                quickItem.find('.ica--quick-chip-pin').on('click', async event => {
+                    stopEvent(event);
+                    await toggleAgentFavorite(agent);
+                });
+
+                quickGrid.append(quickItem);
+            }
+        }
+
+        container.append(quickSection);
+    }
+
     // Group by category
     const grouped = {};
     for (const cat of Object.keys(AGENT_CATEGORIES)) {
@@ -1062,12 +1143,12 @@ function renderAgentList() {
     }
 
     if (Object.keys(grouped).length === 0) {
-        container.append('<div class="ica--empty-state">No agents yet. Click <b>New Agent</b> or <b>Templates</b> to get started.</div>');
+        container.append(allAgents.length === 0
+            ? '<div class="ica--empty-state">No agents yet. Click <b>New Agent</b> or <b>Templates</b> to get started.</div>'
+            : '<div class="ica--empty-state">No agents match the current filters.</div>');
         restoreAgentListScrollState(scrollState);
         return;
     }
-
-    const phaseLabels = { pre: 'pre', post: 'post', both: 'pre + post' };
 
     for (const [cat, catAgents] of Object.entries(grouped)) {
         const catInfo = AGENT_CATEGORIES[cat];
@@ -1112,10 +1193,15 @@ function renderAgentList() {
                     <div class="ica--card-header">
                         ${selectModeActive ? `<input type="checkbox" class="ica--card-select" title="Select agent" ${selectedAgentIds.has(agent.id) ? 'checked' : ''} />` : `<button type="button" class="ica--card-toggle ${toggleClass}" title="${agent.enabled ? 'Disable' : 'Enable'}"></button>`}
                         <span class="ica--card-name">${escapeHtml(agent.name)}</span>
-                        <span class="ica--card-phase">${phaseLabels[agent.phase] || agent.phase}</span>
-                        <button type="button" class="ica--card-drag-handle" title="Hold and drag to reorder">
-                            <i class="fa-solid fa-grip-vertical"></i>
-                        </button>
+                        <div class="ica--card-header-actions">
+                            <button type="button" class="ica--card-favorite ${agent.favorite ? 'is-active' : ''}" title="${agent.favorite ? 'Remove from Quick Toggles' : 'Add to Quick Toggles'}">
+                                <i class="fa-solid fa-star"></i>
+                            </button>
+                            <span class="ica--card-phase">${AGENT_PHASE_LABELS[agent.phase] || agent.phase}</span>
+                            <button type="button" class="ica--card-drag-handle" title="Hold and drag to reorder">
+                                <i class="fa-solid fa-grip-vertical"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="ica--card-desc">${escapeHtml(desc)}</div>
                     <div class="ica--card-meta">
@@ -1168,9 +1254,12 @@ function renderAgentList() {
 
             card.find('.ica--card-toggle').on('click', async function (event) {
                 stopEvent(event);
-                agent.enabled = !agent.enabled;
-                await saveAgent(agent);
-                renderAgentList();
+                await toggleAgentEnabled(agent);
+            });
+
+            card.find('.ica--card-favorite').on('click', async function (event) {
+                stopEvent(event);
+                await toggleAgentFavorite(agent);
             });
 
             card.find('.ica--btn-edit').on('click', event => {
@@ -1357,6 +1446,7 @@ async function openEditor(agentId = null) {
     editorEl.find('#ica--editor-category').val(agent.category);
     editorEl.find('#ica--editor-phase').val(agent.phase);
     editorEl.find('#ica--editor-description').val(agent.description);
+    editorEl.find('#ica--editor-favorite').prop('checked', Boolean(agent.favorite));
     editorEl.find('#ica--editor-prompt').val(agent.prompt);
     populateConnectionProfileSelect(editorEl.find('#ica--editor-connectionProfile')[0], {
         emptyLabel: 'Use extension default',
@@ -1625,6 +1715,7 @@ async function openEditor(agentId = null) {
     agent.category = editorEl.find('#ica--editor-category').val().toString();
     agent.phase = editorEl.find('#ica--editor-phase').val().toString();
     agent.description = editorEl.find('#ica--editor-description').val().toString().trim();
+    agent.favorite = editorEl.find('#ica--editor-favorite').prop('checked');
     agent.connectionProfile = editorEl.find('#ica--editor-connectionProfile').val()?.toString() || '';
     agent.modelOverride = editorEl.find('#ica--editor-modelOverride').val()?.toString().trim() || '';
     agent.prompt = editorEl.find('#ica--editor-prompt').val().toString();

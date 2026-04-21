@@ -108,6 +108,164 @@
     opacity: 0.6;
 }
 
+.ica--quick-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: var(--sb-radius-lg, 16px);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 40%, transparent);
+    background:
+        linear-gradient(145deg,
+            color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 12%, transparent),
+            color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 70%, transparent));
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 10%, transparent);
+}
+
+.ica--quick-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ica--quick-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: calc(var(--mainFontSize) * 0.92);
+}
+
+.ica--quick-count {
+    font-size: calc(var(--mainFontSize) * 0.72);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.65;
+}
+
+.ica--quick-subtitle {
+    font-size: calc(var(--mainFontSize) * 0.78);
+    line-height: 1.4;
+    opacity: 0.74;
+}
+
+.ica--quick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 8px;
+}
+
+.ica--quick-empty {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor, #555) 42%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBorderColor, #555) 10%, transparent);
+    font-size: calc(var(--mainFontSize) * 0.78);
+    line-height: 1.4;
+    opacity: 0.78;
+}
+
+.ica--quick-chip {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #555) 42%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 28%, transparent);
+}
+
+.ica--quick-chip.is-enabled {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 52%, transparent);
+    background:
+        linear-gradient(145deg,
+            color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 12%, transparent),
+            color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 26%, transparent));
+}
+
+.ica--quick-chip-main,
+.ica--quick-chip-pin {
+    border: none;
+    color: inherit;
+    appearance: none;
+    font: inherit;
+}
+
+.ica--quick-chip-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ica--quick-chip-main:hover,
+.ica--quick-chip-pin:hover {
+    background: color-mix(in srgb, var(--SmartThemeBorderColor, #555) 18%, transparent);
+}
+
+.ica--quick-chip-status {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--SmartThemeBorderColor, #555) 24%, transparent);
+    opacity: 0.88;
+}
+
+.ica--quick-chip.is-enabled .ica--quick-chip-status {
+    color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 80%, #fff 20%);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 18%, transparent);
+}
+
+.ica--quick-chip-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ica--quick-chip-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ica--quick-chip-meta {
+    font-size: calc(var(--mainFontSize) * 0.68);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.64;
+}
+
+.ica--quick-chip-pin {
+    width: 38px;
+    min-width: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.ica--quick-chip-pin.is-active {
+    color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 72%, #f7d774 28%);
+    opacity: 1;
+}
+
 /* Category section */
 .ica--category-group {
     display: flex;
@@ -204,13 +362,21 @@
     gap: 8px;
 }
 
+.ica--card-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
 .ica--card-drag-handle {
     display: none;
     width: 28px;
     height: 28px;
     align-items: center;
     justify-content: center;
-    margin-left: 2px;
+    margin-left: 0;
     padding: 0;
     border: none;
     border-radius: 999px;
@@ -263,6 +429,32 @@
     transform: translateX(14px);
 }
 
+.ica--card-favorite {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.45;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ica--card-favorite:hover {
+    opacity: 0.95;
+    background: color-mix(in srgb, var(--SmartThemeBorderColor, #555) 18%, transparent);
+}
+
+.ica--card-favorite.is-active {
+    color: color-mix(in srgb, var(--SmartThemeQuoteColor, #8b8) 72%, #f7d774 28%);
+    opacity: 1;
+}
+
 .ica--card-name {
     flex: 1;
     font-weight: 600;
@@ -279,6 +471,7 @@
     letter-spacing: 0.06em;
     opacity: 0.5;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 /* Card body: description + meta */
@@ -396,6 +589,22 @@
 }
 
 @media (max-width: 768px) {
+    .ica--quick-section {
+        padding: 12px;
+    }
+
+    .ica--quick-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ica--quick-chip {
+        padding: 4px;
+    }
+
+    .ica--quick-chip-main {
+        padding: 8px 9px;
+    }
+
     .ica--card-toggle {
         width: 22px;
         height: 11px;
@@ -415,6 +624,11 @@
     .ica--card-select {
         width: 14px;
         height: 14px;
+    }
+
+    .ica--card-favorite {
+        width: 24px;
+        height: 24px;
     }
 }
 

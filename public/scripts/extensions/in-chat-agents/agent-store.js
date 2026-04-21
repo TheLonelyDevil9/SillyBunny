@@ -75,6 +75,7 @@ import {
  * @property {string} modelOverride - Optional model name to use instead of profile default
  * @property {string} sourceTemplateId
  * @property {boolean} enabled
+ * @property {boolean} favorite
  * @property {AgentConditions} conditions
  * @property {AgentToolDef[]} tools - Tool definitions for 'tool' category agents
  * @property {object} settings - Per-agent settings object for tool agents
@@ -294,6 +295,7 @@ export function createDefaultAgent() {
         },
         regexScripts: [],
         enabled: false,
+        favorite: false,
         phaseLocked: false,
         conditions: {
             triggerKeywords: [],
@@ -384,6 +386,7 @@ export function normalizeAgent(rawAgent = {}) {
             ? rawAgent.regexScripts.map(script => normalizeRegexScript(script ?? {}))
             : defaults.regexScripts,
         enabled: Boolean(rawAgent.enabled),
+        favorite: Boolean(rawAgent.favorite),
         phaseLocked: Boolean(rawAgent.phaseLocked),
         conditions: {
             ...defaults.conditions,
