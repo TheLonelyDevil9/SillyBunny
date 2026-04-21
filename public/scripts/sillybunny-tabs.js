@@ -128,6 +128,7 @@ const SB_DESKTOP_SHELL_RESIZE = Object.freeze({
     minHeight: 320,
     bottomGap: 16,
 });
+const SB_SHELL_TOGGLE_GUARD_MS = 260;
 const SB_INIT_RETRY_DELAY_MS = 150;
 const SB_INIT_MAX_RETRIES = 30;
 
@@ -306,6 +307,8 @@ const sbState = {
     initRetryTimer: 0,
     initRetryCount: 0,
     initObserver: null,
+    landingPageObserver: null,
+    landingPageSyncFrame: 0,
     inlineDrawerAutoClose: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.settingsDrawerAutoClose), false),
     theme: normalizeTheme(safeGetItem(SB_STORAGE_KEYS.theme)),
     surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
@@ -3518,6 +3521,10 @@ function toggleShellPanel(shellKey, tabId = null) {
     }
 
     if (tabId ? isShellTabOpen(shellKey, tabId) : isShellOpen(shellKey)) {
+        if (wasShellJustOpened(shellKey)) {
+            return;
+        }
+
         closeShell(shellKey);
         return;
     }
@@ -3530,6 +3537,57 @@ function isLandingPageVisible() {
     return isActuallyVisible(document.querySelector('.welcomePanel'));
 }
 
+function syncHomeButtonState() {
+    const homeButton = document.getElementById('sb-home-toggle');
+    if (!(homeButton instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    const isHomeVisible = isLandingPageVisible();
+    setButtonPressed(homeButton, isHomeVisible);
+    homeButton.classList.toggle('is-current', isHomeVisible);
+
+    if (isHomeVisible) {
+        homeButton.setAttribute('aria-current', 'page');
+    } else {
+        homeButton.removeAttribute('aria-current');
+    }
+}
+
+function queueLandingPageStateSync() {
+    if (sbState.landingPageSyncFrame) {
+        return;
+    }
+
+    sbState.landingPageSyncFrame = window.requestAnimationFrame(() => {
+        sbState.landingPageSyncFrame = 0;
+        syncHomeButtonState();
+    });
+}
+
+function bindLandingPageObserver() {
+    const chatRoot = document.getElementById('chat');
+    if (!(chatRoot instanceof HTMLElement)) {
+        return;
+    }
+
+    sbState.landingPageObserver?.disconnect();
+
+    const observer = new MutationObserver(() => {
+        queueLandingPageStateSync();
+    });
+
+    observer.observe(chatRoot, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden'],
+    });
+
+    sbState.landingPageObserver = observer;
+    queueLandingPageStateSync();
+}
+
 async function returnToLandingPage() {
     closeShell('left');
     closeShell('right');
@@ -3539,6 +3597,7 @@ async function returnToLandingPage() {
     setConnectionStripOpenState(false);
 
     if (isLandingPageVisible()) {
+        queueLandingPageStateSync();
         document.getElementById('chat')?.scrollTo({
             top: 0,
             behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
@@ -3550,10 +3609,12 @@ async function returnToLandingPage() {
 
     if (typeof context?.closeCurrentChat === 'function') {
         await context.closeCurrentChat();
+        queueLandingPageStateSync();
         return;
     }
 
     document.getElementById('option_close_chat')?.click();
+    queueLandingPageStateSync();
 }
 
 function syncProxyButtonState(proxyButton, sourceIcon) {
@@ -3584,6 +3645,15 @@ function observeProxyButton(buttonId, iconSelector) {
     });
 
     observer.observe(sourceIcon, { attributes: true, attributeFilter: ['class'] });
+}
+
+function wasShellJustOpened(shellKey) {
+    const shellState = getShellState(shellKey);
+    if (!shellState) {
+        return false;
+    }
+
+    return (performance.now() - Number(shellState.lastOpenedAt || 0)) < SB_SHELL_TOGGLE_GUARD_MS;
 }
 
 function buildTopBar() {
@@ -3709,6 +3779,7 @@ function buildTopBar() {
     updateTopBarBrand();
     updateTopbarUtilityButtons();
     syncTopbarLayoutState();
+    queueLandingPageStateSync();
 }
 
 function hideHostToggles() {
@@ -6192,6 +6263,8 @@ function openShell(shellKey, tabId = null) {
         setActiveTab(shellKey, tabId);
     }
 
+    shellState.lastOpenedAt = performance.now();
+
     if (isDrawerActuallyOpen(shellRoot)) {
         return;
     }
@@ -6356,6 +6429,7 @@ function buildShell(shellKey) {
 
     const shellState = {
         activeTabId: shellConfig.defaultTabId,
+        lastOpenedAt: 0,
         tabs: new Map(),
         nav,
         headerTitle: title,
@@ -6381,6 +6455,7 @@ function buildShell(shellKey) {
         wasOpen = isOpen;
 
         if (isOpen) {
+            shellState.lastOpenedAt = performance.now();
             closeMobileNav();
             const activeTab = shellState.tabs.get(shellState.activeTabId);
             activeTab?.onActivate?.();
@@ -7579,6 +7654,7 @@ function initAll() {
     setMobileButtonScale(sbState.mobileButtonScale, { persist: false });
     syncDesktopShellSizing();
     buildTopBar();
+    bindLandingPageObserver();
     buildBottomChatBar();
     // Refresh again after the current JS task — APP_READY may have already
     // fired before this listener was registered, so the initial call in

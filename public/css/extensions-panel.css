@@ -4,7 +4,7 @@
 }
 
 .extensions_block input[type="submit"]:hover {
-    background-color: color-mix(in srgb, var(--color-primary, #f1b285) 34%, transparent);
+    background-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 34%, transparent);
 }
 
 .extensions_block input[type="checkbox"],
@@ -70,7 +70,7 @@ label[for="extensions_notify_updates"] input[type="checkbox"] {
 }
 
 .extensions_info .toggle_enable {
-    color: color-mix(in srgb, var(--color-primary, #f1b285) 88%, white 12%);
+    color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 88%, white 12%);
 }
 
 .extensions_info .toggle_disable {
@@ -124,7 +124,7 @@ label[for="extensions_notify_updates"] input[type="checkbox"] {
 }
 
 .extensions_info .extension_name.update_available {
-    color: color-mix(in srgb, var(--color-primary, #f1b285) 92%, white 8%);
+    color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 92%, white 8%);
 }
 
 .extensions_info .third_party_toolbar {

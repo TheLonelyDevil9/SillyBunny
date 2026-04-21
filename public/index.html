@@ -10,11 +10,11 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="darkreader-lock">
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#130f0d">
+    <meta name="theme-color" content="#1d2128">
     <style>
         /* Put critical CSS here. The rest should go in stylesheets. */
         body {
-            background-color: #130f0d;
+            background-color: #1d2128;
         }
     </style>
     <link rel="preload" as="style" href="style.css">
@@ -2271,8 +2271,8 @@
                 <div class="flex-container flexFlowColumn">
                     <div id="main-API-selector-block">
                         <select id="main_api">
-                            <option value="textgenerationwebui" data-i18n="Text Completion">Text Completion</option>
                             <option value="openai" data-i18n="Chat Completion">Chat Completion</option>
+                            <option value="textgenerationwebui" data-i18n="Text Completion">Text Completion</option>
                             <option value="novel" data-i18n="NovelAI">NovelAI</option>
                             <option value="koboldhorde" data-i18n="AI Horde">AI Horde</option>
                             <option value="kobold" data-i18n="KoboldAI">KoboldAI Classic</option>
@@ -5063,31 +5063,33 @@
                                         <span>Reset</span>
                                     </button>
                                 </div>
-                                <div class="sb-accent-color-controls" style="margin-top: 12px;">
-                                    <div class="flex-container alignItemsBaseline" style="gap: 8px; flex-wrap: wrap;">
-                                        <span style="font-size: 0.9em;">Accent Colors:</span>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="blue" title="Blue" style="background: #3b82f6; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="cyan" title="Cyan" style="background: #06b6d4; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="green" title="Green" style="background: #10b981; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="yellow" title="Yellow" style="background: #f59e0b; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="orange" title="Orange" style="background: #f97316; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="red" title="Red" style="background: #ef4444; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="pink" title="Pink" style="background: #ec4899; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="purple" title="Purple" style="background: #a855f7; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
-                                        <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="gray" title="Gray" style="background: #6b7280; width: 32px; height: 32px; padding: 0; border-radius: 50%;"></button>
+                                <div class="sb-accent-color-controls">
+                                    <div class="sb-accent-preset-row">
+                                        <span class="sb-accent-color-label">Accent Colors:</span>
+                                        <div class="sb-accent-presets" role="group" aria-label="Accent colors">
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="blue" title="Blue" aria-label="Blue accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="cyan" title="Cyan" aria-label="Cyan accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="green" title="Green" aria-label="Green accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="yellow" title="Yellow" aria-label="Yellow accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="orange" title="Orange" aria-label="Orange accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="red" title="Red" aria-label="Red accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="pink" title="Pink" aria-label="Pink accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="purple" title="Purple" aria-label="Purple accent"></button>
+                                            <button type="button" class="menu_button menu_button_icon sb-accent-preset" data-accent="gray" title="Gray" aria-label="Gray accent"></button>
+                                        </div>
                                     </div>
-                                    <label class="checkbox_label flexBasis100p" style="margin-top: 8px;">
+                                    <label class="checkbox_label flexBasis100p sb-custom-accent-toggle">
                                         <input type="checkbox" id="sb-custom-accent-mode" />
                                         <span data-i18n="Custom RGB Accent">Custom RGB Accent</span>
                                     </label>
-                                    <div id="sb-custom-accent-pickers" style="display: none; margin-top: 8px; gap: 8px;" class="flex-container flexFlowColumn">
-                                        <div class="flex-container" style="gap: 8px;">
+                                    <div id="sb-custom-accent-pickers" style="display: none;" class="sb-custom-accent-pickers flex-container flexFlowColumn">
+                                        <div class="sb-accent-picker-row flex-container">
                                             <toolcool-color-picker id="sb-accent-primary-picker"></toolcool-color-picker>
-                                            <span style="font-size: 0.9em;">Primary Accent</span>
+                                            <span class="sb-accent-picker-label">Primary Accent</span>
                                         </div>
-                                        <div class="flex-container" style="gap: 8px;">
+                                        <div class="sb-accent-picker-row flex-container">
                                             <toolcool-color-picker id="sb-accent-secondary-picker"></toolcool-color-picker>
-                                            <span style="font-size: 0.9em;">Secondary Accent</span>
+                                            <span class="sb-accent-picker-label">Secondary Accent</span>
                                         </div>
                                     </div>
                                 </div>

@@ -208,7 +208,7 @@
 
 
 .success {
-    color: color-mix(in srgb, var(--color-primary, #f1b285) 88%, white 12%);
+    color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 88%, white 12%);
 }
 
 .failure {

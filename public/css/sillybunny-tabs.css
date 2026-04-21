@@ -393,7 +393,7 @@ body.sb-topbar-compact #sb-chatbar-layer {
 }
 
 .sb-chatbar-button.is-active {
-    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 42%, var(--sb-shell-border) 58%);
+    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 42%, var(--sb-shell-border) 58%);
     box-shadow: 0 8px 16px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
 }
 
@@ -415,7 +415,7 @@ body.sb-topbar-compact #sb-chatbar-layer {
 }
 
 #sb-chatbar-visibility-toggle.is-active > i {
-    color: var(--color-primary, #f1b285);
+    color: var(--color-primary, var(--sb-accent));
 }
 
 .sb-chatbar-button:disabled,
@@ -542,7 +542,7 @@ body.sb-topbar-compact #sb-chatbar-layer {
     gap: 8px;
     min-height: var(--sb-chatbar-field-height);
     padding: 0 14px;
-    border: 1px solid color-mix(in srgb, var(--color-primary, #f1b285) 42%, var(--sb-shell-border) 58%);
+    border: 1px solid color-mix(in srgb, var(--color-primary, var(--sb-accent)) 42%, var(--sb-shell-border) 58%);
     border-radius: var(--sb-chatbar-button-radius);
     background: transparent;
     color: var(--SmartThemeBodyColor);
@@ -559,7 +559,7 @@ body.sb-topbar-compact #sb-chatbar-layer {
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background: color-mix(in srgb, var(--color-primary, #f1b285) 14%, var(--sb-card-bg));
+    background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 14%, var(--sb-card-bg));
     opacity: 0.96;
 }
 
@@ -671,7 +671,7 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .sb-chat-file.is-current {
-    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 46%, var(--sb-shell-border) 54%);
+    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 46%, var(--sb-shell-border) 54%);
 }
 
 .sb-chat-file-head,
@@ -871,7 +871,7 @@ body:not(.movingUI) .drawer-content.maximized {
     bottom: var(--sb-proxy-underline-bottom);
     height: 2px;
     border-radius: 999px;
-    background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary, #f1b285) 86%, transparent), color-mix(in srgb, var(--color-accent, #df8e70) 86%, transparent));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary, var(--sb-accent)) 86%, transparent), color-mix(in srgb, var(--color-accent, var(--sb-accent-soft)) 86%, transparent));
     transform: scaleX(0);
     transform-origin: center;
     transition: transform 180ms ease;
@@ -883,31 +883,41 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .sb-proxy-button.is-open,
-.sb-proxy-button.is-pinned {
+.sb-proxy-button.is-pinned,
+.sb-proxy-button.is-active,
+.sb-proxy-button.is-current {
     opacity: 1;
 }
 
-.sb-proxy-button.is-open {
+.sb-proxy-button.is-open,
+.sb-proxy-button.is-active,
+.sb-proxy-button.is-current {
     background: color-mix(in srgb, var(--sb-button-hover) 92%, transparent);
     box-shadow: 0 14px 26px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
 }
 
-.sb-proxy-button.is-open i {
+.sb-proxy-button.is-open i,
+.sb-proxy-button.is-active i,
+.sb-proxy-button.is-current i {
     transform: translateY(-1px) scale(1.06);
-    color: var(--color-primary, #f1b285);
+    color: var(--color-primary, var(--sb-accent));
 }
 
-.sb-proxy-button.is-open span {
+.sb-proxy-button.is-open span,
+.sb-proxy-button.is-active span,
+.sb-proxy-button.is-current span {
     transform: translateY(-1px);
 }
 
 .sb-proxy-button.is-open::after,
-.sb-proxy-button.is-pinned::after {
+.sb-proxy-button.is-pinned::after,
+.sb-proxy-button.is-active::after,
+.sb-proxy-button.is-current::after {
     transform: scaleX(1);
 }
 
 .sb-proxy-button.is-pinned {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary, #f1b285) 25%, transparent) inset;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary, var(--sb-accent)) 25%, transparent) inset;
 }
 
 .sb-mobile-toggle {
@@ -1956,7 +1966,7 @@ body.sb-shell-resizing * {
     width: 100%;
     max-width: 100%;
     margin-bottom: 18px;
-    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 28%, var(--sb-shell-border) 72%);
+    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 28%, var(--sb-shell-border) 72%);
 }
 
 .sb-import-hints {
@@ -1972,7 +1982,7 @@ body.sb-shell-resizing * {
     padding: 0 10px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 76%, transparent);
-    background: color-mix(in srgb, var(--color-primary, #f1b285) 10%, transparent);
+    background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 10%, transparent);
     font-size: calc(var(--mainFontSize) * 0.7);
     line-height: 1.2;
 }
@@ -2428,7 +2438,7 @@ body.sb-shell-resizing * {
 }
 
 .sb-shortcut-select:focus {
-    outline: 2px solid var(--color-primary, #f1b285);
+    outline: 2px solid var(--color-primary, var(--sb-accent));
     outline-offset: -1px;
 }
 
@@ -2470,7 +2480,7 @@ body.sb-shell-resizing * {
 }
 
 #sb-bottom-chat-select:focus {
-    outline: 2px solid var(--color-primary, #f1b285);
+    outline: 2px solid var(--color-primary, var(--sb-accent));
     outline-offset: -1px;
 }
 
@@ -2516,7 +2526,7 @@ body.sb-shell-resizing * {
 }
 
 #sb-persona-bubble:hover {
-    border-color: var(--color-primary, #f1b285);
+    border-color: var(--color-primary, var(--sb-accent));
     transform: scale(1.08);
 }
 
@@ -2555,7 +2565,7 @@ body.sb-shell-resizing * {
 }
 
 .sb-persona-option.is-active {
-    background: color-mix(in srgb, var(--color-primary, #f1b285) 20%, transparent);
+    background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 20%, transparent);
 }
 
 .sb-persona-option-avatar {
@@ -2635,7 +2645,7 @@ body.sb-shell-resizing * {
 }
 
 .sb-topbar-label-option.is-selected {
-    border-color: color-mix(in srgb, var(--color-primary, #f1b285) 42%, var(--sb-shell-border) 58%);
+    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 42%, var(--sb-shell-border) 58%);
     box-shadow: 0 12px 24px color-mix(in srgb, var(--SmartThemeShadowColor) 14%, transparent);
 }
 
@@ -2647,7 +2657,7 @@ body.sb-shell-resizing * {
 .sb-topbar-label-checkbox {
     flex: 0 0 auto;
     margin: 2px 0 0;
-    accent-color: var(--color-primary, #f1b285);
+    accent-color: var(--color-primary, var(--sb-accent));
 }
 
 .sb-topbar-label-option-copy {
@@ -2712,8 +2722,8 @@ body.sb-shell-resizing * {
 
 @keyframes sb-search-hit {
     0% {
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary, #f1b285) 75%, transparent);
-        background-color: color-mix(in srgb, var(--color-primary, #f1b285) 16%, transparent);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary, var(--sb-accent)) 75%, transparent);
+        background-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 16%, transparent);
     }
 
     100% {

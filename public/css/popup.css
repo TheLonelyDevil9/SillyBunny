@@ -12,7 +12,7 @@ dialog {
     box-shadow: 0 0 25px color-mix(in srgb, var(--SmartThemeShadowColor) 90%, transparent);
     border: 1px solid var(--SmartThemeBorderColor);
     padding: 12px 20px;
-    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, var(--color-background, #130f0d));
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 96%, var(--color-background, var(--sb-shell-main-bg)));
     border-radius: 1.65rem;
     display: flex;
     flex-direction: column;
@@ -193,13 +193,13 @@ body.no-blur .popup[open]::backdrop {
 }
 
 .menu_button.popup-button-ok {
-    background-color: var(--color-primary, #f1b285);
+    background-color: var(--color-primary, var(--sb-accent));
     color: black;
     border-color: transparent;
 }
 
 .menu_button.popup-button-ok:hover {
-    background-color: color-mix(in srgb, var(--color-primary, #f1b285) 85%, white);
+    background-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 85%, white);
 }
 
 .popup-controls .menu_button {

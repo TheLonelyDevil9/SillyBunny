@@ -187,6 +187,8 @@ SillyBunny includes some extras by default to help you get started right away:
 - Open Launchpad button now toggles the launchpad (opens if closed, closes if open)
 - Added active state highlighting to Open Launchpad button when launchpad is open
 - Launchpad now expands by default on first startup to showcase tutorials
+- Home now highlights in the top bar while the landing page is visible, matching the active-state treatment used by the shell buttons
+- Switching from Navigate to Customize no longer double-triggers and closes the shell again during the opening animation
 
 **Themes and Appearance**
 
@@ -200,6 +202,10 @@ SillyBunny includes some extras by default to help you get started right away:
 - Removed hardcoded brown colors from Modern Glass and Bold Stylized shell themes
 - Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
 - Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
+- Removed the remaining hardcoded brown accents from the home shell, popups, extension panels, and shared UI fallbacks so theme colors stay consistent after refreshes
+- Quick context shortcut buttons now render in a strict horizontal row for both Text Completions and Chat Completions
+- Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
+- Recent Chats now clips cleanly with corrected corner rounding
 
 **Bug fixes**
 
@@ -211,6 +217,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Reduced Import Folder and Sync Extensions button sizes on mobile for better fit
 - Removed bloated search hint text and tab descriptions on mobile for cleaner UI
 - Added reinstall button for third-party extensions to quickly fix corrupted extensions by deleting and reinstalling from repository
+- Changed fresh-install API defaults so Chat Completions is the first/main default instead of the old Text Completion or Horde/Kobold path
 
 **Reasoning and provider compatibility**
 

@@ -8203,7 +8203,7 @@ export async function getSettings(initLoaderHandle = null) {
 
         //Load which API we are using
         if (settings.main_api == undefined) {
-            settings.main_api = 'kobold';
+            settings.main_api = 'openai';
         }
 
         if (settings.main_api == 'poe') {
