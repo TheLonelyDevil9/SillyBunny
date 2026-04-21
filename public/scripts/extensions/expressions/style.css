@@ -170,11 +170,11 @@ img.expression.default {
 }
 
 #image_list .expression_list_item[data-expression-type="success"] .expression_list_title {
-    color: color-mix(in srgb, var(--color-primary, #f1b285) 88%, white 12%);
+    color: color-mix(in srgb, var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor))) 88%, white 12%);
 }
 
 #image_list .expression_list_item[data-expression-type="additional"] .expression_list_title {
-    color: color-mix(in srgb, var(--color-accent, #df8e70) 82%, var(--SmartThemeBodyColor) 18%);
+    color: color-mix(in srgb, var(--color-accent, var(--sb-accent-soft, var(--SmartThemeUnderlineColor))) 82%, var(--SmartThemeBodyColor) 18%);
 }
 #image_list .expression_list_item[data-expression-type="additional"] .expression_list_title::before {
     content: '➕';

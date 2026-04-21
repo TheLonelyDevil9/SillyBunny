@@ -290,7 +290,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomeActionCard {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, #17110e);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, var(--SmartThemeChatTintColor) 8%);
     min-width: 0;
     min-height: 88px;
     width: 100%;
@@ -1298,7 +1298,7 @@ body.big-avatars .welcomeRecent .recentChatList .recentChat .chatMessageContaine
 }
 
 .welcomeGuideMascot {
-    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, #17110e);
+    --sb-welcome-surface-bg: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--SmartThemeChatTintColor) 12%);
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);

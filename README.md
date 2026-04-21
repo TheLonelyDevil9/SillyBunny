@@ -208,6 +208,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
 - Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
 - Removed the remaining hardcoded brown accents from the home shell, popups, extension panels, and shared UI fallbacks so theme colors stay consistent after refreshes
+- Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
 - Quick context shortcut buttons now render in a strict horizontal row for both Text Completions and Chat Completions
 - Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
 - Recent Chats now clips cleanly with corrected corner rounding

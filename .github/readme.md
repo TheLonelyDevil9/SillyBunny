@@ -202,6 +202,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Fixed extension containers showing brown colors by updating default CSS variables to match Dark V1.0
 - Removed hardcoded brown colors from Modern Glass and Bold Stylized shell themes
 - Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
+- Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
 - Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
 
 **Bug fixes**

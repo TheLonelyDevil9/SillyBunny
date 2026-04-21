@@ -7605,7 +7605,7 @@ function updateVertexAIServiceAccountStatus(isValid = false, message = '') {
     }
 
     if (isValid && message) {
-        infoSpan.html(`<i class="fa-solid fa-check-circle" style="color: var(--color-primary, #f1b285);"></i> ${message}`);
+        infoSpan.html(`<i class="fa-solid fa-check-circle" style="color: var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor)));"></i> ${message}`);
         statusDiv.show();
     } else if (!isValid && message) {
         infoSpan.html(`<i class="fa-solid fa-exclamation-triangle" style="color: var(--warning, #ffb46b);"></i> ${message}`);
