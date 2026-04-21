@@ -75,6 +75,26 @@ const STARTER_PACK_EXTENSIONS = Object.freeze({
         id: 'third-party/SillyBunny-CssSnippets',
         repoUrl: 'https://github.com/platberlitz/SillyBunny-CssSnippets',
     }),
+    promptInspector: Object.freeze({
+        id: 'third-party/Extension-PromptInspector',
+        repoUrl: 'https://github.com/SillyTavern/Extension-PromptInspector',
+    }),
+    chatCompletionTabs: Object.freeze({
+        id: 'third-party/SillyTavern-ChatCompletionTabs',
+        repoUrl: 'https://github.com/RivelleDays/SillyTavern-ChatCompletionTabs',
+    }),
+    inputHistory: Object.freeze({
+        id: 'third-party/SillyTavern-InputHistory',
+        repoUrl: 'https://github.com/LenAnderson/SillyTavern-InputHistory',
+    }),
+    laLib: Object.freeze({
+        id: 'third-party/SillyTavern-LALib',
+        repoUrl: 'https://github.com/LenAnderson/SillyTavern-LALib',
+    }),
+    tooltips: Object.freeze({
+        id: 'third-party/SillyTavern-Tooltips',
+        repoUrl: 'https://github.com/LenAnderson/SillyTavern-Tooltips',
+    }),
 });
 
 const WELCOME_TUTORIAL_STEPS = Object.freeze([
@@ -802,6 +822,41 @@ function buildStarterPackItems() {
                 icon: 'fa-palette',
                 chips: ['Extension', 'Styling', 'Opt-in'],
                 extensionName: STARTER_PACK_EXTENSIONS.cssSnippets.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Prompt Inspector',
+                body: 'See the prompt stack more clearly when you need to understand what is being sent to the model, debug formatting, or compare how your setup changes the final payload.',
+                icon: 'fa-magnifying-glass',
+                chips: ['Extension', 'Recommended', 'Prompting'],
+                extensionName: STARTER_PACK_EXTENSIONS.promptInspector.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Chat Completion Tabs',
+                body: 'Split chat-completions settings into cleaner tabs so model setup is easier to scan and less overwhelming when you are tuning providers, presets, and request options.',
+                icon: 'fa-table-columns',
+                chips: ['Extension', 'Recommended', 'Layout'],
+                extensionName: STARTER_PACK_EXTENSIONS.chatCompletionTabs.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Input History',
+                body: 'Keep a recallable history of what you typed so it is easier to retry, revise, or recover longer prompts and roleplay replies without retyping them from scratch.',
+                icon: 'fa-clock-rotate-left',
+                chips: ['Extension', 'Recommended', 'Workflow'],
+                extensionName: STARTER_PACK_EXTENSIONS.inputHistory.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'LALib',
+                body: 'LenAnderson\'s shared helper library powers several other extensions, so having it in the Starter Pack makes later installs smoother and reduces dependency hunting.',
+                icon: 'fa-toolbox',
+                chips: ['Extension', 'Recommended', 'Utility'],
+                extensionName: STARTER_PACK_EXTENSIONS.laLib.id,
+            }),
+            buildExtensionStarterPackItem({
+                title: 'Tooltips',
+                body: 'Adds richer hover help across supported UI pieces so confusing controls are easier to understand without leaving the screen or digging through docs first.',
+                icon: 'fa-circle-info',
+                chips: ['Extension', 'Recommended', 'Help'],
+                extensionName: STARTER_PACK_EXTENSIONS.tooltips.id,
             }),
         ],
     };
