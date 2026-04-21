@@ -19,7 +19,7 @@
     flex-direction: column;
     z-index: 3010;
     overflow-y: hidden;
-    gap: 14px;
+    gap: 10px;
 }
 
 #WorldInfo.sb-shell-embedded-content {
@@ -117,8 +117,8 @@
 
 #wiTopBlock {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
     align-items: start;
 }
 
@@ -151,8 +151,8 @@
 
 #wiSliders {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
 }
 
 #wiSliders > .alignitemscenter.flex-container.flexFlowColumn {
@@ -779,30 +779,30 @@ select.keyselect+span.select2-container .select2-selection--multiple {
 @media screen and (min-width: 961px) {
     #world_popup_workspace {
         display: grid;
-        grid-template-columns: minmax(380px, 0.98fr) minmax(460px, 1.2fr);
+        grid-template-columns: minmax(340px, 0.92fr) minmax(0, 1.08fr);
         align-items: start;
-        gap: 16px;
+        gap: 14px;
         min-height: 0;
     }
 
     #world_popup_entries_column {
         display: flex;
         flex-direction: column;
-        min-height: clamp(420px, 62vh, 920px);
+        min-height: clamp(360px, 58vh, 820px);
     }
 
     #world_popup_entries_list {
         min-height: 0;
         height: 100%;
-        max-height: clamp(420px, 62vh, 920px);
+        max-height: clamp(360px, 58vh, 820px);
         padding-right: 4px;
     }
 
     #world_popup_editor_pane {
         display: flex;
         flex-direction: column;
-        min-height: clamp(420px, 62vh, 920px);
-        padding: 16px;
+        min-height: clamp(360px, 58vh, 820px);
+        padding: 14px;
         border-radius: 22px;
         border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 78%, transparent);
         background:

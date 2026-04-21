@@ -510,8 +510,9 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    max-height: 70vh;
+    max-height: min(82vh, 960px);
     overflow-y: auto;
+    padding-right: 4px;
 }
 
 .ica--editor-section {
@@ -554,7 +555,14 @@
 }
 
 .ica--editor .checkbox_label {
+    align-items: flex-start;
+    column-gap: 8px;
     font-size: calc(var(--mainFontSize) * 0.88);
+}
+
+.ica--editor .checkbox_label > input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-top: 0.2em;
 }
 
 .ica--regex-note {
@@ -795,6 +803,10 @@
     #ica--templatesCallout {
         width: 100%;
         justify-content: center;
+    }
+
+    .ica--editor-row.flex-container {
+        flex-direction: column;
     }
 }
 

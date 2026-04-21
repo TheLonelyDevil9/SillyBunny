@@ -181,13 +181,14 @@ export function extractReasoningSignatureFromData(data, {
         }
     }
 
-    // Direct Gemini format: Extract from responseContent.parts if available (only text parts)
-    if (isGemini && Array.isArray(data?.responseContent?.parts)) {
-        data.responseContent.parts.forEach((part) => {
+    // Direct Gemini format: Extract from responseContent.parts or candidates[].content.parts if available.
+    const geminiParts = data?.responseContent?.parts ?? data?.candidates?.[0]?.content?.parts;
+    if (isGemini && Array.isArray(geminiParts)) {
+        for (const part of geminiParts) {
             if (part.thoughtSignature && typeof part.text === 'string') {
                 return part.thoughtSignature;
             }
-        });
+        }
     }
 
     return null;

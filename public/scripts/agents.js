@@ -694,7 +694,11 @@ function summarizeError(error) {
         return error.message;
     }
 
-    return JSON.stringify(error);
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
 }
 
 function toArray(value) {
@@ -1637,7 +1641,19 @@ function normalizeToolCalls(data) {
 }
 
 function toolResultToContent(result) {
-    return typeof result === 'string' ? result : JSON.stringify(result);
+    if (typeof result === 'string') {
+        return result;
+    }
+
+    if (result == null) {
+        return '';
+    }
+
+    try {
+        return JSON.stringify(result);
+    } catch {
+        return String(result);
+    }
 }
 
 async function sendAgentCompletionRequest(agentSettings, messages, customTools, signal) {
@@ -2472,12 +2488,12 @@ export async function runPostGenerationAgents({ depth, generationType = 'normal'
 
 async function runLorebookSyncFromUi() {
     if (!isAgentModeAvailable()) {
-        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent`);
+        toastr.info(t`Adventure helpers only run in chat-completions mode with an active chat.`, t`Agent`);
         return;
     }
 
     if (!getAgentChatState().enabled) {
-        toastr.info(t`Enable Agent for this chat first.`, t`Agent`);
+        toastr.info(t`Enable adventure helpers for this chat first.`, t`Agent`);
         return;
     }
 
@@ -2490,7 +2506,7 @@ async function runLorebookSyncFromUi() {
 
 async function applyPendingLoreReviewFromUi() {
     if (!isAgentModeAvailable()) {
-        toastr.info(t`Agent mode only runs in chat-completions mode with an active chat.`, t`Agent`);
+        toastr.info(t`Adventure helpers only run in chat-completions mode with an active chat.`, t`Agent`);
         return;
     }
 
@@ -2942,9 +2958,9 @@ function renderAgentPanel() {
         ? t` Lore updates will stay in review until you apply them.`
         : t` Lore updates auto-apply after validation.`;
     const availabilityText = !hasChat
-        ? t`Open a chat to configure per-chat agent mode.`
+        ? t`Open a chat to configure per-chat adventure helpers.`
         : !available
-            ? t`Agent mode currently runs only through chat-completions providers.`
+            ? t`Adventure helpers currently run only through chat-completions providers.`
             : `${t`The turn director runs retrieval before the next reply, then updates durable memory, story state, and lorebook context after the reply is saved.`}${loreReviewText}`;
     $('#agent_mode_status_hint').text(availabilityText);
     $('#agent_preset_status').text(

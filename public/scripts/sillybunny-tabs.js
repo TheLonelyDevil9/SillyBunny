@@ -7071,22 +7071,7 @@ function buildBottomChatBar() {
         attrs: { title: 'Switch chat' },
     });
     chatSelect.addEventListener('change', () => {
-        const chatName = chatSelect.value;
-        if (!chatName) return;
-        const context = getSillyTavernContext();
-        if (!context) return;
-
-        // Use ST's own chat-load mechanism via the hidden input
-        const chatPole = document.getElementById('selected_chat_pole');
-        if (chatPole) {
-            chatPole.value = chatName;
-            chatPole.dispatchEvent(new Event('change', { bubbles: true }));
-            return;
-        }
-        // Fallback: context API
-        if (typeof context.openCharacterChat === 'function') {
-            void context.openCharacterChat(chatName);
-        }
+        void openChatById(chatSelect.value);
     });
 
     const newBtn = createElement('button', {
@@ -7160,7 +7145,15 @@ function buildBottomChatBar() {
         }
     });
 
-    refreshBottomChatSelect();
+    scheduleBottomChatBarRefresh(0);
+}
+
+function scheduleBottomChatBarRefresh(delay = 0) {
+    window.clearTimeout(sbState.bottomChatBarRefreshTimer || 0);
+    sbState.bottomChatBarRefreshTimer = window.setTimeout(() => {
+        sbState.bottomChatBarRefreshTimer = 0;
+        void refreshBottomChatSelect();
+    }, delay);
 }
 
 async function refreshBottomChatSelect() {
@@ -7169,19 +7162,12 @@ async function refreshBottomChatSelect() {
         return;
     }
 
-    const context = getSillyTavernContext();
-    if (!context) {
+    const chatContext = getChatUiContext();
+    if (!chatContext.context) {
         return;
     }
 
-    const currentChatName = normalizeChatFileName(
-        context.getCurrentChatId?.()
-        ?? context.chatId
-        ?? document.getElementById('selected_chat_pole')?.value
-        ?? '',
-    );
-    const character = context.characters?.[context.characterId];
-
+    const currentChatName = chatContext.chatId;
     chatSelect.replaceChildren();
 
     // Add placeholder option showing the current chat
@@ -7191,29 +7177,12 @@ async function refreshBottomChatSelect() {
     placeholder.selected = true;
     chatSelect.appendChild(placeholder);
 
-    // Fetch the list of available chats for this character
-    if (!character?.avatar) {
+    if (!chatContext.canBrowseChats) {
         return;
     }
 
     try {
-        const headers = await getAuthorizedRequestHeadersOrNull(2000, context);
-        if (!headers) {
-            return;
-        }
-
-        const response = await fetch('/api/characters/chats', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ avatar_url: character.avatar, simple: true }),
-        });
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-        const chats = Object.values(data)
-            .sort((a, b) => (b.last_mes || '').localeCompare(a.last_mes || ''))
-            .map(c => normalizeChatFileName(c.file_name));
+        const chats = (await getChatFilesForContext(chatContext)).map(chat => chat.fileName);
 
         chatSelect.replaceChildren();
 
@@ -7233,8 +7202,22 @@ async function refreshBottomChatSelect() {
             fallback.selected = true;
             chatSelect.prepend(fallback);
         }
+
+        if (chatContext.canBrowseChats && chats.length === 0) {
+            const attempts = Number(sbState.bottomChatBarRefreshAttempts ?? 0);
+            if (attempts < 8) {
+                sbState.bottomChatBarRefreshAttempts = attempts + 1;
+                scheduleBottomChatBarRefresh(200);
+            }
+        } else {
+            sbState.bottomChatBarRefreshAttempts = 0;
+        }
     } catch {
-        // Silently keep the placeholder on error
+        const attempts = Number(sbState.bottomChatBarRefreshAttempts ?? 0);
+        if (attempts < 8) {
+            sbState.bottomChatBarRefreshAttempts = attempts + 1;
+            scheduleBottomChatBarRefresh(250);
+        }
     }
 }
 
@@ -7259,10 +7242,16 @@ function updatePersonaBubble(bubble) {
     bubble.setAttribute('title', `Persona: ${currentName}`);
 }
 
+function quoteSlashCommandArgument(value) {
+    return `"${String(value ?? '').replace(/(["\\])/g, '\\$1')}"`;
+}
+
 function getCurrentPersonaSelection(context = getSillyTavernContext()) {
     const personas = context?.powerUserSettings?.personas ?? {};
+    const selectedAvatarId = document.querySelector('#user_avatar_block .avatar-container.selected[data-avatar-id]')?.getAttribute('data-avatar-id')
+        ?? '';
     const currentAvatarId = String(context?.userAvatar ?? '').trim()
-        || Object.entries(personas).find(([, name]) => name === (context?.name1 || ''))?.[0]
+        || String(selectedAvatarId).trim()
         || '';
     const currentName = personas[currentAvatarId] || context?.name1 || 'You';
 
@@ -7346,11 +7335,18 @@ function addPersonaOption(picker, avatarId, name, title, isActive, context) {
 
     option.addEventListener('click', async () => {
         picker.remove();
-        // Use ST's /persona slash command — the most reliable way to switch personas
         const execSlash = context?.executeSlashCommandsWithOptions;
+        let switched = false;
         if (typeof execSlash === 'function') {
-            await execSlash(`/persona ${name}`);
-        } else {
+            try {
+                await execSlash(`/persona-set ${quoteSlashCommandArgument(avatarId)}`);
+                switched = true;
+            } catch (error) {
+                console.warn('[SillyBunny] Persona switch via slash command failed, falling back to DOM selection.', error);
+            }
+        }
+
+        if (!switched) {
             // Fallback: try clicking the DOM avatar
             const avatarBlock = document.getElementById('user_avatar_block');
             const domAvatar = avatarBlock?.querySelector(`.avatar-container[title="${CSS.escape(avatarId)}"]`);
@@ -7428,7 +7424,7 @@ function initAll() {
     // Refresh again after the current JS task — APP_READY may have already
     // fired before this listener was registered, so the initial call in
     // buildBottomChatBar() may have found no active chat yet.
-    setTimeout(() => refreshBottomChatSelect(), 0);
+    scheduleBottomChatBarRefresh(0);
     bindTopbarDragEvents();
     bindChatbarEvents();
     scheduleChatbarRefresh(0);

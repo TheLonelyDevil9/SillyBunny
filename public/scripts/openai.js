@@ -395,6 +395,7 @@ export const settingsToUpdate = {
     continue_postfix: ['#continue_postfix', 'continue_postfix', false, false],
     function_calling: ['#openai_function_calling', 'function_calling', true, false],
     show_thoughts: ['#openai_show_thoughts', 'show_thoughts', true, false],
+    show_thoughts_ui: ['#openai_show_thoughts_ui', 'show_thoughts_ui', true, false],
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     enable_web_search: ['#openai_enable_web_search', 'enable_web_search', true, false],
@@ -504,6 +505,7 @@ const default_settings = {
     continue_postfix: continue_postfix_types.SPACE,
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     show_thoughts: true,
+    show_thoughts_ui: true,
     reasoning_effort: reasoning_effort_types.auto,
     verbosity: verbosity_levels.auto,
     enable_web_search: false,
@@ -8047,6 +8049,13 @@ export function initOpenAI() {
         setToolReasoningControls();
         saveSettingsDebounced();
     });
+
+    $('#openai_show_thoughts_ui').on('input', function () {
+        oai_settings.show_thoughts_ui = !!$(this).prop('checked');
+        $('#chat').attr('data-show-thoughts-ui', oai_settings.show_thoughts_ui === false ? 'false' : 'true');
+        saveSettingsDebounced();
+    });
+    $('#chat').attr('data-show-thoughts-ui', oai_settings.show_thoughts_ui === false ? 'false' : 'true');
 
     $('#openai_reasoning_effort').on('input', function () {
         oai_settings.reasoning_effort = String($(this).val());

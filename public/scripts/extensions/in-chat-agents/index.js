@@ -1,3 +1,4 @@
+import { DiffMatchPatch } from '../../../lib.js';
 import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../extensions.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from '../../popup.js';
 import { download, getSortableDelay, uuidv4 } from '../../utils.js';
@@ -2080,8 +2081,75 @@ function handleExportAll() {
  */
 function escapeHtml(str) {
     const div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = str ?? '';
     return div.innerHTML;
+}
+
+function buildPromptTransformDiffMarkup(beforeText, afterText) {
+    const dmp = new DiffMatchPatch();
+    const diffs = dmp.diff_main(String(beforeText ?? ''), String(afterText ?? ''));
+    dmp.diff_cleanupSemantic(diffs);
+
+    return diffs.map(([operation, text]) => {
+        const escapedText = escapeHtml(text);
+        if (operation === 1) {
+            return `<span class="ica-transform-diff-part--ins">${escapedText}</span>`;
+        }
+        if (operation === -1) {
+            return `<span class="ica-transform-diff-part--del">${escapedText}</span>`;
+        }
+        return `<span>${escapedText}</span>`;
+    }).join('');
+}
+
+async function openPromptTransformHistoryPopup(messageIndex) {
+    if (!Number.isInteger(Number(messageIndex)) || !chat[messageIndex]) {
+        return;
+    }
+
+    const message = chat[Number(messageIndex)];
+    const history = message.extra?.[PROMPT_TRANSFORM_HISTORY_KEY];
+    if (!Array.isArray(history) || history.length === 0) {
+        toastr.info('No transform history available.');
+        return;
+    }
+
+    const entries = history.map((entry, i) => {
+        const timestamp = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+        return `
+            <div class="ica-transform-history-entry" data-index="${i}">
+                <h5>${escapeHtml(entry.agentName || 'Agent')} <small>(${escapeHtml(entry.mode || 'replace')})</small></h5>
+                <small>${timestamp}</small>
+                <div class="ica-transform-diff">${buildPromptTransformDiffMarkup(entry.beforeText ?? '', entry.afterText ?? '')}</div>
+                <div class="ica-transform-actions">
+                    <button class="ica-undo-btn menu_button" data-mesid="${messageIndex}">Undo</button>
+                    <button class="ica-redo-btn menu_button" data-mesid="${messageIndex}">Redo</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const html = $(`<div class="ica-transform-history">${entries}</div>`);
+
+    html.find('.ica-undo-btn').on('click', function () {
+        const idx = Number($(this).data('mesid'));
+        if (undoPromptTransform(idx)) {
+            toastr.success('Transform undone.');
+        } else {
+            toastr.warning('Could not undo transform.');
+        }
+    });
+
+    html.find('.ica-redo-btn').on('click', function () {
+        const idx = Number($(this).data('mesid'));
+        if (redoPromptTransform(idx)) {
+            toastr.success('Transform redone.');
+        } else {
+            toastr.warning('Could not redo transform.');
+        }
+    });
+
+    await new Popup(html, POPUP_TYPE.TEXT, '', { wide: true }).show();
 }
 
 // ===================== Pathfinder Editor =====================
@@ -2685,67 +2753,9 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         }
     });
 
-    // Transform history popup — click the 📝 badge on a message
-    $(document).on('click', '.agent-transform-badge', async function () {
+    $(document).on('click', '.agent-transform-badge, .mes_view_agent_changes', async function () {
         const mesId = $(this).closest('.mes').attr('mesid');
         const messageIndex = Number(mesId);
-        if (isNaN(messageIndex) || !chat[messageIndex]) {
-            return;
-        }
-
-        const message = chat[messageIndex];
-        const history = message.extra?.[PROMPT_TRANSFORM_HISTORY_KEY];
-        if (!Array.isArray(history) || history.length === 0) {
-            toastr.info('No transform history available.');
-            return;
-        }
-
-        const entries = history.map((entry, i) => {
-            const beforePreview = escapeHtml(String(entry.beforeText ?? '').slice(0, 500));
-            const afterPreview = escapeHtml(String(entry.afterText ?? '').slice(0, 500));
-            const beforeEllipsis = entry.beforeText?.length > 500 ? '...' : '';
-            const afterEllipsis = entry.afterText?.length > 500 ? '...' : '';
-            const timestamp = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
-            return `
-                <div class="ica-transform-history-entry" data-index="${i}">
-                    <h5>${escapeHtml(entry.agentName || 'Agent')} <small>(${escapeHtml(entry.mode || 'replace')})</small></h5>
-                    <small>${timestamp}</small>
-                    <div class="ica-diff-original">
-                        <strong>Before:</strong>
-                        <pre>${beforePreview}${beforeEllipsis}</pre>
-                    </div>
-                    <div class="ica-diff-after">
-                        <strong>After:</strong>
-                        <pre>${afterPreview}${afterEllipsis}</pre>
-                    </div>
-                    <div class="ica-transform-actions">
-                        <button class="ica-undo-btn menu_button" data-mesid="${messageIndex}">Undo</button>
-                        <button class="ica-redo-btn menu_button" data-mesid="${messageIndex}">Redo</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        const html = $(`<div class="ica-transform-history">${entries}</div>`);
-
-        html.find('.ica-undo-btn').on('click', function () {
-            const idx = Number($(this).data('mesid'));
-            if (undoPromptTransform(idx)) {
-                toastr.success('Transform undone.');
-            } else {
-                toastr.warning('Could not undo transform.');
-            }
-        });
-
-        html.find('.ica-redo-btn').on('click', function () {
-            const idx = Number($(this).data('mesid'));
-            if (redoPromptTransform(idx)) {
-                toastr.success('Transform redone.');
-            } else {
-                toastr.warning('Could not redo transform.');
-            }
-        });
-
-        await new Popup(html, POPUP_TYPE.TEXT, '', { wide: true }).show();
+        await openPromptTransformHistoryPopup(messageIndex);
     });
 })();

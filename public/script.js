@@ -2101,30 +2101,7 @@ export function updateMessageBlock(messageId, message, { rerenderMessage = true 
         const text = message?.extra?.display_text ?? message.mes;
         messageElement.find('.mes_text').html(messageFormatting(text, message.name, message.is_system, message.is_user, messageId, {}, false));
     }
-
-    // Update reasoning tokens badge
-    const reasoningTokens = message?.extra?.reasoning_tokens;
-    if (reasoningTokens && reasoningTokens > 0) {
-        let badge = messageElement.find('.reasoning-tokens-badge');
-        if (!badge.length) {
-            badge = $('<span class="reasoning-tokens-badge"></span>');
-            messageElement.find('.tokenCounterDisplay').after(badge);
-        }
-        badge.text(`💭 ${reasoningTokens}`);
-    } else {
-        messageElement.find('.reasoning-tokens-badge').remove();
-    }
-
-    // Update agent transform badge
-    if (message?.extra?.inChatAgentTransformHistory?.length > 0) {
-        let transformBadge = messageElement.find('.agent-transform-badge');
-        if (!transformBadge.length) {
-            transformBadge = $('<span class="agent-transform-badge" title="Modified by agent(s)">📝</span>');
-            messageElement.find('.tokenCounterDisplay').after(transformBadge);
-        }
-    } else {
-        messageElement.find('.agent-transform-badge').remove();
-    }
+    updateMessageMetaBadges(messageElement, message);
 
     updateReasoningUI(messageElement);
 
@@ -2758,28 +2735,7 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     messageElement.find('.timestamp').text(timestamp).attr('title', `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`);
     messageElement.find('.mesIDDisplay').text(`#${messageId}`);
     tokenCount && messageElement.find('.tokenCounterDisplay').text(`${tokenCount}t`);
-    
-    const reasoningTokens = mes.extra?.reasoning_tokens;
-    if (reasoningTokens && reasoningTokens > 0) {
-        let badge = messageElement.find('.reasoning-tokens-badge');
-        if (!badge.length) {
-            badge = $('<span class="reasoning-tokens-badge"></span>');
-            messageElement.find('.tokenCounterDisplay').after(badge);
-        }
-        badge.text(`💭 ${reasoningTokens}`);
-    } else {
-        messageElement.find('.reasoning-tokens-badge').remove();
-    }
-
-    if (mes.extra?.inChatAgentTransformHistory?.length > 0) {
-        let transformBadge = messageElement.find('.agent-transform-badge');
-        if (!transformBadge.length) {
-            transformBadge = $('<span class="agent-transform-badge" title="Modified by agent(s)">📝</span>');
-            messageElement.find('.tokenCounterDisplay').after(transformBadge);
-        }
-    } else {
-        messageElement.find('.agent-transform-badge').remove();
-    }
+    updateMessageMetaBadges(messageElement, mes);
 
     mes.title && messageElement.attr('title', mes.title);
     timerValue && messageElement.find('.mes_timer').attr('title', timerTitle).text(timerValue);
@@ -2821,6 +2777,45 @@ export function updateMessageElement(mes, { messageId = chat.length - 1, message
     }
 
     return messageElement;
+}
+
+function updateMessageMetaBadges(messageElement, message) {
+    const $messageElement = messageElement?.jquery ? messageElement : $(messageElement);
+    if ($messageElement.length === 0) {
+        return;
+    }
+
+    const $tokenCounter = $messageElement.find('.tokenCounterDisplay').first();
+    if ($tokenCounter.length === 0) {
+        return;
+    }
+
+    const reasoningTokens = Number(message?.extra?.reasoning_tokens ?? 0);
+    if (reasoningTokens > 0) {
+        let badge = $messageElement.find('.reasoning-tokens-badge');
+        if (!badge.length) {
+            badge = $('<span class="reasoning-tokens-badge" title="Thought tokens"></span>');
+            $tokenCounter.after(badge);
+        }
+        badge.html(`<i class="fa-solid fa-brain" aria-hidden="true"></i><span class="reasoning-tokens-count">${reasoningTokens}</span>`);
+    } else {
+        $messageElement.find('.reasoning-tokens-badge').remove();
+    }
+
+    const hasTransformHistory = Array.isArray(message?.extra?.inChatAgentTransformHistory)
+        && message.extra.inChatAgentTransformHistory.length > 0;
+    if (hasTransformHistory) {
+        let transformBadge = $messageElement.find('.agent-transform-badge');
+        if (!transformBadge.length) {
+            transformBadge = $('<button type="button" class="agent-transform-badge" title="View agent changes" aria-label="View agent changes"></button>');
+            transformBadge.html('<i class="fa-solid fa-file-lines" aria-hidden="true"></i>');
+            $tokenCounter.after(transformBadge);
+        }
+    } else {
+        $messageElement.find('.agent-transform-badge').remove();
+    }
+
+    $messageElement.find('.mes_view_agent_changes').toggle(hasTransformHistory);
 }
 
 /**
@@ -6424,6 +6419,66 @@ function parseAndSaveLogprobs(data, continueFrom) {
  * @returns {string} Extracted message
  */
 export function extractMessageFromData(data, activeApi = null) {
+    const stringifyUnknown = (value) => {
+        if (typeof value === 'string') {
+            return value;
+        }
+
+        if (value == null) {
+            return '';
+        }
+
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
+        }
+    };
+
+    const normalizeContentText = (value) => {
+        if (typeof value === 'string') {
+            return value;
+        }
+
+        if (Array.isArray(value)) {
+            return value
+                .map(item => {
+                    if (typeof item === 'string') {
+                        return item;
+                    }
+                    if (typeof item?.text === 'string') {
+                        return item.text;
+                    }
+                    if (typeof item?.content === 'string') {
+                        return item.content;
+                    }
+                    if (typeof item?.thinking === 'string') {
+                        return item.thinking;
+                    }
+                    return '';
+                })
+                .filter(Boolean)
+                .join('\n\n');
+        }
+
+        if (typeof value === 'object') {
+            if (typeof value.text === 'string') {
+                return value.text;
+            }
+            if (Array.isArray(value.parts)) {
+                return value.parts
+                    .map(part => typeof part?.text === 'string' ? part.text : '')
+                    .filter(Boolean)
+                    .join('\n\n');
+            }
+            if (Array.isArray(value.content)) {
+                return normalizeContentText(value.content);
+            }
+        }
+
+        return '';
+    };
+
     function getResult() {
         if (typeof data === 'string') {
             return data;
@@ -6439,14 +6494,25 @@ export function extractMessageFromData(data, activeApi = null) {
             case 'novel':
                 return data.output;
             case 'openai':
-                return data?.content?.filter(p => p.type === 'text')?.map(p => p.text)?.join('\n\n') ?? data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? data?.text ?? data?.message?.content?.[0]?.text ?? data?.message?.tool_plan ?? '';
+                return normalizeContentText(data?.content?.filter?.(p => p.type === 'text')?.map?.(p => p.text)?.join?.('\n\n'))
+                    || normalizeContentText(data?.choices?.[0]?.message?.content)
+                    || normalizeContentText(data?.choices?.[0]?.text)
+                    || normalizeContentText(data?.text)
+                    || normalizeContentText(data?.message?.content)
+                    || normalizeContentText(data?.message?.tool_plan)
+                    || normalizeContentText(data?.responseContent?.parts)
+                    || normalizeContentText(data?.candidates?.[0]?.content?.parts)
+                    || stringifyUnknown(data?.message?.content);
             default:
                 return '';
         }
     }
 
     const result = getResult();
-    return Array.isArray(result) ? result.map(x => x.text).filter(x => x).join('') : result;
+    if (Array.isArray(result)) {
+        return result.map(x => typeof x?.text === 'string' ? x.text : '').filter(Boolean).join('');
+    }
+    return typeof result === 'string' ? result : stringifyUnknown(result);
 }
 
 /**
