@@ -7003,14 +7003,20 @@ body:not(.movingUI) .drawer-content.maximized {
 }
 
 .ica-transform-diff-part--ins {
-    background: color-mix(in srgb, #3bb273 22%, transparent);
-    color: color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 88%, #3bb273 12%);
+    background: rgba(50, 200, 80, 0.24);
+    color: #90ee90;
+    text-decoration: none;
+    border-radius: 2px;
+    padding: 0 1px;
 }
 
 .ica-transform-diff-part--del {
-    background: color-mix(in srgb, #d35b5b 20%, transparent);
-    color: color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 88%, #d35b5b 12%);
+    background: rgba(220, 50, 50, 0.28);
+    color: #ff9090;
     text-decoration: line-through;
+    text-decoration-color: rgba(220, 80, 80, 0.6);
+    border-radius: 2px;
+    padding: 0 1px;
 }
 
 .ica-transform-actions {
