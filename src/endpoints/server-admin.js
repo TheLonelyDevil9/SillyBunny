@@ -582,3 +582,104 @@ router.post('/update', requireAdminMiddleware, async (_request, response) => {
         });
     }
 });
+
+router.post('/branches', requireAdminMiddleware, async (_request, response) => {
+    try {
+        if (!commandExistsSync('git')) {
+            return response.status(400).json({ error: 'Git is not available in this environment.' });
+        }
+
+        const git = simpleGit({ baseDir: serverDirectory, ...GIT_OPTIONS });
+        const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT).catch(() => false);
+
+        if (!isRepo) {
+            return response.status(400).json({ error: 'This install is not running from a Git repository.' });
+        }
+
+        // Get current branch
+        const currentBranch = toTrimmedString(await git.revparse(['--abbrev-ref', 'HEAD']).catch(() => ''));
+
+        // Get all remote branches
+        const branchSummary = await git.branch(['-r']);
+        const branches = Object.keys(branchSummary.branches)
+            .filter(branch => !branch.includes('HEAD'))
+            .map(branch => branch.replace(/^origin\//, ''))
+            .filter((branch, index, self) => self.indexOf(branch) === index); // Remove duplicates
+
+        response.json({
+            currentBranch,
+            branches,
+        });
+    } catch (error) {
+        console.error('Failed to list branches.', error);
+        response.status(500).json({ error: error.message || 'Failed to list branches.' });
+    }
+});
+
+router.post('/switch-branch', requireAdminMiddleware, async (request, response) => {
+    try {
+        const branch = String(request.body?.branch ?? '').trim();
+        const autoStash = Boolean(request.body?.autoStash);
+
+        if (!branch) {
+            return response.status(400).json({ error: 'Branch name is required.' });
+        }
+
+        if (!commandExistsSync('git')) {
+            return response.status(400).json({ error: 'Git is not available in this environment.' });
+        }
+
+        const git = simpleGit({ baseDir: serverDirectory, ...GIT_OPTIONS });
+        const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT).catch(() => false);
+
+        if (!isRepo) {
+            return response.status(400).json({ error: 'This install is not running from a Git repository.' });
+        }
+
+        // Check for local changes
+        const gitStatus = await git.status();
+        const hasLocalChanges = !gitStatus.isClean();
+
+        if (hasLocalChanges && !autoStash) {
+            return response.status(400).json({
+                error: 'You have local changes. Enable auto-stash or commit/discard your changes first.',
+                hasLocalChanges: true,
+                changedFiles: gitStatus.files.slice(0, 10).map(f => f.path),
+            });
+        }
+
+        // Stash if needed
+        if (hasLocalChanges && autoStash) {
+            await git.stash(['push', '-u', '-m', `Auto-stash before switching to ${branch}`]);
+        }
+
+        // Switch branch
+        await git.checkout(branch);
+
+        // Try to pop stash if we stashed
+        let stashRestored = false;
+        if (hasLocalChanges && autoStash) {
+            try {
+                await git.stash(['pop']);
+                stashRestored = true;
+            } catch (stashError) {
+                console.warn('Failed to restore stash after branch switch:', stashError);
+            }
+        }
+
+        // Schedule restart
+        scheduleRestart(response);
+
+        response.status(202).json({
+            ok: true,
+            branch,
+            stashed: hasLocalChanges && autoStash,
+            stashRestored,
+            restarting: true,
+            message: `Switched to branch "${branch}". Restarting SillyBunny now.`,
+        });
+    } catch (error) {
+        console.error('Failed to switch branch.', error);
+        response.status(500).json({ error: error.message || 'Failed to switch branch.' });
+    }
+});
