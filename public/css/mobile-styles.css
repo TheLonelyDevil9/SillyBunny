@@ -847,7 +847,7 @@
     #character_popup,
     #world_popup,
     .drawer-content {
-        margin-top: 36px;
+        margin-top: 0;
     }
 
     .sb-shell-root,

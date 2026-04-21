@@ -4944,11 +4944,12 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
     display: none;
     opacity: 1.0;
-    position: absolute;
+    position: fixed;
     width: 100%;
     height: 100vh;
     height: 100dvh;
-    z-index: 2058;
+    inset: 0;
+    z-index: 4000;
 }
 
 #character_popup {
@@ -4963,7 +4964,7 @@ body:is([data-generating="true"], [data-swiping="true"]) :is(
     min-height: min(520px, calc(100dvh - var(--topBarBlockSize) - 16px));
     max-height: calc(100dvh - var(--topBarBlockSize) - 16px);
     position: fixed;
-    z-index: 4001;
+    z-index: 4010;
     left: 50%;
     transform: translateX(-50%);
     top: calc(var(--topBarBlockSize) + 8px);
@@ -5765,7 +5766,7 @@ body:not(.caption) .mes_img_caption {
 body:has(.drawer-content.maximized) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)),
 body:has(.drawer-content.open) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)),
 body:has(#character_popup.open) #top-settings-holder:has(.drawer-content.openDrawer:not(.fillLeft):not(.fillRight)) {
-    z-index: 4005;
+    z-index: 3005;
 }
 
 .drawer {
