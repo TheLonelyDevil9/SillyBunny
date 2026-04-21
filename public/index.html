@@ -2123,6 +2123,13 @@
                                             <strong data-source-mode="except" data-source="zai,moonshot,openrouter">
                                                 Provider support varies. Use "Show thought in chat" to control UI visibility separately.
                                             </strong>
+                                            <div class="note-block marginTop5">
+                                                <small>
+                                                    <strong>For Custom OpenAI-compatible providers:</strong> This toggle sends <code>include_reasoning</code> to the backend.
+                                                    The <code>reasoning_effort</code> parameter is only added if your model is recognized as a reasoning model (e.g., o1, o3).
+                                                    If your custom provider supports reasoning but uses a different model name, it may not receive the <code>reasoning_effort</code> parameter.
+                                                </small>
+                                            </div>
                                         </div>
                                         <label for="openai_show_thoughts_ui" class="checkbox_label widthFreeExpand">
                                             <input id="openai_show_thoughts_ui" type="checkbox" />
