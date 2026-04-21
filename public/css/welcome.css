@@ -40,6 +40,7 @@
     width: 100%;
     padding: var(--panel-padding, 18px);
     border-radius: 28px;
+    container: welcome-home / inline-size;
     --sb-welcome-panel-bg:
         radial-gradient(circle at top right, color-mix(in srgb, var(--sb-accent) 16%, transparent), transparent 30%),
         radial-gradient(circle at bottom left, color-mix(in srgb, var(--sb-accent-soft) 12%, transparent), transparent 32%),
@@ -683,6 +684,64 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 
 .welcomePanelModeChip.is-active {
     background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 18%, transparent);
+}
+
+@container welcome-home (max-width: 1320px) {
+    .welcomeHero {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        justify-items: center;
+    }
+
+    .welcomeHeroCopy {
+        width: 100%;
+    }
+
+    .welcomeHeaderTitle {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .welcomePanelToggles {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .welcomeHeroMedia {
+        order: -1;
+        width: min(100%, 320px);
+        min-height: 184px;
+        padding: 14px 12px 12px;
+        align-self: center;
+    }
+
+    .welcomeHeroScene {
+        width: min(100%, 232px);
+        min-height: 164px;
+        padding: 6px 6px 18px;
+    }
+
+    .welcomeHeroMascot {
+        width: clamp(82px, 18vw, 108px);
+    }
+
+    .welcomeHeroRing--1 {
+        width: min(100%, 168px);
+        height: 86px;
+    }
+
+    .welcomeHeroRing--2 {
+        width: min(100%, 112px);
+        height: 112px;
+        top: 12px;
+    }
+
+    .welcomeHeroScene::after {
+        width: min(100%, 156px);
+        height: 24px;
+    }
 }
 
 .welcomeRecent .recentChatList {
