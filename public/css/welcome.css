@@ -38,7 +38,7 @@
     flex-direction: column;
     gap: 18px;
     width: 100%;
-    padding: 18px;
+    padding: var(--panel-padding, 18px);
     border-radius: 28px;
     --sb-welcome-panel-bg:
         radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary, #f1b285) 16%, transparent), transparent 30%),
@@ -92,7 +92,7 @@
 
 .welcomePanel--compact {
     gap: 12px;
-    padding: 14px;
+    padding: var(--spacing-lg, 16px);
 }
 
 .welcomePanel--compact .welcomeHero {
@@ -140,7 +140,7 @@
 
 .welcomePanel--listOnly {
     gap: 0;
-    padding: 10px;
+    padding: var(--spacing-md, 12px);
     border-radius: 22px;
 }
 
@@ -378,7 +378,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
         linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(11, 18, 14, 0.24));
     position: relative;
     min-height: clamp(224px, 30vw, 320px);
-    padding: 20px 16px 16px;
+    padding: var(--spacing-lg, 16px);
     border-radius: 24px;
     display: flex;
     flex-direction: column;
@@ -428,7 +428,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     place-items: center;
     width: min(100%, 312px);
     min-height: clamp(188px, 25vw, 248px);
-    padding: 12px 8px 22px;
+    padding: var(--spacing-md, 12px) var(--spacing-sm, 8px) var(--spacing-md, 12px);
 }
 
 .welcomeHeroScene::before,

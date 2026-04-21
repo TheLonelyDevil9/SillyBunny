@@ -377,6 +377,9 @@ h3:not(.popup h3):not(#chat h3) {
 .checkbox_label {
     min-height: 38px;
     line-height: 1.45;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .checkbox_label small,
@@ -503,37 +506,22 @@ select.text_pole {
 }
 
 #leftSendForm > div,
+#rightSendForm > div:not(.mes_stop),
+#send_form .mes_stop,
 #options_button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    min-width: 42px;
-    height: 42px;
+    width: var(--button-size-md, 42px);
+    min-width: var(--button-size-md, 42px);
+    height: var(--button-size-md, 42px);
     margin: 0;
     padding: 0;
     border-radius: var(--sb-radius-button);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
-    font-size: calc(var(--bottomFormIconSize) * 0.78);
-}
-
-#rightSendForm > div:not(.mes_stop),
-#send_form .mes_stop {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
-    margin: 0;
-    padding: 0;
-    border-radius: var(--sb-radius-button);
-    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
-    box-shadow: 0 10px 18px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
-    font-size: calc(var(--bottomFormIconSize) * 0.72);
+    font-size: calc(var(--bottomFormIconSize) * 0.75);
 }
 
 #send_form .mes_stop {
@@ -555,7 +543,7 @@ select.text_pole {
 #send_textarea {
     min-height: 68px;
     height: auto;
-    padding: 14px 16px 16px;
+    padding: var(--input-padding-y, 14px) var(--input-padding-x, 16px);
     line-height: 1.56;
     border-radius: var(--sb-radius-md);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 3%, transparent);
@@ -2574,16 +2562,12 @@ input[type='range']::-moz-range-thumb {
 
     #leftSendForm > div,
     #rightSendForm > div:not(.mes_stop),
+    #send_form .mes_stop,
     #options_button {
-        width: 38px;
-        min-width: 38px;
-        height: 38px;
+        width: var(--button-size-md);
+        min-width: var(--button-size-md);
+        height: var(--button-size-md);
     }
-
-    #send_form .mes_stop {
-        width: 42px;
-        min-width: 42px;
-        max-width: 42px;
         height: 42px;
         min-height: 42px;
         max-height: 42px;
@@ -2591,6 +2575,6 @@ input[type='range']::-moz-range-thumb {
 
     #send_textarea {
         min-height: 74px;
-        padding: 12px 14px 16px;
+        padding: var(--input-padding-y) var(--input-padding-x);
     }
 }

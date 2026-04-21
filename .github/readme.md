@@ -206,6 +206,13 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **UI polish**
 
+- Established comprehensive spacing design system using CSS custom properties for consistent spacing, button sizing, and component padding across desktop and mobile
+- Fixed button sizing asymmetry — all send form buttons now use consistent sizes (42px desktop, 40px tablet, 38px mobile)
+- Corrected asymmetric padding throughout cards, panels, inputs, and navigation elements for visual balance
+- Standardized popup control gaps and welcome panel spacing for consistency
+- Fixed checkbox and text label alignment across all UI components on both desktop and mobile
+- Improved mobile navigation padding symmetry and textarea input consistency
+- Enhanced WebKit browser compatibility while maintaining all existing Safari-specific fixes
 - Added persistent Full Home, Compact, and List only display modes for the Home welcome panel so recent chats can stay visible without the large onboarding card taking over the chat area
 - Tightened the World Info workspace layout so the entry list and editor pane fit better on desktop-sized windows
 - Improved checkbox alignment, mobile/editor layout behavior, and escaped macro braces in the in-chat agent prompt placeholder so template tokens display literally

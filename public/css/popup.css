@@ -185,7 +185,7 @@ body.no-blur .popup[open]::backdrop {
     margin-top: 10px;
     display: flex;
     align-self: center;
-    gap: 20px;
+    gap: var(--spacing-md, 12px);
 }
 
 .menu_button.menu_button_default {

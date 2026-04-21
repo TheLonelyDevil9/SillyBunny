@@ -116,7 +116,7 @@
     }
 
     #sb-mobile-nav-content {
-        padding: 14px 12px 18px;
+        padding: var(--spacing-lg, 16px) var(--spacing-md, 12px);
         gap: 12px;
     }
 
@@ -150,7 +150,7 @@
     /* Input area mobile optimization */
     #send_textarea {
         min-height: calc(var(--bottomFormBlockSize) * 1.1);
-        padding: 8px 10px;
+        padding: var(--input-padding-y) var(--input-padding-x);
     }
 
     #send_form .mes_stop {
@@ -541,13 +541,13 @@
     }
 
     .checkbox_label {
-        align-items: flex-start;
+        align-items: center;
         column-gap: 8px;
     }
 
     .checkbox_label > input[type="checkbox"] {
         flex: 0 0 auto;
-        margin-top: 0.2em;
+        margin-top: 0;
     }
 
     :is(#kobold_api-presets, #novel_api-presets, #openai_api-presets, #textgenerationwebui_api-presets) .menu_button,
