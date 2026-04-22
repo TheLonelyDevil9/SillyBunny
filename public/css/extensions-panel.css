@@ -9,18 +9,19 @@
 
 .extensions_block input[type="checkbox"],
 .extensions_block input[type="radio"] {
-    margin-left: 10px;
-    margin-right: 10px;
+    margin: 0;
+    flex: 0 0 auto;
 }
 
 label[for="extensions_autoconnect"] {
     display: flex;
     align-items: center;
+    gap: 8px;
     margin: 0 !important;
 }
 
 label[for="extensions_notify_updates"] {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 8px;
     margin: 0 !important;
@@ -29,7 +30,6 @@ label[for="extensions_notify_updates"] {
 label[for="extensions_notify_updates"] input[type="checkbox"] {
     margin: 0;
     flex: 0 0 auto;
-    align-self: center;
 }
 
 .extensions_url_block {

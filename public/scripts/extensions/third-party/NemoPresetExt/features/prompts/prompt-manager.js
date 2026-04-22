@@ -13,6 +13,8 @@ import { disableTrayMode } from './category-tray.js';
 
 // 1. CONFIGURATION & STATE
 const NEMO_BUILT_IN_PATTERNS = ['=+', '-{3,}', '\\*{3,}', '(?:[^\\w\\s]+\\s*)?[─━—-]\\+'];
+const TOUCH_SCROLL_THRESHOLD_PX = 10;
+const TOUCH_CLICK_SUPPRESSION_MS = 250;
 
 const SELECTORS = {
     promptsContainer: '#completion_prompt_manager_list',
@@ -1421,8 +1423,18 @@ export const NemoPresetManager = {
         // Add event listeners with error handling
         this.setupEventListeners();
 
+        this.touchInteractionState = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            suppressUntil: 0,
+        };
         container.addEventListener('click', this.handleContainerClick.bind(this));
         container.addEventListener('contextmenu', this.handleContextMenu.bind(this));
+        container.addEventListener('touchstart', this.handleContainerTouchStart.bind(this), { passive: true });
+        container.addEventListener('touchmove', this.handleContainerTouchMove.bind(this), { passive: true });
+        container.addEventListener('touchend', this.handleContainerTouchEnd.bind(this), { passive: true });
+        container.addEventListener('touchcancel', this.handleContainerTouchEnd.bind(this), { passive: true });
         this.initializeObserver(container);
         this.createContextMenu();
 
@@ -2044,6 +2056,45 @@ export const NemoPresetManager = {
         }
     },
 
+    handleContainerTouchStart: function(event) {
+        const touch = event.touches?.[0];
+        if (!touch) {
+            return;
+        }
+
+        this.touchInteractionState = {
+            active: true,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            suppressUntil: 0,
+        };
+    },
+
+    handleContainerTouchMove: function(event) {
+        const touch = event.touches?.[0];
+        if (!touch || !this.touchInteractionState?.active) {
+            return;
+        }
+
+        const deltaX = Math.abs(touch.clientX - this.touchInteractionState.startX);
+        const deltaY = Math.abs(touch.clientY - this.touchInteractionState.startY);
+        if (deltaX > TOUCH_SCROLL_THRESHOLD_PX || deltaY > TOUCH_SCROLL_THRESHOLD_PX) {
+            this.touchInteractionState.suppressUntil = Date.now() + TOUCH_CLICK_SUPPRESSION_MS;
+        }
+    },
+
+    handleContainerTouchEnd: function() {
+        if (!this.touchInteractionState) {
+            return;
+        }
+
+        this.touchInteractionState.active = false;
+    },
+
+    shouldSuppressSummaryToggle: function() {
+        return Boolean(this.touchInteractionState && Date.now() < this.touchInteractionState.suppressUntil);
+    },
+
     handleContainerClick: function(event) {
         const { target } = event;
         const toggleButton = target.closest(SELECTORS.toggleButton);
@@ -2070,6 +2121,12 @@ export const NemoPresetManager = {
                 });
             }
         } else if (summary && !target.closest('a, button')) {
+            if (this.shouldSuppressSummaryToggle()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
             const details = summary.closest('details');
             const li = details.querySelector('summary > li');
             const dividerInfo = this.getDividerInfo(li);

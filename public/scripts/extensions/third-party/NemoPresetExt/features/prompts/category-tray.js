@@ -36,6 +36,60 @@ let topLevelDropZone = null; // Drop zone for making prompts top-level
 let isOverTopLevelDropZone = false;
 let isDragging = false; // Flag to pause updates during drag
 let currentContextMenu = null; // Track current context menu for cleanup
+const TOUCH_SCROLL_THRESHOLD_PX = 10;
+const TOUCH_CLICK_SUPPRESSION_MS = 250;
+const trayTouchGuardState = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    suppressUntil: 0,
+};
+
+function setupPromptListTouchGuard(promptList) {
+    if (!promptList || promptList.dataset.nemoTrayTouchGuardInitialized === 'true') {
+        return;
+    }
+
+    const handleTouchStart = (event) => {
+        const touch = event.touches?.[0];
+        if (!touch) {
+            return;
+        }
+
+        trayTouchGuardState.active = true;
+        trayTouchGuardState.startX = touch.clientX;
+        trayTouchGuardState.startY = touch.clientY;
+        trayTouchGuardState.suppressUntil = 0;
+    };
+
+    const handleTouchMove = (event) => {
+        const touch = event.touches?.[0];
+        if (!touch || !trayTouchGuardState.active) {
+            return;
+        }
+
+        const deltaX = Math.abs(touch.clientX - trayTouchGuardState.startX);
+        const deltaY = Math.abs(touch.clientY - trayTouchGuardState.startY);
+        if (deltaX > TOUCH_SCROLL_THRESHOLD_PX || deltaY > TOUCH_SCROLL_THRESHOLD_PX) {
+            trayTouchGuardState.suppressUntil = Date.now() + TOUCH_CLICK_SUPPRESSION_MS;
+        }
+    };
+
+    const handleTouchEnd = () => {
+        trayTouchGuardState.active = false;
+    };
+
+    promptList.addEventListener('touchstart', handleTouchStart, { passive: true });
+    promptList.addEventListener('touchmove', handleTouchMove, { passive: true });
+    promptList.addEventListener('touchend', handleTouchEnd, { passive: true });
+    promptList.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    promptList.dataset.nemoTrayTouchGuardInitialized = 'true';
+}
+
+function shouldSuppressTraySummaryClick() {
+    return Date.now() < trayTouchGuardState.suppressUntil;
+}
 
 /**
  * Get saved presets from extension settings
@@ -341,6 +395,7 @@ function convertTopLevelPrompts() {
 
     const promptList = document.querySelector('#completion_prompt_manager_list');
     if (!promptList) return 0;
+    setupPromptListTouchGuard(promptList);
 
     // Find all top-level prompts (direct children of prompt list, not in sections)
     // Exclude any that are inside our created container
@@ -440,6 +495,9 @@ function createTopLevelContainer(promptList, promptIds) {
     const clickHandler = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (shouldSuppressTraySummaryClick()) {
+            return;
+        }
         toggleTray(topLevelPromptsContainer);
     };
 
@@ -469,6 +527,7 @@ function convertToTrayMode() {
 
     // Target ALL sections (both main and sub-sections)
     const allSections = document.querySelectorAll('details.nemo-engine-section');
+    setupPromptListTouchGuard(document.querySelector('#completion_prompt_manager_list'));
 
     console.log('[NemoTray] Found sections:', allSections.length);
 
@@ -562,6 +621,9 @@ function convertToTrayMode() {
                 const clickHandler = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (shouldSuppressTraySummaryClick()) {
+                        return;
+                    }
                     console.log('[NemoTray] Clicked section:', getSectionId(section));
                     toggleTray(section);
                 };
@@ -684,6 +746,9 @@ function convertToTrayMode() {
         const clickHandler = (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (shouldSuppressTraySummaryClick()) {
+                return;
+            }
             console.log('[NemoTray] Clicked section:', getSectionId(section));
             toggleTray(section);
         };

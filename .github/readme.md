@@ -210,6 +210,8 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **User Experience**
 
+- Fixed mobile checkbox and toggle alignment across the shared UI, Extensions panel, World Info, and Prompt Manager so labels stay vertically centered and spacing stays consistent on narrow screens
+- Reduced mobile checkbox row heights at the 620px and 450px breakpoints so dense settings panels feel cleaner on phones
 - Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically
 - Quick Access Shortcuts can now be set to Search, and fresh installs now default the right shortcut to the Search icon instead of Persona
 - Replaced the old per-shell settings search bars with a single universal search row under the SillyBunny logo, so search is always available no matter which panel is open
@@ -255,6 +257,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **Bug fixes**
 
+- Fixed mobile preset menu folders accidentally toggling when a scroll gesture ended on a folder header by suppressing synthetic post-scroll summary clicks
 - Fixed repo lint regressions across Pathfinder follow-up changes and existing workspace files so the full `npm run lint` pass succeeds again
 - Fixed duplicate third-party extension cards in the Extensions panel by deduplicating manifest and render entries before they reach the UI
 - Fixed SillyBunny-to-SillyTavern minimum version compatibility checks so third-party extensions like JS Slash Runner no longer fail against the forked client version

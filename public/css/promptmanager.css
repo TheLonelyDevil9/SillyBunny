@@ -518,7 +518,7 @@
 }
 
 #completion_prompt_manager_popup .completion_prompt_manager_prompt_header_actions {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
@@ -531,10 +531,10 @@
 }
 
 #completion_prompt_manager_popup #completion_prompt_manager_forbid_overrides_block .checkbox_label {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 8px;
-    line-height: 1.2;
+    line-height: 1.45;
 }
 
 #completion_prompt_manager_popup #completion_prompt_manager_forbid_overrides_block .checkbox_label input[type="checkbox"] {
@@ -543,8 +543,9 @@
 }
 
 #completion_prompt_manager_popup #completion_prompt_manager_forbid_overrides_block .checkbox_label span {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    line-height: 1.45;
 }
 
 @media screen and (min-width: 961px) {

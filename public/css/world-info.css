@@ -296,7 +296,7 @@
     align-items: center;
     display: flex;
     flex-direction: row;
-    column-gap: 10px;
+    gap: 10px;
 }
 
 .world_entry_form_control .checkbox h4 {
@@ -1104,6 +1104,16 @@ select.keyselect+span.select2-container .select2-selection--multiple {
 
     .WIEnteryHeaderControls {
         grid-template-columns: 1fr;
+    }
+
+    #wiCheckboxes .checkbox_label {
+        min-height: 40px;
+    }
+}
+
+@media screen and (max-width: 450px) {
+    #wiCheckboxes .checkbox_label {
+        min-height: 36px;
     }
 }
 

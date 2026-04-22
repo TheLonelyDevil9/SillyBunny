@@ -391,6 +391,12 @@ h3:not(.popup h3):not(#chat h3) {
     gap: 8px;
 }
 
+.checkbox_label > input[type="checkbox"],
+.checkbox_label > input[type="radio"] {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
 .checkbox_label small,
 .checkbox_label span {
     line-height: 1.45;
@@ -399,7 +405,7 @@ h3:not(.popup h3):not(#chat h3) {
 @media screen and (min-width: 769px) and (max-width: 1280px) and (pointer: fine) {
     .checkbox_label {
         min-height: 32px;
-        column-gap: 8px;
+        gap: 8px;
     }
 }
 
@@ -2444,12 +2450,11 @@ input[type='range']::-moz-range-thumb {
 }
 
 #rm_extensions_block label.checkbox_label.flexNoGap {
-    column-gap: 8px;
+    gap: 8px;
 }
 
 #rm_extensions_block label[for='extensions_notify_updates'] {
     gap: 8px !important;
-    column-gap: 8px !important;
 }
 
 #rm_extensions_block #extensions_notify_updates {
