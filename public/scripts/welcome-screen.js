@@ -52,6 +52,7 @@ const STARTER_PACK_PRESET_NAME_SILLYTAVERN = 'Pura\'s Director Preset (SillyTave
 const STARTER_PACK_PRESET_TITLE = 'Pura\'s Director Presets';
 const STARTER_PACK_CREATOR_NAME = 'purachina';
 const STARTER_PACK_SITE_URL = 'https://platberlitz.github.io/';
+const GEECHAN_PRESET_NAME = 'Geechan - Universal Roleplay (Chat Completions) (v5.0)';
 const GEECHAN_SITE_URL = 'https://rentry.org/geechan';
 const TLD_CHUB_URL = 'https://chub.ai/users/thelonelydevil';
 const TLD_DISCORD_PALS_URL = 'https://github.com/TheLonelyDevil9/discord-pals/';
@@ -765,18 +766,23 @@ function buildLinkStarterPackItem({
 }
 
 function buildGeechanStarterPackItem() {
+    const presetManager = getPresetManager('openai');
+    const isOpenAiStyleApi = main_api === 'openai';
+    const isSelected = isOpenAiStyleApi && presetManager?.getSelectedPresetName() === GEECHAN_PRESET_NAME;
+    const body = 'Geechan\'s Rentry highlights his well-written character cards and guides alongside his prompts and presets. SillyBunny includes his Universal Roleplay v5.0 preset across Chat Completions, plus the matching Text Completions variant for context, system prompt, and instruct pieces. He also made our bundled Assistant Nahida card and Prose Polisher agent.';
+
     return {
         title: 'Geechan',
-        body: 'Geechan\'s Rentry highlights his well-written character cards and guides alongside his prompts and presets. SillyBunny includes his Universal Roleplay v5.0 preset across Chat Completions, plus the matching Text Completions variant for context, system prompt, and instruct pieces. He also made our bundled Assistant Nahida card and Prose Polisher agent.',
+        body: isSelected ? `${body} This preset is selected right now.` : body,
         icon: 'fa-leaf',
         chips: ['Chat Completions', 'Text Completions', 'Prose Polisher', 'Assistant Nahida'],
         chipColumnCount: 4,
-        statusLabel: 'Preset pack',
-        statusTone: 'warm',
+        statusLabel: isSelected ? 'Selected' : 'Preset pack',
+        statusTone: isSelected ? 'good' : 'warm',
         actionLabel: 'Apply preset',
         actionIcon: 'fa-wand-magic-sparkles',
         actionType: 'apply-preset',
-        actionValue: 'Geechan - Universal Roleplay (Chat Completions) (v5.0)',
+        actionValue: GEECHAN_PRESET_NAME,
         secondaryActionLabel: 'Visit site',
         secondaryActionIcon: 'fa-arrow-up-right-from-square',
         secondaryActionType: 'open-link',
