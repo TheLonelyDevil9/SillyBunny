@@ -505,15 +505,17 @@ function clearPromptTransformRunningToast(toast) {
 }
 
 function clearAllPromptTransformRunningToasts() {
-    if (activePromptTransformToasts.size === 0) {
-        return;
-    }
-
     for (const toast of activePromptTransformToasts) {
         toastr.clear(toast);
     }
 
     activePromptTransformToasts.clear();
+
+    $('.toast').filter((_, element) => {
+        const title = $(element).find('.toast-title').text().trim();
+        const message = $(element).find('.toast-message').text().trim();
+        return title === 'In-Chat Agent' && /^Running prompt (rewrite|append) via /u.test(message);
+    }).each((_, element) => toastr.clear($(element)));
 }
 
 async function commitOpenEditorForMessage(messageIndex) {

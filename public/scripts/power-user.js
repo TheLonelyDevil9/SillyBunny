@@ -449,6 +449,7 @@ let themes = [];
 let movingUIPresets = [];
 /** @type {ContextSettings[]} */
 export let context_presets = [];
+let customThemeStyleEntries = {};
 
 const storage_keys = {
     storyStringValidationCache: 'StoryStringValidationCache',
@@ -1337,6 +1338,28 @@ function applyCustomCSS() {
         document.head.appendChild(style);
     }
     style.innerHTML = power_user.custom_css;
+    applyCustomThemeStyleEntries();
+}
+
+function applyCustomThemeStyleEntries() {
+    const customThemeEntries = customThemeStyleEntries;
+    if (!customThemeEntries || typeof customThemeEntries !== 'object') {
+        return;
+    }
+
+    const rootStyle = document.documentElement.style;
+    for (const [varId, rawValue] of Object.entries(customThemeEntries)) {
+        const value = String(rawValue ?? '').trim();
+        if (!varId || !value) {
+            continue;
+        }
+
+        rootStyle.setProperty(`--${varId}`, value);
+
+        if (varId === 'mainFont') {
+            rootStyle.setProperty('--mainFontFamily', value);
+        }
+    }
 }
 
 function applyBlurStrength() {
@@ -1526,6 +1549,9 @@ function getExampleMessagesBehavior() {
 //MARK: loadPowerUser
 export async function loadPowerUserSettings(settings, data) {
     const defaultStscript = JSON.parse(JSON.stringify(power_user.stscript));
+    customThemeStyleEntries = settings.extension_settings?.CTSI?.entries && typeof settings.extension_settings.CTSI.entries === 'object'
+        ? { ...settings.extension_settings.CTSI.entries }
+        : {};
     // Load from settings.json
     if (settings.power_user !== undefined) {
         // Migrate old preference to a new setting
