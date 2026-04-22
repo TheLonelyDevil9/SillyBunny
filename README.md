@@ -197,6 +197,13 @@ SillyBunny includes some extras by default to help you get started right away:
 
 ### v1.4.0 (2026-04-21)
 
+**Documentation**
+
+- Added Playwright automation script for screenshot capture (`tests/capture-screenshots.js`)
+- Added comprehensive manual screenshot guide (`docs/SCREENSHOT_GUIDE.md`)
+- Screenshot tools support both desktop (1920x1080) and mobile (390x844) viewports
+- Automated script captures all 5 UI sections with proper navigation and timing
+
 **User Experience**
 
 - Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically

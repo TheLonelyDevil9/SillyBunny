@@ -131,14 +131,15 @@ bash start.sh
 
 ### Different UI
 
-The original SillyTavern layout is replaced with a custom navigation shell:
+The original SillyTavern layout is replaced with a custom, easy-to-navigate graphical shell:
 
-- **Left/right panel navigation** for workspace and customization
-- **Search-first** across presets, lore, extensions, personas, and settings
-- **Mobile-aware** with a dedicated phone/tablet navigation layer
-- **Collapsible settings sections** in both Chat Completions and Text Completions presets
-- **Extra shell themes**: Modern Glass, Clean Minimal, Bold Stylized, etc.
-- **Extra palette presets**: Forest Dusk, Forest Dawn, Rose Glow, etc.
+- **Top bar**: Reworked with cleaner, better-defined nested menus. Includes Navigate, Customize, Home, and Characters.
+- **Bottom bar**: New bottom bar designed for quick access to persona switching, quick chat switching, and add/edit/remove existing chat functionality.
+- **Panel-oriented navigation**: Easy access to all settings in nested panels. Collapsible settings sections in both Chat Completions and Text Completions presets.
+- **Global search**: A global search bar that queries across presets, lore, extensions, personas, and settings at once.
+- **Platform-aware**: Designed for both desktop and mobile, with a dedicated phone/tablet navigation layer
+- **Three modern shell themes**: Modern Glass, Clean Minimal, Bold Stylized
+- **Palette customization**: Easily change the accent colour of any theme you're currently using.
 
 ### Bun-first runtime
 
@@ -198,17 +199,29 @@ SillyBunny includes some extras by default to help you get started right away:
 
 ### v1.4.0 (2026-04-21)
 
+**Documentation**
+
+- Added Playwright automation script for screenshot capture (`tests/capture-screenshots.js`)
+- Added comprehensive manual screenshot guide (`docs/SCREENSHOT_GUIDE.md`)
+- Screenshot tools support both desktop (1920x1080) and mobile (390x844) viewports
+- Automated script captures all 5 UI sections with proper navigation and timing
+
 **User Experience**
 
 - Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically
 - Quick Access Shortcuts can now be set to Search, and fresh installs now default the right shortcut to the Search icon instead of Persona
+- Replaced the old per-shell settings search bars with a single universal search row under the SillyBunny logo, so search is always available no matter which panel is open
+- Universal search now expands downward from the top bar, searches across both Workspace and Customize, and jumps directly to matching settings on desktop and mobile
 - Universal search is now hidden by default behind the Search shortcut icon and drops down over the header when opened, instead of permanently increasing the top bar height
 - Universal search surfaces are now fully opaque so the field, results panel, and result cards stay readable over any page background
 - Moved Open Launchpad button next to Temporary Chat for better visual alignment
 - Open Launchpad button now toggles the launchpad (opens if closed, closes if open)
 - Added active state highlighting to Open Launchpad button when launchpad is open
 - Launchpad now expands by default on first startup to showcase tutorials
+- Home now highlights in the top bar while the landing page is visible, matching the active-state treatment used by the shell buttons
+- Switching from Navigate to Customize no longer double-triggers and closes the shell again during the opening animation
 - Switching between Navigate and Customize now keeps the target shell open immediately instead of briefly collapsing through a closed state
+- Home now reflows from its own panel width, so returning from Customize no longer crushes the landing copy into a narrow one-word column
 - Home display toggles now render once in a centered top row instead of duplicating again above Recent Chats
 - Refreshed the README gallery for v1.4.0 with updated desktop/mobile shell captures and new Bunny Guide in-chat screenshots
 - Corrected the v1.4.0 README shell captures so the mobile gallery and Characters views no longer show broken overlay states
@@ -228,8 +241,13 @@ SillyBunny includes some extras by default to help you get started right away:
 - Fixed extension containers showing brown colors by updating default CSS variables to match Dark V1.0
 - Removed hardcoded brown colors from Modern Glass and Bold Stylized shell themes
 - Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
-- Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
 - Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
+- Removed the remaining hardcoded brown accents from the home shell, popups, extension panels, and shared UI fallbacks so theme colors stay consistent after refreshes
+- Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
+- Quick context shortcut buttons now render in a strict horizontal row for both Text Completions and Chat Completions
+- Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
+- Recent Chats now clips cleanly with corrected corner rounding
+- Expanded the Prompt Manager editor pane and widened its dropdown controls in the workspace shell so menu fields no longer feel cramped on desktop
 - Moonlit Echoes chat layouts now stay available with Moonlit Echoes itself turned off, including Echo, Whisper, Hush, Ripple, Tide, and their chat-style toggles
 
 **Bug fixes**
@@ -243,10 +261,11 @@ SillyBunny includes some extras by default to help you get started right away:
 - Reduced Import Folder and Sync Extensions button sizes on mobile for better fit
 - Removed bloated search hint text and tab descriptions on mobile for cleaner UI
 - Added reinstall button for third-party extensions to quickly fix corrupted extensions by deleting and reinstalling from repository
+- Changed fresh-install API defaults so Chat Completions is the first/main default instead of the old Text Completion or Horde/Kobold path
 
 **Reasoning and provider compatibility**
 
-- Added a separate "Show thought in chat" toggle so reasoning can be requested without forcing returned thought text to stay visible in chat
+- Simplified reasoning controls by removing the separate "Show thought in chat" toggle, so "Request model reasoning" is the single control again
 - Fixed response text extraction for OpenAI-style and Gemini-style payloads so parts/content/candidates/tool-plan formats render correctly instead of collapsing into blank or broken output
 - Fixed Gemini thought-signature handling by reading `candidates[].content.parts` correctly and checking the `gemini.thoughtSignatures` config dynamically
 - Added clarification tooltip for "Request model reasoning" toggle explaining behavior for Custom OpenAI-compatible providers
@@ -258,6 +277,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Updated agent transform diff styling to match recast-post-processing — more subtle colors with rgba transparency for cleaner visual appearance
 - Added a dedicated "View agent changes" message action and wired it to the same transform-history popup as the inline badge
 - Hardened agent error/result serialization for non-JSON values and updated adventure-helper status copy to be clearer in the UI
+- Normalized structured agent/prompt content before text-completion fallback and post-generation passes, so XML-style prompts and appended assistant responses no longer degrade into `[object Object]`
 - Post-generation prompt agents now strip repeated outer `<assistant_response>` wrappers before prompting or applying results, so duplicate transport tags no longer leak into chat output
 
 **Bottom bar and persona fixes**
