@@ -210,6 +210,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 - Fixed a Termux/Android mobile typing bug where accepting keyboard autocorrect suggestions could append the replacement text to the end of the message instead of replacing the misspelled word in place
 - Hardened the shared autocomplete engine around native replacement and IME composition events, so Android/Termux keyboard corrections can finish in place without slash-command or name autocomplete interrupting the browser's own text replacement flow
+- Fixed the login page font loading so it now imports the same Figtree stack as the main app instead of falling back to bundled Noto Sans for the body text
 - Fixed mobile checkbox and toggle alignment across the shared UI, Extensions panel, World Info, and Prompt Manager so labels stay vertically centered and spacing stays consistent on narrow screens
 - Fine-tuned the OpenAI reasoning settings on mobile so the reasoning checkboxes stay centered against their labels and the tag-style dropdown stacks cleanly with symmetrical spacing on phone widths
 - Reduced mobile checkbox row heights at the 620px and 450px breakpoints so dense settings panels feel cleaner on phones
