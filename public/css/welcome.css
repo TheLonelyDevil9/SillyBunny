@@ -113,10 +113,18 @@
 
 .welcomePanel--compact .welcomeHeroCopy {
     gap: 0;
+    align-items: flex-start;
+    text-align: left;
 }
 
 .welcomePanel--compact .welcomeHeaderTitle {
+    flex-direction: row;
     align-items: center;
+    justify-content: flex-start;
+}
+
+.welcomePanel--compact .welcomeHeroTitleGroup {
+    text-align: left;
 }
 
 .welcomePanel--compact .welcomeHeaderLogo {
@@ -189,8 +197,8 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
     flex-direction: column;
     gap: 16px;
     min-width: 0;
-    align-items: flex-start;
-    text-align: left;
+    align-items: center;
+    text-align: center;
 }
 
 .welcomeHeroEyebrow {
@@ -203,8 +211,9 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 
 .welcomeHeaderTitle {
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 16px;
     min-width: 0;
 }
