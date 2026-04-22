@@ -2,12 +2,6 @@
 
 An elegant fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern), designed with a cleaner, shell-based UI; Bun-based backend; built-in tutorials, presets, extensions, and a quick-start dashboard; and a lightweight agnetic system to faciliate modern agent functionality.
 
-## Changelog
-
-- 2026-04-22: Cache-busted SillyBunny's self-hosted Figtree stylesheet and font asset URLs on both the app shell and login page, so browsers are forced off stale Noto Sans-era font caches on desktop and mobile.
-
-You can find additional extras here: [platberlitz.github.io](https://platberlitz.github.io/)
-
 > [!WARNING]
 > This is an in-dev fork, and is considered beta quality. [Please direct all issues to this project's issue tracker.](https://github.com/platberlitz/SillyBunny/issues)
 >
@@ -28,39 +22,31 @@ You can find additional extras here: [platberlitz.github.io](https://platberlitz
 
 ## User Interface
 
-These screenshots show the refreshed `v1.4.0` shell-based UI across Navigate, Customize, Agents, Characters, and a Bunny Guide in-chat view on desktop and mobile.
+These screenshots show the refreshed `v1.4.0` shell-based UI across Navigate, Customize, Agents, Characters, Search, and a Bunny Guide in-chat view on desktop and mobile.
 
 #### Desktop
 
-**Navigation Menu**
+| Desktop Navigation Menu | Desktop Customize Menu |
+| :---: | :---: |
+| <img src="screenshots/sillybunny-ui-desktop-navigate-v1.4.0.png" alt="Desktop Navigation Menu" width="100%"> | <img src="screenshots/sillybunny-ui-desktop-customize-v1.4.0.png" alt="Desktop Customize Menu" width="100%"> |
 
-<img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-navigate-v1.4.0.png" alt="Desktop Navigation Menu" width="100%">
+| Desktop Agents Menu | Desktop Characters Menu |
+| :---: | :---: |
+| <img src="screenshots/sillybunny-ui-desktop-agents-v1.4.0.png" alt="Desktop Agents Menu" width="100%"> | <img src="screenshots/sillybunny-ui-desktop-characters-v1.4.0.png" alt="Desktop Characters Menu" width="100%"> |
 
-**Customize Menu**
-
-<img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-customize-v1.4.0.png" alt="Desktop Customize Menu" width="100%">
-
-**Agents Menu**
-
-<img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-agents-v1.4.0.png" alt="Desktop Agents Menu" width="100%">
-
-**Characters Menu**
-
-<img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-characters-v1.4.0.png" alt="Desktop Characters Menu" width="100%">
-
-**Bunny Guide In-Chat**
-
-<img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-in-chat-v1.4.0.png" alt="Desktop Bunny Guide Chat" width="100%">
+| Desktop Search | Desktop Chat |
+| :---: | :---: |
+| <img src="screenshots/sillybunny-ui-desktop-search-v1.4.0.png" alt="Desktop Search" width="100%"> | <img src="screenshots/sillybunny-ui-desktop-in-chat-v1.4.0.png" alt="Desktop Bunny Guide Chat" width="100%"> |
 
 #### Mobile
 
-| Navigation Menu | Customize Menu | Agents Menu | Characters Menu |
-| :---: | :---: | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-navigate-v1.4.0.png" alt="Mobile Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-customize-v1.4.0.png" alt="Mobile Customize Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-agents-v1.4.0.png" alt="Mobile Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-characters-v1.4.0.png" alt="Mobile Characters Menu" width="100%"> |
+| Mobile Navigation Menu | Mobile Customize Menu | Mobile Agents Menu |
+| :---: | :---: | :---: |
+| <img src="screenshots/sillybunny-ui-mobile-navigate-v1.4.0.png" alt="Mobile Navigation Menu" width="100%"> | <img src="screenshots/sillybunny-ui-mobile-customize-v1.4.0.png" alt="Mobile Customize Menu" width="100%"> | <img src="screenshots/sillybunny-ui-mobile-agents-v1.4.0.png" alt="Mobile Agents Menu" width="100%"> |
 
-| Bunny Guide In-Chat |
-| :---: |
-| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-in-chat-v1.4.0.png" alt="Mobile Bunny Guide Chat" width="45%"> |
+| Mobile Characters Menu | Mobile Search | Mobile Chat |
+| :---: | :---: | :---: |
+| <img src="screenshots/sillybunny-ui-mobile-characters-v1.4.0.png" alt="Mobile Characters Menu" width="100%"> | <img src="screenshots/sillybunny-ui-mobile-search-v1.4.0.png" alt="Mobile Search" width="100%"> | <img src="screenshots/sillybunny-ui-mobile-in-chat-v1.4.0.png" alt="Mobile Bunny Guide Chat" width="100%"> |
 
 ---
 
