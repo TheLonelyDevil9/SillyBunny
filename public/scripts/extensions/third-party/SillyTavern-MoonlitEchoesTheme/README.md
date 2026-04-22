@@ -5,6 +5,7 @@
 
 ## SillyBunny Fork Changelog
 
+- 2026-04-22: Bundled SillyBunny's default Figtree font locally and switched the app plus login page to the self-hosted stylesheet, so the body keeps the original Figtree look instead of falling back to Noto Sans when remote font loading fails.
 - 2026-04-22: Fixed SillyBunny's login page font loading so the body now imports the same Figtree stack as the main app instead of falling back to bundled Noto Sans.
 - 2026-04-22: Hardened SillyBunny's shared autocomplete input handling around native keyboard replacement and IME composition events, so Android and Termux autocorrect suggestions can replace text in place without appending at the end of the field.
 - 2026-04-22: Switched SillyBunny's default UI font back to Figtree after testing Noto Sans, so fresh loads and theme fallbacks again use Figtree across desktop and mobile.
