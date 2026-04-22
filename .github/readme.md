@@ -4,6 +4,10 @@
 
 An elegant fork of [SillyTavern](https://github.com/SillyTavern/SillyTavern), designed with a cleaner, shell-based UI; Bun-based backend; built-in tutorials, presets, extensions, and a quick-start dashboard; and a lightweight agnetic system to faciliate modern agent functionality.
 
+## Changelog
+
+- 2026-04-22: Cache-busted SillyBunny's self-hosted Figtree stylesheet and font asset URLs on both the app shell and login page, so browsers are forced off stale Noto Sans-era font caches on desktop and mobile.
+
 You can find additional extras here: [platberlitz.github.io](https://platberlitz.github.io/)
 
 > [!WARNING]
