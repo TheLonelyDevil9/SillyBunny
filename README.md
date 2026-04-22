@@ -209,6 +209,7 @@ SillyBunny includes some extras by default to help you get started right away:
 **User Experience**
 
 - Fixed mobile checkbox and toggle alignment across the shared UI, Extensions panel, World Info, and Prompt Manager so labels stay vertically centered and spacing stays consistent on narrow screens
+- Fine-tuned the OpenAI reasoning settings on mobile so the reasoning checkboxes stay centered against their labels and the tag-style dropdown stacks cleanly with symmetrical spacing on phone widths
 - Reduced mobile checkbox row heights at the 620px and 450px breakpoints so dense settings panels feel cleaner on phones
 - Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically
 - Quick Access Shortcuts can now be set to Search, and fresh installs now default the right shortcut to the Search icon instead of Persona

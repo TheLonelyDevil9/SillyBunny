@@ -1062,17 +1062,36 @@ input[type='range']::-moz-range-thumb {
 }
 
 #openai_api .checkbox_label,
-#openai_settings .checkbox_label {
+#openai_settings .checkbox_label,
+#range_block_openai .checkbox_label {
     width: 100%;
-    flex-wrap: wrap;
-    align-items: flex-start;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+#openai_api .checkbox_label > input[type="checkbox"],
+#openai_api .checkbox_label > input[type="radio"],
+#openai_settings .checkbox_label > input[type="checkbox"],
+#openai_settings .checkbox_label > input[type="radio"],
+#range_block_openai .checkbox_label > input[type="checkbox"],
+#range_block_openai .checkbox_label > input[type="radio"] {
+    flex: 0 0 auto;
+    align-self: center;
+    margin: 0;
 }
 
 #openai_api .checkbox_label > span,
 #openai_api .checkbox_label > small,
 #openai_settings .checkbox_label > span,
-#openai_settings .checkbox_label > small {
+#openai_settings .checkbox_label > small,
+#range_block_openai .checkbox_label > span,
+#range_block_openai .checkbox_label > small {
+    flex: 1 1 auto;
     min-width: 0;
+    display: block;
+    line-height: 1.45;
     overflow-wrap: anywhere;
 }
 
@@ -1218,6 +1237,34 @@ input[type='range']::-moz-range-thumb {
 @media screen and (max-width: 760px) {
     #openai_api-presets .flex-container.flexNoGap {
         grid-template-columns: 1fr;
+    }
+
+    #openai_api .checkbox_label,
+    #openai_settings .checkbox_label,
+    #range_block_openai .checkbox_label {
+        min-height: 38px;
+        padding-block: 2px;
+    }
+
+    #openai_api .oneline-dropdown,
+    #openai_settings .oneline-dropdown,
+    #range_block_openai .oneline-dropdown {
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    #openai_api .oneline-dropdown label,
+    #openai_settings .oneline-dropdown label,
+    #range_block_openai .oneline-dropdown label {
+        width: 100%;
+        margin: 0;
+    }
+
+    #openai_api .oneline-dropdown select,
+    #openai_settings .oneline-dropdown select,
+    #range_block_openai .oneline-dropdown select {
+        width: 100%;
+        min-width: 0;
     }
 
     #openai_api-presets .flex-container.marginLeft5,
