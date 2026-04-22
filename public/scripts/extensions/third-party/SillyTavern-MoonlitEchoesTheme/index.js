@@ -495,7 +495,7 @@ function ensureChatStyleCss() {
     const linkChatStyles = document.createElement('link');
     linkChatStyles.id = 'MoonlitEchosTheme-chat-styles';
     linkChatStyles.rel = 'stylesheet';
-    linkChatStyles.href = `${baseUrl}/chat-styles.css?v=20260422a`;
+    linkChatStyles.href = `${baseUrl}/chat-styles.css?v=20260422b`;
     document.head.append(linkChatStyles);
 }
 

@@ -1535,10 +1535,16 @@ img[src*="sillybunny-pixel-logo.png"] {
 
 .mes_text,
 .mes_reasoning {
+    font-family: var(--mainFontFamily, 'Figtree', 'Noto Sans', sans-serif);
     font-weight: 500;
     line-height: calc(var(--mainFontSize) + .5rem);
     max-width: 100%;
     overflow-wrap: anywhere;
+}
+
+.mes_text :where(p, li, blockquote, q, span),
+.mes_reasoning :where(p, li, blockquote, q, span) {
+    font-family: inherit;
 }
 
 .mes_text {

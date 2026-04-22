@@ -971,6 +971,11 @@ body.tidestyle #chat {
 }
 
 /* Shared fixes for the Moonlit chat layouts */
+body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) #chat :is(.mes_text, .mes_reasoning),
+body:is(.echostyle, .whisperstyle, .hushstyle, .ripplestyle, .tidestyle) #chat :is(.mes_text, .mes_reasoning) :where(p, li, blockquote, q, span) {
+    font-family: var(--mainFontFamily, 'Figtree', 'Noto Sans', sans-serif);
+}
+
 body.ripplestyle {
     .mesAvatarWrapper {
         display: grid;
