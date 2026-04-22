@@ -94,19 +94,77 @@ function addChromePatch() {
     }
 }
 
+function isEditableFocusTarget(element) {
+    return element instanceof HTMLInputElement
+        || element instanceof HTMLTextAreaElement
+        || (element instanceof HTMLElement && element.isContentEditable);
+}
+
 function applyBrowserFixes() {
     if (isFirefox()) {
         sanitizeInlineQuotationOnCopy();
     }
 
     if (isMobile()) {
-        const fixFunkyPositioning = () => {
+        const viewport = window.visualViewport;
+        let viewportFixScheduled = false;
+        let lastViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+
+        const updateViewportBaseline = () => {
+            lastViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+        };
+
+        const applyPositionFix = ({ force = false } = {}) => {
+            updateViewportBaseline();
+
+            // Avoid force-pinning the root while Android IMEs are actively
+            // editing text. That can break replacement/correction targets and
+            // make accepted suggestions append at the end of the field instead.
+            if (!force && isEditableFocusTarget(document.activeElement)) {
+                return;
+            }
+
+            if (viewportFixScheduled) {
+                return;
+            }
+
+            viewportFixScheduled = true;
             console.debug('[Mobile] Device viewport change detected.');
             document.documentElement.style.position = 'fixed';
-            requestAnimationFrame(() => document.documentElement.style.position = '');
+            requestAnimationFrame(() => {
+                document.documentElement.style.position = '';
+                viewportFixScheduled = false;
+            });
         };
-        window.addEventListener('resize', fixFunkyPositioning);
-        window.addEventListener('orientationchange', fixFunkyPositioning);
+
+        const fixFunkyPositioning = () => {
+            const currentViewportHeight = Math.round(viewport?.height || window.innerHeight || 0);
+            const viewportDelta = Math.abs(currentViewportHeight - lastViewportHeight);
+
+            lastViewportHeight = currentViewportHeight;
+
+            // Ignore tiny viewport twitches from the mobile browser chrome and
+            // keyboard suggestion UI. Those do not need the layout workaround.
+            if (viewportDelta < 24) {
+                return;
+            }
+
+            applyPositionFix();
+        };
+
+        viewport?.addEventListener('resize', fixFunkyPositioning, { passive: true });
+        window.addEventListener('resize', fixFunkyPositioning, { passive: true });
+        window.addEventListener('orientationchange', () => {
+            updateViewportBaseline();
+            applyPositionFix({ force: true });
+        }, { passive: true });
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                updateViewportBaseline();
+            }
+        });
+        document.addEventListener('focusin', updateViewportBaseline, true);
+        document.addEventListener('focusout', () => requestAnimationFrame(updateViewportBaseline), true);
     }
 
     addSafariPatch();
