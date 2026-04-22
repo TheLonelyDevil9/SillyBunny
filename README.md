@@ -187,149 +187,34 @@ SillyBunny includes some extras by default to help you get started right away:
 
 ### v1.4.0 (2026-04-22)
 
-**Documentation**
+**Added**
 
-- Removed the broken screenshot automation script and outdated screenshot guide after the shell controls diverged from those instructions
-- Replaced all `v1.4.0` README gallery screenshots with fresh live captures across desktop and mobile
+- A universal search flow for the shell, with Search available as a quick shortcut and shared results across Navigate and Customize.
+- A fuller home/launchpad experience, including persistent `Full Home`, `Compact`, and `List only` modes, bundled helpers, and launchpad shortcuts for common actions.
+- New UI customization tools, including a Google Font picker, accent color presets, and a custom RGB accent option.
+- More built-in agnetic and reasoning support, including visible reasoning-tag presets, extra Custom OpenAI-compatible reasoning presets, an agent cancel action, agent diff/history viewing, and Pathfinder auto-use for attached lorebooks.
+- Additional context-size presets and a server-admin branch switcher.
 
-**Maintenance**
+**Removed or Changed**
 
-- Cleaned up lingering nested helper declarations and async promise executor patterns so the current lint suite and stricter proactive ESLint checks stay green
+- Replaced the old per-panel settings search bars with a single universal search surface under the SillyBunny header.
+- Changed the default visual stack to the `Dark V1.0` UI theme with the `Clean Minimal` shell style.
+- Removed the Forest Dusk, Forest Dawn, and Rose Glow theme preset buttons.
+- Reworked the welcome/home surface so it opens correctly on fresh installs, keeps its controls visible across modes, and uses a cleaner launchpad/bundled-extras layout.
+- Refreshed the `v1.4.0` README screenshot gallery and removed the stale screenshot automation/docs flow that no longer matched the live shell.
 
-**User Experience**
+**Fixed**
 
-- Fixed a Termux/Android mobile typing bug where accepting keyboard autocorrect suggestions could append the replacement text to the end of the message instead of replacing the misspelled word in place
-- Hardened the shared autocomplete engine around native replacement and IME composition events, so Android/Termux keyboard corrections can finish in place without slash-command or name autocomplete interrupting the browser's own text replacement flow
-- Fixed the login page font loading so it now imports the same Figtree stack as the main app instead of falling back to bundled Noto Sans for the body text
-- Bundled Figtree locally and switched the main app plus login page to the self-hosted stylesheet, so the default body font keeps the original Figtree look even when Google Fonts is blocked or fails to load
-- Fixed mobile checkbox and toggle alignment across the shared UI, Extensions panel, World Info, and Prompt Manager so labels stay vertically centered and spacing stays consistent on narrow screens
-- Fine-tuned the OpenAI reasoning settings on mobile so the reasoning checkboxes stay centered against their labels and the tag-style dropdown stacks cleanly with symmetrical spacing on phone widths
-- Reduced mobile checkbox row heights at the 620px and 450px breakpoints so dense settings panels feel cleaner on phones
-- Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically
-- Quick Access Shortcuts can now be set to Search, and fresh installs now default the right shortcut to the Search icon instead of Persona
-- Replaced the old per-shell settings search bars with a single universal search row under the SillyBunny logo, so search is always available no matter which panel is open
-- Universal search now expands downward from the top bar, searches across both Workspace and Customize, and jumps directly to matching settings on desktop and mobile
-- Universal search is now hidden by default behind the Search shortcut icon and drops down over the header when opened, instead of permanently increasing the top bar height
-- Universal search surfaces are now fully opaque so the field, results panel, and result cards stay readable over any page background
-- Moved Open Launchpad button next to Temporary Chat for better visual alignment
-- Open Launchpad button now toggles the launchpad (opens if closed, closes if open)
-- Added active state highlighting to Open Launchpad button when launchpad is open
-- Launchpad now expands by default on first startup to showcase tutorials
-- Home now highlights in the top bar while the landing page is visible, matching the active-state treatment used by the shell buttons
-- Switching from Navigate to Customize no longer double-triggers and closes the shell again during the opening animation
-- Switching between Navigate and Customize now keeps the target shell open immediately instead of briefly collapsing through a closed state
-- Home now reflows from its own panel width, so returning from Customize no longer crushes the landing copy into a narrow one-word column
-- Home display toggles now render once in a centered top row instead of duplicating again above Recent Chats
-- Refreshed the README gallery for v1.4.0 with updated desktop/mobile shell captures and new Bunny Guide in-chat screenshots
-- Corrected the v1.4.0 README shell captures so the mobile gallery and Characters views no longer show broken overlay states
-- Replaced the empty desktop Agents capture with a populated in-chat agents workspace and switched the desktop README gallery to full-width rows so the 1920x1080 screenshots render at readable size
-- Regenerated the desktop Characters and mobile Navigate/Agents captures so the gallery shows the Home landing surface behind those menus and the mobile Agents view now includes populated in-chat agent cards
-- Increased terminal log serialization depth so LLM request and response preview objects no longer collapse into `[Object ...]` in Windows terminal debug logs
-
-**Themes and Appearance**
-
-- Fixed legacy Moonlit-style `--mainFont` and `--headerFont` references by restoring root font compatibility aliases, so older imported themes stop falling back to browser-default fonts on desktop and mobile
-- Fixed Moonlit Echoes raw custom CSS so it only applies while the extension is enabled instead of lingering after the theme is turned off
-- Fixed saved Custom Theme Style Input font variables such as `mainFont` and `headerFont` so they are reapplied after extension settings finish loading, preventing cold-load refreshes from falling back to the default font stack on desktop and mobile
-- Changed default UI theme to Dark V1.0 (from Default (Dark) 1.7.1)
-- Fresh installs now seed Dark V 1.0 on first run instead of briefly landing on Dark Lite until a manual reset
-- Synced the fresh-install default-user theme seed values with the Dark V 1.0 preset so first boot no longer inherits leftover Dark Lite toggles like Fast UI, compact input, timestamps, or no-shadows
-- Changed default shell style to Clean Minimal (from Modern Glass)
-- Removed Forest Dusk, Forest Dawn, and Rose Glow theme preset buttons
-- Added 9 accent color preset buttons (blue, cyan, green, yellow, orange, red, pink, purple, gray) for quick color adjustments
-- Added Custom RGB Accent toggle with color pickers for full accent customization
-- Reset button now resets theme colors to Dark V1.0
-- Fixed extension containers showing brown colors by updating default CSS variables to match Dark V1.0
-- Removed hardcoded brown colors from Modern Glass and Bold Stylized shell themes
-- Made shell themes fully theme-aware - they now adapt to your chosen theme colors instead of forcing brown tones
-- Replaced icon-only panel mode toggles with labeled buttons (Full Home, Compact, List only)
-- Removed the remaining hardcoded brown accents from the home shell, popups, extension panels, and shared UI fallbacks so theme colors stay consistent after refreshes
-- Normalized shared header surfaces and fresh-install fallback colors so section headers no longer revert to brown on desktop or mobile
-- Quick context shortcut buttons now render in a strict horizontal row for both Text Completions and Chat Completions
-- Accent color preset swatches are now visible on mobile and use smaller touch-friendly circles that fit narrow screens better
-- Recent Chats now clips cleanly with corrected corner rounding
-- Expanded the Prompt Manager editor pane and widened its dropdown controls in the workspace shell so menu fields no longer feel cramped on desktop
-- Moonlit Echoes chat layouts now stay available with Moonlit Echoes itself turned off, including Echo, Whisper, Hush, Ripple, Tide, and their chat-style toggles
-
-**Bug fixes**
-
-- Fixed ARM/Node launcher restarts dirtying `package-lock.json` by using lockfile-driven Node installs and auto-restoring the tracked lockfile after npm-only metadata churn, so self-updates and PM2 restarts stop leaving the repo in a modified state
-- Hardened in-chat agent cancel cleanup so lingering "Running prompt ..." toasts are removed even if the original tracked toast handle was lost before cancellation
-- Fixed Pathfinder pipeline mode so the saved lorebook and connection-profile settings are rehydrated on startup, predictive retrieval runs again during real generations, and pipeline-only mode no longer depends on Tool Mode being enabled
-- Fixed Pathfinder connection-profile dropdowns in both the main settings panel and prompt editor by switching them back to the supported Connection Manager profile API
-- Fixed Pathfinder lorebook trees not rebuilding after reloads by auto-building missing trees on demand for predictive retrieval and Search tool calls
-- Reduced noisy `dryRun` before-generation logs during prompt previews and topbar token refreshes so normal generation logging stays readable
-- Fixed mobile preset menu folders accidentally toggling when a scroll gesture ended on a folder header by suppressing synthetic post-scroll summary clicks
-- Separated the `Custom CSS` drawer from the `Chat & Characters` settings group and reduced the mobile SillyTavern import card/button sizing so the path field, `Import Folder`, and `Sync Extensions` controls fit cleanly on small screens
-- Switched the default SillyBunny UI font back to Figtree after testing Noto Sans, so fresh sessions and fallback theme loads again use Figtree across desktop and mobile
-- Switched the default SillyBunny UI font from Figtree to Noto Sans so fresh sessions and fallback theme loads use Noto Sans across desktop and mobile
-- Fixed repo lint regressions across Pathfinder follow-up changes and existing workspace files so the full `npm run lint` pass succeeds again
-- Fixed duplicate third-party extension cards in the Extensions panel by deduplicating manifest and render entries before they reach the UI
-- Fixed SillyBunny-to-SillyTavern minimum version compatibility checks so third-party extensions like JS Slash Runner no longer fail against the forked client version
-- Fixed Pathfinder settings popup scrolling on desktop and mobile, including browsers that were not honoring the parent popup scroll container
-- Fixed Termux UI restarts auto-launching a detached browser session and breaking the active terminal attachment
-- Fixed extensions disappearing from UI after updates — stale entries in the disabled-extensions list are now automatically cleaned on reload
-- Fixed Advanced Definitions modal appearing behind Characters drawer on mobile by increasing z-index
-- Fixed reasoning token counts not displaying separately — now shows format like `150t (45r)` where 45r is reasoning tokens
-- Fixed auto-cache refresh causing initialization loop on fresh instances by skipping cache clear when no prior settings exist
-- Fixed auto-cache refresh not fully clearing cached assets by using hard reload instead of soft reload
-- Fixed bottom bar startup refresh on slow Node.js boots by giving it the same late-context binding and APP_READY retry behavior used by the top/chat bars
-- Reduced Import Folder and Sync Extensions button sizes on mobile for better fit
-- Removed bloated search hint text and tab descriptions on mobile for cleaner UI
-- Added reinstall button for third-party extensions to quickly fix corrupted extensions by deleting and reinstalling from repository
-- Changed fresh-install API defaults so Chat Completions is the first/main default instead of the old Text Completion or Horde/Kobold path
-
-**Pathfinder enhancements**
-
-- Added an auto-use toggle that automatically enables lorebooks attached to the active character card or chat when Pathfinder settings are opened or refreshed
-- Added detailed Pathfinder console logging for lorebook discovery, tree building, pipeline stages, tool/runtime routing, diagnostics, and settings changes
-
-**Reasoning and provider compatibility**
-
-- Fixed the startup blank screen introduced by visible reasoning-tag support by making the tag parser bootstrap lazy-safe across the existing `script.js`/`openai.js`/`reasoning.js` module cycle
-- Simplified reasoning controls by removing the separate "Show thought in chat" toggle, so "Request model reasoning" is the single control again
-- Fixed response text extraction for OpenAI-style and Gemini-style payloads so parts/content/candidates/tool-plan formats render correctly instead of collapsing into blank or broken output
-- Fixed Gemini thought-signature handling by reading `candidates[].content.parts` correctly and checking the `gemini.thoughtSignatures` config dynamically
-- Added clarification tooltip for "Request model reasoning" toggle explaining behavior for Custom OpenAI-compatible providers
-- Added configurable visible reasoning-tag prompts for hidden-thinking models, with built-in `<think>`, `<thinking>`, and `<thought>` wrapper options plus parsing support for those tag variants
-- Added Custom OpenAI-compatible reasoning presets for GLM 5.1 and Kimi K2.5/K2.6 in Additional Parameters, including provider-specific `thinking` object support without manual YAML edits
-- Cleaned up token counters so message metadata shows `Xt` while the brain badge keeps live reasoning-token counts in sync during streaming
-
-**Agents and message tools**
-
-- Fixed in-chat agent running toasts so cancelling or stopping a prompt-based post-processing pass clears any stuck "Running ..." notification, and the toast can now also be dismissed manually on desktop and mobile
-- Restored the in-chat agent post-processing running toast for profile-backed prompt transforms by treating those internal requests like other agent-owned generations, so the active status stays visible on desktop and mobile until the pass finishes
-- Fixed message metadata badges so reasoning-token counts and agent-change actions stay in sync during both initial render and later message updates
-- Upgraded in-chat agent transform history to show semantic diffs with insert/delete highlighting while keeping Undo/Redo actions
-- Updated agent transform diff styling to match recast-post-processing — more subtle colors with rgba transparency for cleaner visual appearance
-- Added a dedicated "View agent changes" message action and wired it to the same transform-history popup as the inline badge
-- Added an in-chat agent cancel button so active agent-driven generations can be stopped directly from the Agents panel
-- Added Quick Toggle robot actions for pinned agents so "Apply to Last Reply" is available in the compact view too, with responsive action layout that keeps the shared UI usable on mobile-sized screens
-- Hardened agent error/result serialization for non-JSON values and updated adventure-helper status copy to be clearer in the UI
-- Normalized structured agent/prompt content before text-completion fallback and post-generation passes, so XML-style prompts and appended assistant responses no longer degrade into `[object Object]`
-- Post-generation prompt agents now strip repeated outer `<assistant_response>` wrappers before prompting or applying results, so duplicate transport tags no longer leak into chat output
-
-**Bottom bar and persona fixes**
-
-- Fixed bottom-bar chat switching to use the shared chat-opening flow and added retry refresh logic so chat lists populate more reliably after startup and chat events
-- Fixed bottom-bar persona switching by preferring `/persona-set` with safely quoted avatar ids and improving active persona detection
-- Fixed persona switching when multiple personas share the same name — the bottom bar now correctly selects by avatar ID instead of always falling back to the first name match
-- Fixed bottom bar not loading on first page load in Node.js environments — added APP_READY state check and increased retry attempts from 8 to 30
-
-**UI polish**
-
-- Established comprehensive spacing design system using CSS custom properties for consistent spacing, button sizing, and component padding across desktop and mobile
-- Fixed button sizing asymmetry — all send form buttons now use consistent sizes (42px desktop, 40px tablet, 38px mobile)
-- Corrected asymmetric padding throughout cards, panels, inputs, and navigation elements for visual balance
-- Standardized popup control gaps and welcome panel spacing for consistency
-- Fixed checkbox and text label alignment across all UI components on both desktop and mobile
-- Improved mobile navigation padding symmetry and textarea input consistency
-- Enhanced WebKit browser compatibility while maintaining all existing Safari-specific fixes
-- Added persistent Full Home, Compact, and List only display modes for the Home welcome panel so recent chats can stay visible without the large onboarding card taking over the chat area
-- Tightened the World Info workspace layout so the entry list and editor pane fit better on desktop-sized windows
-- Improved checkbox alignment, mobile/editor layout behavior, and escaped macro braces in the in-chat agent prompt placeholder so template tokens display literally
-- Added branch switching dropdown to Server Admin panel — switch between main and staging with confirmation dialog, auto-stash option, and automatic restart
-- Added context size options at 4k increments — 12k, 20k, 24k, 28k, and 36k-60k now available to fill gaps between existing sizes
+- Termux/Android text replacement and autocomplete behavior, so accepted keyboard corrections no longer append broken text in the send box.
+- Mobile layout and parity issues across checkboxes, toggles, prompt/settings rows, menu spacing, and shared control alignment.
+- Theme/font regressions, including self-hosted Figtree fallback behavior, legacy theme font aliases, stale brown shell colors, and Moonlit Echoes CSS/layout persistence issues.
+- Shell/navigation issues affecting launchpad toggling, Home active state/highlighting, Navigate/Customize switching, quick shortcuts, and welcome-panel sizing/reflow.
+- Pathfinder stability issues around saved settings rehydration, connection-profile selection, lorebook tree rebuilding, popup scrolling, and noisy diagnostics.
+- Reasoning/provider compatibility bugs affecting startup, token counters, OpenAI/Gemini response parsing, Gemini thought signatures, and visible reasoning controls.
+- Agent and message-tooling bugs affecting running toasts, post-processing visibility, structured-content handling, and message metadata sync.
+- Bottom-bar and persona behavior, including startup loading, chat switching, and persona selection when duplicate names exist.
+- Extension/runtime issues including duplicate extension cards, stale disabled-extension entries, minimum-version compatibility, reinstall flow, and ARM/Node update churn in `package-lock.json`.
+- Readability and maintenance issues, including flattened AI Studio/terminal debug logging and lint/async helper cleanup needed to keep the codebase green.
 
 [Find other changelogs in our Releases.](https://github.com/platberlitz/SillyBunny/releases)
 
