@@ -24,23 +24,31 @@ You can find additional extras here: [platberlitz.github.io](https://platberlitz
 
 ## User Interface
 
-These screenshots show the new shell-based UI across Navigate, Customize, Agents, and Characters on desktop and mobile.
+These screenshots show the refreshed `v1.4.0` shell-based UI across Navigate, Customize, Agents, Characters, and a Bunny Guide in-chat view on desktop and mobile.
 
 #### Desktop
 
 | Navigation Menu | Customize Menu |
 | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-navigate-v1.3.6.png" alt="Desktop Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-customize-v1.3.6.png" alt="Desktop Customize Menu" width="100%"> |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-navigate-v1.4.0.png" alt="Desktop Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-customize-v1.4.0.png" alt="Desktop Customize Menu" width="100%"> |
 
 | Agents Menu | Characters Menu |
 | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-agents-v1.3.6.png" alt="Desktop Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-characters-v1.3.6.png" alt="Desktop Characters Menu" width="100%"> |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-agents-v1.4.0.png" alt="Desktop Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-characters-v1.4.0.png" alt="Desktop Characters Menu" width="100%"> |
+
+| Bunny Guide In-Chat |
+| :---: |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-desktop-in-chat-v1.4.0.png" alt="Desktop Bunny Guide Chat" width="100%"> |
 
 #### Mobile
 
 | Navigation Menu | Customize Menu | Agents Menu | Characters Menu |
 | :---: | :---: | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-navigate-v1.3.6.png" alt="Mobile Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-customize-v1.3.6.png" alt="Mobile Customize Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-agents-v1.3.6.png" alt="Mobile Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-characters-v1.3.6.png" alt="Mobile Characters Menu" width="100%"> |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-navigate-v1.4.0.png" alt="Mobile Navigation Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-customize-v1.4.0.png" alt="Mobile Customize Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-agents-v1.4.0.png" alt="Mobile Agents Menu" width="100%"> | <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-characters-v1.4.0.png" alt="Mobile Characters Menu" width="100%"> |
+
+| Bunny Guide In-Chat |
+| :---: |
+| <img src="https://raw.githubusercontent.com/platberlitz/SillyBunny/main/screenshots/sillybunny-ui-mobile-in-chat-v1.4.0.png" alt="Mobile Bunny Guide Chat" width="45%"> |
 
 ---
 
@@ -198,6 +206,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Switching between Navigate and Customize now keeps the target shell open immediately instead of briefly collapsing through a closed state
 - Home now reflows from its own panel width, so returning from Customize no longer crushes the landing copy into a narrow one-word column
 - Home display toggles now render once in a centered top row instead of duplicating again above Recent Chats
+- Refreshed the README gallery for v1.4.0 with updated desktop/mobile shell captures and new Bunny Guide in-chat screenshots
 
 **Themes and Appearance**
 
