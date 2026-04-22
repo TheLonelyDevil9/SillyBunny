@@ -149,7 +149,7 @@ function consumeStreamChunk(stream, chunk, encoding) {
 function captureConsoleCall(stream, args) {
     const formattedMessage = formatWithOptions({
         colors: false,
-        depth: 6,
+        depth: 10,
         breakLength: Infinity,
         compact: false,
     }, ...args);

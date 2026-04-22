@@ -214,6 +214,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Corrected the v1.4.0 README shell captures so the mobile gallery and Characters views no longer show broken overlay states
 - Replaced the empty desktop Agents capture with a populated in-chat agents workspace and switched the desktop README gallery to full-width rows so the 1920x1080 screenshots render at readable size
 - Regenerated the desktop Characters and mobile Navigate/Agents captures so the gallery shows the Home landing surface behind those menus and the mobile Agents view now includes populated in-chat agent cards
+- Increased terminal log serialization depth so LLM request and response preview objects no longer collapse into `[Object ...]` in Windows terminal debug logs
 
 **Themes and Appearance**
 
