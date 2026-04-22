@@ -203,6 +203,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Switching between Navigate and Customize now keeps the target shell open immediately instead of briefly collapsing through a closed state
 - Home display toggles now render once in a centered top row instead of duplicating again above Recent Chats
 - Refreshed the README gallery for v1.4.0 with updated desktop/mobile shell captures and new Bunny Guide in-chat screenshots
+- Corrected the v1.4.0 README shell captures so the mobile gallery and Characters views no longer show broken overlay states
 
 **Themes and Appearance**
 

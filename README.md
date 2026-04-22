@@ -207,6 +207,7 @@ SillyBunny includes some extras by default to help you get started right away:
 - Home now reflows from its own panel width, so returning from Customize no longer crushes the landing copy into a narrow one-word column
 - Home display toggles now render once in a centered top row instead of duplicating again above Recent Chats
 - Refreshed the README gallery for v1.4.0 with updated desktop/mobile shell captures and new Bunny Guide in-chat screenshots
+- Corrected the v1.4.0 README shell captures so the mobile gallery and Characters views no longer show broken overlay states
 
 **Themes and Appearance**
 
