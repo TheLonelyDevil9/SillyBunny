@@ -46,6 +46,13 @@
                 <span>Refresh List</span>
             </button>
         </div>
+        <div class="pf--setting-group pf--lorebook-toggle">
+            <label class="checkbox_label">
+                <input type="checkbox" id="pf--auto-use-attached" />
+                <span>Automatically use attached character/chat lorebooks</span>
+            </label>
+            <div class="pf--setting-help">When enabled, Pathfinder auto-selects lorebooks attached to the active character card or chat.</div>
+        </div>
     </div>
 
     <!-- Step 2: Choose Mode -->
@@ -248,6 +255,12 @@
     flex-direction: column;
     gap: 16px;
     padding: 10px 0;
+    max-height: calc(100vh - 200px);
+    max-height: calc(100dvh - 200px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     text-align: left;
 }
 
@@ -474,6 +487,10 @@
     opacity: 0.7;
 }
 
+.pf--lorebook-toggle {
+    margin-top: 10px;
+}
+
 .pf--empty-state {
     display: flex;
     flex-direction: column;
@@ -684,8 +701,6 @@
 @media (max-width: 600px) {
     .pf--settings {
         max-height: calc(100dvh - 120px);
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
     }
 
     .pf--mode-cards {

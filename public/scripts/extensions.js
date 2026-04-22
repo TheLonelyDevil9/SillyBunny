@@ -545,29 +545,42 @@ export function findExtension(name) {
  * @returns {Promise<Record<string, object>>} Object with extension names as keys and their manifests as values
  */
 async function getManifests(names) {
+    const results = await Promise.all(names.map(async name => {
+        try {
+            const response = await fetch(getExtensionAssetUrl(name, 'manifest.json'));
+            if (!response.ok) {
+                return { name, ok: false };
+            }
+
+            return {
+                name,
+                ok: true,
+                manifest: await response.json(),
+            };
+        } catch (err) {
+            console.log('Could not load manifest.json for ' + name, err);
+            return { name, ok: false };
+        }
+    }));
+
     const obj = {};
-    const promises = [];
+    const loadedManifestKeys = new Set();
 
-    for (const name of names) {
-        const promise = new Promise((resolve, reject) => {
-            fetch(getExtensionAssetUrl(name, 'manifest.json')).then(async response => {
-                if (response.ok) {
-                    const json = await response.json();
-                    obj[name] = json;
-                    resolve();
-                } else {
-                    reject();
-                }
-            }).catch(err => {
-                reject();
-                console.log('Could not load manifest.json for ' + name, err);
-            });
-        });
+    for (const result of results) {
+        if (!result.ok) {
+            continue;
+        }
 
-        promises.push(promise);
+        const manifestKey = getExtensionDedupKey(result.name);
+        if (loadedManifestKeys.has(manifestKey)) {
+            console.warn(`[Extensions] Skipping duplicate manifest entry for "${result.name}"`);
+            continue;
+        }
+
+        loadedManifestKeys.add(manifestKey);
+        obj[result.name] = result.manifest;
     }
 
-    await Promise.allSettled(promises);
     return obj;
 }
 
@@ -596,7 +609,7 @@ async function activateExtensions() {
         // Client version requirement: pass if 'minimum_client_version' is undefined or null.
         let meetsClientMinimumVersion = true;
         if (minClientVersion !== undefined) {
-            meetsClientMinimumVersion = versionCompare(clientVersion, minClientVersion);
+            meetsClientMinimumVersion = versionCompare(clientVersion, minClientVersion, { mapSillyBunnyToSillyTavern: true });
         }
 
         // Module requirements: pass if 'requires' is undefined, null, or not an array; check subset if it's an array
@@ -989,6 +1002,13 @@ function generateExtensionHtml(name, manifest, isActive, isDisabled, isExternal,
     return extensionHtml;
 }
 
+function getExtensionDedupKey(name) {
+    return String(name || '')
+        .replace(/^third-party\//i, '')
+        .trim()
+        .toLowerCase();
+}
+
 /**
  * Gets extension data and generates the corresponding HTML for displaying the extension.
  *
@@ -1006,7 +1026,7 @@ function getExtensionData(extension) {
 
     const extensionHtml = generateExtensionHtml(name, manifest, isActive, isDisabled, isExternal, checkboxClass);
 
-    return { isExternal, extensionHtml };
+    return { isExternal, extensionHtml, name, dedupeKey: getExtensionDedupKey(name) };
 }
 
 
@@ -1079,10 +1099,17 @@ async function showExtensionsDetails() {
         const sortByName = accountStorage.getItem(sortOrderKey) === 'true';
         const sortFn = sortByName ? sortManifestsByName : sortManifestsByOrder;
         const extensions = Object.entries(manifests).sort((a, b) => sortFn(a[1], b[1])).map(getExtensionData);
+        const renderedExtensions = new Set();
         let extensionsToToggle = [];
 
         extensions.forEach(value => {
-            const { isExternal, extensionHtml } = value;
+            const { isExternal, extensionHtml, name, dedupeKey } = value;
+            if (renderedExtensions.has(dedupeKey)) {
+                console.warn(`[Extensions] Skipping duplicate extension block for "${name}"`);
+                return;
+            }
+
+            renderedExtensions.add(dedupeKey);
             const container = isExternal ? htmlExternal : htmlDefault;
             container.append(extensionHtml);
         });

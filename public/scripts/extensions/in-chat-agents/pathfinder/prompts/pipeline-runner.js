@@ -8,6 +8,12 @@ import { getSettings, getTree, getAllEntryUids } from '../tree-store.js';
 import { getReadableBooks, getEntryContent } from '../pathfinder-tool-bridge.js';
 import { logPipelineStageStart, logPipelineStageComplete, logPipelineError } from '../activity-feed.js';
 
+const PATHFINDER_LOG_PREFIX = '[Pathfinder]';
+
+function logPathfinderPipeline(message, ...details) {
+    console.log(`${PATHFINDER_LOG_PREFIX} ${message}`, ...details);
+}
+
 /**
  * @typedef {Object} PipelineContext
  * @property {string} chat_history - Formatted recent chat
@@ -32,8 +38,13 @@ import { logPipelineStageStart, logPipelineStageComplete, logPipelineError } fro
  * @returns {Promise<PipelineResult>}
  */
 export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
+    logPathfinderPipeline(`Starting predictive pipeline "${pipelineId}".`, {
+        chatMessageCount: Array.isArray(chatMessages) ? chatMessages.length : 0,
+        maxMessages,
+    });
     const pipeline = getPipeline(pipelineId);
     if (!pipeline) {
+        console.warn(`${PATHFINDER_LOG_PREFIX} Pipeline "${pipelineId}" was requested, but no matching pipeline was found.`);
         return {
             success: false,
             selectedEntries: [],
@@ -46,6 +57,7 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
     const context = await buildPipelineContext(chatMessages, maxMessages);
 
     if (!context.entry_names.trim()) {
+        logPathfinderPipeline(`Pipeline "${pipeline.name}" found no readable lorebook entries to evaluate.`);
         return {
             success: true,
             selectedEntries: [],
@@ -62,6 +74,10 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
 
         // Check skip condition
         if (stage.optional && stage.skipCondition && settings[stage.skipCondition]) {
+            logPathfinderPipeline(`Skipping optional pipeline stage ${i + 1}/${pipeline.stages.length}.`, {
+                stagePromptId: stage.promptId,
+                skipCondition: stage.skipCondition,
+            });
             stageResults.push({
                 stageIndex: i,
                 promptId: stage.promptId,
@@ -75,6 +91,7 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
         if (!prompt) {
             const error = `Prompt not found: ${stage.promptId}`;
             logPipelineError(pipeline.name, stage.promptId, error);
+            console.warn(`${PATHFINDER_LOG_PREFIX} Pipeline stage ${i + 1} is missing prompt "${stage.promptId}".`);
             return {
                 success: false,
                 selectedEntries: [],
@@ -84,16 +101,28 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
         }
 
         logPipelineStageStart(pipeline.name, prompt.name, i + 1, pipeline.stages.length);
+        logPathfinderPipeline(`Running pipeline stage ${i + 1}/${pipeline.stages.length} for "${pipeline.name}".`, {
+            promptId: stage.promptId,
+            promptName: prompt.name,
+        });
 
         try {
             // Resolve input mappings
             const inputs = resolveInputMappings(stage.inputMapping, context, currentEntries, settings);
+            logPathfinderPipeline(`Resolved pipeline stage inputs for "${prompt.name}".`, {
+                inputKeys: Object.keys(inputs),
+                candidateCount: currentEntries.length,
+            });
 
             // Build the prompt
             const userPrompt = substituteTemplate(prompt.userPromptTemplate, inputs);
 
             // Get connection profile (stage-specific or default)
             const profileId = prompt.connectionProfile || settings.connectionProfile || '';
+            logPathfinderPipeline(`Submitting pipeline stage "${prompt.name}" to sidecar model.`, {
+                profileId: profileId || 'main-model',
+                maxTokens: prompt.settings?.maxTokens ?? 1024,
+            });
 
             // Call the LLM
             const response = await sidecarGenerateWithProfile(
@@ -114,6 +143,10 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
             });
 
             logPipelineStageComplete(pipeline.name, prompt.name, currentEntries.length);
+            logPathfinderPipeline(`Pipeline stage "${prompt.name}" completed.`, {
+                selectedEntries: currentEntries.length,
+                reasoningLength: parsed.reasoning?.length ?? 0,
+            });
 
             stageResults.push({
                 stageIndex: i,
@@ -125,6 +158,10 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
             logPipelineError(pipeline.name, stage.promptId, errorMsg);
+            console.warn(`${PATHFINDER_LOG_PREFIX} Pipeline stage ${i + 1}/${pipeline.stages.length} failed.`, {
+                promptId: stage.promptId,
+                error: errorMsg,
+            });
 
             stageResults.push({
                 stageIndex: i,
@@ -135,6 +172,7 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
 
             // If non-optional stage fails, abort
             if (!stage.optional) {
+                logPathfinderPipeline(`Aborting predictive pipeline "${pipeline.name}" after a required stage failure.`);
                 return {
                     success: false,
                     selectedEntries: [],
@@ -145,6 +183,9 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
         }
     }
 
+    logPathfinderPipeline(`Predictive pipeline "${pipeline.name}" completed.`, {
+        selectedEntries: currentEntries.length,
+    });
     return {
         success: true,
         selectedEntries: currentEntries,
@@ -160,6 +201,10 @@ export async function runPipeline(pipelineId, chatMessages, maxMessages = 10) {
  */
 async function buildPipelineContext(chatMessages, maxMessages) {
     const books = getReadableBooks();
+    logPathfinderPipeline('Building pipeline context from readable lorebooks.', {
+        books,
+        maxMessages,
+    });
 
     // Format chat history
     const recentMessages = chatMessages.slice(-maxMessages);
@@ -176,9 +221,15 @@ async function buildPipelineContext(chatMessages, maxMessages) {
 
     for (const bookName of books) {
         const tree = getTree(bookName);
-        if (!tree) continue;
+        if (!tree) {
+            logPathfinderPipeline(`Skipped lorebook "${bookName}" while building pipeline context because no tree is cached yet.`);
+            continue;
+        }
 
         const uids = getAllEntryUids(tree);
+        logPathfinderPipeline(`Collecting entries for pipeline context from "${bookName}".`, {
+            uidCount: uids.length,
+        });
         for (const uid of uids) {
             const entry = await getEntryContent(bookName, uid);
             if (entry && entry.comment) {
@@ -189,6 +240,11 @@ async function buildPipelineContext(chatMessages, maxMessages) {
         }
     }
 
+    logPathfinderPipeline('Pipeline context build complete.', {
+        lorebookCount: books.length,
+        entryCount: entryNames.length,
+        chatMessageCount: recentMessages.length,
+    });
     return {
         chat_history,
         entry_names: entryNames.join('\n'),
@@ -246,6 +302,12 @@ function formatCandidateEntries(candidates, context, settings) {
     const contentMode = settings.entryContentMode ?? 'full';
     const truncateLength = settings.truncateLength ?? 500;
     const maxCandidates = settings.maxCandidates ?? 20;
+    logPathfinderPipeline('Formatting candidate entries for pipeline stage.', {
+        candidateCount: candidates.length,
+        contentMode,
+        truncateLength,
+        maxCandidates,
+    });
 
     const limited = candidates.slice(0, maxCandidates);
     const formatted = [];
@@ -289,6 +351,10 @@ function substituteTemplate(template, values) {
  */
 function parseOutput(response, format, entriesByName) {
     const trimmed = response.trim();
+    logPathfinderPipeline('Parsing pipeline stage output.', {
+        format,
+        responseLength: trimmed.length,
+    });
 
     if (format === 'json_object' || format === 'json_array') {
         // Try to extract JSON from response
@@ -318,10 +384,14 @@ function parseOutput(response, format, entriesByName) {
                 const validEntries = entries.filter(name =>
                     typeof name === 'string' && entriesByName.has(name),
                 );
+                logPathfinderPipeline('Pipeline JSON output parsed successfully.', {
+                    requestedEntries: entries.length,
+                    validEntries: validEntries.length,
+                });
 
                 return { entries: validEntries, reasoning };
             } catch (e) {
-                console.warn('[PipelineRunner] Failed to parse JSON output:', e);
+                console.warn(`${PATHFINDER_LOG_PREFIX} Failed to parse pipeline JSON output.`, e);
             }
         }
     }
@@ -331,5 +401,8 @@ function parseOutput(response, format, entriesByName) {
         .map(line => line.replace(/^[-*]\s*/, '').trim())
         .filter(line => line && entriesByName.has(line));
 
+    logPathfinderPipeline('Pipeline fallback line parsing complete.', {
+        validEntries: lines.length,
+    });
     return { entries: lines };
 }

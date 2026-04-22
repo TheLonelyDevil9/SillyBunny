@@ -1,5 +1,11 @@
 import { getSettings, getTree, isLorebookEnabled, canReadBook, canWriteBook } from './tree-store.js';
 
+const PATHFINDER_LOG_PREFIX = '[Pathfinder]';
+
+function logPathfinderToolBridge(message, ...details) {
+    console.log(`${PATHFINDER_LOG_PREFIX} ${message}`, ...details);
+}
+
 export const TOOL_NAMES = {
     SEARCH: 'Pathfinder_Search',
     REMEMBER: 'Pathfinder_Remember',
@@ -29,18 +35,35 @@ export function getActiveTunnelVisionBooks() {
 }
 
 export function getReadableBooks() {
-    return getActiveTunnelVisionBooks().filter(b => canReadBook(b));
+    const books = getActiveTunnelVisionBooks().filter(b => canReadBook(b));
+    logPathfinderToolBridge('Readable lorebooks resolved for Pathfinder.', { books });
+    return books;
 }
 
 export function getWritableBooks() {
-    return getActiveTunnelVisionBooks().filter(b => canWriteBook(b));
+    const books = getActiveTunnelVisionBooks().filter(b => canWriteBook(b));
+    logPathfinderToolBridge('Writable lorebooks resolved for Pathfinder.', { books });
+    return books;
 }
 
 export function resolveTargetBook(requestedBook, writableBooks = null) {
     const books = writableBooks ?? getWritableBooks();
     if (books.length === 0) return null;
-    if (requestedBook && books.includes(requestedBook)) return requestedBook;
-    return books[0];
+    if (requestedBook && books.includes(requestedBook)) {
+        logPathfinderToolBridge('Resolved requested writable lorebook for Pathfinder tool call.', {
+            requestedBook,
+            selectedBook: requestedBook,
+        });
+        return requestedBook;
+    }
+
+    const fallbackBook = books[0];
+    logPathfinderToolBridge('Falling back to the first writable lorebook for Pathfinder tool call.', {
+        requestedBook: requestedBook || null,
+        selectedBook: fallbackBook,
+        writableBooks: books,
+    });
+    return fallbackBook;
 }
 
 export function getBookListWithDescriptions() {
@@ -63,11 +86,14 @@ function countAllEntries(tree) {
 
 export function preflightToolRuntimeState() {
     const books = getActiveTunnelVisionBooks();
-    return {
+    const runtimeState = {
         hasBooks: books.length > 0,
         bookCount: books.length,
         books,
     };
+
+    logPathfinderToolBridge('Preflight Pathfinder tool runtime state computed.', runtimeState);
+    return runtimeState;
 }
 
 /**
@@ -78,14 +104,28 @@ export function preflightToolRuntimeState() {
  */
 export async function getEntryContent(bookName, uid) {
     const ctx = window?.SillyTavern?.getContext?.();
-    if (!ctx?.loadWorldInfo) return null;
+    if (!ctx?.loadWorldInfo) {
+        console.warn(`${PATHFINDER_LOG_PREFIX} Cannot fetch lorebook entry because loadWorldInfo is unavailable.`, {
+            bookName,
+            uid,
+        });
+        return null;
+    }
 
     try {
+        logPathfinderToolBridge(`Fetching Pathfinder entry ${uid} from lorebook "${bookName}".`);
         const bookData = await ctx.loadWorldInfo(bookName);
-        if (!bookData?.entries) return null;
+        if (!bookData?.entries) {
+            console.warn(`${PATHFINDER_LOG_PREFIX} Lorebook "${bookName}" has no entries while fetching UID ${uid}.`);
+            return null;
+        }
 
         for (const entry of Object.values(bookData.entries)) {
             if (entry && entry.uid === uid) {
+                logPathfinderToolBridge(`Fetched Pathfinder entry ${uid} from lorebook "${bookName}".`, {
+                    title: entry.comment || entry.key?.[0] || '',
+                    disabled: entry.disable ?? false,
+                });
                 return {
                     uid: entry.uid,
                     comment: entry.comment || entry.key?.[0] || '',
@@ -95,6 +135,7 @@ export async function getEntryContent(bookName, uid) {
                 };
             }
         }
+        console.warn(`${PATHFINDER_LOG_PREFIX} Entry ${uid} was not found in lorebook "${bookName}".`);
     } catch (err) {
         console.warn(`[Pathfinder] Failed to get entry ${uid} from ${bookName}:`, err);
     }
@@ -109,13 +150,22 @@ export async function getEntryContent(bookName, uid) {
  */
 export async function getAllEntriesWithContent(bookName) {
     const ctx = window?.SillyTavern?.getContext?.();
-    if (!ctx?.loadWorldInfo) return [];
+    if (!ctx?.loadWorldInfo) {
+        console.warn(`${PATHFINDER_LOG_PREFIX} Cannot fetch lorebook contents because loadWorldInfo is unavailable.`, {
+            bookName,
+        });
+        return [];
+    }
 
     try {
+        logPathfinderToolBridge(`Fetching all Pathfinder entries from lorebook "${bookName}".`);
         const bookData = await ctx.loadWorldInfo(bookName);
-        if (!bookData?.entries) return [];
+        if (!bookData?.entries) {
+            console.warn(`${PATHFINDER_LOG_PREFIX} Lorebook "${bookName}" has no entries while fetching all content.`);
+            return [];
+        }
 
-        return Object.values(bookData.entries)
+        const entries = Object.values(bookData.entries)
             .filter(entry => entry && !entry.disable)
             .map(entry => ({
                 uid: entry.uid,
@@ -123,6 +173,10 @@ export async function getAllEntriesWithContent(bookName) {
                 content: entry.content || '',
                 key: entry.key || [],
             }));
+        logPathfinderToolBridge(`Fetched lorebook contents for "${bookName}".`, {
+            entryCount: entries.length,
+        });
+        return entries;
     } catch (err) {
         console.warn(`[Pathfinder] Failed to get entries from ${bookName}:`, err);
         return [];

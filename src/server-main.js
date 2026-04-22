@@ -400,34 +400,39 @@ async function postSetupTasks(result) {
     const browserLaunchHostname = await cliArgs.getBrowserLaunchHostname(result);
     const browserLaunchUrl = cliArgs.getBrowserLaunchUrl(browserLaunchHostname);
     const browserLaunchApp = String(getConfigValue('browserLaunch.browser', 'default') ?? '');
+    const skipBrowserAutoLaunch = process.env.SILLYBUNNY_SKIP_BROWSER_AUTO_LAUNCH === '1';
 
     if (cliArgs.browserLaunchEnabled) {
-        try {
-            // Load the browser launcher only when auto-open is enabled.
-            const openModule = await import('open');
-            const { default: open, apps } = openModule;
+        if (skipBrowserAutoLaunch) {
+            console.log('Skipping browser auto-launch after restart to keep the Termux session attached.');
+        } else {
+            try {
+                // Load the browser launcher only when auto-open is enabled.
+                const openModule = await import('open');
+                const { default: open, apps } = openModule;
 
-            function getBrowsers() {
-                const isAndroid = process.platform === 'android';
-                if (isAndroid) {
-                    return {};
+                function getBrowsers() {
+                    const isAndroid = process.platform === 'android';
+                    if (isAndroid) {
+                        return {};
+                    }
+                    return {
+                        'firefox': apps.firefox,
+                        'chrome': apps.chrome,
+                        'edge': apps.edge,
+                        'brave': apps.brave,
+                    };
                 }
-                return {
-                    'firefox': apps.firefox,
-                    'chrome': apps.chrome,
-                    'edge': apps.edge,
-                    'brave': apps.brave,
-                };
+
+                const validBrowsers = getBrowsers();
+                const appName = validBrowsers[browserLaunchApp.trim().toLowerCase()];
+                const openOptions = appName ? { app: { name: appName } } : {};
+
+                console.log(`Launching in a browser: ${browserLaunchApp}...`);
+                await open(browserLaunchUrl.toString(), openOptions);
+            } catch (error) {
+                console.error('Failed to launch the browser. Open the URL manually.', error);
             }
-
-            const validBrowsers = getBrowsers();
-            const appName = validBrowsers[browserLaunchApp.trim().toLowerCase()];
-            const openOptions = appName ? { app: { name: appName } } : {};
-
-            console.log(`Launching in a browser: ${browserLaunchApp}...`);
-            await open(browserLaunchUrl.toString(), openOptions);
-        } catch (error) {
-            console.error('Failed to launch the browser. Open the URL manually.', error);
         }
     }
 

@@ -11,7 +11,6 @@ import {
     runDiagnostics,
 } from './pathfinder-init.js';
 import {
-    saveTree,
     setLorebookEnabled,
     listConnectionProfiles,
 } from './pathfinder/tree-store.js';
@@ -21,17 +20,120 @@ import { getPrompt, savePrompt } from './pathfinder/prompts/prompt-store.js';
 import { getDefaultPrompts } from './pathfinder/prompts/default-prompts.js';
 
 const MODULE_NAME = 'in-chat-agents';
+const PATHFINDER_LOG_PREFIX = '[Pathfinder]';
 
 let settingsEl = null;
 let currentAgent = null;
 
+function logPathfinder(message, ...details) {
+    console.log(`${PATHFINDER_LOG_PREFIX} ${message}`, ...details);
+}
+
+function ensureEnabledLorebooks(settings) {
+    if (!Array.isArray(settings.enabledLorebooks)) {
+        settings.enabledLorebooks = [];
+    }
+
+    return settings.enabledLorebooks;
+}
+
+function formatLorebookSourceLabel(sourceTypes) {
+    const orderedTypes = ['character', 'chat', 'global'];
+    const labels = orderedTypes.filter(type => sourceTypes.has(type));
+    return labels.join(', ') || 'global';
+}
+
+function upsertLorebook(lorebooksByName, name, data = {}) {
+    if (!name) {
+        return;
+    }
+
+    const book = lorebooksByName.get(name) ?? {
+        name,
+        entries: '?',
+        attached: false,
+        sourceTypes: new Set(),
+    };
+
+    if (data.entries !== undefined) {
+        book.entries = data.entries;
+    }
+
+    if (data.type) {
+        book.sourceTypes.add(data.type);
+        if (data.type === 'character' || data.type === 'chat') {
+            book.attached = true;
+        }
+    }
+
+    lorebooksByName.set(name, book);
+}
+
+async function ensureLorebookTree(bookName) {
+    try {
+        logPathfinder(`Building tree for lorebook "${bookName}".`);
+        const bookData = await loadWorldInfo(bookName);
+        if (!bookData?.entries) {
+            console.warn(`${PATHFINDER_LOG_PREFIX} Lorebook "${bookName}" could not be loaded for tree building.`);
+            return false;
+        }
+
+        const entryCount = Object.keys(bookData.entries).length;
+        logPathfinder(`Loaded lorebook "${bookName}" for tree building.`, { entryCount });
+        await buildTreeFromMetadata(bookName, bookData);
+        logPathfinder(`Tree build completed for lorebook "${bookName}".`, { entryCount });
+        return true;
+    } catch (err) {
+        console.warn(`${PATHFINDER_LOG_PREFIX} Failed to build tree for lorebook "${bookName}".`, err);
+        return false;
+    }
+}
+
+async function syncAutoAttachedLorebooks(lorebooks, settings) {
+    if (!settings.autoUseAttachedLorebook) {
+        return [];
+    }
+
+    const enabledLorebooks = ensureEnabledLorebooks(settings);
+    const attachedLorebooks = lorebooks.filter(book => book.attached).map(book => book.name);
+    const newLorebooks = attachedLorebooks.filter(name => !enabledLorebooks.includes(name));
+
+    if (attachedLorebooks.length === 0) {
+        logPathfinder('Auto-use attached lorebooks is enabled, but no attached lorebooks were found.');
+        return [];
+    }
+
+    settings.enabledLorebooks = Array.from(new Set([...enabledLorebooks, ...attachedLorebooks]));
+    attachedLorebooks.forEach(bookName => setLorebookEnabled(bookName, true));
+    setPathfinderSettings(settings);
+
+    if (newLorebooks.length > 0) {
+        logPathfinder('Auto-enabled attached lorebooks.', { lorebooks: newLorebooks });
+        for (const bookName of newLorebooks) {
+            await ensureLorebookTree(bookName);
+        }
+    }
+
+    return newLorebooks;
+}
+
 /**
  * Opens the Pathfinder settings panel
  * @param {Object} agent - The Pathfinder agent object
- * @param {Function} onSave - Callback when settings are saved
  */
-export async function openPathfinderSettings(agent, onSave) {
+export async function openPathfinderSettings(agent) {
     currentAgent = agent;
+    const existingSettings = getPathfinderSettings();
+    setPathfinderSettings({
+        pipelinePrompts: existingSettings.pipelinePrompts,
+        pipelines: existingSettings.pipelines,
+        ...(agent?.settings || {}),
+    });
+    logPathfinder(`Settings opened for agent "${agent?.name || 'Pathfinder'}".`, {
+        lorebooks: getPathfinderSettings().enabledLorebooks || [],
+        toolMode: Boolean(getPathfinderSettings().sidecarEnabled),
+        pipelineMode: Boolean(getPathfinderSettings().pipelineEnabled),
+    });
 
     const html = await renderExtensionTemplateAsync(MODULE_NAME, 'pathfinder-settings');
     if (!html) {
@@ -44,7 +146,7 @@ export async function openPathfinderSettings(agent, onSave) {
     // Initialize UI
     await refreshLorebookList();
     loadSettingsIntoUI();
-    bindEvents(onSave);
+    bindEvents();
     updateStatusBanner();
     updateModeCardStates();
 
@@ -56,9 +158,12 @@ export async function openPathfinderSettings(agent, onSave) {
  */
 async function getAvailableLorebooks() {
     const ctx = getContext();
-    if (!ctx) return [];
+    if (!ctx) {
+        console.warn(`${PATHFINDER_LOG_PREFIX} Could not resolve the current context while gathering lorebooks.`);
+        return [];
+    }
 
-    const lorebooks = [];
+    const lorebooksByName = new Map();
 
     // Use the global world_names array from world-info.js
     if (Array.isArray(world_names) && world_names.length > 0) {
@@ -67,15 +172,14 @@ async function getAvailableLorebooks() {
                 // Try to load the world info to get entry count
                 const bookData = await loadWorldInfo(name);
                 const entryCount = bookData?.entries ? Object.keys(bookData.entries).length : '?';
-                lorebooks.push({
-                    name: name,
+                upsertLorebook(lorebooksByName, name, {
                     entries: entryCount,
                     type: 'global',
                 });
             } catch (err) {
                 // If we can't load it, just add with unknown count
-                lorebooks.push({
-                    name: name,
+                console.warn(`${PATHFINDER_LOG_PREFIX} Failed to load lorebook metadata for "${name}".`, err);
+                upsertLorebook(lorebooksByName, name, {
                     entries: '?',
                     type: 'global',
                 });
@@ -88,27 +192,28 @@ async function getAvailableLorebooks() {
         const char = ctx.characters[ctx.characterId];
         if (char?.data?.extensions?.world) {
             const charBook = char.data.extensions.world;
-            if (!lorebooks.some(b => b.name === charBook)) {
-                lorebooks.push({
-                    name: charBook,
-                    entries: '?',
-                    type: 'character',
-                });
-            }
+            upsertLorebook(lorebooksByName, charBook, { type: 'character' });
         }
     }
 
     // Also check chat-attached lorebooks
     if (ctx.chat_metadata?.world_info) {
         const chatBook = ctx.chat_metadata.world_info;
-        if (!lorebooks.some(b => b.name === chatBook)) {
-            lorebooks.push({
-                name: chatBook,
-                entries: '?',
-                type: 'chat',
-            });
-        }
+        upsertLorebook(lorebooksByName, chatBook, { type: 'chat' });
     }
+
+    const lorebooks = Array.from(lorebooksByName.values()).map(book => ({
+        ...book,
+        type: formatLorebookSourceLabel(book.sourceTypes),
+    }));
+    logPathfinder('Available lorebooks refreshed.', {
+        lorebooks: lorebooks.map(book => ({
+            name: book.name,
+            entries: book.entries,
+            type: book.type,
+            attached: book.attached,
+        })),
+    });
 
     return lorebooks;
 }
@@ -122,9 +227,18 @@ async function refreshLorebookList() {
 
     const lorebooks = await getAvailableLorebooks();
     const settings = getPathfinderSettings();
-    const enabledBooks = settings.enabledLorebooks || [];
+    ensureEnabledLorebooks(settings);
+
+    settingsEl.find('#pf--auto-use-attached').prop('checked', Boolean(settings.autoUseAttachedLorebook));
+    const autoEnabledLorebooks = await syncAutoAttachedLorebooks(lorebooks, settings);
+    if (autoEnabledLorebooks.length > 0) {
+        updateAgentSettings();
+        updateStatusBanner();
+    }
+    const enabledBooks = ensureEnabledLorebooks(getPathfinderSettings());
 
     if (lorebooks.length === 0) {
+        logPathfinder('No lorebooks were available for the current character/chat context.');
         listEl.html(`
             <div class="pf--empty-state">
                 <i class="fa-solid fa-book-open"></i>
@@ -160,25 +274,23 @@ async function refreshLorebookList() {
 
             // Update settings
             const s = getPathfinderSettings();
-            if (!Array.isArray(s.enabledLorebooks)) s.enabledLorebooks = [];
+            ensureEnabledLorebooks(s);
 
             if (checked && !s.enabledLorebooks.includes(bookName)) {
                 s.enabledLorebooks.push(bookName);
                 setLorebookEnabled(bookName, true);
-
-                // Build tree for this book
-                try {
-                    const bookData = await loadWorldInfo(bookName);
-                    if (bookData) {
-                        const tree = await buildTreeFromMetadata(bookName, bookData);
-                        saveTree(bookName, tree);
-                    }
-                } catch (err) {
-                    console.warn('[Pathfinder] Failed to build tree for', bookName, err);
-                }
+                logPathfinder(`Lorebook "${bookName}" enabled.`, {
+                    source: book.type,
+                    attached: book.attached,
+                });
+                await ensureLorebookTree(bookName);
             } else if (!checked) {
                 s.enabledLorebooks = s.enabledLorebooks.filter(b => b !== bookName);
                 setLorebookEnabled(bookName, false);
+                logPathfinder(`Lorebook "${bookName}" disabled.`, {
+                    source: book.type,
+                    attached: book.attached,
+                });
             }
 
             setPathfinderSettings(s);
@@ -206,6 +318,7 @@ function loadSettingsIntoUI() {
     // Tool settings
     settingsEl.find('#pf--enable-tools').prop('checked', s.sidecarEnabled || false);
     settingsEl.find('#pf--mandatory-tools').prop('checked', s.mandatoryTools || false);
+    settingsEl.find('#pf--auto-use-attached').prop('checked', s.autoUseAttachedLorebook || false);
 
     // Populate connection profiles
     populateConnectionProfiles();
@@ -236,16 +349,37 @@ function populateConnectionProfiles() {
     if (s.connectionProfile) {
         select.val(s.connectionProfile);
     }
+
+    logPathfinder('Connection profiles populated for Pathfinder.', {
+        count: profiles.length,
+        selectedProfile: s.connectionProfile || 'main-model',
+    });
 }
 
 /**
  * Bind all event handlers
  */
-function bindEvents(onSave) {
+function bindEvents() {
     // Refresh lorebooks
     settingsEl.find('#pf--refresh-lorebooks').on('click', async () => {
+        logPathfinder('Manual lorebook refresh requested from Pathfinder settings.');
         await refreshLorebookList();
         toastr.info('Lorebook list refreshed');
+    });
+
+    settingsEl.find('#pf--auto-use-attached').on('change', async function () {
+        const enabled = $(this).prop('checked');
+        const s = getPathfinderSettings();
+        s.autoUseAttachedLorebook = enabled;
+        setPathfinderSettings(s);
+        logPathfinder(`Auto-use attached lorebooks ${enabled ? 'enabled' : 'disabled'}.`);
+
+        if (enabled) {
+            await refreshLorebookList();
+        }
+
+        updateAgentSettings();
+        updateStatusBanner();
     });
 
     // Mode toggles
@@ -254,6 +388,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.sidecarEnabled = enabled;
         setPathfinderSettings(s);
+        logPathfinder(`Tool Mode ${enabled ? 'enabled' : 'disabled'}.`);
         updateModeCardStates();
         updateDualModeWarning();
         updateAgentSettings();
@@ -266,6 +401,7 @@ function bindEvents(onSave) {
         s.pipelineEnabled = enabled;
         // Don't force sidecarEnabled - let user choose both independently
         setPathfinderSettings(s);
+        logPathfinder(`Predictive Pipeline ${enabled ? 'enabled' : 'disabled'}.`);
         updateModeCardStates();
         updateAgentSettings();
     });
@@ -275,6 +411,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.pipelineId = $(this).val();
         setPathfinderSettings(s);
+        logPathfinder('Pipeline type changed.', { pipelineId: s.pipelineId });
         updateAgentSettings();
     });
 
@@ -282,6 +419,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.entryContentMode = $(this).val();
         setPathfinderSettings(s);
+        logPathfinder('Pipeline entry content mode changed.', { entryContentMode: s.entryContentMode });
         updateAgentSettings();
     });
 
@@ -289,6 +427,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.truncateLength = parseInt($(this).val()) || 500;
         setPathfinderSettings(s);
+        logPathfinder('Pipeline truncate length changed.', { truncateLength: s.truncateLength });
         updateAgentSettings();
     });
 
@@ -296,6 +435,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.maxCandidates = parseInt($(this).val()) || 20;
         setPathfinderSettings(s);
+        logPathfinder('Pipeline max candidates changed.', { maxCandidates: s.maxCandidates });
         updateAgentSettings();
     });
 
@@ -303,6 +443,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.connectionProfile = $(this).val();
         setPathfinderSettings(s);
+        logPathfinder('Pipeline connection profile changed.', { connectionProfile: s.connectionProfile || 'main-model' });
         updateAgentSettings();
     });
 
@@ -311,6 +452,7 @@ function bindEvents(onSave) {
         const s = getPathfinderSettings();
         s.mandatoryTools = $(this).prop('checked');
         setPathfinderSettings(s);
+        logPathfinder('Mandatory tool usage changed.', { mandatoryTools: s.mandatoryTools });
         updateAgentSettings();
     });
 
@@ -325,6 +467,7 @@ function bindEvents(onSave) {
             }
         }
 
+        logPathfinder('Tool availability changed.', { toolName, enabled });
         updateAgentSettings();
         syncToolAgentRegistrations();
     });
@@ -334,14 +477,18 @@ function bindEvents(onSave) {
         const section = $(this).closest('.pf--section-collapsible');
         const body = section.find('.pf--section-body');
         const chevron = $(this).find('.pf--chevron');
+        const sectionTitle = $(this).find('strong').text().trim() || 'Unnamed section';
+        const willOpen = !body.is(':visible');
 
         body.slideToggle(200);
         chevron.toggleClass('fa-chevron-down fa-chevron-right');
+        logPathfinder(`${willOpen ? 'Opened' : 'Collapsed'} Pathfinder section "${sectionTitle}".`);
     });
 
     // Prompt editor
     settingsEl.find('#pf--prompt-selector').on('change', function () {
         const promptId = $(this).val();
+        logPathfinder('Prompt editor selection changed.', { promptId: promptId || 'none' });
         if (promptId) {
             loadPromptIntoEditor(promptId);
             settingsEl.find('#pf--prompt-fields').show();
@@ -357,6 +504,7 @@ function bindEvents(onSave) {
     settingsEl.find('#pf--run-diagnostics').on('click', async () => {
         const output = settingsEl.find('#pf--diagnostics-output');
         output.text('Running diagnostics...');
+        logPathfinder('Pathfinder diagnostics started.');
 
         try {
             const results = await runDiagnostics();
@@ -368,8 +516,10 @@ function bindEvents(onSave) {
             }
 
             output.text(text || 'All checks passed!');
+            logPathfinder('Pathfinder diagnostics completed.', results);
         } catch (err) {
             output.text('Error running diagnostics: ' + err.message);
+            console.warn(`${PATHFINDER_LOG_PREFIX} Pathfinder diagnostics failed.`, err);
         }
     });
 }
@@ -438,8 +588,16 @@ function updateAgentSettings() {
     if (!currentAgent) return;
 
     const s = getPathfinderSettings();
-    currentAgent.settings = { ...s };
+    const { pipelinePrompts, pipelines, ...agentSettings } = s;
+    currentAgent.settings = { ...agentSettings };
     currentAgent.enabled = (s.enabledLorebooks || []).length > 0 && (s.sidecarEnabled || s.pipelineEnabled);
+    logPathfinder('Agent settings synchronized.', {
+        enabled: currentAgent.enabled,
+        lorebooks: s.enabledLorebooks || [],
+        toolMode: Boolean(s.sidecarEnabled),
+        pipelineMode: Boolean(s.pipelineEnabled),
+        autoUseAttachedLorebook: Boolean(s.autoUseAttachedLorebook),
+    });
 
     saveSettingsDebounced();
 }
@@ -451,6 +609,7 @@ function loadPromptIntoEditor(promptId) {
     const prompt = getPrompt(promptId);
     if (!prompt) return;
 
+    logPathfinder('Loaded Pathfinder prompt into editor.', { promptId, promptName: prompt.name || promptId });
     settingsEl.find('#pf--prompt-system').val(prompt.systemPrompt || '');
     settingsEl.find('#pf--prompt-user').val(prompt.userPromptTemplate || '');
     clearPromptStatus();
@@ -470,6 +629,7 @@ function saveCurrentPrompt() {
     prompt.userPromptTemplate = settingsEl.find('#pf--prompt-user').val();
 
     savePrompt(prompt);
+    logPathfinder('Saved Pathfinder prompt changes.', { promptId, promptName: prompt.name || promptId });
     showPromptStatus('Saved!', 'success');
 }
 
@@ -489,6 +649,7 @@ function resetCurrentPrompt() {
     }
 
     savePrompt({ ...defaultPrompt, isDefault: true });
+    logPathfinder('Reset Pathfinder prompt to defaults.', { promptId, promptName: defaultPrompt.name || promptId });
     loadPromptIntoEditor(promptId);
     showPromptStatus('Reset to default', 'success');
 }

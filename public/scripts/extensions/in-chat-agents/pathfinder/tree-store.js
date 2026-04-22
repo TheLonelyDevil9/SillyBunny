@@ -23,6 +23,7 @@ export const SETTING_DEFAULTS = {
     ephemeralResults: true,
     sidecarEnabled: false,
     enabledLorebooks: [],
+    autoUseAttachedLorebook: false,
     confirmTools: {},
     // Pipeline settings
     pipelineEnabled: false,

@@ -249,6 +249,10 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **Bug fixes**
 
+- Fixed duplicate third-party extension cards in the Extensions panel by deduplicating manifest and render entries before they reach the UI
+- Fixed SillyBunny-to-SillyTavern minimum version compatibility checks so third-party extensions like JS Slash Runner no longer fail against the forked client version
+- Fixed Pathfinder settings popup scrolling on desktop and mobile, including browsers that were not honoring the parent popup scroll container
+- Fixed Termux UI restarts auto-launching a detached browser session and breaking the active terminal attachment
 - Fixed extensions disappearing from UI after updates — stale entries in the disabled-extensions list are now automatically cleaned on reload
 - Fixed Advanced Definitions modal appearing behind Characters drawer on mobile by increasing z-index
 - Fixed reasoning token counts not displaying separately — now shows format like `150t (45r)` where 45r is reasoning tokens
@@ -259,6 +263,11 @@ SillyBunny includes some extras by default to help you get started right away:
 - Removed bloated search hint text and tab descriptions on mobile for cleaner UI
 - Added reinstall button for third-party extensions to quickly fix corrupted extensions by deleting and reinstalling from repository
 - Changed fresh-install API defaults so Chat Completions is the first/main default instead of the old Text Completion or Horde/Kobold path
+
+**Pathfinder enhancements**
+
+- Added an auto-use toggle that automatically enables lorebooks attached to the active character card or chat when Pathfinder settings are opened or refreshed
+- Added detailed Pathfinder console logging for lorebook discovery, tree building, pipeline stages, tool/runtime routing, diagnostics, and settings changes
 
 **Reasoning and provider compatibility**
 

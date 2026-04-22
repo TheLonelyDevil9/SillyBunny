@@ -157,6 +157,7 @@ function getRestartPayload() {
         parentPid: process.pid,
         cwd: serverDirectory,
         command: [process.argv[0], ...process.argv.slice(1)],
+        envPatch: isNativeTermuxEnvironment() ? { SILLYBUNNY_SKIP_BROWSER_AUTO_LAUNCH: '1' } : {},
     };
 
     return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');

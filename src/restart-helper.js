@@ -27,6 +27,7 @@ async function main() {
     const parentPid = Number(payload?.parentPid);
     const command = Array.isArray(payload?.command) ? payload.command : [];
     const cwd = String(payload?.cwd ?? process.cwd());
+    const envPatch = payload?.envPatch && typeof payload.envPatch === 'object' ? payload.envPatch : {};
 
     if (!Number.isFinite(parentPid) || command.length < 2) {
         process.exit(1);
@@ -39,7 +40,7 @@ async function main() {
         cwd,
         detached: true,
         stdio: 'ignore',
-        env: process.env,
+        env: { ...process.env, ...envPatch },
     });
 
     child.unref();

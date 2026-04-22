@@ -2756,19 +2756,40 @@ export function textValueMatcher(params, data) {
  * Compares two version numbers, returning true if srcVersion >= minVersion
  * @param {string} srcVersion The current version.
  * @param {string} minVersion The target version number to test against
+ * @param {{ mapSillyBunnyToSillyTavern?: boolean }} [options] Comparison options
  * @returns {boolean} True if srcVersion >= minVersion, false if not
  */
-export function versionCompare(srcVersion, minVersion) {
+export function versionCompare(srcVersion, minVersion, options = {}) {
     // Strip 'v' prefix for numeric comparison compatibility
     let s = (srcVersion || '0.0.0').replace(/^[vV]/, '');
     let m = (minVersion || '0.0.0').replace(/^[vV]/, '');
 
-    // SillyBunny compatibility: treat v1.4.0 as 1.14.0 to pass ST 1.13.x requirements
-    if (s === '1.4.0') {
-        s = '1.14.0';
+    if (options.mapSillyBunnyToSillyTavern) {
+        const mappedVersion = mapSillyBunnyVersionToStEquivalent(s);
+        if (mappedVersion !== s) {
+            console.debug(`[Version] Mapping SillyBunny ${s} to ST-equivalent ${mappedVersion} for compatibility check against ${m}`);
+            s = mappedVersion;
+        }
     }
 
     return s.localeCompare(m, undefined, { numeric: true, sensitivity: 'base' }) > -1;
+}
+
+function mapSillyBunnyVersionToStEquivalent(version) {
+    const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)(.*)$/);
+    if (!match) {
+        return version;
+    }
+
+    const [, major, minor, patch, suffix] = match;
+    const numericMajor = Number(major);
+    const numericMinor = Number(minor);
+
+    if (numericMajor !== 1 || !Number.isInteger(numericMinor) || numericMinor >= 10) {
+        return version;
+    }
+
+    return `${numericMajor}.${numericMinor + 10}.${patch}${suffix}`;
 }
 
 /**

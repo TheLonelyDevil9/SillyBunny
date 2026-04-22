@@ -2430,6 +2430,10 @@ async function openPathfinderEditor(agent) {
 
     if (!settingsPanel) return;
 
+    console.log('[Pathfinder] Settings popup opened from agent editor.', {
+        agentName: agent?.name || 'Pathfinder',
+    });
+
     const result = await new Popup(settingsPanel, POPUP_TYPE.CONFIRM, '', {
         okButton: 'Save & Close',
         cancelButton: 'Cancel',
@@ -2446,7 +2450,14 @@ async function openPathfinderEditor(agent) {
         await saveAgent(agent);
         renderAgentList();
         syncToolAgentRegistrations();
+        console.log('[Pathfinder] Settings popup saved and closed.', {
+            agentName: agent?.name || 'Pathfinder',
+        });
         toastr.success('Pathfinder settings saved');
+    } else {
+        console.log('[Pathfinder] Settings popup closed without confirmation.', {
+            agentName: agent?.name || 'Pathfinder',
+        });
     }
 }
 
