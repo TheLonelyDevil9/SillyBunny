@@ -1490,6 +1490,16 @@ export function applyPowerUserSettings() {
     switchSwipeNumAllMessages();
 }
 
+export function applyCustomThemeStyleEntriesFromExtensionSettings(extensionSettings = {}) {
+    const entries = extensionSettings?.CTSI?.entries;
+    if (!entries || typeof entries !== 'object') {
+        return;
+    }
+
+    customThemeStyleEntries = { ...entries };
+    applyCustomThemeStyleEntries();
+}
+
 export function applyStylePins() {
     try {
         const existingPins = document.querySelector('#chat > .style-pins');

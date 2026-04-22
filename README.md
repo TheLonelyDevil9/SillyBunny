@@ -236,7 +236,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 - Fixed legacy Moonlit-style `--mainFont` and `--headerFont` references by restoring root font compatibility aliases, so older imported themes stop falling back to browser-default fonts on desktop and mobile
 - Fixed Moonlit Echoes raw custom CSS so it only applies while the extension is enabled instead of lingering after the theme is turned off
-- Fixed saved Custom Theme Style Input font variables such as `mainFont` and `headerFont` so installs that miss the original CTSI runtime still reapply those fonts on desktop and mobile after refresh
+- Fixed saved Custom Theme Style Input font variables such as `mainFont` and `headerFont` so they are reapplied after extension settings finish loading, preventing cold-load refreshes from falling back to the default font stack on desktop and mobile
 - Changed default UI theme to Dark V1.0 (from Default (Dark) 1.7.1)
 - Fresh installs now seed Dark V 1.0 on first run instead of briefly landing on Dark Lite until a manual reset
 - Synced the fresh-install default-user theme seed values with the Dark V 1.0 preset so first boot no longer inherits leftover Dark Lite toggles like Fast UI, compact input, timestamps, or no-shadows
