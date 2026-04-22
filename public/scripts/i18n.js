@@ -6,7 +6,6 @@ const overrideLanguage = localStorage.getItem(storageKey);
 const localeFile = String(overrideLanguage || navigator.language || navigator.userLanguage || 'en').toLowerCase();
 var langs;
 // Don't change to let/const! It will break module loading.
-// eslint-disable-next-line prefer-const
 var localeData;
 
 /** @type {Set<string>|null} Array of translations keys if they should be tracked - if not tracked then null */

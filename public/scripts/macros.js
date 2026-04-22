@@ -716,7 +716,7 @@ export function evaluateMacros(content, env, postProcessFn) {
 export function initMacros() {
     // Only manually register those is new macro engine is not on. In the new one, they are already registered automatically
     if (!power_user.experimental_macro_engine) {
-        function initLastGenerationType() {
+        const initLastGenerationType = () => {
             let lastGenerationType = '';
 
             MacrosParser.registerMacro('lastGenerationType',
@@ -732,7 +732,7 @@ export function initMacros() {
             eventSource.on(event_types.CHAT_CHANGED, () => {
                 lastGenerationType = '';
             });
-        }
+        };
 
         MacrosParser.registerMacro('isMobile',
             () => String(isMobile()),

@@ -1835,7 +1835,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
     }
 
     if (!isSystem) {
-        function getRegexPlacement() {
+        const getRegexPlacement = () => {
             try {
                 if (isReasoning) {
                     return regex_placement.REASONING;
@@ -1850,7 +1850,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
             } catch {
                 return regex_placement.AI_OUTPUT;
             }
-        }
+        };
 
         const regexPlacement = getRegexPlacement();
         const usableMessages = chat.map((x, index) => ({ message: x, index: index })).filter(x => !x.message.is_system);
@@ -9206,45 +9206,40 @@ async function messageEditDone(div) {
  */
 export async function getChatsFromFiles(data, isGroupChat) {
     const context = getContext();
-    let chat_dict = {};
-    let chat_list = Object.values(data).sort((a, b) => a.file_name.localeCompare(b.file_name)).reverse();
+    const chat_dict = {};
+    const chat_list = Object.values(data).sort((a, b) => a.file_name.localeCompare(b.file_name)).reverse();
 
-    let chat_promise = chat_list.map(({ file_name }) => {
-        return new Promise(async (res, rej) => {
-            try {
-                const endpoint = isGroupChat ? '/api/chats/group/get' : '/api/chats/get';
-                const requestBody = isGroupChat
-                    ? JSON.stringify({ id: file_name })
-                    : JSON.stringify({
-                        ch_name: characters[context.characterId].name,
-                        file_name: file_name.replace('.jsonl', ''),
-                        avatar_url: characters[context.characterId].avatar,
-                    });
-
-                const chatResponse = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: requestBody,
-                    cache: 'no-cache',
+    const chat_promise = chat_list.map(async ({ file_name }) => {
+        try {
+            const endpoint = isGroupChat ? '/api/chats/group/get' : '/api/chats/get';
+            const requestBody = isGroupChat
+                ? JSON.stringify({ id: file_name })
+                : JSON.stringify({
+                    ch_name: characters[context.characterId].name,
+                    file_name: file_name.replace('.jsonl', ''),
+                    avatar_url: characters[context.characterId].avatar,
                 });
 
-                if (!chatResponse.ok) {
-                    return res();
-                    // continue;
-                }
+            const chatResponse = await fetch(endpoint, {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: requestBody,
+                cache: 'no-cache',
+            });
 
-                const currentChat = await chatResponse.json();
-                if (!isGroupChat) {
-                    // remove the first message, which is metadata, only for individual chats
-                    currentChat.shift();
-                }
-                chat_dict[file_name] = currentChat;
-            } catch (error) {
-                console.error(error);
+            if (!chatResponse.ok) {
+                return;
             }
 
-            return res();
-        });
+            const currentChat = await chatResponse.json();
+            if (!isGroupChat) {
+                // remove the first message, which is metadata, only for individual chats
+                currentChat.shift();
+            }
+            chat_dict[file_name] = currentChat;
+        } catch (error) {
+            console.error(error);
+        }
     });
 
     await Promise.all(chat_promise);
@@ -12106,13 +12101,13 @@ jQuery(async function () {
          * Sets the scroll height of the edit textarea to fit the content.
          * @param {HTMLTextAreaElement} e Textarea element to auto-fit
          */
-        function autoFitEditTextArea(e) {
+        const autoFitEditTextArea = (e) => {
             const scrollTop = chatElement.scrollTop();
             e.style.height = '0px';
             const newHeight = e.scrollHeight + 4;
             e.style.height = `${newHeight}px`;
             chatElement.scrollTop(scrollTop);
-        }
+        };
         const autoFitEditTextAreaDebounced = debounce(autoFitEditTextArea, debounce_timeout.short);
         document.addEventListener('input', e => {
             if (e.target instanceof HTMLTextAreaElement && e.target.classList.contains('edit_textarea')) {
@@ -13330,13 +13325,13 @@ jQuery(async function () {
 
                 // Remember the chat currently selected, so we can reload it after the replacement
                 const currentChatFile = characters[this_chid].chat;
-                async function postReplace() {
+                const postReplace = async () => {
                     await openCharacterChat(currentChatFile);
-                }
+                };
 
                 switch (result) {
                     case POPUP_RESULT_FILE: {
-                        async function uploadReplacementCard(e) {
+                        const uploadReplacementCard = async (e) => {
                             const file = e.target.files[0];
                             if (!file) {
                                 return;
@@ -13350,7 +13345,7 @@ jQuery(async function () {
                             } catch {
                                 toastr.error('Failed to replace the character card.', 'Something went wrong');
                             }
-                        }
+                        };
                         $('#character_replace_file').off('change').on('change', uploadReplacementCard).trigger('click');
                         break;
                     }

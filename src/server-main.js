@@ -411,7 +411,7 @@ async function postSetupTasks(result) {
                 const openModule = await import('open');
                 const { default: open, apps } = openModule;
 
-                function getBrowsers() {
+                const getBrowsers = () => {
                     const isAndroid = process.platform === 'android';
                     if (isAndroid) {
                         return {};
@@ -422,7 +422,7 @@ async function postSetupTasks(result) {
                         'edge': apps.edge,
                         'brave': apps.brave,
                     };
-                }
+                };
 
                 const validBrowsers = getBrowsers();
                 const appName = validBrowsers[browserLaunchApp.trim().toLowerCase()];

@@ -376,7 +376,7 @@ async function synchronizeChat(batchSize = 5) {
          * @param {string} cause Error cause key
          * @returns {string} Error message
          */
-        function getErrorMessage(cause) {
+        const getErrorMessage = (cause) => {
             switch (cause) {
                 case 'api_key_missing':
                     return 'API key missing. Save it in the "API Connections" panel.';
@@ -391,7 +391,7 @@ async function synchronizeChat(batchSize = 5) {
                 default:
                     return 'Check server console for more details';
             }
-        }
+        };
 
         console.error('Vectors: Failed to synchronize chat', error);
 
@@ -1516,7 +1516,7 @@ async function onVectorizeAllFilesClick() {
          * @param file {import('../../chats.js').FileAttachment} File attachment
          * @returns {number} Chunk size for the file
          */
-        function getChunkSize(file) {
+        const getChunkSize = (file) => {
             if (chatAttachments.includes(file)) {
                 // Convert kilobytes to string length
                 const thresholdLength = settings.size_threshold * 1024;
@@ -1531,14 +1531,14 @@ async function onVectorizeAllFilesClick() {
             }
 
             return -1;
-        }
+        };
 
         /**
          * Gets the overlap percent for a file attachment.
          * @param file {import('../../chats.js').FileAttachment} File attachment
          * @returns {number} Overlap percent for the file
          */
-        function getOverlapPercent(file) {
+        const getOverlapPercent = (file) => {
             if (chatAttachments.includes(file)) {
                 return settings.overlap_percent;
             }
@@ -1548,7 +1548,7 @@ async function onVectorizeAllFilesClick() {
             }
 
             return 0;
-        }
+        };
 
         let allSuccess = true;
 

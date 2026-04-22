@@ -3907,7 +3907,7 @@ export function processChatSlashCommands() {
          * Rehydrates a filter closure from a string.
          * @returns {SlashCommandClosure | null}
          */
-        function reviveFilterClosure() {
+        const reviveFilterClosure = () => {
             if (!inject.filter) {
                 return null;
             }
@@ -3918,7 +3918,7 @@ export function processChatSlashCommands() {
                 console.warn('Failed to revive filter closure for script injection', id, error);
                 return null;
             }
-        }
+        };
 
         const prefixedId = `${SCRIPT_PROMPT_KEY}${id}`;
         const filterClosure = reviveFilterClosure();
@@ -4042,7 +4042,7 @@ async function buttonsCallback(args, text) {
         /** @type {Map<number, ButtonLabel>} */
         const resultToButtonMap = new Map(buttons.map((button, index) => [index + 2, button]));
 
-        return new Promise(async (resolve) => {
+        return new Promise((resolve) => {
             const safeValue = DOMPurify.sanitize(text || '');
 
             /** @type {Popup} */
@@ -4107,19 +4107,19 @@ async function buttonsCallback(args, text) {
             popupContainer.style.flexDirection = 'column';
             popupContainer.style.maxHeight = '80vh'; // Limit the overall height of the popup
 
-            popup = new Popup(popupContainer, POPUP_TYPE.TEXT, '', { okButton: multiple ? t`Ok` : t`Cancel`, allowVerticalScrolling: true });
-            popup.show()
-                .then((result => resolve(getResult(result))))
-                .catch(() => resolve(''));
-
             /** @returns {string} @param {string|number|boolean} result */
-            function getResult(result) {
+            const getResult = (result) => {
                 if (multiple) {
                     const array = result === POPUP_RESULT.AFFIRMATIVE ? Array.from(multipleToggledState).map(r => resultToButtonMap.get(r)?.text ?? '') : [];
                     return JSON.stringify(array);
                 }
                 return typeof result === 'number' ? resultToButtonMap.get(result)?.text ?? '' : '';
-            }
+            };
+
+            popup = new Popup(popupContainer, POPUP_TYPE.TEXT, '', { okButton: multiple ? t`Ok` : t`Cancel`, allowVerticalScrolling: true });
+            popup.show()
+                .then((result => resolve(getResult(result))))
+                .catch(() => resolve(''));
         });
     } catch {
         return '';
@@ -4374,7 +4374,7 @@ function fuzzyCallback(args, searchInValue) {
             }
         }
 
-        function getFirstMatch() {
+        const getFirstMatch = () => {
             const fuse = new Fuse([searchInValue], params);
             // each item in the "list" is searched within "search_item", if any matches it returns the matched "item"
             for (const searchItem of list) {
@@ -4388,9 +4388,9 @@ function fuzzyCallback(args, searchInValue) {
 
             console.info('/fuzzy: no match');
             return '';
-        }
+        };
 
-        function getBestMatch() {
+        const getBestMatch = () => {
             const fuse = new Fuse(list, params);
             const result = fuse.search(searchInValue);
             console.debug('/fuzzy: result', result);
@@ -4401,7 +4401,7 @@ function fuzzyCallback(args, searchInValue) {
 
             console.info('/fuzzy: no match');
             return '';
-        }
+        };
 
         switch (String(args.mode).trim().toLowerCase()) {
             case 'best':
@@ -5723,27 +5723,26 @@ async function deleteCharacterCallback(args) {
 async function continueChatCallback(args, prompt) {
     const shouldAwait = isTrueBoolean(args?.await);
 
-    const outerPromise = new Promise(async (resolve, reject) => {
+    const outerPromise = (async () => {
         try {
             await waitUntilCondition(() => !is_send_press && !is_group_generating, 10000, 100);
         } catch {
             console.warn('Timeout waiting for generation unlock');
             toastr.warning(t`Cannot run /continue command while the reply is being generated.`);
-            return reject();
+            throw new Error('Timeout waiting for generation unlock');
         }
 
-        try {
-            // Prevent infinite recursion
-            $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
+        // Prevent infinite recursion
+        $('#send_textarea').val('')[0].dispatchEvent(new Event('input', { bubbles: true }));
 
-            const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
-            await Generate('continue', options);
-
-            resolve();
-        } catch (error) {
+        const options = prompt?.trim() ? { quiet_prompt: prompt.trim(), quietToLoud: true } : {};
+        await Generate('continue', options);
+    })().catch(error => {
+        if (error?.message !== 'Timeout waiting for generation unlock') {
             console.error('Error running /continue command:', error);
-            reject(error);
         }
+
+        throw error;
     });
 
     if (shouldAwait) {

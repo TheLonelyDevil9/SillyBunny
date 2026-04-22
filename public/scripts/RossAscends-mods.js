@@ -1059,11 +1059,11 @@ export function initRossMods() {
             } else if (is_send_press == false) {
                 const skipConfirmKey = 'RegenerateWithCtrlEnter';
                 const skipConfirm = accountStorage.getItem(skipConfirmKey) === 'true';
-                function doRegenerate() {
+                const doRegenerate = () => {
                     console.debug('Regenerating with Ctrl+Enter');
                     $('#option_regenerate').trigger('click');
                     $('#options').hide();
-                }
+                };
 
                 // If there is input text, we do not trigger a regenerate - we just send it
                 if ($('#send_textarea').val() !== '') {

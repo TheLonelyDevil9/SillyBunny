@@ -1969,6 +1969,29 @@ router.post('/bias', async function (request, response) {
             encodeFunction = (tokenizer.encode.bind(tokenizer));
         }
 
+        /**
+         * Gets tokenids for a given entry
+         * @param {string} text Entry text
+         * @param {(string) => Uint32Array} encode Function to encode text to token ids
+         * @returns {Uint32Array} Array of token ids
+         */
+        const getEntryTokens = (text, encode) => {
+            // Get raw token ids from JSON array
+            if (text.trim().startsWith('[') && text.trim().endsWith(']')) {
+                try {
+                    const json = JSON.parse(text);
+                    if (Array.isArray(json) && json.every(x => typeof x === 'number')) {
+                        return new Uint32Array(json);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+
+            // Otherwise, get token ids from tokenizer
+            return encode(text);
+        };
+
         for (const entry of request.body) {
             if (!entry || !entry.text) {
                 continue;
@@ -1988,29 +2011,6 @@ router.post('/bias', async function (request, response) {
         // not needed for cached tokenizers
         //tokenizer.free();
         return response.send(result);
-
-        /**
-         * Gets tokenids for a given entry
-         * @param {string} text Entry text
-         * @param {(string) => Uint32Array} encode Function to encode text to token ids
-         * @returns {Uint32Array} Array of token ids
-         */
-        function getEntryTokens(text, encode) {
-            // Get raw token ids from JSON array
-            if (text.trim().startsWith('[') && text.trim().endsWith(']')) {
-                try {
-                    const json = JSON.parse(text);
-                    if (Array.isArray(json) && json.every(x => typeof x === 'number')) {
-                        return new Uint32Array(json);
-                    }
-                } catch {
-                    // ignore
-                }
-            }
-
-            // Otherwise, get token ids from tokenizer
-            return encode(text);
-        }
     } catch (error) {
         console.error(error);
         return response.send({});

@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
          * @param {string} text Text to classify
          * @returns {Promise<object>} Classification result
          */
-        async function getResult(text) {
+        const getResult = async (text) => {
             if (cacheObject.has(text)) {
                 return cacheObject.get(text);
             } else {
@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
                 cacheObject.set(text, result);
                 return result;
             }
-        }
+        };
 
         console.debug('Classify input:', text);
         const result = await getResult(text);

@@ -54,7 +54,7 @@ router.post('/ping', async (request, response) => {
 
 router.post('/upscalers', async (request, response) => {
     try {
-        async function getUpscalerModels() {
+        const getUpscalerModels = async () => {
             const url = new URL(request.body.url);
             url.pathname = '/sdapi/v1/upscalers';
 
@@ -72,9 +72,9 @@ router.post('/upscalers', async (request, response) => {
             /** @type {any} */
             const data = await result.json();
             return data.map(x => x.name);
-        }
+        };
 
-        async function getLatentUpscalers() {
+        const getLatentUpscalers = async () => {
             const url = new URL(request.body.url);
             url.pathname = '/sdapi/v1/latent-upscale-modes';
 
@@ -92,7 +92,7 @@ router.post('/upscalers', async (request, response) => {
             /** @type {any} */
             const data = await result.json();
             return data.map(x => x.name);
-        }
+        };
 
         const [upscalers, latentUpscalers] = await Promise.all([getUpscalerModels(), getLatentUpscalers()]);
 
@@ -238,7 +238,7 @@ router.post('/get-model', async (request, response) => {
 
 router.post('/set-model', async (request, response) => {
     try {
-        async function getProgress() {
+        const getProgress = async () => {
             const url = new URL(request.body.url);
             url.pathname = '/sdapi/v1/progress';
 
@@ -249,7 +249,7 @@ router.post('/set-model', async (request, response) => {
                 },
             });
             return await result.json();
-        }
+        };
 
         const url = new URL(request.body.url);
         url.pathname = '/sdapi/v1/options';
@@ -1473,7 +1473,7 @@ bfl.post('/generate', async (request, response) => {
             output_format: 'jpeg',
         };
 
-        function getClosestAspectRatio(width, height) {
+        const getClosestAspectRatio = (width, height) => {
             const minAspect = 9 / 21;
             const maxAspect = 21 / 9;
             const currentAspect = width / height;
@@ -1493,7 +1493,7 @@ bfl.post('/generate', async (request, response) => {
             } else {
                 return simplifyRatio(width, height);
             }
-        }
+        };
 
         if (String(request.body.model).endsWith('-ultra')) {
             requestBody.aspect_ratio = getClosestAspectRatio(request.body.width, request.body.height);

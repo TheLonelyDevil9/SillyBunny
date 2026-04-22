@@ -35,17 +35,16 @@ router.post('/list', async (_request, response) => {
         /** @type {Promise<import('../users.js').UserViewModel>[]} */
         const viewModelPromises = users
             .filter(x => x.enabled)
-            .map(user => new Promise(async (resolve) => {
-                getUserAvatar(user.handle).then(avatar =>
-                    resolve({
-                        handle: user.handle,
-                        name: user.name,
-                        created: user.created,
-                        avatar: avatar,
-                        password: !!user.password,
-                    }),
-                );
-            }));
+            .map(async user => {
+                const avatar = await getUserAvatar(user.handle);
+                return {
+                    handle: user.handle,
+                    name: user.name,
+                    created: user.created,
+                    avatar,
+                    password: !!user.password,
+                };
+            });
 
         const viewModels = await Promise.all(viewModelPromises);
         viewModels.sort((x, y) => (x.created ?? 0) - (y.created ?? 0));

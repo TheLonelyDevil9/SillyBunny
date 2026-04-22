@@ -962,7 +962,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
          * Inline a media attachment into the chat message.
          * @param {MediaAttachment} media - The media attachment to inline.
          */
-        async function inlineMediaAttachment(media) {
+        const inlineMediaAttachment = async (media) => {
             if (!media || !media.url) {
                 return;
             }
@@ -978,7 +978,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
             if (audioInlining && media.type === MEDIA_TYPE.AUDIO) {
                 await chatMessage.addAudio(media.url);
             }
-        }
+        };
 
         if (Array.isArray(chatPrompt.media) && chatPrompt.media.length) {
             if (chatPrompt.mediaDisplay === MEDIA_DISPLAY.LIST) {

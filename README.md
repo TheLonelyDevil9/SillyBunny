@@ -202,6 +202,10 @@ SillyBunny includes some extras by default to help you get started right away:
 - Removed the broken screenshot automation script and outdated screenshot guide after the shell controls diverged from those instructions
 - Replaced all `v1.4.0` README gallery screenshots with fresh live captures across desktop and mobile
 
+**Maintenance**
+
+- Cleaned up lingering nested helper declarations and async promise executor patterns so the current lint suite and stricter proactive ESLint checks stay green
+
 **User Experience**
 
 - Bunny Preset Tools now treats Geechan-style `🌱 ━+` prompt headers as built-in collapsible sections, so those preset groups open as dropdowns automatically

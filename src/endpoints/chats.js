@@ -357,7 +357,7 @@ async function checkChatIntegrity(filePath, integritySlug) {
  * @typedef {(textArray: string[]) => boolean} ChatMatchFunction
  */
 export async function getChatInfo(pathToFile, additionalData = {}, withMetadata = false, matcher = null) {
-    return new Promise(async (res) => {
+    try {
         const parsedPath = path.parse(pathToFile);
         const stats = await fs.promises.stat(pathToFile);
         const hasMatcher = (typeof matcher === 'function');
@@ -374,8 +374,7 @@ export async function getChatInfo(pathToFile, additionalData = {}, withMetadata 
         };
 
         if (stats.size === 0) {
-            res(chatData);
-            return;
+            return chatData;
         }
 
         const fileStream = fs.createReadStream(pathToFile);
@@ -384,35 +383,44 @@ export async function getChatInfo(pathToFile, additionalData = {}, withMetadata 
             crlfDelay: Infinity,
         });
 
-        let lastLine;
-        let itemCounter = 0;
-        let hasAnyMatch = false;
-        let matchBuffer = [];
-        rl.on('line', (line) => {
-            if (withMetadata && itemCounter === 0) {
-                const jsonData = tryParse(line);
-                if (jsonData && _.isObjectLike(jsonData.chat_metadata)) {
-                    chatData.chat_metadata = jsonData.chat_metadata;
-                }
-            }
-            // Skip matching if any match was already found
-            if (hasMatcher && !hasAnyMatch && itemCounter > 0) {
-                const jsonData = tryParse(line);
-                if (jsonData) {
-                    matchBuffer.push(jsonData.mes || '');
-                    if (matcher(matchBuffer)) {
-                        hasAnyMatch = true;
-                        matchBuffer = [];
+        return await new Promise((res, rej) => {
+            let lastLine;
+            let itemCounter = 0;
+            let hasAnyMatch = false;
+            let matchBuffer = [];
+
+            fileStream.once('error', rej);
+            rl.once('error', rej);
+
+            rl.on('line', (line) => {
+                if (withMetadata && itemCounter === 0) {
+                    const jsonData = tryParse(line);
+                    if (jsonData && _.isObjectLike(jsonData.chat_metadata)) {
+                        chatData.chat_metadata = jsonData.chat_metadata;
                     }
                 }
-            }
-            itemCounter++;
-            lastLine = line;
-        });
-        rl.on('close', () => {
-            rl.close();
+                // Skip matching if any match was already found
+                if (hasMatcher && !hasAnyMatch && itemCounter > 0) {
+                    const jsonData = tryParse(line);
+                    if (jsonData) {
+                        matchBuffer.push(jsonData.mes || '');
+                        if (matcher(matchBuffer)) {
+                            hasAnyMatch = true;
+                            matchBuffer = [];
+                        }
+                    }
+                }
+                itemCounter++;
+                lastLine = line;
+            });
+            rl.on('close', () => {
+                rl.close();
 
-            if (lastLine) {
+                if (!lastLine) {
+                    res(chatData);
+                    return;
+                }
+
                 const jsonData = tryParse(lastLine);
                 if (jsonData && (jsonData.name || jsonData.character_name || jsonData.chat_metadata)) {
                     chatData.chat_items = (itemCounter - 1);
@@ -425,9 +433,12 @@ export async function getChatInfo(pathToFile, additionalData = {}, withMetadata 
                     console.warn('Found an invalid or corrupted chat file:', pathToFile);
                     res({});
                 }
-            }
+            });
         });
-    });
+    } catch (error) {
+        console.error('Failed to read chat info:', pathToFile, error);
+        return {};
+    }
 }
 
 export const router = express.Router();

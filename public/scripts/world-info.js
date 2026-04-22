@@ -4888,13 +4888,13 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
         for (const entry of sortedEntries) {
             // Logging preparation
             let headerLogged = false;
-            function log(...args) {
+            const log = (...args) => {
                 if (!headerLogged) {
                     console.debug(`[WI] Entry ${entry.uid}`, `from '${entry.world}' processing`, entry);
                     headerLogged = true;
                 }
                 console.debug(`[WI] Entry ${entry.uid}`, ...args);
-            }
+            };
 
             // Already processed, considered and then skipped entries should still be skipped
             if (failedProbabilityChecks.has(entry) || allActivatedEntries.has(`${entry.world}.${entry.uid}`)) {
@@ -5043,7 +5043,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             log('Entry with primary key match', primaryKeyMatch, 'has secondary keywords. Checking with logic logic', Object.entries(world_info_logic).find(x => x[1] === entry.selectiveLogic));
 
             /** @type {() => boolean} */
-            function matchSecondaryKeys() {
+            const matchSecondaryKeys = () => {
                 let hasAnyMatch = false;
                 let hasAllMatch = true;
                 for (let keysecondary of entry.keysecondary) {
@@ -5078,7 +5078,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 }
 
                 return false;
-            }
+            };
 
             const matched = matchSecondaryKeys();
             if (!matched) {
@@ -5121,7 +5121,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 break;
             }
 
-            function verifyProbability() {
+            const verifyProbability = () => {
                 // If we don't need to roll, it's always true
                 if (!entry.useProbability || entry.probability === 100) {
                     console.debug(`WI entry ${entry.uid} does not use probability`);
@@ -5142,7 +5142,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
 
                 failedProbabilityChecks.add(entry);
                 return false;
-            }
+            };
 
             const success = verifyProbability();
             if (!success) {
@@ -5184,10 +5184,10 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             console.debug(`[WI] Successfully activated ${successfulNewEntries.length} new entries to prompt. ${allActivatedEntries.size} total entries activated.`, successfulNewEntries);
         }
 
-        function logNextState(...args) {
+        const logNextState = (...args) => {
             args.length && console.debug(args.shift(), ...args);
             console.debug('[WI] Setting scan state', Object.entries(scan_state).find(x => x[1] === scanState));
-        }
+        };
 
         // After processing and rolling entries is done, see if we should continue with normal recursion
         if (world_info_recursive && !token_budget_overflowed && successfulNewEntriesForRecursion.length) {
