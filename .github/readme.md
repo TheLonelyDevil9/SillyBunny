@@ -251,6 +251,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **Bug fixes**
 
+- Fixed repo lint regressions across Pathfinder follow-up changes and existing workspace files so the full `npm run lint` pass succeeds again
 - Fixed duplicate third-party extension cards in the Extensions panel by deduplicating manifest and render entries before they reach the UI
 - Fixed SillyBunny-to-SillyTavern minimum version compatibility checks so third-party extensions like JS Slash Runner no longer fail against the forked client version
 - Fixed Pathfinder settings popup scrolling on desktop and mobile, including browsers that were not honoring the parent popup scroll container

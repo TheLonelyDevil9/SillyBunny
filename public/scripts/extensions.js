@@ -1381,7 +1381,7 @@ async function onReinstallClick() {
         t`This will delete and reinstall ${extensionName} from ${repoUrl}. Any local changes will be lost. Continue?`,
         POPUP_TYPE.CONFIRM,
         '',
-        {}
+        {},
     );
 
     if (confirmation !== POPUP_RESULT.AFFIRMATIVE) {

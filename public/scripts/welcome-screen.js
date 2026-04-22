@@ -489,7 +489,7 @@ function isWelcomeDeckCollapsed() {
     if (stored === null) {
         // Check if this is first run - if so, default to expanded (false)
         // Otherwise default to collapsed (true)
-        return firstRun ? false : true;
+        return !firstRun;
     }
     return stored === 'true';
 }

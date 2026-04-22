@@ -4419,7 +4419,7 @@ function renderServerAdminStatus(data) {
     const branchSelect = createElement('select', {
         id: 'sb-branch-select',
         className: 'text_pole',
-        attrs: { style: 'width: 100%; max-width: 200px;' }
+        attrs: { style: 'width: 100%; max-width: 200px;' },
     });
     const currentBranch = repository?.branch || version?.gitBranch || 'Unknown';
     const currentOption = createElement('option', { attrs: { value: currentBranch, selected: 'selected' } });

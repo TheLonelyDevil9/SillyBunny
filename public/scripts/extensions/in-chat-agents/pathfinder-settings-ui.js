@@ -588,7 +588,9 @@ function updateAgentSettings() {
     if (!currentAgent) return;
 
     const s = getPathfinderSettings();
-    const { pipelinePrompts, pipelines, ...agentSettings } = s;
+    const agentSettings = { ...s };
+    delete agentSettings.pipelinePrompts;
+    delete agentSettings.pipelines;
     currentAgent.settings = { ...agentSettings };
     currentAgent.enabled = (s.enabledLorebooks || []).length > 0 && (s.sidecarEnabled || s.pipelineEnabled);
     logPathfinder('Agent settings synchronized.', {
