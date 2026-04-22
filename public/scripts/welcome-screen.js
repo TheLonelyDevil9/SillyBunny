@@ -222,7 +222,7 @@ const WELCOME_BUNDLED_ASSISTANTS = Object.freeze([
         personality: 'Patient, beginner-friendly, calm, and practical.',
         scenario: 'You are the built-in Bunny Guide for SillyBunny. Help the user understand the interface, APIs, presets, prompt settings, personas, and world info in plain, approachable language.',
         firstMessage: 'Hi. I\'m the Bunny Guide. If anything in SillyBunny feels confusing, ask in plain English and I\'ll walk through it with you step by step.',
-        chips: Object.freeze(['LLM basics', 'SillyBunny help', 'Plain English', 'Bundled']),
+        chips: Object.freeze(['LLM basics', 'SillyBunny help', 'Plain English', 'purachina']),
         questions: Object.freeze([
             'What is an LLM, in plain English?',
             'What is a character card?',
@@ -243,20 +243,20 @@ const WELCOME_BUNDLED_ASSISTANTS = Object.freeze([
         portraitAlt: 'Assistant Nahida portrait',
         characterName: 'Assistant Nahida',
         title: 'Assistant Nahida',
-        body: 'Assistant Nahida is a separate bundled assistant with a gentle, metaphor-laden demeanour for all kinds of queries. She has the same capabilities as our Bunny Assistant, but with a more philosophical lens.',
+        body: 'Assistant Nahida is one of our bundled assistants: with a gentle, metaphor-laden demeanour for all kinds of queries. She has the same capabilities as our Bunny Assistant, but with a more philosophical lens.',
         credit: 'Created by Geechan.',
         creator: 'Geechan',
         creatorNotes: 'Bundled with SillyBunny. Created by Geechan. Feel free to edit.',
-        description: 'Assistant Nahida is a bundled SillyBunny helper who explains prompts, token budgeting, presets, context setup, and workflow choices in calm, beginner-friendly language.',
+        description: 'Assistant Nahida is one of our bundled SillyBunny helpers. She can help explain prompts, token budgeting, presets, context setup, and workflow choices in calm, beginner-friendly language.',
         personality: 'Patient, observant, encouraging, thoughtful, and concise.',
         scenario: 'You are Assistant Nahida, a bundled helper for SillyBunny. Guide the user through prompts, token budgeting, presets, reasoning settings, context size, and general workflow questions with calm clarity.',
         firstMessage: 'Hello. I\'m Assistant Nahida, a bundled helper made by Geechan. If you want, we can sort out prompts, presets, context size, or any confusing settings together.',
-        chips: Object.freeze(['Geechan', 'Prompts', 'Context', 'Workflow']),
+        chips: Object.freeze(['LLM basics', 'SillyBunny help', 'Philosophical', 'Geechan']),
         questions: Object.freeze([
             'Can you help me make sense of my current system prompt?',
             'What should I tune first: model, preset, or prompt settings?',
             'Do large language models feel emotions?',
-            'Are larger parameter models better in all cases?',
+            'Are larger parameter models better for roleplaying?',
         ]),
         actionLabel: 'Open Assistant Nahida',
         actionIcon: 'fa-leaf',
@@ -676,9 +676,9 @@ function buildPresetStarterPackItem() {
         ? 'SillyBunny'
         : (selectedPresetName === STARTER_PACK_PRESET_NAME_SILLYTAVERN ? 'SillyTavern' : '');
     const hasPresetPair = Boolean(sillyBunnyPreset && sillyTavernPreset);
-    const chips = ['OpenAI-style', 'Two versions', 'Agents-aware', STARTER_PACK_CREATOR_NAME];
+    const chips = ['Chat Completions', 'Two versions', 'Agent-aware', STARTER_PACK_CREATOR_NAME];
     const chipColumnCount = Math.max(2, Math.min(chips.length, 4));
-    const body = `${STARTER_PACK_CREATOR_NAME}'s Director Preset now ships in two versions: the SillyTavern one includes the Toggle and Randomiser prompts, while the SillyBunny version keeps the Main, the Primary Toggles, and the Prefill Toggles only because Agents already cover the optional toggles and randomiser prompts.`;
+    const body = `purachina's website contains his character cards, presets, and other projects. A minimal version of his Director Preset ships included with SillyBunny, and is ready to go for Chat Completions! We've included both this version and his regular preset for convenience.`;
 
     if (!isOpenAiStyleApi) {
         return {
@@ -687,7 +687,7 @@ function buildPresetStarterPackItem() {
             icon: 'fa-sliders',
             chips,
             chipColumnCount,
-            statusLabel: 'OpenAI-style only',
+            statusLabel: 'Chat Completions',
             statusTone: 'neutral',
             actionIcon: 'fa-arrow-up-right-from-square',
             actionLabel: 'Open API',
@@ -767,9 +767,9 @@ function buildLinkStarterPackItem({
 function buildGeechanStarterPackItem() {
     return {
         title: 'Geechan',
-        body: 'Geechan\'s Rentry highlights his well-written character cards and guides, alongside his prompts and presets. He also made our bundled Assistant Nahida card and Prose Polisher agent. SillyBunny includes his Universal Roleplay v5.0 preset across Chat Completions, plus the matching Text Completions variant for context, system prompt, and instruct pieces.',
+        body: 'Geechan\'s Rentry highlights his well-written character cards and guides alongside his prompts and presets. SillyBunny includes his Universal Roleplay v5.0 preset across Chat Completions, plus the matching Text Completions variant for context, system prompt, and instruct pieces. He also made our bundled Assistant Nahida card and Prose Polisher agent.',
         icon: 'fa-leaf',
-        chips: ['Character cards', 'Assistant Nahida', 'Prose Polisher', 'Rentry'],
+        chips: ['Chat Completions', 'Text Completions', 'Prose Polisher', 'Assistant Nahida'],
         chipColumnCount: 4,
         statusLabel: 'Preset pack',
         statusTone: 'warm',
@@ -777,7 +777,7 @@ function buildGeechanStarterPackItem() {
         actionIcon: 'fa-wand-magic-sparkles',
         actionType: 'apply-preset',
         actionValue: 'Geechan - Universal Roleplay (Chat Completions) (v5.0)',
-        secondaryActionLabel: 'Visit Geechan',
+        secondaryActionLabel: 'Visit site',
         secondaryActionIcon: 'fa-arrow-up-right-from-square',
         secondaryActionType: 'open-link',
         secondaryActionValue: GEECHAN_SITE_URL,
@@ -787,14 +787,14 @@ function buildGeechanStarterPackItem() {
 function buildTldStarterPackItem() {
     return buildLinkStarterPackItem({
         title: 'TheLonelyDevil',
-        body: 'SillyBunny bundles the standalone TLD Card Conversion Preset for character card conversions and generations, and the Memory Sharding Quick Reply set for compressing chat history into structured memory shards. To use Memory Sharding, go to the Quick Reply settings, enable the "Memory Sharding" set, then click the "Shard Memory" button when you want to summarise your chat. Use around 30k context so the shard pass has enough room to work cleanly. We also recommend Discord Pals as a way to run LLM characters inside Discord!',
+        body: 'SillyBunny bundles the TLD Card Conversion Preset for character card conversions and generations, and the Memory Sharding Quick Reply set for compressing chat history into structured memory shards. We also recommend his Discord Pals program to run LLM characters inside Discord!',
         icon: 'fa-shoe-prints',
-        chips: ['Card converter', 'Memory shards', 'Discord', 'Chub'],
+        chips: ['Card converter', 'Memory shards', 'Discord Pals', 'Chub'],
         statusLabel: 'Card Converter',
         statusTone: 'warm',
-        actionLabel: 'Open Chub profile',
+        actionLabel: 'Visit site',
         actionValue: TLD_CHUB_URL,
-        secondaryActionLabel: 'View Discord Pals',
+        secondaryActionLabel: 'Discord Pals',
         secondaryActionValue: TLD_DISCORD_PALS_URL,
     });
 }
