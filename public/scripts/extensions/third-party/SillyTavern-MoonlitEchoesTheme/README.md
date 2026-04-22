@@ -5,6 +5,7 @@
 
 ## SillyBunny Fork Changelog
 
+- 2026-04-22: Restored the in-chat agent post-processing running toast for profile-backed prompt transforms so the active agent status stays visible through completion on desktop and mobile.
 - 2026-04-22: Guarded SillyBunny's mobile viewport reposition workaround during active text entry so Android and Termux keyboard autocorrect replacements stop appending corrected words to the end of the chat input.
 - 2026-04-22: Fixed ARM/Node launcher restarts dirtying the tracked `package-lock.json` by using lockfile-driven Node installs and auto-restoring the tracked lockfile after npm-only metadata churn, which keeps PM2/self-update server checkouts clean for later pulls.
 - 2026-04-22: Fixed Moonlit raw custom CSS so it only applies while Moonlit Echoes is enabled, and restored legacy `--mainFont` / `--headerFont` compatibility so older Moonlit-style themes stop falling back to browser default fonts on desktop and mobile.

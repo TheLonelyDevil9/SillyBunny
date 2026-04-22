@@ -855,13 +855,23 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
     const modelOverride = typeof agent.modelOverride === 'string' ? agent.modelOverride.trim() : '';
     const context = getContext();
     const CMRS = context?.ConnectionManagerRequestService;
+    const runAsInternalPromptTransform = async (requestFn) => {
+        internalPromptTransformDepth++;
+        try {
+            return await requestFn();
+        } finally {
+            internalPromptTransformDepth = Math.max(0, internalPromptTransformDepth - 1);
+        }
+    };
 
     if (profileId) {
         if (!CMRS || typeof CMRS.sendRequest !== 'function') {
             throw new Error(`${describePromptTransformTarget(profileId, 'profile')} is set, but Connection Manager is unavailable.`);
         }
 
-        return await requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens, modelOverride);
+        return await runAsInternalPromptTransform(async () =>
+            await requestProfilePromptTransform(CMRS, profileId, promptMessages, maxTokens, modelOverride),
+        );
     }
 
     const quietPrompt = promptMessages
@@ -874,9 +884,8 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
         delete extension_prompts[key];
     }
 
-    internalPromptTransformDepth++;
     try {
-        return {
+        return await runAsInternalPromptTransform(async () => ({
             output: await generateQuietPrompt({
                 quietPrompt,
                 quietName: 'In-Chat Agent',
@@ -886,10 +895,8 @@ async function requestPromptTransform(agent, promptMessages, maxTokens) {
             }),
             runner: 'main',
             profileId: '',
-        };
+        }));
     } finally {
-        internalPromptTransformDepth = Math.max(0, internalPromptTransformDepth - 1);
-
         for (const [key, value] of preservedPrompts) {
             extension_prompts[key] = value;
         }

@@ -302,6 +302,7 @@ SillyBunny includes some extras by default to help you get started right away:
 **Agents and message tools**
 
 - Fixed in-chat agent running toasts so cancelling or stopping a prompt-based post-processing pass clears any stuck "Running ..." notification, and the toast can now also be dismissed manually on desktop and mobile
+- Restored the in-chat agent post-processing running toast for profile-backed prompt transforms by treating those internal requests like other agent-owned generations, so the active status stays visible on desktop and mobile until the pass finishes
 - Fixed message metadata badges so reasoning-token counts and agent-change actions stay in sync during both initial render and later message updates
 - Upgraded in-chat agent transform history to show semantic diffs with insert/delete highlighting while keeping Undo/Redo actions
 - Updated agent transform diff styling to match recast-post-processing — more subtle colors with rgba transparency for cleaner visual appearance
