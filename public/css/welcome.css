@@ -248,7 +248,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 }
 
 .welcomeHeroBlurb {
-    margin: 10px 0 0;
+    margin: 10px auto 0;
     max-width: 56ch;
     font-size: calc(var(--mainFontSize) * 0.96);
     line-height: 1.55;
@@ -258,6 +258,7 @@ body.hideChatAvatars .welcomePanel .recentChatList .recentChat .avatar {
 
 .welcomeForkNotice {
     margin-top: 14px;
+    margin-inline: auto;
     max-width: min(100%, 600px);
     padding: 10px 12px;
     border-radius: 16px;

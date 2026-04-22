@@ -182,6 +182,7 @@ const WELCOME_GUIDE_CARDS = Object.freeze([
         actionLabel: 'Open the Search bar',
         actionType: 'open-global-search',
         actionValue: '',
+        isSearchTrigger: true,
     },
     {
         title: 'Quick-access Buttons',
@@ -562,6 +563,7 @@ function buildGuideCards() {
         ...card,
         chips: [...card.chips],
         chipColumnCount: Math.max(2, Math.min(card.chips.length || 1, 4)),
+        isSearchTrigger: card.isSearchTrigger || false,
     }));
 }
 

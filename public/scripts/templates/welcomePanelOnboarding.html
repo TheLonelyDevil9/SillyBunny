@@ -237,7 +237,7 @@
                                 {{/each}}
                             </div>
                             {{#if actionLabel}}
-                                <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{actionType}}" data-action-value="{{actionValue}}">
+                                <button class="menu_button menu_button_icon welcomeActionButton" data-action="{{actionType}}" data-action-value="{{actionValue}}"{{#if isSearchTrigger}} data-sb-universal-search-trigger="true"{{/if}}>
                                     <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                     <span>{{actionLabel}}</span>
                                 </button>
