@@ -5,6 +5,7 @@
 
 ## SillyBunny Fork Changelog
 
+- 2026-04-22: Fixed ARM/Node launcher restarts dirtying the tracked `package-lock.json` by using a lockfile-safe install path during Node-mode startup, which keeps PM2/self-update server checkouts clean for later pulls.
 - 2026-04-22: Fixed Moonlit raw custom CSS so it only applies while Moonlit Echoes is enabled, and restored legacy `--mainFont` / `--headerFont` compatibility so older Moonlit-style themes stop falling back to browser default fonts on desktop and mobile.
 
 **English** | [繁體中文](https://github.com/RivelleDays/SillyTavern-MoonlitEchoesTheme/blob/main/.github/README-zh_Hant.md)

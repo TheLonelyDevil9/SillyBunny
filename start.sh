@@ -195,7 +195,11 @@ fi
 export NODE_ENV=production
 install_args=()
 if [[ "$runtime_kind" == node ]]; then
-    install_args=(install --no-audit --no-fund --omit=dev)
+    if [[ -f package-lock.json ]]; then
+        install_args=(ci --no-audit --no-fund --omit=dev)
+    else
+        install_args=(install --no-audit --no-fund --omit=dev)
+    fi
 else
     install_args=(install --frozen-lockfile --production)
     if is_termux; then

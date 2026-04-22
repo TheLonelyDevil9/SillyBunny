@@ -258,6 +258,7 @@ SillyBunny includes some extras by default to help you get started right away:
 
 **Bug fixes**
 
+- Fixed ARM/Node launcher restarts dirtying `package-lock.json` by switching Node-mode installs to `npm ci` when a lockfile is present, so self-updates and PM2 restarts stop leaving the repo in a modified state
 - Fixed Pathfinder pipeline mode so the saved lorebook and connection-profile settings are rehydrated on startup, predictive retrieval runs again during real generations, and pipeline-only mode no longer depends on Tool Mode being enabled
 - Fixed Pathfinder connection-profile dropdowns in both the main settings panel and prompt editor by switching them back to the supported Connection Manager profile API
 - Fixed Pathfinder lorebook trees not rebuilding after reloads by auto-building missing trees on demand for predictive retrieval and Search tool calls
