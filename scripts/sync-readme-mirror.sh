@@ -37,7 +37,8 @@ cleanup() {
 trap cleanup EXIT
 
 printf '%s\n\n' "$MIRROR_NOTICE" > "$TMP_FILE"
-cat "$SOURCE_README" >> "$TMP_FILE"
+# Rebase README screenshot assets so links still resolve from .github/readme.md.
+sed 's|src="\.github/screenshots/|src="screenshots/|g' "$SOURCE_README" >> "$TMP_FILE"
 
 if cmp -s "$TMP_FILE" "$TARGET_README"; then
     echo "README mirror is already in sync."
