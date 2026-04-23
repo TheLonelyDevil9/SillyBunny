@@ -237,7 +237,7 @@ function getInstallCommand() {
     if (fs.existsSync(packageLockPath) && commandExistsSync('npm')) {
         return {
             command: 'npm',
-            args: ['install', '--no-audit', '--no-fund'],
+            args: ['ci', '--no-audit', '--no-fund', '--omit=dev'],
         };
     }
 
@@ -552,9 +552,18 @@ router.post('/update', requireAdminMiddleware, async (_request, response) => {
 
         const installCommand = getInstallCommand();
         let installResult = null;
+        let restorePackageLockAfterInstall = false;
 
         if (installCommand) {
+            restorePackageLockAfterInstall = installCommand.command === 'npm'
+                && installCommand.args.includes('ci')
+                && commandExistsSync('git')
+                && fs.existsSync(path.join(serverDirectory, 'package-lock.json'));
             installResult = await runCommand(installCommand.command, installCommand.args);
+
+            if (restorePackageLockAfterInstall) {
+                await runCommand('git', ['restore', '--', 'package-lock.json']).catch(() => null);
+            }
         }
 
         const nextRepository = await getRepositoryStatus();

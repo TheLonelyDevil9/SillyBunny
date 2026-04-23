@@ -58,7 +58,7 @@
                     </span>
                 </button>
             </div>
-            <div class="welcomeShortcuts">
+            <div class="welcomeShortcuts" aria-label="Home shortcuts">
                 <button class="menu_button menu_button_icon welcomeShortcut open_characters_library">
                     <i class="fa-solid fa-image-portrait"></i>
                     <span data-i18n="Sample characters">Sample characters</span>
@@ -83,24 +83,6 @@
                     <i class="fa-solid fa-book-open"></i>
                     <span>Documentation</span>
                 </a>
-            </div>
-            <div class="welcomeCompactShortcuts" aria-label="Compact home shortcuts">
-                <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact open_characters_library">
-                    <i class="fa-solid fa-image-portrait"></i>
-                    <span data-i18n="Sample characters">Sample characters</span>
-                </button>
-                <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact external_import_button">
-                    <i class="fa-solid fa-cloud-arrow-down"></i>
-                    <span data-i18n="Import Character">Import character</span>
-                </button>
-                <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact welcomeActionButton" data-action="open-tab" data-action-value="left:api">
-                    <i class="fa-solid fa-plug"></i>
-                    <span>Open API</span>
-                </button>
-                <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact welcomeActionButton" data-action="open-tab" data-action-value="right:extensions">
-                    <i class="fa-solid fa-cubes"></i>
-                    <span>Extensions</span>
-                </button>
             </div>
         </div>
 
@@ -144,6 +126,32 @@
                 <i class="fa-solid fa-xmark fa-fw"></i>
             </button>
         </div>
+    </div>
+    <div class="welcomeListShortcuts" aria-label="List-only home shortcuts">
+        <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact open_characters_library">
+            <i class="fa-solid fa-image-portrait"></i>
+            <span data-i18n="Sample characters">Sample characters</span>
+        </button>
+        <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact external_import_button">
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+            <span data-i18n="Import Character">Import character</span>
+        </button>
+        <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact welcomeActionButton" data-action="open-tab" data-action-value="left:api">
+            <i class="fa-solid fa-plug"></i>
+            <span>Open API</span>
+        </button>
+        <button class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact welcomeActionButton" data-action="open-tab" data-action-value="right:extensions">
+            <i class="fa-solid fa-cubes"></i>
+            <span>Extensions</span>
+        </button>
+        <a class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact" target="_blank" href="https://github.com/platberlitz/SillyBunny">
+            <i class="fa-brands fa-github"></i>
+            <span>GitHub</span>
+        </a>
+        <a class="menu_button menu_button_icon welcomeShortcut welcomeShortcut--compact" target="_blank" href="https://docs.sillytavern.app/">
+            <i class="fa-solid fa-book-open"></i>
+            <span>Documentation</span>
+        </a>
     </div>
 
     <div class="welcomeDeck{{#if deckCollapsed}} is-collapsed{{/if}}" data-collapsed="{{#if deckCollapsed}}true{{else}}false{{/if}}">
