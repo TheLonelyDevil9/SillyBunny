@@ -60,6 +60,18 @@ export function logSidecarRetrieval(nodeIds, entryCount) {
     });
 }
 
+export function logPathfinderRetrievalDetail(detail) {
+    addFeedItem({
+        type: 'pathfinder_retrieval_detail',
+        mode: detail?.mode || 'unknown',
+        books: Array.isArray(detail?.books) ? detail.books : [],
+        selectedEntries: Array.isArray(detail?.selectedEntries) ? detail.selectedEntries : [],
+        stageResults: Array.isArray(detail?.stageResults) ? detail.stageResults : [],
+        injectedPrompt: detail?.injectedPrompt || '',
+        metadata: detail?.metadata || {},
+    });
+}
+
 export function logConditionalEvaluations(evaluations) {
     addFeedItem({
         type: 'conditional_evaluations',

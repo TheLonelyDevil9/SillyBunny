@@ -1,6 +1,7 @@
 import { getSettings, getTree, getAllEntryUids } from './tree-store.js';
 import { ALL_TOOL_NAMES, getActiveTunnelVisionBooks } from './pathfinder-tool-bridge.js';
 import { getEnabledToolAgents } from '../agent-store.js';
+import { getPathfinderRuntimeAgent } from '../agent-runner.js';
 
 export async function runDiagnostics() {
     const results = {};
@@ -59,6 +60,8 @@ export async function runDiagnostics() {
 
     if (s.sidecarEnabled) {
         const enabledAgents = getEnabledToolAgents();
+        const pathfinderAgent = getPathfinderRuntimeAgent(enabledAgents);
+        const enabledPathfinderTools = (pathfinderAgent?.tools ?? []).filter(tool => tool.enabled !== false);
         const registeredTools = ALL_TOOL_NAMES.filter(name =>
             ToolManager?.tools?.find(t => t.name === name),
         );
@@ -75,10 +78,15 @@ export async function runDiagnostics() {
                     message: `${registeredTools.length} tools registered, but tool calling is not supported for the current API/settings. Enable "Function Calling" in OpenAI settings and ensure the current model supports tools.`,
                 };
             }
-        } else if (enabledAgents.length === 0) {
+        } else if (!pathfinderAgent) {
             results['Tool Registration'] = {
                 ok: false,
-                message: 'No tool agents are enabled. Enable at least one agent in the Agents section.',
+                message: 'Tool mode is enabled, but the Pathfinder tool agent is not active right now. Enable Pathfinder as a tool agent, then reopen settings or reload agents.',
+            };
+        } else if (enabledPathfinderTools.length === 0) {
+            results['Tool Registration'] = {
+                ok: false,
+                message: 'Tool mode is enabled, but every Pathfinder tool toggle is off. Re-enable at least one Pathfinder tool in Tool Settings.',
             };
         } else if (registeredTools.length === 0) {
             results['Tool Registration'] = {
@@ -90,13 +98,13 @@ export async function runDiagnostics() {
         } else {
             results['Tool Registration'] = {
                 ok: false,
-                message: `Partial: ${registeredTools.length}/${ALL_TOOL_NAMES.length} tools registered. Some tool agents may be disabled.`,
+                message: `Partial: ${registeredTools.length}/${enabledPathfinderTools.length} enabled Pathfinder tools registered. Some Pathfinder tool toggles may be disabled or not yet refreshed.`,
             };
         }
     } else {
         results['Tool Registration'] = {
             ok: true,
-            message: 'Tool mode disabled - skipped',
+            message: 'Tool mode disabled - skipped. Tool agents are not required unless you want Pathfinder tools.',
         };
     }
 

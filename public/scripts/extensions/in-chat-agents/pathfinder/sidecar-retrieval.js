@@ -1,7 +1,7 @@
 import { getTree, findNodeById, getAllEntryUids, getSettings } from './tree-store.js';
 import { getReadableBooks, getEntryContent } from './pathfinder-tool-bridge.js';
 import { sidecarGenerate } from './llm-sidecar.js';
-import { logSidecarRetrieval, logPipelineStart, logPipelineComplete, setSidecarActive } from './activity-feed.js';
+import { logPathfinderRetrievalDetail, logSidecarRetrieval, logPipelineStart, logPipelineComplete, setSidecarActive } from './activity-feed.js';
 import { buildTreeFromMetadata } from './tree-builder.js';
 import { runPipeline } from './prompts/pipeline-runner.js';
 
@@ -121,6 +121,8 @@ async function runPipelineRetrieval(setExtensionPrompt, extensionPromptTypes, ex
                 if (entry && entry.comment === entryName) {
                     entryContents.push({
                         name: entry.comment,
+                        bookName,
+                        uid,
                         content: entry.content,
                     });
                     break;
@@ -135,6 +137,23 @@ async function runPipelineRetrieval(setExtensionPrompt, extensionPromptTypes, ex
             .join('\n\n');
 
         const content = `<pathfinder_context>\n${formattedContent}\n</pathfinder_context>`;
+        logPathfinderRetrievalDetail({
+            mode: 'pipeline',
+            books,
+            selectedEntries: entryContents.map(entry => ({
+                name: entry.name,
+                bookName: entry.bookName || '',
+                uid: entry.uid ?? null,
+                preview: entry.content ? String(entry.content).slice(0, 240) : '',
+            })),
+            stageResults: result.stageResults,
+            injectedPrompt: content,
+            metadata: {
+                pipelineId,
+                selectedEntryCount: entryContents.length,
+                candidateCount: result.selectedEntries?.length ?? 0,
+            },
+        });
         setExtensionPrompt(
             PIPELINE_RETRIEVAL_KEY,
             content,
@@ -145,6 +164,19 @@ async function runPipelineRetrieval(setExtensionPrompt, extensionPromptTypes, ex
         );
 
         console.log(`[Pathfinder] Pipeline injected ${entryContents.length} entries`);
+    } else {
+        logPathfinderRetrievalDetail({
+            mode: 'pipeline',
+            books,
+            selectedEntries: [],
+            stageResults: result.stageResults,
+            injectedPrompt: '',
+            metadata: {
+                pipelineId,
+                selectedEntryCount: 0,
+                candidateCount: result.selectedEntries?.length ?? 0,
+            },
+        });
     }
 }
 
@@ -188,6 +220,27 @@ async function runLegacySidecarRetrieval(setExtensionPrompt, extensionPromptType
         }
 
         logSidecarRetrieval(nodeIds, allEntries.length);
+        logPathfinderRetrievalDetail({
+            mode: 'tool-retrieval',
+            books,
+            selectedEntries: allEntries.map(entry => ({
+                uid: entry?.uid ?? null,
+                name: entry?.comment || entry?.key?.[0] || '',
+                preview: entry?.content ? String(entry.content).slice(0, 240) : '',
+            })),
+            stageResults: [{
+                stageIndex: 0,
+                promptId: 'legacy-sidecar',
+                success: true,
+                entriesFound: allEntries.length,
+                nodeIds,
+            }],
+            injectedPrompt: allEntries.length > 0 ? `**Pathfinder Auto-Retrieval** (${allEntries.length} entries relevant)` : '',
+            metadata: {
+                nodeIds,
+                selectedEntryCount: allEntries.length,
+            },
+        });
 
         if (allEntries.length > 0) {
             const content = `**Pathfinder Auto-Retrieval** (${allEntries.length} entries relevant)`;

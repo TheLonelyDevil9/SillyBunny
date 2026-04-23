@@ -5,6 +5,7 @@
 import { renderExtensionTemplateAsync, getContext } from '../../extensions.js';
 import { saveSettingsDebounced } from '../../../script.js';
 import { world_names, loadWorldInfo } from '../../world-info.js';
+import { saveAgent } from './agent-store.js';
 import {
     getPathfinderSettings,
     setPathfinderSettings,
@@ -18,6 +19,7 @@ import { buildTreeFromMetadata } from './pathfinder/tree-builder.js';
 import { syncToolAgentRegistrations } from './agent-runner.js';
 import { getPrompt, savePrompt } from './pathfinder/prompts/prompt-store.js';
 import { getDefaultPrompts } from './pathfinder/prompts/default-prompts.js';
+import { clearFeed, getFeedItems } from './pathfinder/activity-feed.js';
 
 const MODULE_NAME = 'in-chat-agents';
 const PATHFINDER_LOG_PREFIX = '[Pathfinder]';
@@ -149,6 +151,7 @@ export async function openPathfinderSettings(agent) {
     bindEvents();
     updateStatusBanner();
     updateModeCardStates();
+    renderRetrievalLog();
 
     return settingsEl;
 }
@@ -456,7 +459,7 @@ function bindEvents() {
         updateAgentSettings();
     });
 
-    settingsEl.find('.pf--tool-list input[data-tool]').on('change', function () {
+    settingsEl.find('.pf--tool-list input[data-tool]').on('change', async function () {
         const toolName = $(this).data('tool');
         const enabled = $(this).prop('checked');
 
@@ -468,7 +471,7 @@ function bindEvents() {
         }
 
         logPathfinder('Tool availability changed.', { toolName, enabled });
-        updateAgentSettings();
+        await updateAgentSettings();
         syncToolAgentRegistrations();
     });
 
@@ -522,6 +525,17 @@ function bindEvents() {
             console.warn(`${PATHFINDER_LOG_PREFIX} Pathfinder diagnostics failed.`, err);
         }
     });
+
+    settingsEl.find('#pf--refresh-log').on('click', () => {
+        renderRetrievalLog();
+        logPathfinder('Pathfinder retrieval log refreshed.');
+    });
+
+    settingsEl.find('#pf--clear-log').on('click', () => {
+        clearFeed();
+        renderRetrievalLog();
+        logPathfinder('Pathfinder retrieval log cleared.');
+    });
 }
 
 /**
@@ -548,6 +562,104 @@ function updateStatusBanner() {
         banner.find('.pf--status-icon i').removeClass('fa-circle-check').addClass('fa-circle-xmark');
         banner.find('.pf--status-text strong').text('Pathfinder is not configured');
         banner.find('.pf--status-text span').text('Select at least one lorebook below to get started');
+    }
+}
+
+function renderRetrievalLog() {
+    const output = settingsEl.find('#pf--retrieval-log-output');
+    if (!output.length) {
+        return;
+    }
+
+    const items = getFeedItems().filter(item =>
+        item.type === 'pathfinder_retrieval_detail'
+        || item.type === 'pipeline_start'
+        || item.type === 'pipeline_stage_start'
+        || item.type === 'pipeline_stage_complete'
+        || item.type === 'pipeline_complete'
+        || item.type === 'pipeline_error'
+        || item.type === 'sidecar_retrieval'
+        || item.type === 'tool_call_started'
+        || item.type === 'tool_call_completed'
+        || item.type === 'tool_call_error',
+    );
+
+    if (items.length === 0) {
+        output.text('No Pathfinder retrieval activity recorded yet.');
+        return;
+    }
+
+    const text = items.map(formatRetrievalLogItem).filter(Boolean).join('\n\n');
+    output.text(text || 'No Pathfinder retrieval activity recorded yet.');
+}
+
+function formatRetrievalLogItem(item) {
+    const timestamp = item?.timestamp ? new Date(item.timestamp).toLocaleTimeString() : '--:--:--';
+
+    switch (item.type) {
+        case 'pathfinder_retrieval_detail': {
+            const selectedEntries = Array.isArray(item.selectedEntries) ? item.selectedEntries : [];
+            const stageResults = Array.isArray(item.stageResults) ? item.stageResults : [];
+            const lines = [
+                `[${timestamp}] Retrieval (${item.mode || 'unknown'})`,
+                `Books: ${(item.books || []).join(', ') || 'None'}`,
+                `Selected entries: ${selectedEntries.length}`,
+            ];
+
+            if (selectedEntries.length > 0) {
+                lines.push('Entries:');
+                for (const entry of selectedEntries) {
+                    const label = entry.bookName ? `${entry.name || 'Untitled'} (${entry.bookName})` : (entry.name || 'Untitled');
+                    lines.push(`- ${label}${entry.uid !== null && entry.uid !== undefined ? ` [uid ${entry.uid}]` : ''}`);
+                    if (entry.preview) {
+                        lines.push(`  ${String(entry.preview).replace(/\s+/g, ' ').trim()}`);
+                    }
+                }
+            }
+
+            if (stageResults.length > 0) {
+                lines.push('Stages:');
+                for (const stage of stageResults) {
+                    const stageLabel = stage.promptId || stage.stageName || `Stage ${Number(stage.stageIndex) + 1}`;
+                    const stageStatus = stage.success === false ? 'error' : (stage.skipped ? 'skipped' : 'ok');
+                    const count = stage.entriesFound ?? stage.selectedEntries ?? 0;
+                    lines.push(`- ${stageLabel}: ${stageStatus}${count ? ` (${count})` : ''}`);
+                    if (stage.reasoning) {
+                        lines.push(`  Reasoning: ${String(stage.reasoning).replace(/\s+/g, ' ').trim()}`);
+                    }
+                    if (stage.error) {
+                        lines.push(`  Error: ${stage.error}`);
+                    }
+                }
+            }
+
+            if (item.injectedPrompt) {
+                lines.push('Injected prompt:');
+                lines.push(item.injectedPrompt);
+            }
+
+            return lines.join('\n');
+        }
+        case 'pipeline_start':
+            return `[${timestamp}] Pipeline start: ${item.pipelineName} (${item.stageCount} stage(s))`;
+        case 'pipeline_stage_start':
+            return `[${timestamp}] Pipeline stage start: ${item.stageName} (${item.stageIndex}/${item.totalStages})`;
+        case 'pipeline_stage_complete':
+            return `[${timestamp}] Pipeline stage complete: ${item.stageName} (${item.entriesFound} entries)`;
+        case 'pipeline_complete':
+            return `[${timestamp}] Pipeline complete: ${item.pipelineName} (${item.totalEntries} entries, ${item.stageResults} stage results)`;
+        case 'pipeline_error':
+            return `[${timestamp}] Pipeline error: ${item.pipelineName} / ${item.stageName} - ${item.error}`;
+        case 'sidecar_retrieval':
+            return `[${timestamp}] Legacy retrieval selected ${item.entryCount} entries from node IDs: ${(item.nodeIds || []).join(', ') || 'none'}`;
+        case 'tool_call_started':
+            return `[${timestamp}] Tool started: ${item.toolName}`;
+        case 'tool_call_completed':
+            return `[${timestamp}] Tool completed: ${item.toolName} - ${item.result}`;
+        case 'tool_call_error':
+            return `[${timestamp}] Tool error: ${item.toolName} - ${item.error}`;
+        default:
+            return '';
     }
 }
 
@@ -584,7 +696,7 @@ function updateDualModeWarning() {
 /**
  * Update agent settings object and trigger save
  */
-function updateAgentSettings() {
+async function updateAgentSettings() {
     if (!currentAgent) return;
 
     const s = getPathfinderSettings();
@@ -601,6 +713,7 @@ function updateAgentSettings() {
         autoUseAttachedLorebook: Boolean(s.autoUseAttachedLorebook),
     });
 
+    await saveAgent(currentAgent);
     saveSettingsDebounced();
 }
 

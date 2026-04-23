@@ -98,7 +98,7 @@ function isPathfinderToolAgent(agent) {
         (agent?.category === 'tool' && agent?.tools?.some(tool => tool.name?.startsWith('Pathfinder_')));
 }
 
-function getPathfinderRuntimeAgent(agents = getEnabledToolAgents()) {
+export function getPathfinderRuntimeAgent(agents = getEnabledToolAgents()) {
     return agents.find(isPathfinderToolAgent) ?? null;
 }
 

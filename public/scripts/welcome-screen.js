@@ -48,8 +48,7 @@ const DEFAULT_NEUTRAL_ASSISTANT_NAME = 'Assistant';
 const DEFAULT_DISPLAYED = 3;
 const MAX_DISPLAYED = 15;
 const STARTER_PACK_PRESET_NAME_SILLYBUNNY = 'Pura\'s Director Preset (SillyBunny)';
-const STARTER_PACK_PRESET_NAME_SILLYTAVERN = 'Pura\'s Director Preset (SillyTavern)';
-const STARTER_PACK_PRESET_TITLE = 'Pura\'s Director Presets';
+const STARTER_PACK_PRESET_TITLE = 'Pura\'s Director Preset';
 const STARTER_PACK_CREATOR_NAME = 'purachina';
 const STARTER_PACK_SITE_URL = 'https://platberlitz.github.io/';
 const GEECHAN_PRESET_NAME = 'Geechan - Universal Roleplay (Chat Completions) (v5.0)';
@@ -121,7 +120,7 @@ const WELCOME_TUTORIAL_STEPS = Object.freeze([
     {
         title: 'Choose a preset',
         body: 'First, select a preset of your choice: this helps dictate model responses. Advanced Formatting controls templates and prompt structure, while World Info helps the model remember lore and setting details.',
-        hint: 'You only really need to start with a preset! We recommend our bundled Geechan or Purachina presets. Access the other tabs once you feel more comfortable.',
+        hint: 'You only really need to start with a preset! We recommend our bundled Geechan or Director preset. Access the other tabs once you feel more comfortable.',
         chips: ['Presets', 'Advanced Formatting', 'World Info', 'Context'],
         actionLabel: 'Open Presets',
         actionType: 'open-tab',
@@ -670,21 +669,18 @@ function buildExtensionStarterPackItem({ title, body, icon, chips, extensionName
 function buildPresetStarterPackItem() {
     const presetManager = getPresetManager('openai');
     const sillyBunnyPreset = presetManager?.findPreset(STARTER_PACK_PRESET_NAME_SILLYBUNNY);
-    const sillyTavernPreset = presetManager?.findPreset(STARTER_PACK_PRESET_NAME_SILLYTAVERN);
     const isOpenAiStyleApi = main_api === 'openai';
     const selectedPresetName = isOpenAiStyleApi ? presetManager?.getSelectedPresetName() : '';
-    const selectedVariant = selectedPresetName === STARTER_PACK_PRESET_NAME_SILLYBUNNY
-        ? 'SillyBunny'
-        : (selectedPresetName === STARTER_PACK_PRESET_NAME_SILLYTAVERN ? 'SillyTavern' : '');
-    const hasPresetPair = Boolean(sillyBunnyPreset && sillyTavernPreset);
-    const chips = ['Chat Completions', 'Two versions', 'Agent-aware', STARTER_PACK_CREATOR_NAME];
+    const isSelected = selectedPresetName === STARTER_PACK_PRESET_NAME_SILLYBUNNY;
+    const hasBundledPreset = Boolean(sillyBunnyPreset);
+    const chips = ['Chat Completions', 'Bundled', 'Agent-aware', STARTER_PACK_CREATOR_NAME];
     const chipColumnCount = Math.max(2, Math.min(chips.length, 4));
-    const body = `purachina's website contains his character cards, presets, and other projects. A minimal version of his Director Preset ships included with SillyBunny, and is ready to go for Chat Completions! We've included both this version and his regular preset for convenience.`;
+    const body = `purachina's website contains his character cards, presets, and other projects. A SillyBunny-tuned version of his Director Preset ships included and is ready to use for Chat Completions.`;
 
     if (!isOpenAiStyleApi) {
         return {
             title: STARTER_PACK_PRESET_TITLE,
-            body: `${body} Switch to an OpenAI-compatible chat-completions setup first, then you can apply either version here.`,
+            body: `${body} Switch to an OpenAI-compatible chat-completions setup first, then you can apply it here.`,
             icon: 'fa-sliders',
             chips,
             chipColumnCount,
@@ -697,17 +693,17 @@ function buildPresetStarterPackItem() {
         };
     }
 
-    if (hasPresetPair) {
+    if (hasBundledPreset) {
         return {
             title: STARTER_PACK_PRESET_TITLE,
-            body: selectedVariant
-                ? `${body} The ${selectedVariant} version is selected right now.`
-                : `${body} Both versions are bundled and ready to apply without importing files by hand.`,
+            body: isSelected
+                ? `${body} It is selected right now.`
+                : `${body} It is bundled and ready to apply without importing files by hand.`,
             icon: 'fa-sliders',
             chips,
             chipColumnCount,
-            statusLabel: selectedVariant ? `Selected: ${selectedVariant}` : 'Preset Pack',
-            statusTone: selectedVariant ? 'good' : 'warm',
+            statusLabel: isSelected ? 'Selected' : 'Bundled',
+            statusTone: isSelected ? 'good' : 'warm',
             actionIcon: 'fa-wand-magic-sparkles',
             actionLabel: 'Apply preset',
             actionType: 'apply-preset',

@@ -247,6 +247,28 @@
             </button>
         </div>
     </div>
+
+    <div class="pf--section pf--section-collapsible">
+        <div class="pf--section-header pf--collapsible-header">
+            <i class="fa-solid fa-chevron-right pf--chevron"></i>
+            <strong>Retrieval Log</strong>
+            <span class="pf--badge">Detailed</span>
+        </div>
+        <div class="pf--section-body" style="display: none;">
+            <div class="pf--section-desc">Shows what Pathfinder actually selected or injected, including selected lore entries, stage results, and the prompt payload Pathfinder added before generation.</div>
+            <div class="pf--log-actions">
+                <button type="button" id="pf--refresh-log" class="menu_button menu_button_icon">
+                    <i class="fa-solid fa-rotate"></i>
+                    <span>Refresh Log</span>
+                </button>
+                <button type="button" id="pf--clear-log" class="menu_button menu_button_icon">
+                    <i class="fa-solid fa-trash"></i>
+                    <span>Clear Log</span>
+                </button>
+            </div>
+            <div id="pf--retrieval-log-output" class="pf--retrieval-log-output">No Pathfinder retrieval activity recorded yet.</div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -434,6 +456,26 @@
     opacity: 0.8;
     margin-bottom: 12px;
     line-height: 1.4;
+}
+
+.pf--log-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.pf--retrieval-log-output,
+.pf--diagnostics-output {
+    white-space: pre-wrap;
+    line-height: 1.45;
+    font-size: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 320px;
+    overflow: auto;
 }
 
 /* Lorebook List */

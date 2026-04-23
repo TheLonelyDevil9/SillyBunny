@@ -126,7 +126,7 @@
     /* Send form variables */
     --bottomFormBlockPadding: calc(var(--mainFontSize) / 2.5);
     --bottomFormIconSize: calc(var(--mainFontSize) * 1.9);
-    --bottomFormBlockSize: calc(var(--bottomFormIconSize) + var(--bottomFormBlockPadding));
+    --bottomFormBlockSize: var(--topBarBlockSize);
 
     /*Top Bar Scaling Variables*/
     --topBarIconSize: calc(var(--mainFontSize) * 2);
@@ -6932,6 +6932,7 @@ body:not(.movingUI) .drawer-content.maximized {
 .reasoning-tokens-badge {
     display: inline-flex;
     align-items: center;
+    vertical-align: middle;
     gap: 4px;
     margin-left: 4px;
     padding: 1px 6px;
@@ -6941,6 +6942,7 @@ body:not(.movingUI) .drawer-content.maximized {
     color: color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 82%, var(--SmartThemeQuoteColor, #8b8) 18%);
     font-size: 0.75em;
     font-weight: 600;
+    line-height: 1;
     cursor: default;
     white-space: nowrap;
     box-shadow: 0 1px 3px color-mix(in srgb, #000 12%, transparent);
@@ -6949,6 +6951,7 @@ body:not(.movingUI) .drawer-content.maximized {
 .reasoning-tokens-badge i {
     font-size: 0.9em;
     opacity: 0.85;
+    line-height: 1;
 }
 
 .agent-transform-badge {

@@ -343,6 +343,84 @@ async function deleteConnectionProfile() {
 }
 
 /**
+ * Selects multiple connection profiles for deletion.
+ * @returns {Promise<ConnectionProfile[]>}
+ */
+async function selectConnectionProfilesForDeletion() {
+    const profiles = extension_settings.connectionManager.profiles;
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+        toastr.info(t`No connection profiles to delete.`);
+        return [];
+    }
+
+    const escapeAttr = value => String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+
+    const html = $(
+        `<div class="flex-container flexFlowColumn flexGap10">
+            <div>${t`Select the connection profiles you want to delete.`}</div>
+            <div class="flex-container flexFlowColumn flexGap5">
+                ${profiles.map(profile => `
+                    <label class="checkbox_label justifyStart">
+                        <input type="checkbox" value="${escapeAttr(profile.id)}" />
+                        <span>${escapeAttr(profile.name || profile.id)}</span>
+                    </label>
+                `).join('')}
+            </div>
+        </div>`,
+    );
+
+    const result = await new Popup(html, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Delete selected`,
+        cancelButton: t`Cancel`,
+        wide: true,
+    }).show();
+
+    if (result !== POPUP_RESULT.AFFIRMATIVE) {
+        return [];
+    }
+
+    const selectedIds = new Set(html.find('input:checked').map((_, el) => String($(el).val())).get());
+    return profiles.filter(profile => selectedIds.has(profile.id));
+}
+
+/**
+ * Deletes selected saved connection profiles.
+ * @returns {Promise<void>}
+ */
+async function deleteAllConnectionProfiles() {
+    const profilesToDelete = await selectConnectionProfilesForDeletion();
+    if (profilesToDelete.length === 0) {
+        return;
+    }
+
+    const confirm = await Popup.show.confirm(
+        t`Delete selected connection profiles?`,
+        t`This will permanently delete ${profilesToDelete.length} saved connection profile(s).`,
+    );
+
+    if (!confirm) {
+        return;
+    }
+
+    const selectedIds = new Set(profilesToDelete.map(profile => profile.id));
+    extension_settings.connectionManager.profiles = extension_settings.connectionManager.profiles.filter(profile => !selectedIds.has(profile.id));
+    if (selectedIds.has(extension_settings.connectionManager.selectedProfile)) {
+        extension_settings.connectionManager.selectedProfile = null;
+    }
+    saveSettingsDebounced();
+
+    for (const profile of profilesToDelete) {
+        await eventSource.emit(event_types.CONNECTION_PROFILE_DELETED, profile);
+    }
+
+    toastr.success(t`Deleted ${profilesToDelete.length} connection profile(s).`);
+}
+
+/**
  * Formats the connection profile for display.
  * @param {ConnectionProfile} profile Connection profile
  * @returns {Object} Fancy profile
@@ -617,6 +695,15 @@ async function renderDetailsContent(detailsContent) {
         await eventSource.emit(event_types.CONNECTION_PROFILE_UPDATED, oldProfile, profile);
         await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, profile.name);
         toastr.success('Connection profile updated', '', { timeOut: 1500 });
+    });
+
+    const deleteAllButton = document.getElementById('delete_all_connection_profiles');
+    deleteAllButton?.addEventListener('click', async () => {
+        await deleteAllConnectionProfiles();
+        renderConnectionProfiles(profiles);
+        await renderDetailsContent(detailsContent);
+        toggleProfileSpecificButtons();
+        await eventSource.emit(event_types.CONNECTION_PROFILE_LOADED, NONE);
     });
 
     const deleteButton = document.getElementById('delete_connection_profile');

@@ -3547,7 +3547,7 @@ export async function getWorldEntry(name, data, entry, options = {}) {
 
     // Kill switch
     handleEntryKillSwitchHelper({
-        entryKillSwitch: headerTemplate.find('div[name="entryKillSwitch"]'),
+        entryKillSwitch: headerTemplate.find('[name="entryKillSwitch"]'),
         entry, data, name, template: headerTemplate,
     });
 

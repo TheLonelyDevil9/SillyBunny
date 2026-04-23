@@ -1796,6 +1796,9 @@ export function createThumbnail(dataUrl, maxWidth = null, maxHeight = null, type
         dataUrl = `data:image/jpeg;base64,${dataUrl}`;
     }
 
+    const sourceType = dataUrl.match(/^data:(image\/[^;]+);/i)?.[1]?.toLowerCase();
+    const preserveAlpha = type !== 'image/jpeg' && ['image/png', 'image/webp'].includes(type) && ['image/png', 'image/webp', 'image/gif'].includes(sourceType);
+
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.src = dataUrl;
@@ -1809,8 +1812,12 @@ export function createThumbnail(dataUrl, maxWidth = null, maxHeight = null, type
             canvas.height = thumbnailHeight;
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, thumbnailWidth, thumbnailHeight);
+            if (!preserveAlpha) {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, thumbnailWidth, thumbnailHeight);
+            } else {
+                ctx.clearRect(0, 0, thumbnailWidth, thumbnailHeight);
+            }
             ctx.drawImage(img, 0, 0, thumbnailWidth, thumbnailHeight);
 
             // Convert the canvas to a data URL and resolve the promise

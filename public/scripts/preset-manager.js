@@ -819,6 +819,76 @@ class PresetManager {
     }
 
     /**
+     * Deletes multiple presets by name.
+     * @param {string[]} names Names of presets to delete.
+     * @returns {Promise<{deleted: string[], failed: string[]}>}
+     */
+    async deletePresets(names) {
+        const deleted = [];
+        const failed = [];
+
+        for (const name of names) {
+            try {
+                const result = await this.deletePreset(name);
+                if (result) {
+                    deleted.push(name);
+                } else {
+                    failed.push(name);
+                }
+            } catch {
+                failed.push(name);
+            }
+        }
+
+        return { deleted, failed };
+    }
+
+    /**
+     * Opens a checkbox picker for deleting multiple presets.
+     * @returns {Promise<string[]>}
+     */
+    async selectPresetsForDeletion() {
+        const presetNames = this.getAllPresets().filter(name => name !== 'gui');
+
+        if (presetNames.length === 0) {
+            toastr.info(t`No deletable presets found.`);
+            return [];
+        }
+
+        const escapeAttr = value => String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+
+        const html = $(
+            `<div class="flex-container flexFlowColumn flexGap10">
+                <div>${t`Select the presets you want to delete.`}</div>
+                <div class="flex-container flexFlowColumn flexGap5">
+                    ${presetNames.map(name => `
+                        <label class="checkbox_label justifyStart">
+                            <input type="checkbox" value="${escapeAttr(name)}" />
+                            <span>${escapeAttr(name)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            </div>`,
+        );
+
+        const result = await new Popup(html, POPUP_TYPE.CONFIRM, '', {
+            okButton: t`Delete selected`,
+            cancelButton: t`Cancel`,
+            wide: true,
+        }).show();
+
+        if (result !== POPUP_RESULT.AFFIRMATIVE) {
+            return [];
+        }
+
+        return html.find('input:checked').map((_, el) => String($(el).val())).get();
+    }
+
+    /**
      * Retrieves the default preset for the API from the server.
      * @param {string} name Name of the preset to restore
      * @returns {Promise<any>} Default preset object, or undefined if the request fails
@@ -1150,6 +1220,47 @@ export async function initPresetManager() {
         } else {
             const warningToast = !presetManager.isAdvancedFormatting() ? t`Preset was not deleted from server` : t`Template was not deleted from server`;
             toastr.warning(warningToast);
+        }
+
+        saveSettingsDebounced();
+    });
+
+    $(document).on('click', '[data-preset-manager-delete-all]', async function () {
+        const apiId = $(this).data('preset-manager-delete-all');
+        const presetManager = getPresetManager(apiId);
+
+        if (!presetManager) {
+            console.warn(`Preset Manager not found for API: ${apiId}`);
+            return;
+        }
+
+        const presetNames = await presetManager.selectPresetsForDeletion();
+        if (presetNames.length === 0) {
+            return;
+        }
+
+        const noun = presetManager.isAdvancedFormatting() ? t`template` : t`preset`;
+        const pluralNoun = presetManager.isAdvancedFormatting() ? t`templates` : t`presets`;
+        const confirm = await Popup.show.confirm(
+            t`Delete selected ${pluralNoun}?`,
+            t`This will permanently delete ${presetNames.length} selected ${pluralNoun} for this section. The built-in GUI preset is kept.`,
+        );
+
+        if (!confirm) {
+            return;
+        }
+
+        const { deleted, failed } = await presetManager.deletePresets(presetNames);
+
+        if (deleted.length) {
+            toastr.success(t`Deleted ${deleted.length} ${deleted.length === 1 ? noun : pluralNoun}.`);
+            for (const name of deleted) {
+                await eventSource.emit(event_types.PRESET_DELETED, { apiId, name });
+            }
+        }
+
+        if (failed.length) {
+            toastr.warning(t`Failed to delete ${failed.length} ${failed.length === 1 ? noun : pluralNoun} from the server.`);
         }
 
         saveSettingsDebounced();

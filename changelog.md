@@ -1,14 +1,23 @@
 # Changelog
 
-## Unreleased
+## v1.4.1
 
-- Updated the launchpad quick-access and guide cards so Characters Menu, Global Search, and Import Character shortcuts now trigger the real panels/actions instead of dead placeholders.
-- Simplified the launchpad bundled extras cards by merging purachina's site link into the Director Presets card, renaming the preset action to `Apply preset`, and adding a matching `Apply preset` action to the Geechan card.
-- Removed stale launchpad wording around sample characters, reduced one remaining legacy settings-search dependency in `sillybunny-tabs.js`, and tightened hero centering on mobile so the bar beneath the mascot stays visually centered.
-- Fixed Android/Termux IME autocomplete so replacements no longer append extra words while typing in the main send box.
-- Fixed self-hosted Figtree fallback behavior on iOS/Safari and restored stronger default weights so the app no longer falls back to Noto Sans.
-- Flattened AI Studio debug payload logging so complex request summaries print readably instead of collapsing into `[Object ...]`.
-- Added a Google Font picker with preset and custom font support, plus persistent application through power-user settings.
-- Reworked Customize > Settings drawer structure and spacing, including centered `Custom CSS` and `Google Font` headers and less cramped appearance rows.
-- Fixed the welcome/home panel to auto-open on fresh installs, avoid duplicate insertion, remove the stale legacy template, and keep home mode controls visible in full, compact, and list-only layouts.
-- Synced shared resizing behavior between the Navigate and Customize side panels.
+Date: 2026-04-23
+
+Changes:
+- Restored World Info entry enable/disable behavior and tightened the World Info layout with smaller cards, narrower popup rows, and cleaner mobile/desktop spacing.
+- Added selectable multi-delete pickers for saved presets and connection profiles instead of delete-all-only flows.
+- Improved Pathfinder usability with clearer tool-mode diagnostics, persisted tool toggles like Update and Forget, and a detailed retrieval log showing selected lore entries, stage results, and injected Pathfinder context.
+- Kept List Only mode focused on recent chats by removing its extra shortcut row, while also cleaning up home-screen preset copy so only the bundled SillyBunny-tuned Director preset is promoted.
+- Polished shell/UI consistency by aligning the reasoning token badge, matching bottom-bar sizing to the top bar, and preserving transparency for cropped avatars and alpha-capable thumbnails.
+- Hardened self-update behavior so existing Node/npm installs no longer dirty `package-lock.json` during routine updates.
+- Bumped the app version strings and default-user settings version to `1.4.1`.
+
+- Fixed `NetworkError: failed to fetch resource` on zip import by ensuring the uploads directory is always created on startup before multer uses it as its destination.
+
+Commits:
+- `fix(ui): ship v1.4.1 lorebook and shell polish`
+- `fix(ui): tighten home and updater polish`
+- `fix(ui): refine pathfinder and selective deletes`
+- `fix(ui): add pathfinder retrieval logging`
+- `fix(server): ensure uploads dir exists before multer`

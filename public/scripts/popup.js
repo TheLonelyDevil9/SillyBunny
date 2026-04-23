@@ -711,8 +711,11 @@ export class Popup {
 
         // Cropped image should be returned as a data URL
         if (this.type === POPUP_TYPE.CROP) {
+            const cropper = $(this.cropImage).data('cropper');
+            const sourceType = this.cropImage?.src?.match(/^data:(image\/[^;]+);/i)?.[1]?.toLowerCase();
+            const outputType = sourceType && sourceType !== 'image/jpeg' ? sourceType : 'image/png';
             value = result >= POPUP_RESULT.AFFIRMATIVE
-                ? $(this.cropImage).data('cropper').getCroppedCanvas().toDataURL('image/jpeg')
+                ? cropper.getCroppedCanvas().toDataURL(outputType)
                 : null;
         }
 
