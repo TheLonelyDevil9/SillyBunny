@@ -8,6 +8,27 @@ permissions:
   contents: read
 
 jobs:
+  block-default-user-state:
+    name: ✅ Block tracked default-user state
+    runs-on: ubuntu-latest
+    if: always() && (github.event.action == 'opened' || github.event.action == 'synchronize')
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+            ref: ${{ github.event.pull_request.head.sha }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Ensure default-user state is not tracked
+        run: |
+          tracked_files="$(git ls-files 'data/default-user/**')"
+          if [ -n "$tracked_files" ]; then
+            echo 'Tracked files under data/default-user are not allowed.'
+            echo "$tracked_files"
+            exit 1
+          fi
+
   run-eslint:
     name: ✅ Check ESLint on PR
     runs-on: ubuntu-latest
