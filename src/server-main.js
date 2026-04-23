@@ -306,6 +306,7 @@ if (cliArgs.enableCorsProxy) {
 
 // File uploads
 const uploadsPath = path.join(cliArgs.dataRoot, UPLOADS_DIRECTORY);
+fs.mkdirSync(uploadsPath, { recursive: true });
 app.use(multer({ dest: uploadsPath, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
 app.use(multerMonkeyPatch);
 

@@ -13,8 +13,11 @@ Changes:
 - Hardened self-update behavior so existing Node/npm installs no longer dirty `package-lock.json` during routine updates.
 - Bumped the app version strings and default-user settings version to `1.4.1`.
 
+- Fixed `NetworkError: failed to fetch resource` on zip import by ensuring the uploads directory is always created on startup before multer uses it as its destination.
+
 Commits:
 - `fix(ui): ship v1.4.1 lorebook and shell polish`
 - `fix(ui): tighten home and updater polish`
 - `fix(ui): refine pathfinder and selective deletes`
 - `fix(ui): add pathfinder retrieval logging`
+- `fix(server): ensure uploads dir exists before multer`
