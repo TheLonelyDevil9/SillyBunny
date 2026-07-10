@@ -167,6 +167,14 @@ const SILLYBUNNY_PALETTE_BINDINGS = Object.freeze([
 const SB_ACCENT_PROFILE_SEED_VERSION = 2;
 const SB_ACCENT_PROFILES_DRAWER_KEY = 'SBAccentProfilesDrawerExpanded';
 const MAX_SB_ACCENT_PROFILE_NAME_LENGTH = 40;
+const ANDROID_STREAMING_SETTING_DEFAULTS = Object.freeze({
+    android_conservative_streaming: true,
+    android_reduce_streaming_work: true,
+    android_disable_smooth_streaming: true,
+    android_disable_stream_fade_in: true,
+    android_streaming_basic_markdown: false,
+});
+const ANDROID_STREAMING_SETTINGS_INITIALIZED_KEY = 'android_streaming_settings_initialized';
 const SILLYBUNNY_ACCENT_PROFILE_SEEDS = Object.freeze([
     { name: 'Warm Signal', quote_text_color: 'rgba(201, 198, 168, 1)', underline_text_color: 'rgba(166, 164, 147, 1)' },
     { name: 'Story Moss', quote_text_color: 'rgba(114, 192, 144, 1)', underline_text_color: 'rgba(161, 209, 172, 1)' },
@@ -314,8 +322,8 @@ export const power_user = {
     ios_webkit_reduce_streaming_work: true,
     ios_webkit_disable_smooth_streaming: true,
     ios_webkit_disable_stream_fade_in: true,
-    android_conservative_streaming: true,
-    android_disable_stream_fade_in: true,
+    ...ANDROID_STREAMING_SETTING_DEFAULTS,
+    [ANDROID_STREAMING_SETTINGS_INITIALIZED_KEY]: true,
 
     // SillyBunny: aggressive DOM unloading for low-memory devices
     aggressive_dom_unload: false,
@@ -2308,6 +2316,8 @@ function getExampleMessagesBehavior() {
 export async function loadPowerUserSettings(settings, data) {
     const defaultStscript = JSON.parse(JSON.stringify(power_user.stscript));
     const hasAccentProfileSeedVersion = settings.power_user !== undefined && Object.hasOwn(settings.power_user, 'sb_accent_profiles_seed_version');
+    const shouldInitializeAndroidStreamingSettings = settings.power_user === undefined
+        || !Object.hasOwn(settings.power_user, ANDROID_STREAMING_SETTINGS_INITIALIZED_KEY);
     customThemeStyleEntries = settings.extension_settings?.CTSI?.entries && typeof settings.extension_settings.CTSI.entries === 'object'
         ? { ...settings.extension_settings.CTSI.entries }
         : {};
@@ -2329,6 +2339,12 @@ export async function loadPowerUserSettings(settings, data) {
     }
 
     if (normalizeAccentProfiles()) {
+        saveSettingsDebounced();
+    }
+
+    if (shouldInitializeAndroidStreamingSettings) {
+        Object.assign(power_user, ANDROID_STREAMING_SETTING_DEFAULTS);
+        power_user[ANDROID_STREAMING_SETTINGS_INITIALIZED_KEY] = true;
         saveSettingsDebounced();
     }
 
@@ -2542,6 +2558,11 @@ export async function loadPowerUserSettings(settings, data) {
     $('#ios_webkit_reduce_streaming_work').prop('checked', power_user.ios_webkit_reduce_streaming_work);
     $('#ios_webkit_disable_smooth_streaming').prop('checked', power_user.ios_webkit_disable_smooth_streaming);
     $('#ios_webkit_disable_stream_fade_in').prop('checked', power_user.ios_webkit_disable_stream_fade_in);
+    $('#android_conservative_streaming').prop('checked', power_user.android_conservative_streaming);
+    $('#android_reduce_streaming_work').prop('checked', power_user.android_reduce_streaming_work);
+    $('#android_streaming_basic_markdown').prop('checked', power_user.android_streaming_basic_markdown);
+    $('#android_disable_smooth_streaming').prop('checked', power_user.android_disable_smooth_streaming);
+    $('#android_disable_stream_fade_in').prop('checked', power_user.android_disable_stream_fade_in);
     $('#aggressive_dom_unload').prop('checked', power_user.aggressive_dom_unload);
     $('#aggressive_dom_window_size').val(power_user.aggressive_dom_window_size);
     $('#aggressive_dom_window_size_counter').val(power_user.aggressive_dom_window_size);
@@ -4397,6 +4418,31 @@ jQuery(async () => {
 
     $('#ios_webkit_disable_stream_fade_in').on('input', function () {
         power_user.ios_webkit_disable_stream_fade_in = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#android_conservative_streaming').on('input', function () {
+        power_user.android_conservative_streaming = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#android_reduce_streaming_work').on('input', function () {
+        power_user.android_reduce_streaming_work = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#android_streaming_basic_markdown').on('input', function () {
+        power_user.android_streaming_basic_markdown = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#android_disable_smooth_streaming').on('input', function () {
+        power_user.android_disable_smooth_streaming = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#android_disable_stream_fade_in').on('input', function () {
+        power_user.android_disable_stream_fade_in = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

@@ -1,4 +1,9 @@
 import {
+    ANDROID_REASONING_RENDER_INTERVAL_MS,
+    ANDROID_STREAMING_UPDATE_INTERVAL_MS,
+    formatPlainTextStreamingPreview,
+    formatBasicMarkdownStreamingPreview,
+    isReducedStreamingDomWorkPlatform,
     getMobileStreamingBottomPinBehavior,
     getStreamingReasoningRenderInterval,
     getStreamingUpdateInterval,
@@ -7,12 +12,59 @@ import {
     isSmoothStreamingEffectivelyEnabled,
     shouldReduceStreamingDomWork,
     shouldRenderLiveReasoningContent,
+    shouldUsePlainTextStreamingPreview,
 } from '../public/scripts/mobile-streaming.js';
 
+const androidNavigator = {
+    platform: 'Linux armv8l',
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36',
+    maxTouchPoints: 5,
+};
+
+const firefoxAndroidNavigator = {
+    platform: 'Linux armv8l',
+    userAgent: 'Mozilla/5.0 (Android 14; Mobile; rv:126.0) Gecko/126.0 Firefox/126.0',
+    maxTouchPoints: 5,
+};
+
 describe('mobile streaming helpers', () => {
+    test('detects mobile platforms that need reduced live DOM work', () => {
+        expect(isReducedStreamingDomWorkPlatform({ platform: 'iPhone', maxTouchPoints: 1 })).toBe(true);
+        expect(isReducedStreamingDomWorkPlatform(androidNavigator)).toBe(true);
+        expect(isReducedStreamingDomWorkPlatform(firefoxAndroidNavigator)).toBe(true);
+        expect(isReducedStreamingDomWorkPlatform({ platform: 'Linux x86_64', userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36', maxTouchPoints: 0 })).toBe(false);
+    });
+
+    test('applies platform-specific reduced DOM work toggles', () => {
+        expect(shouldReduceStreamingDomWork({ platform: 'iPhone', maxTouchPoints: 1 }, {
+            iosEnabled: false,
+            androidEnabled: true,
+        })).toBe(false);
+
+        expect(shouldReduceStreamingDomWork(androidNavigator, {
+            iosEnabled: false,
+            androidEnabled: true,
+        })).toBe(true);
+
+        expect(shouldReduceStreamingDomWork(firefoxAndroidNavigator, {
+            iosEnabled: false,
+            androidEnabled: true,
+        })).toBe(true);
+
+        expect(shouldReduceStreamingDomWork(androidNavigator, {
+            iosEnabled: true,
+            androidEnabled: false,
+        })).toBe(false);
+    });
+
     test('uses conservative iOS streaming floors', () => {
         expect(IOS_STREAMING_UPDATE_INTERVAL_MS).toBe(250);
         expect(IOS_REASONING_RENDER_INTERVAL_MS).toBe(1500);
+    });
+
+    test('uses Android-specific streaming floor constants', () => {
+        expect(ANDROID_STREAMING_UPDATE_INTERVAL_MS).toBe(250);
+        expect(ANDROID_REASONING_RENDER_INTERVAL_MS).toBe(1500);
     });
 
     test('keeps desktop streaming intervals unchanged', () => {
@@ -31,6 +83,17 @@ describe('mobile streaming helpers', () => {
         })).toBe(500);
     });
 
+    test('applies a conservative Android floor to streaming updates', () => {
+        expect(getStreamingUpdateInterval(33, {
+            navigatorRef: androidNavigator,
+        })).toBe(ANDROID_STREAMING_UPDATE_INTERVAL_MS);
+    });
+
+    test('uses platform-specific live reasoning render intervals', () => {
+        expect(getStreamingReasoningRenderInterval({ platform: 'iPhone', maxTouchPoints: 1 })).toBe(IOS_REASONING_RENDER_INTERVAL_MS);
+        expect(getStreamingReasoningRenderInterval(androidNavigator)).toBe(ANDROID_REASONING_RENDER_INTERVAL_MS);
+    });
+
     test('allows iOS WebKit streaming floors to be disabled', () => {
         expect(getStreamingUpdateInterval(33, {
             navigatorRef: { platform: 'iPhone', maxTouchPoints: 1 },
@@ -38,39 +101,72 @@ describe('mobile streaming helpers', () => {
         })).toBe(33);
     });
 
-    test('honors platform-specific reduced DOM work toggles', () => {
-        expect(shouldReduceStreamingDomWork({ platform: 'iPhone', maxTouchPoints: 1 }, {
-            iosEnabled: false,
-        })).toBe(false);
-
-        expect(shouldReduceStreamingDomWork({ platform: 'iPhone', maxTouchPoints: 1 }, {
+    test('allows Android streaming floors to be disabled independently', () => {
+        expect(getStreamingUpdateInterval(33, {
+            navigatorRef: androidNavigator,
             iosEnabled: true,
+            androidEnabled: false,
+        })).toBe(33);
+    });
+
+    test('uses Android reduced DOM work by default', () => {
+        expect(shouldReduceStreamingDomWork(androidNavigator)).toBe(true);
+    });
+
+    test('uses plain text streaming previews only for reduced non-final mobile ticks', () => {
+        expect(shouldUsePlainTextStreamingPreview({
+            isFinal: false,
+            isReducedDomWork: true,
+            isImpersonate: false,
         })).toBe(true);
 
-        expect(shouldReduceStreamingDomWork({
-            platform: 'Linux armv8l',
-            userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-        }, {
-            androidEnabled: true,
-        })).toBe(true);
+        expect(shouldUsePlainTextStreamingPreview({
+            isFinal: true,
+            isReducedDomWork: true,
+            isImpersonate: false,
+        })).toBe(false);
 
-        expect(shouldReduceStreamingDomWork({
-            platform: 'Linux armv8l',
-            userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+        expect(shouldUsePlainTextStreamingPreview({
+            isFinal: false,
+            isReducedDomWork: false,
+            isImpersonate: false,
+        })).toBe(false);
+
+        expect(shouldUsePlainTextStreamingPreview({
+            isFinal: false,
+            isReducedDomWork: true,
+            isImpersonate: true,
+        })).toBe(false);
+
+        expect(shouldUsePlainTextStreamingPreview({
+            isFinal: false,
+            isReducedDomWork: true,
+            isImpersonate: false,
+            useBasicMarkdown: true,
         })).toBe(false);
     });
 
-    test('exports the live reasoning render interval helper', () => {
-        expect(getStreamingReasoningRenderInterval({ platform: 'iPhone', maxTouchPoints: 1 }))
-            .toBe(IOS_REASONING_RENDER_INTERVAL_MS);
-
-        expect(getStreamingReasoningRenderInterval({
-            platform: 'Linux armv8l',
-            userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-        })).toBe(IOS_REASONING_RENDER_INTERVAL_MS);
+    test('escapes plain text streaming previews and preserves line breaks', () => {
+        expect(formatPlainTextStreamingPreview('<tag a="1">A & B</tag>\nnext line'))
+            .toBe('&lt;tag a=&quot;1&quot;&gt;A &amp; B&lt;/tag&gt;<br>next line');
     });
 
-    test('reports effective Smooth Streaming after iOS WebKit bypasses', () => {
+    test('formats basic markdown streaming previews with limited processing', () => {
+        const mockConverter = {
+            makeHtml: (text) => text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
+        };
+
+        expect(formatBasicMarkdownStreamingPreview('**bold** text', { converter: mockConverter }))
+            .toBe('<strong>bold</strong> text');
+
+        expect(formatBasicMarkdownStreamingPreview('<script>alert("xss")</script>', { converter: mockConverter }))
+            .toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+
+        expect(formatBasicMarkdownStreamingPreview('test', { converter: null }))
+            .toBe('test');
+    });
+
+    test('reports effective Smooth Streaming after platform-specific bypasses', () => {
         expect(isSmoothStreamingEffectivelyEnabled({
             smoothStreaming: true,
             iosWebKitDisableSmoothStreaming: true,
@@ -81,6 +177,18 @@ describe('mobile streaming helpers', () => {
             smoothStreaming: true,
             iosWebKitDisableSmoothStreaming: true,
             navigatorRef: { platform: 'iPhone', maxTouchPoints: 1 },
+        })).toBe(false);
+
+        expect(isSmoothStreamingEffectivelyEnabled({
+            smoothStreaming: true,
+            iosWebKitDisableSmoothStreaming: true,
+            navigatorRef: androidNavigator,
+        })).toBe(true);
+
+        expect(isSmoothStreamingEffectivelyEnabled({
+            smoothStreaming: true,
+            androidDisableSmoothStreaming: true,
+            navigatorRef: androidNavigator,
         })).toBe(false);
 
         expect(isSmoothStreamingEffectivelyEnabled({
@@ -96,7 +204,7 @@ describe('mobile streaming helpers', () => {
         })).toBe(false);
     });
 
-    test('uses instant streaming bottom pins on iOS WebKit', () => {
+    test('uses instant streaming bottom pins on reduced mobile platforms', () => {
         expect(getMobileStreamingBottomPinBehavior({
             navigatorRef: { platform: 'Linux x86_64', maxTouchPoints: 1 },
         })).toBe('smooth');
@@ -108,6 +216,10 @@ describe('mobile streaming helpers', () => {
 
         expect(getMobileStreamingBottomPinBehavior({
             navigatorRef: { platform: 'iPhone', maxTouchPoints: 1 },
+        })).toBe('auto');
+
+        expect(getMobileStreamingBottomPinBehavior({
+            navigatorRef: androidNavigator,
         })).toBe('auto');
     });
 

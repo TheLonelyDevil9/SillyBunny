@@ -2527,7 +2527,7 @@ function forwardResponsesApiStream(fetchResponse, expressResponse, request, onDi
     }
 
     expressResponse.setHeader('Content-Type', 'text/event-stream');
-    expressResponse.setHeader('Cache-Control', 'no-cache');
+    expressResponse.setHeader('Cache-Control', 'no-cache, no-transform');
     expressResponse.setHeader('Connection', 'keep-alive');
 
     let buffer = '';
