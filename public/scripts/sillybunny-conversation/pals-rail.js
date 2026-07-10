@@ -12,16 +12,18 @@ import {
     getActiveConversationBranch,
     getConversationGroupById,
     getConversationGroupIdForAvatar,
+    getConversationGroups,
     getConversationStore,
     getConversationThreadKey,
     getCurrentCharAvatar,
+    isConversationThreadKeyForPersona,
     normalizeConversationBranch,
     parseConversationThreadKey,
     parsePositiveInt,
 } from './context.js';
 import { getCharacterForAvatar, getCharacterIndexForAvatar, getConversationParticipants } from './media.js';
 import { getActiveConversationThreadKey } from './notifications.js';
-import { formatPromptText } from './prompt.js';
+import { formatPromptText } from './shared-helpers.js';
 import { getSettings } from './settings-store.js';
 import { conversationState } from './state.js';
 import { getConversationSeenAt, getConversationThread } from './thread-store.js';
@@ -44,15 +46,19 @@ export function getConversationPals() {
 export function getConversationRailItems() {
     const items = [];
     const seen = new Set();
+    const seenGroupIds = new Set();
     const activeKey = getActiveConversationThreadKey();
+    const getGroupDisplayCharacter = group => (group?.members || [])
+        .map(avatar => getCharacterForAvatar(avatar))
+        .find(character => character?.avatar) || null;
     const addItem = ({ character, index, settings, groupId = '', group = null, threadStore = null }) => {
         const avatar = character?.avatar;
-        if (!avatar || !settings?.enabled) {
+        if (!avatar || (!groupId && !settings?.enabled)) {
             return;
         }
 
         const key = getConversationThreadKey(avatar, groupId || '');
-        if (!key || seen.has(key)) {
+        if (!key || seen.has(key) || (groupId && seenGroupIds.has(String(groupId)))) {
             return;
         }
 
@@ -60,18 +66,43 @@ export function getConversationRailItems() {
             const branchId = threadStore?.activeBranchId || DEFAULT_BRANCH_ID;
             const branch = normalizeConversationBranch(threadStore?.branches?.[branchId], branchId);
             const isEmptyThread = !branch.messages.length && !branch.unread && branch.preview === 'Conversation ready';
-            if (isEmptyThread) {
+            if (isEmptyThread && !group?.is_conversation_group) {
                 return;
             }
         }
 
         seen.add(key);
+        if (groupId) {
+            seenGroupIds.add(String(groupId));
+        }
         items.push({ character, index, settings, groupId: groupId || '', group, key });
     };
 
     getConversationPals().forEach(pal => addItem({ ...pal, groupId: '' }));
 
+    getConversationGroups().forEach((group) => {
+        const character = getGroupDisplayCharacter(group);
+        if (!character?.avatar) {
+            return;
+        }
+
+        const groupId = String(group.id || '');
+        const settings = getConversationSettingsForCharacter(character, { groupId });
+        addItem({
+            character,
+            index: getCharacterIndexForAvatar(character.avatar),
+            settings,
+            groupId,
+            group,
+            threadStore: getConversationStore().characters?.[getConversationThreadKey(character.avatar, groupId)] || null,
+        });
+    });
+
     Object.entries(getConversationStore().characters || {}).forEach(([storeKey, threadStore]) => {
+        if (!isConversationThreadKeyForPersona(storeKey)) {
+            return;
+        }
+
         const parsed = parseConversationThreadKey(storeKey);
         if (!parsed.groupId || !parsed.avatar) {
             return;

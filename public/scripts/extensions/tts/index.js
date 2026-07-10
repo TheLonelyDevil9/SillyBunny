@@ -43,6 +43,22 @@ import { applyLocale, t } from '/scripts/i18n.js';
 const UPDATE_INTERVAL = 1000;
 const wrapper = new ModuleWorkerWrapper(moduleWorker);
 
+/**
+ * Safely clones an object, with fallback for environments without structuredClone.
+ * @param {any} obj - The object to clone
+ * @returns {any} The cloned object
+ */
+function safeClone(obj) {
+    try {
+        return typeof structuredClone === 'function'
+            ? structuredClone(obj)
+            : JSON.parse(JSON.stringify(obj));
+    } catch (error) {
+        console.warn('TTS: Failed to clone object, using shallow copy', error);
+        return { ...obj };
+    }
+}
+
 let voiceMapEntries = [];
 let voiceMap = {}; // {charName:voiceid, charName2:voiceid2}
 let lastChatId = null;
@@ -232,13 +248,76 @@ async function onNarrateText(args, text) {
     return '';
 }
 
+export async function narrateTtsMessage(message, { messageId = null, manual = false, force = false, unrestrictedVoiceMap = false } = {}) {
+    if (!message || typeof message !== 'object') {
+        return false;
+    }
+
+    const isManual = Boolean(manual || force);
+    if (!extension_settings.tts.enabled) {
+        if (isManual) {
+            toastr.warning('TTS is disabled. Please enable it in the extension settings.');
+        }
+        return false;
+    }
+
+    if (!isManual && !extension_settings.tts.auto_generation) {
+        return false;
+    }
+
+    if (!isManual && message.is_user && !extension_settings.tts.narrate_user) {
+        return false;
+    }
+
+    if (!String(message.mes || '').trim() && !message.extra?.display_text) {
+        if (isManual) {
+            toastr.info('No text to narrate.');
+        }
+        return false;
+    }
+
+    try {
+        await ensureTtsProviderLoaded();
+        await initVoiceMap(Boolean(unrestrictedVoiceMap));
+    } catch (error) {
+        console.warn('TTS voice map initialization failed', error);
+        if (isManual) {
+            toastr.warning('Could not load TTS voices. Check the TTS extension settings.');
+        }
+        return false;
+    }
+
+    if (isManual) {
+        resetTtsPlayback();
+    }
+
+    processAndQueueTtsMessage(message, messageId, { manual: isManual });
+    await wrapper.update();
+    return true;
+}
+
+async function ensureTtsProviderLoaded() {
+    const providerName = String(extension_settings.tts.currentProvider || $('#tts_provider').val() || defaultSettings.currentProvider || '').trim();
+    if (!providerName) {
+        throw new Error('No TTS provider is selected.');
+    }
+
+    if (!ttsProvider || ttsProviderName !== providerName) {
+        await loadTtsProvider(providerName);
+    }
+
+    if (!ttsProvider || typeof ttsProvider.checkReady !== 'function') {
+        throw new Error(`TTS provider ${providerName} did not initialize.`);
+    }
+}
+
 async function moduleWorker() {
     if (!extension_settings.tts.enabled) {
         return;
     }
 
-    processTtsQueue();
-    processAudioJobQueue();
+    await processTtsQueue();
+    await processAudioJobQueue();
     updateUiAudioPlayState();
 }
 
@@ -299,7 +378,7 @@ function isTtsProcessing() {
  */
 function processAndQueueTtsMessage(message, messageId = null, { manual = false } = {}) {
     /** @type {TtsMessage} */
-    const clone = structuredClone(message);
+    const clone = safeClone(message);
     clone.id = messageId ?? null;
     clone.manual = manual ?? false;
 
@@ -536,6 +615,9 @@ let currentTtsJob = null; // Null if nothing is currently being processed
 function completeTtsJob() {
     console.info(`Current TTS job for ${currentTtsJob?.name} completed.`);
     currentTtsJob = null;
+    if (ttsJobQueue.length > 0) {
+        setTimeout(() => wrapper.update(), 0);
+    }
 }
 
 async function tts(text, voiceId, char, voiceMapKey = null) {
@@ -790,6 +872,7 @@ async function processTtsQueue() {
 
         // Clear current job so the segmented jobs can be processed
         currentTtsJob = null;
+        setTimeout(() => wrapper.update(), 0);
     } catch (error) {
         toastr.error(error.toString());
         console.error(error);
@@ -1164,7 +1247,7 @@ async function onMessageEvent(messageId, lastCharIndex) {
 
     // clone message object, as things go haywire if message object is altered below (it's passed by reference)
     /** @type {TtsMessage} */
-    const message = structuredClone(context.chat[messageId]);
+    const message = safeClone(context.chat[messageId]);
     const hashNew = getStringHash(message?.mes ?? '');
 
     // Ignore prompt-hidden messages
@@ -1192,11 +1275,11 @@ async function onMessageEvent(messageId, lastCharIndex) {
 
     // if last message within current message, message got extended. only send diff to TTS.
     if (isLastMessageInCurrent()) {
-        const tmp = structuredClone(message);
+        const tmp = safeClone(message);
         message.mes = message.mes.replace(lastMessage.mes, '');
         lastMessage = tmp;
     } else {
-        lastMessage = structuredClone(message);
+        lastMessage = safeClone(message);
     }
 
     // We're currently swiping. Don't generate voice
@@ -1240,7 +1323,7 @@ async function onMessageDeleted() {
         return;
     }
     lastMessageHash = messageHash;
-    lastMessage = context.chat.length ? structuredClone(context.chat[context.chat.length - 1]) : null;
+    lastMessage = context.chat.length ? safeClone(context.chat[context.chat.length - 1]) : null;
 
     // stop any tts playback since message might not exist anymore
     resetTtsPlayback();
@@ -1301,7 +1384,7 @@ async function onPeriodicMessageGenerationTick() {
         return;
     }
 
-    const lastMessage = structuredClone(context.chat[lastMessageId]);
+    const lastMessage = safeClone(context.chat[lastMessageId]);
     const lastMessageText = lastMessage?.mes ?? '';
 
     // look for double ending lines which should indicate the end of a paragraph

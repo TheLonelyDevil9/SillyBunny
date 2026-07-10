@@ -2785,7 +2785,7 @@ async function sendOpenAIResponsesRequest(request, response) {
     }
 }
 
-router.post('/generate', async function (request, response) {
+export async function handleChatCompletionsGenerate(request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
 
@@ -3292,7 +3292,9 @@ router.post('/generate', async function (request, response) {
             response.end();
         }
     }
-});
+}
+
+router.post('/generate', handleChatCompletionsGenerate);
 
 const multimodalModels = express.Router();
 

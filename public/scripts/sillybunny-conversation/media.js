@@ -4,20 +4,24 @@ import {
     getActiveConversationBranch,
     getConversationGroupById,
     getConversationGroupIdForAvatar,
+    getConversationPersonaId,
     getCurrentCharacter,
     getCurrentCharAvatar,
     getCurrentCharName,
 } from './context.js';
 import { parseAvatarList } from './partners.js';
-import { formatPromptText } from './prompt.js';
+import { formatPromptText } from './shared-helpers.js';
 import { scheduleTimelineRender } from './render-scheduler.js';
 import { getCurrentActivityFromSchedule, getStoredSchedule } from './schedule.js';
 import { getSettings } from './settings-store.js';
 import { conversationState } from './state.js';
 import { getConversationThread } from './thread-store.js';
 
-export async function generateConversationImage(prompt, negative = '') {
+export async function generateConversationImage(prompt, negative = '', { notify = false } = {}) {
     if (conversationState.imageGenerationActive) {
+        if (notify) {
+            globalThis.toastr?.warning?.('Image generation is already running.');
+        }
         return null;
     }
 
@@ -25,16 +29,26 @@ export async function generateConversationImage(prompt, negative = '') {
     conversationState.imageGenerationAbortController = new AbortController();
     scheduleTimelineRender();
     try {
-        const qig = await import('./extensions/quick-image-gen/index.js');
+        const qig = await import('../extensions/quick-image-gen/index.js');
+        if (typeof qig.ensureQuickImageGenReady === 'function') {
+            await qig.ensureQuickImageGenReady();
+        }
+
         const entry = await qig.withTransientGenerationSettings({}, async () => {
             const settings = qig.getGenerationSettingsForRun();
             const raw = await qig.generateForProvider(prompt, negative, settings, conversationState.imageGenerationAbortController.signal, {});
             return raw ? qig.finalizeGeneratedEntry(raw, prompt, negative, settings, {}) : null;
         });
 
+        if (!entry?.url && notify) {
+            globalThis.toastr?.warning?.('Quick Image Gen did not return an image.');
+        }
         return entry?.url ?? null;
     } catch (error) {
         console.warn('Conversation Mode: QIG not available or generation failed', error);
+        if (notify) {
+            globalThis.toastr?.warning?.(`Quick Image Gen failed: ${error?.message || 'check Image Gen settings'}`);
+        }
         return null;
     } finally {
         conversationState.imageGenerationActive = false;
@@ -63,12 +77,12 @@ export function addUniqueAvatar(avatars, avatar, currentAvatar = '') {
     avatars.push(avatar);
 }
 
-export function getConversationPartnerAvatars(avatar = getCurrentCharAvatar(), settings = null, { includeThreadPartners = true, groupId = getConversationGroupIdForAvatar(avatar) } = {}) {
-    const resolvedSettings = settings || getSettings(avatar, { groupId });
+export function getConversationPartnerAvatars(avatar = getCurrentCharAvatar(), settings = null, { branchId = '', includeThreadPartners = true, groupId = getConversationGroupIdForAvatar(avatar), personaId = getConversationPersonaId() } = {}) {
+    const resolvedSettings = settings || getSettings(avatar, { groupId, personaId });
     const partnerAvatars = [];
     parseAvatarList(resolvedSettings?.multi_char_names).forEach(partnerAvatar => addUniqueAvatar(partnerAvatars, partnerAvatar, avatar));
 
-    const group = getConversationGroupById(groupId);
+    const group = getConversationGroupById(groupId, { personaId });
     if (group?.members?.length) {
         group.members
             .filter(memberAvatar => !group.disabled_members?.includes(memberAvatar))
@@ -76,7 +90,7 @@ export function getConversationPartnerAvatars(avatar = getCurrentCharAvatar(), s
     }
 
     if (includeThreadPartners) {
-        getConversationThread(avatar, { groupId }).forEach((message) => {
+        getConversationThread(avatar, { branchId, create: false, groupId, personaId }).forEach((message) => {
             if (message?.role !== 'partner') {
                 return;
             }
@@ -89,8 +103,8 @@ export function getConversationPartnerAvatars(avatar = getCurrentCharAvatar(), s
 }
 
 export function getConversationParticipants(avatar = getCurrentCharAvatar(), settings = null, options = {}) {
-    const { groupId = getConversationGroupIdForAvatar(avatar) } = options;
-    const resolvedSettings = settings || getSettings(avatar, { groupId });
+    const { groupId = getConversationGroupIdForAvatar(avatar), personaId = getConversationPersonaId() } = options;
+    const resolvedSettings = settings || getSettings(avatar, { groupId, personaId });
     const participants = [];
     const primary = getCharacterForAvatar(avatar);
     if (primary?.avatar) {
