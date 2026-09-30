@@ -1447,7 +1447,6 @@ html.sb-ios-keyboard-inset-active #right-nav-panel.openDrawer > .scrollableInner
         min-width: 0 !important;
         margin-top: 0 !important;
         border-radius: 20px 20px 0 0 !important;
-        animation: sbMobileShellSheetIn 220ms var(--sb-ease-out) both;
         transform-origin: center bottom;
     }
 
@@ -2237,7 +2236,10 @@ html.sb-ios-keyboard-inset-active #right-nav-panel.openDrawer > .scrollableInner
     #right-nav-panel.openDrawer:is([data-menu-type="character_edit"], [data-menu-type="create"]) #result_info {
         grid-area: meta;
         display: grid !important;
-        grid-template-columns: minmax(0, 1fr) repeat(4, minmax(34px, 40px));
+        /* Implicit columns so every visible action stays on the token row, however many are shown. */
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(34px, 40px);
         align-items: center;
         justify-content: stretch;
         gap: 4px;
@@ -2248,7 +2250,9 @@ html.sb-ios-keyboard-inset-active #right-nav-panel.openDrawer > .scrollableInner
 
     #right-nav-panel.openDrawer:is([data-menu-type="character_edit"], [data-menu-type="create"]) #result_info_text {
         min-width: 0;
+        padding-inline-start: 8px;
         line-height: 1.05;
+        text-align: start;
     }
 
     #right-nav-panel.openDrawer:is([data-menu-type="character_edit"], [data-menu-type="create"]) #result_info .right_menu_button {
@@ -3159,15 +3163,6 @@ html.sb-ios-keyboard-inset-active #right-nav-panel.openDrawer > .scrollableInner
 }
 
 @media screen and (max-width: 768px) and (prefers-reduced-motion: reduce) {
-    #left-nav-panel.openDrawer,
-    #user-settings-block.openDrawer,
-    .sb-shell-root.openDrawer,
-    .sb-shell-root.fillLeft.openDrawer,
-    .sb-shell-root.fillRight.openDrawer,
-    #right-nav-panel.openDrawer {
-        animation: none;
-    }
-
     #sb-mobile-nav,
     #sb-mobile-chat-tools,
     .sb-nav-item {
