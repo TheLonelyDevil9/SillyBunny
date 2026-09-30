@@ -9,6 +9,7 @@ import { materializeAndValidateProviderOutput } from '../public/scripts/extensio
 import { normalizeProviderResult } from '../public/scripts/extensions/quick-image-gen/lib/provider-contract.js';
 import { buildTextAIRequestMessages } from '../public/scripts/extensions/quick-image-gen/lib/prompt-pipeline.js';
 import { MAX_IMAGE_BYTES } from '../public/scripts/extensions/quick-image-gen/lib/security.js';
+import { buildNovelAIPreciseReferenceParameters } from '../public/scripts/novelai-precise-reference.js';
 
 const capabilityRegistryKey = Symbol.for('sillybunny.extensionCapabilities');
 const qigSource = readFileSync(fileURLToPath(new URL('../public/scripts/extensions/quick-image-gen/index.js', import.meta.url)), 'utf8');
@@ -164,6 +165,7 @@ describe('Conversation extension media integration', () => {
         const settings = { sd: {
             source: 'novel', model: 'nai-diffusion-4-5-full', sampler: 'k_euler', scheduler: 'karras',
             steps: 23, scale: 6, width: 832, height: 1216, seed: 42,
+            novel_precise_reference: { enabled: false, references: [] },
             prompt_prefix: 'photo of {{char}}', negative_prompt: 'blur',
             character_prompts: { conversation: 'blue eyes', roleplay: 'wrong character' },
             character_negative_prompts: { conversation: 'hat' },
@@ -189,6 +191,7 @@ describe('Conversation extension media integration', () => {
             substituteParams: (text, options) => text.replaceAll('{{char}}', options?.name2Override || 'Roleplay'),
             getRequestHeaders: () => ({}),
             loadNovelSchedulers: () => ['karras'],
+            buildNovelAIPreciseReferenceParameters,
             humanizedDateTime: () => 'timestamp',
             saveBase64AsFile: save,
             sendMessage,
