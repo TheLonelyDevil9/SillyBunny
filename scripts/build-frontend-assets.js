@@ -64,11 +64,14 @@ function getOutputName(relativePath, hash) {
     return path.join(parsed.dir, `${parsed.name}-${hash}${parsed.ext}`);
 }
 
+// Whitespace around `+` is significant inside calc(), and whitespace before `:` is a
+// descendant combinator (`.a :is(.b)`), so neither may be stripped.
 function minifyCss(source) {
     return source
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\s+/g, ' ')
-        .replace(/\s*([{}:;,>+~])\s*/g, '$1')
+        .replace(/\s*([{};,>~])\s*/g, '$1')
+        .replace(/:\s+/g, ':')
         .replace(/;}/g, '}')
         .trim();
 }
