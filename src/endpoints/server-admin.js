@@ -20,7 +20,7 @@ import {
     resolveRemoteBranchName,
 } from '../server-admin-git.js';
 import { getServerLogSnapshot } from '../server-log-buffer.js';
-import { getLatestZipReleaseStatus, stageZipReleaseUpdate } from '../server-admin-zip-update.js';
+import { getCachedLatestZipReleaseStatus, stageZipReleaseUpdate } from '../server-admin-zip-update.js';
 import {
     discardStagedServerPluginRelease,
     getServerPluginUpdateCapabilities,
@@ -705,7 +705,7 @@ router.post('/status', requireAdminMiddleware, async (_request, response) => {
     try {
         const version = await getVersion();
         const repository = await getRepositoryStatus();
-        const release = repository.isRepo ? null : await getLatestZipReleaseStatus(version.pkgVersion);
+        const release = repository.isRepo ? null : await getCachedLatestZipReleaseStatus(version.pkgVersion, { force: true });
         response.json({
             runtime: formatRuntimeLabel(),
             configPath: getConfigFilePath(),
@@ -716,6 +716,32 @@ router.post('/status', requireAdminMiddleware, async (_request, response) => {
     } catch (error) {
         console.error('Failed to get server admin status.', error);
         response.status(500).json({ error: error.message || 'Failed to get server status.' });
+    }
+});
+
+// Lightweight background check for the startup update toast. Git checkouts are
+// skipped without fetching; launchers and the Server panel already cover them.
+router.post('/update-notice', requireAdminMiddleware, async (_request, response) => {
+    try {
+        const isRepo = commandExistsSync('git') && await isGitRepository(simpleGit({ baseDir: serverDirectory, ...GIT_OPTIONS }));
+
+        if (isRepo) {
+            return response.json({ available: false, installType: 'git' });
+        }
+
+        const version = await getVersion();
+        const release = await getCachedLatestZipReleaseStatus(version.pkgVersion);
+
+        response.json({
+            available: Boolean(release.canUpdate),
+            installType: 'zip',
+            currentVersion: release.currentVersion,
+            latestVersion: release.latestVersion,
+            releaseUrl: release.releaseUrl,
+        });
+    } catch (error) {
+        console.error('Failed to check for a SillyBunny update notice.', error);
+        response.status(500).json({ error: error.message || 'Failed to check for updates.' });
     }
 });
 
@@ -1034,7 +1060,7 @@ router.post('/zip-update', requireAdminMiddleware, async (_request, response) =>
             return response.status(400).json({ error: 'This install is a Git checkout. Use the Git update path instead.', repository });
         }
 
-        const release = await getLatestZipReleaseStatus(version.pkgVersion);
+        const release = await getCachedLatestZipReleaseStatus(version.pkgVersion, { force: true });
 
         if (!release.checked) {
             return response.status(502).json({ error: release.message || 'Failed to check GitHub releases.', release });

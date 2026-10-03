@@ -8,7 +8,7 @@ import yauzl from 'yauzl';
 
 import { isPathInside } from './path-containment.js';
 
-const GITHUB_OWNER = 'platberlitz';
+const GITHUB_OWNER = 'SillyBunnyTeam';
 const GITHUB_REPO = 'SillyBunny';
 const GITHUB_RELEASE_API_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 const GITHUB_RELEASE_DOWNLOAD_PREFIX = `/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/`;
@@ -16,6 +16,12 @@ const RELEASE_ZIP_PREFIX = 'SillyBunny-v';
 const RELEASE_ZIP_SUFFIX = '-github.zip';
 const REQUEST_TIMEOUT_MS = 15000;
 const USER_AGENT = 'SillyBunny ZIP updater';
+// Background update notices reuse one GitHub check per window so page loads and
+// open tabs stay well under the unauthenticated API rate limit (60/hour/IP).
+const RELEASE_STATUS_CACHE_MS = 6 * 60 * 60 * 1000;
+const RELEASE_STATUS_FAILURE_CACHE_MS = 30 * 60 * 1000;
+
+let releaseStatusCache = null;
 
 function normalizeVersion(value) {
     return String(value ?? '').trim().replace(/^v/i, '');
@@ -177,6 +183,31 @@ export async function getLatestZipReleaseStatus(currentVersion) {
     }
 
     return status;
+}
+
+/**
+ * Returns the latest ZIP release status, reusing a recent check for the same
+ * installed version. Concurrent callers share one in-flight GitHub request.
+ * `force` skips the cached result and stores the fresh one for later callers.
+ * @param {string} currentVersion Installed package version
+ * @param {{ force?: boolean, now?: number, check?: typeof getLatestZipReleaseStatus }} [options]
+ * @returns {Promise<ReturnType<typeof createBaseReleaseStatus>>}
+ */
+export async function getCachedLatestZipReleaseStatus(currentVersion, { force = false, now = Date.now(), check = getLatestZipReleaseStatus } = {}) {
+    const version = normalizeVersion(currentVersion);
+
+    if (!force && releaseStatusCache?.version === version && releaseStatusCache.expiresAt > now) {
+        return await releaseStatusCache.promise;
+    }
+
+    const entry = { version, expiresAt: Number.POSITIVE_INFINITY, promise: null };
+    entry.promise = check(version).then(status => {
+        entry.expiresAt = now + (status.checked ? RELEASE_STATUS_CACHE_MS : RELEASE_STATUS_FAILURE_CACHE_MS);
+        return status;
+    });
+    releaseStatusCache = entry;
+
+    return await entry.promise;
 }
 
 function getSafeZipEntryPath(fileName) {
