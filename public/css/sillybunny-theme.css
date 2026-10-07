@@ -109,6 +109,11 @@
     --sb-shell-header-glow: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
     --sb-shell-tab-active-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, var(--SmartThemeBlurTintColor) 93%);
     --sb-shell-border: color-mix(in srgb, var(--SmartThemeBorderColor) 96%, transparent);
+    /* Shell text scale (DESIGN.md "Foreground" and "Dim Foreground"). Every `--sb-shell-text*`
+       consumer resolves here; without these the declarations were dropped and the text inherited
+       whatever colour its ancestor happened to carry. */
+    --sb-shell-text: var(--SmartThemeBodyColor);
+    --sb-shell-text-secondary: var(--sb-muted-fg);
     --sb-shell-shadow: 0 8px 24px color-mix(in srgb, var(--SmartThemeShadowColor) 24%, transparent);
     --sb-shadow-panel: var(--sb-shell-shadow);
     --sb-shadow-control: 0 1px 2px color-mix(in srgb, var(--SmartThemeShadowColor) 24%, transparent);
@@ -189,6 +194,10 @@
     --sb-layer-view: var(--sb-layer-view-source);
     --sb-layer-bottombar: var(--sb-layer-bottombar-source);
     --sb-layer-window: var(--sb-layer-window-source);
+    /* Complementary rail (Conversation pals rail, Settings sidebar and its header).
+       libadwaita sidebar-bg: #2e2e32 in Libadwaita dark, #ebebed in light. */
+    --sb-sidebar-bg-source: color-mix(in srgb, var(--SmartThemeBlurTintColor) 95%, var(--SmartThemeBodyColor) 5%);
+    --sb-sidebar-bg: var(--sb-sidebar-bg-source);
     /* Page behind #sheld: a step away from Window/View so the main column does not melt into the canvas. */
     --sb-page-bg-source: color-mix(in srgb, var(--SmartThemeBlurTintColor) 88%, var(--SmartThemeBodyColor) 12%);
     --sb-page-bg: var(--sb-page-bg-source);
@@ -353,6 +362,7 @@ input[type="submit"] {
         --sb-layer-view: rgb(from var(--sb-layer-view-source) r g b / 1);
         --sb-layer-bottombar: rgb(from var(--sb-layer-bottombar-source) r g b / 1);
         --sb-layer-window: rgb(from var(--sb-layer-window-source) r g b / 1);
+        --sb-sidebar-bg: rgb(from var(--sb-sidebar-bg-source) r g b / 1);
         --sb-page-bg: rgb(from var(--sb-page-bg-source) r g b / 1);
         --sb-layer-canvas: rgb(from var(--sb-layer-canvas-source) r g b / 1);
         --sb-layer-headerbar: rgb(from var(--sb-layer-headerbar-source) r g b / 1);
@@ -410,6 +420,9 @@ input[type="submit"] {
     --sb-layer-dialog-source: var(--SmartThemeBlurTintColor);
     --sb-layer-toast-source: color-mix(in srgb, var(--SmartThemeBodyColor) 90%, black 10%);
     --sb-layer-toast-fg: #ffffff;
+    /* The rail leans a touch further toward the body colour in light mode so it separates from a
+       white View; mirrors the Conversation rail's light value. */
+    --sb-sidebar-bg-source: color-mix(in srgb, var(--SmartThemeBlurTintColor) 93%, var(--SmartThemeBodyColor) 7%);
     --sb-dialog-backdrop-alpha: 0.14;
     --sb-shadow-dialog-highlight: 0 0 #0000;
 }
@@ -2967,7 +2980,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     border-radius: 999px;
     background: color-mix(in srgb, var(--sb-accent) 10%, transparent);
     color: var(--sb-contrast-strong, var(--SmartThemeBodyColor));
-    font-size: 0.82rem;
+    font-size: var(--sb-type-control);
     font-weight: 600;
 }
 
@@ -3069,7 +3082,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 }
 
 .sb-sampling-transmission__label {
-    font-size: 0.75rem;
+    font-size: var(--sb-type-meta);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -3098,7 +3111,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 
 .sb-transmission-btn {
     padding: 3px 10px;
-    font-size: 0.75rem;
+    font-size: var(--sb-type-meta);
     font-weight: 500;
     border-radius: 6px;
     border: 1px solid transparent;
@@ -3145,7 +3158,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.72rem;
+    font-size: var(--sb-type-meta);
     font-weight: 600;
     color: var(--SmartThemeBodyColor);
     background: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, transparent);
@@ -3495,7 +3508,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 
 .sb-sampling-priority-after .toggle-description {
     margin: 4px 0;
-    font-size: 0.86rem;
+    font-size: var(--sb-type-control);
 }
 
 /* Mobile/touch: keep dense controls scroll-friendly during vertical drags. */
@@ -3533,7 +3546,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         min-width: 0;
         margin: 0;
         text-align: center;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         font-weight: 700;
         line-height: 1.2;
         overflow-wrap: anywhere;
@@ -3576,7 +3589,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         min-width: 0;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         font-weight: 700;
         line-height: 1.2;
         overflow-wrap: anywhere;
@@ -3612,7 +3625,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         margin: 0;
         justify-content: flex-start;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         line-height: 1.2;
         overflow-wrap: anywhere;
     }
@@ -3699,7 +3712,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         min-width: 0;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         font-weight: 700;
         line-height: 1.2;
         overflow-wrap: anywhere;
@@ -3762,7 +3775,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         min-width: 0;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         font-weight: 700;
         line-height: 1.2;
         overflow-wrap: anywhere;
@@ -3806,7 +3819,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         width: auto;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         line-height: 1.2;
         overflow-wrap: anywhere;
     }
@@ -3835,7 +3848,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         width: auto;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         line-height: 1.2;
         overflow-wrap: anywhere;
     }
@@ -3864,7 +3877,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 
     .sb-sampling-control-card > #cfg_block_ooba > h4,
     .sb-sampling-control-card > #grammar_block_ooba > h4 {
-        font-size: calc(var(--mainFontSize) * 0.88);
+        font-size: var(--sb-type-control);
     }
 
     .sb-sampling-control-card > #grammar_block_ooba > h4 .flex-container {
@@ -4158,7 +4171,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 }
 
 .sb-chat-completion-config-inline-copy strong {
-    font-size: calc(var(--mainFontSize) * 0.88);
+    font-size: var(--sb-type-control);
 }
 
 .sb-chat-completion-config-inline-copy small {
@@ -4193,7 +4206,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     min-height: 34px;
     padding: 7px 10px;
     border-radius: 12px;
-    font-size: calc(var(--mainFontSize) * 0.9);
+    font-size: var(--sb-type-control);
     line-height: 1.2;
     white-space: normal;
 }
@@ -4627,6 +4640,28 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     align-items: center;
 }
 
+/* Phase 6F: the presets block opens with one row instead of a title card plus a select row. The
+   label takes the leading column, so the grid needs a third track for it. */
+#openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row:has(> select[data-preset-manager-for]) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    row-gap: 8px;
+    margin-bottom: 0;
+}
+
+#openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row > strong {
+    font-size: var(--sb-type-title);
+    line-height: var(--sb-line-title);
+    color: var(--sb-shell-text-secondary);
+    white-space: nowrap;
+}
+
+/* The emptied card only stays in the dom so `#openai_api-presets > div` keeps the same first child
+   for the ChatCompletionTabs tab bar to anchor to. */
+#openai_api-presets .sb-preset-toolbar-card {
+    display: none;
+}
+
 #openai_api-presets .flex-container.flexNoGap > select {
     min-width: 0;
 }
@@ -4696,6 +4731,34 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     max-height: var(--sb-preset-row-control-size, var(--sb-field-min-height)) !important;
 }
 
+/* Phase 6F: the merged row's label and its seven preset actions take a fixed 542px, so between
+   roughly 1024px and the mobile breakpoint the select would be squeezed to a couple of characters.
+   In that band the row keeps two lines instead -- label and select on the first, action group
+   spanning the second. Below 768px the media query below stacks all three; above 1024px the select
+   has room again and the three-column rule further up applies. */
+@media screen and (min-width: 769px) and (max-width: 1024px) {
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row:has(> select[data-preset-manager-for]) {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+            'label select'
+            'actions actions';
+    }
+
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row > strong {
+        grid-area: label;
+    }
+
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row > select {
+        grid-area: select;
+    }
+
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row > .flex-container.marginLeft5 {
+        grid-area: actions;
+        height: auto;
+        flex-wrap: wrap;
+    }
+}
+
 @media screen and (max-width: 768px) {
     #openai_api-presets .flex-container.flexNoGap {
         grid-template-columns: 1fr;
@@ -4705,6 +4768,17 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     #AdvancedFormatting .flex-container.flexNoGap:has(> select[data-preset-manager-for]) {
         --sb-preset-row-control-size: max(var(--sb-field-min-height), 44px);
         grid-template-columns: 1fr;
+    }
+
+    /* Phase 6F: seven 44px actions no longer fit beside the select, so the merged row stacks and
+       lets the action group wrap, which it already does at this width. */
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row:has(> select[data-preset-manager-for]) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #openai_api-presets .flex-container.flexNoGap.sb-preset-toolbar-row > .flex-container.marginLeft5 {
+        height: auto;
+        flex-wrap: wrap;
     }
 
     #openai_api .checkbox_label,
@@ -4810,7 +4884,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 }
 
 #AdvancedFormatting .sb-reasoning-max-field span {
-    font-size: calc(var(--mainFontSize) * 0.76);
+    font-size: var(--sb-type-meta);
     font-weight: 700;
     min-width: 0;
 }
@@ -4944,7 +5018,6 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
         linear-gradient(135deg, color-mix(in srgb, var(--sb-accent) 16%, transparent), transparent 62%),
         linear-gradient(180deg, color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent), color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, transparent));
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 86%, transparent);
-    box-shadow: 0 16px 28px color-mix(in srgb, var(--SmartThemeShadowColor) 10%, transparent);
 }
 
 #UI-presets-block > h4 {
@@ -5064,13 +5137,13 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 }
 
 .quick_context_size span {
-    font-size: calc(var(--mainFontSize) * 0.9);
+    font-size: var(--sb-type-control);
     font-weight: 700;
     line-height: 1;
 }
 
 .quick_context_size small {
-    font-size: calc(var(--mainFontSize) * 0.68);
+    font-size: var(--sb-type-caption);
     font-weight: 700;
     letter-spacing: 0.03em;
     line-height: 1;
@@ -5306,7 +5379,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 .sb-accent-profiles-copy small,
 .sb-accent-profiles-empty {
     color: var(--sb-muted-fg);
-    font-size: calc(var(--mainFontSize) * 0.75);
+    font-size: var(--sb-type-meta);
 }
 
 .sb-accent-profile-save {
@@ -5454,11 +5527,11 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     }
 
     .quick_context_size span {
-        font-size: calc(var(--mainFontSize) * 0.88);
+        font-size: var(--sb-type-control);
     }
 
     .quick_context_size small {
-        font-size: calc(var(--mainFontSize) * 0.66);
+        font-size: var(--sb-type-caption);
     }
 
     #range_block_openai .range-block-range-and-counter {
@@ -5542,7 +5615,8 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     min-width: 0;
 }
 
-#user-settings-block #UI-language-block {
+#user-settings-block #UI-language-block,
+#sb-data-security-content #UI-language-block {
     flex: 1 1 240px;
     min-width: min(100%, 220px);
     flex-wrap: wrap;
@@ -5551,22 +5625,26 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     gap: 8px;
 }
 
-#user-settings-block #UI-language-block > span {
+#user-settings-block #UI-language-block > span,
+#sb-data-security-content #UI-language-block > span {
     flex: 0 0 auto;
 }
 
-#user-settings-block #ui_language_select {
+#user-settings-block #ui_language_select,
+#sb-data-security-content #ui_language_select {
     flex: 1 1 180px;
     min-width: 0;
 }
 
-#user-settings-block #version_display {
+#user-settings-block #version_display,
+#sb-data-security-content #version_display {
     flex: 0 1 auto;
     min-width: 0;
     margin-left: auto;
     overflow-wrap: anywhere;
     text-align: right;
 }
+
 
 #user-settings-block [name='UserSettingsRowTwo'] {
     flex-wrap: wrap;
@@ -5602,7 +5680,8 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     gap: 8px;
 }
 
-#user-settings-block #account_controls {
+#user-settings-block #account_controls,
+#sb-data-security-content #account_controls {
     flex-wrap: wrap;
     gap: 8px;
 }
@@ -5611,6 +5690,34 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
     flex: 1 1 120px;
     min-width: 0;
     justify-content: center;
+}
+
+/* Data & Security header controls. Moved out of `#user-settings-block` they become plain grid
+   children in a full-width column, so without a cap they stretch to the panel edge: the language
+   select and the account buttons size to their content instead, wrapping when narrow. These tie on
+   specificity with the shared rules above, so they come after them. */
+#sb-data-security-content #UI-language-block {
+    width: 100%;
+    flex: 0 1 auto;
+}
+
+#sb-data-security-content #ui_language_select {
+    flex: 0 1 320px;
+}
+
+#sb-data-security-content #account_controls {
+    justify-content: flex-start;
+}
+
+#sb-data-security-content #account_controls > .menu_button {
+    flex: 0 1 200px;
+    min-width: 0;
+    justify-content: center;
+}
+
+#sb-data-security-content #version_display {
+    margin-left: 0;
+    text-align: left;
 }
 
 #user-settings-block #settingsSearch {
@@ -5873,7 +5980,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 
 #rm_extensions_block .extensions_block > .alignitemscenter.flex-container.wide100p > label span {
     min-width: 0;
-    font-size: calc(var(--mainFontSize) * 0.84);
+    font-size: var(--sb-type-control);
     line-height: 1.35;
     white-space: normal;
 }
@@ -5999,7 +6106,7 @@ body.reduced-motion input[type='range']::-moz-range-thumb {
 }
 
 .sb-openai-settings-subdrawer .completion_prompt_manager_header_tokens {
-    font-size: calc(var(--mainFontSize) * 0.85);
+    font-size: var(--sb-type-control);
     color: var(--sb-contrast-muted, var(--SmartThemeBodyColor));
 }
 
@@ -6413,8 +6520,11 @@ body.reduced-motion *::after {
         align-items: stretch;
     }
 
+    /* Stacked rows: the note takes its own row ahead of the buttons. `auto` lets the note size to
+       its text instead of the row, which pushes its last word past the container's edge. */
     #user-settings-utility-actions .sb-settings-utility-note {
-        flex: 0 0 auto;
+        flex: 1 1 100%;
+        width: 100%;
     }
 
     #user-settings-utility-actions .sb-settings-utility-action {
@@ -6430,7 +6540,7 @@ body.reduced-motion *::after {
         min-height: 34px;
         padding: 7px 10px;
         border-radius: 11px;
-        font-size: calc(var(--mainFontSize) * 0.84);
+        font-size: var(--sb-type-control);
     }
 
     .sb-shell-panel-scroller .menu_button,
@@ -6440,7 +6550,7 @@ body.reduced-motion *::after {
         min-height: 38px;
         padding: 8px 12px;
         border-radius: 12px;
-        font-size: calc(var(--mainFontSize) * 0.92);
+        font-size: var(--sb-type-control);
         line-height: 1.25;
     }
 
@@ -6695,7 +6805,7 @@ body.reduced-motion *::after {
         min-width: 34px;
         height: 34px;
         min-height: 34px;
-        font-size: calc(var(--mainFontSize) * 0.9);
+        font-size: var(--sb-type-control);
     }
 
     :is(#kobold_api-presets, #novel_api-presets, #textgenerationwebui_api-presets) .sb-non-chat-preset-row {
@@ -6753,7 +6863,7 @@ body.reduced-motion *::after {
         min-width: 0;
         margin: 0;
         text-align: left;
-        font-size: calc(var(--mainFontSize) * 0.82);
+        font-size: var(--sb-type-control);
         font-weight: 700;
         line-height: 1.2;
         overflow-wrap: anywhere;

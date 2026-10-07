@@ -6,23 +6,18 @@ import { initInstallNotice } from './sillybunny-install-notice.js';
 import {
     clampMobileShellText as clampText,
     createMobileShellLifecycle,
-    MOBILE_SHELL_NAV_TOGGLE_ACTION,
     normalizeMobileShellRailIcon as normalizeFontAwesomeIcon,
     normalizeMobileShellText as normalizeText,
 } from './mobile-shell-lifecycle/index.js';
 import { isIOSWebKitPlatform, isLegacyIOSWebKitPlatform } from './mobile-send-button.js';
-import { initializeMobileSectionNav, requestMobileSectionView } from './sillybunny-mobile-section-nav.js';
+import { initializeMobileBottomBar, syncMobileBottomBar } from './sillybunny-mobile-bottom-bar.js';
 import { initializeMessageActions } from './sillybunny-message-actions.js';
 import { initializeToastMotion } from './sillybunny-toast-motion.js';
 import {
     animateIn,
     animateOut,
-    MOTION_EASE_OUT_CUBIC,
     MOTION_FAST,
     MOTION_SLOW,
-    originFrom,
-    play as playMotion,
-    prefersReducedMotion as prefersShellReducedMotion,
     SPRING_SHEET,
     stopMotion,
 } from './sillybunny-motion.js';
@@ -58,12 +53,19 @@ import {
     setTextSamplingParameterTransmissionState,
     getTextSamplingParameterViewModel,
 } from './textgen-settings.js';
+import {
+    SB_USER_SETTINGS_CONTAINER_IDS,
+    SB_DATA_SECURITY_CONTAINER_ID,
+    SB_FLAT_SECTION_CLASS,
+    SB_FLAT_SECTION_HEADER_CLASS,
+    flattenNestedSettingsDrawers,
+    splitUserSettingsContent,
+} from './sillybunny-settings-content.js';
 
 const sbMobileShellLifecycle = createMobileShellLifecycle();
 const sbPresetApiSyncLifecycle = createPresetApiSyncLifecycle();
 const sbSearchRenderRequests = new WeakMap();
 const loadServerToolsModule = createDeferredModule(new URL('./sillybunny-server-tools.js', import.meta.url));
-const loadSettingsTabsModule = createDeferredModule(new URL('./sillybunny-settings-tabs.js', import.meta.url));
 let serverToolsPromise;
 let settingsPanelPromise;
 
@@ -79,18 +81,146 @@ function loadServerTools() {
 }
 
 function initializeSettingsPanel() {
-    settingsPanelPromise ??= loadSettingsTabsModule().then(module => {
+    settingsPanelPromise ??= Promise.resolve().then(() => {
         injectThemePicker();
         injectSillyTavernImportCard();
-        module.initializeSettingsTabs();
+        // SillyTavern's own settings tab UI is not used here: the settings page sidebar owns
+        // navigation, so the inline drawers are opened directly instead.
+        openAllInlineDrawers();
         applyDefaultDrawerStates();
-        const tab = getShellState('right')?.tabs.get('settings');
-        if (tab) tab.searchIndex = null;
+        // Injection above can author drawers inside another drawer -- the Appearance theme card
+        // creates `#sb-interface-drawer`, `#sb-topbar-label-drawer` and
+        // `#sb-quick-access-shortcuts-drawer` inside `#AppearanceSection`, all after the split has
+        // already run its flatten pass -- so it is repeated once the panel is fully built.
+        flattenRightShellSettingsDrawers();
+        invalidateUserSettingsTabSearchIndexes();
     }).catch(error => {
         settingsPanelPromise = undefined;
         throw error;
     });
     return settingsPanelPromise;
+}
+
+/**
+ * Tabs whose collapsible drawers are left alone.
+ *
+ * Extensions is the one the 6F decision names: each of its 17 drawers is a self-contained,
+ * independently-authored block rather than a stray accordion. Agents is the same case for the same
+ * reason -- its panel is built by the bundled in-chat-agents extension, which drives its own
+ * drawer's toggle programmatically (`in-chat-agents/index.js` reaches for the toggle and dispatches
+ * a click), so flattening it would take away a control the extension owns.
+ */
+const SB_COLLAPSIBLE_DRAWER_TAB_IDS = Object.freeze(new Set(['extensions', 'agents']));
+
+/** Phase 6F: marks the merged Chat Completion presets row and the chrome card it replaces. */
+const SB_PRESET_TOOLBAR_ROW_CLASS = 'sb-preset-toolbar-row';
+const SB_PRESET_TOOLBAR_CARD_CLASS = 'sb-preset-toolbar-card';
+
+/**
+ * Flattens drawers in every Backend and Customize panel, covering drawers authored after the split.
+ */
+function flattenRightShellSettingsDrawers() {
+    const shellState = getShellState('right');
+    if (!shellState) {
+        return;
+    }
+
+    for (const [tabId, tabState] of shellState.tabs.entries()) {
+        if (!SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) && tabState.panel instanceof HTMLElement) {
+            flattenNestedSettingsDrawers(tabState.panel, { includeTopLevel: true });
+        }
+    }
+}
+
+/**
+ * Drops the cached search index for every Customize tab. The split moves nodes between tabs, so
+ * a cached index would keep pointing at detached content.
+ */
+function invalidateUserSettingsTabSearchIndexes() {
+    const shellState = getShellState('right');
+    if (!shellState) {
+        return;
+    }
+
+    for (const tabState of shellState.tabs.values()) {
+        tabState.searchIndex = null;
+    }
+}
+
+/**
+ * Every root that holds Customize settings content, in the order a user sees them.
+ *
+ * Phase 6C gives each Customize tab its own container, so the three containers are the live roots.
+ * The legacy block is kept on the list last because it stays in the document and third-party
+ * drawers still append into it; it has no settings left, so it contributes nothing in practice.
+ *
+ * The Data & Security container is here too. Its content is authored inside the settings block, so
+ * before the split moved it the drawer expansion, search reveal and drawer persistence below all
+ * reached it; listing it keeps that behaviour instead of leaving the moved drawer inert. It is
+ * absent from the document until its panel is built, and the `instanceof` guard covers that.
+ *
+ * @returns {HTMLElement[]}
+ */
+function getUserSettingsContentRoots() {
+    const roots = [];
+
+    for (const tabId of ['appearance', 'interface', 'messages']) {
+        const container = document.getElementById(SB_USER_SETTINGS_CONTAINER_IDS[tabId]);
+        if (container instanceof HTMLElement) {
+            roots.push(container);
+        }
+    }
+
+    const dataSecurity = document.getElementById(SB_DATA_SECURITY_CONTAINER_ID);
+    if (dataSecurity instanceof HTMLElement) {
+        roots.push(dataSecurity);
+    }
+
+    const legacyBlock = document.getElementById('user-settings-block-content');
+    if (legacyBlock instanceof HTMLElement) {
+        roots.push(legacyBlock);
+    }
+
+    return roots;
+}
+
+function openAllInlineDrawers(root = null) {
+    // Open every inline-drawer section so its content is visible.
+    const roots = root instanceof HTMLElement ? [root] : getUserSettingsContentRoots();
+    for (const current of roots) {
+        current.querySelectorAll('.inline-drawer').forEach(drawer => {
+            const toggle = drawer.querySelector(':scope > .inline-drawer-toggle');
+            const drawerContent = drawer.querySelector(':scope > .inline-drawer-content');
+            if (toggle && drawerContent) {
+                toggle.setAttribute('aria-expanded', 'true');
+                toggle.classList.add('openDrawer');
+                drawerContent.style.display = '';
+            }
+        });
+    }
+}
+
+/**
+ * Re-runs the drawer flatten for a panel that may have been built after the split.
+ *
+ * The split flattens the markup it relocates, but some sections author their drawers at runtime --
+ * `#sb-openai-output` builds four of them in `openai.js` once its panel is created -- so the pass
+ * is repeated on activation. It is idempotent, so re-running it costs a query and no DOM churn.
+ *
+ * Extensions and Agents are skipped for the same reason as in `flattenRightShellSettingsDrawers`.
+ *
+ * @param {string} shellKey
+ * @param {string} tabId
+ */
+function flattenSettingsPanelDrawers(shellKey, tabId) {
+    if (SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId)) {
+        return;
+    }
+
+    const panel = getShellState(shellKey)?.tabs.get(tabId)?.panel;
+    if (panel instanceof HTMLElement) {
+        flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
+    }
 }
 
 async function prepareShellSearch() {
@@ -99,15 +229,10 @@ async function prepareShellSearch() {
         Array.from(shell.tabs.values(), tab => tab.ensureReady?.()),
     ));
 }
-const SB_SHELL_SUBTITLE_PLACEHOLDER = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
 
 const SB_STORAGE_KEYS = Object.freeze({
     leftTab: 'sb-left-tab',
     rightTab: 'sb-right-tab',
-    leftShellSize: 'sb-left-shell-size',
-    rightShellSize: 'sb-right-shell-size',
-    desktopShellSnapToChatWidth: 'sb-desktop-shell-snap-to-chat-width',
-    characterDrawerRightLocked: 'sb-character-drawer-right-locked',
     surfaceTransparency: 'sb-surface-transparency',
     topbarScaleDesktop: 'sb-topbar-scale-desktop',
     topbarScaleMobile: 'sb-topbar-scale-mobile',
@@ -176,7 +301,7 @@ const SB_SHORTCUT_TARGETS = Object.freeze([
 
 const SB_SHORTCUT_DEFAULTS = Object.freeze({
     left: 'left:agents',
-    right: 'action:search',
+    right: 'right:extensions',
     slot3: 'none',
     slot4: 'none',
     slot5: 'none',
@@ -230,18 +355,18 @@ const SB_FRONTEND_ICONS = Object.freeze([
     },
 ]);
 const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
-const SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR = '.sb-openai-settings-drawer, .sb-openai-settings-subdrawer, [id$="prompt_manager_drawer"]';
+/**
+ * Drawers whose open state is written by their own code rather than by the generic persistence
+ * scan, so the scan must not also write a key for them.
+ *
+ * 6F removed `sb-openai-budget`, `sb-openai-output` and `sb-openai-advanced` from this list: they
+ * are flattened now, and a flattened section is not a drawer -- it has no toggle and no content
+ * wrapper -- so there is no open state left for either writer to persist.
+ */
+const SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR = '[id$="prompt_manager_drawer"]';
 const SB_STORAGE_PREFIX = 'sb-';
 const SB_STORAGE_WRITE_DEBOUNCE_MS = 120;
 const SB_MOBILE_ACTION_DEBOUNCE_MS = 140;
-const SB_SHELL_FOCUSABLE_SELECTOR = [
-    'a[href]',
-    'button:not([disabled])',
-    'input:not([disabled]):not([type="hidden"])',
-    'select:not([disabled])',
-    'textarea:not([disabled])',
-    '[tabindex]:not([tabindex="-1"])',
-].join(',');
 
 let sbInlineDrawerPersistenceObserver = null;
 let sbInlineDrawerPersistenceQueued = false;
@@ -298,6 +423,32 @@ function migrateLegacyWorldInfoRoute(target) {
     return target === 'left:world-info' ? 'characters:world-info' : target;
 }
 
+function migrateTabId(shellKey, tabId) {
+    // Phase 5: migrate old tab IDs to new reorganized structure
+    const migrations = {
+        left: {
+            'presets': 'prompting',
+            'api': 'connections',
+            'advanced-formatting': 'context',
+            // sampling and agents stay the same
+        },
+        right: {
+            'settings': 'appearance',
+            'background': 'appearance',
+            'server': 'data-security',
+            'console-logs': 'logs',
+            // extensions stays the same
+        },
+    };
+
+    const shellMigrations = migrations[shellKey];
+    if (shellMigrations && shellMigrations[tabId]) {
+        return shellMigrations[tabId];
+    }
+
+    return tabId;
+}
+
 function isSearchShortcutTarget(target) {
     return target === 'action:search';
 }
@@ -329,12 +480,10 @@ function activateShortcutTarget(target) {
 
     const [shell, tab] = String(target).split(':');
 
+    // SillyBunny: toggleShellPanel routes every shell through the settings page (feat/v1.9.0-ui-overhaul)
     if (shell === 'characters') {
-        if (!tab || tab === 'characters') {
-            void setCharacterListEntityView('characters');
-        }
         preloadPanelStylesheets('characters', tab);
-        toggleShellPanel(shell, tab);
+        toggleShellPanel(shell, tab || null);
         return;
     }
 
@@ -428,19 +577,6 @@ function safeSetItem(key, value) {
     scheduleSbStorageFlush();
 }
 
-function safeRemoveItem(key) {
-    if (!isSillyBunnyStorageKey(key)) {
-        try { localStorage.removeItem(key); } catch {
-            // Ignore storage removal failures.
-        }
-        return;
-    }
-
-    sbStorageCache.set(key, null);
-    sbStoragePendingWrites.set(key, { remove: true });
-    scheduleSbStorageFlush();
-}
-
 bindSbStorageFlushEvents();
 
 const SB_IDLE_BRAND_LABEL = 'SillyBunny';
@@ -489,30 +625,6 @@ const SB_TOPBAR_DRAG_Y_RATIO = 0.24;
 const SB_TOPBAR_CONTEXT_REFRESH_DEBOUNCE = 220;
 const SB_CHATBAR_SEARCH_DEBOUNCE = 220;
 const SB_CHAT_SEARCH_MARK_SELECTOR = 'mark[data-sb-chat-search="true"]';
-const SB_DESKTOP_SHELL_LAYOUT = Object.freeze({
-    minWidth: 600,
-    maxWidth: 900,
-    ratio: 0.55,
-    laptopViewportMin: 1001,
-    laptopViewportMax: 1440,
-    laptopMinWidth: 680,
-    laptopMaxWidth: 920,
-    laptopRatio: 0.6,
-    laptopGutter: 28,
-    compactMaxWidth: 900,
-    compactViewportWidth: 1100,
-    compactGap: 20,
-    gutterMin: 20,
-    gutterRatio: 0.04,
-    gutterMax: 80,
-    fullWidthMaxHeight: 860,
-});
-const SB_DESKTOP_SHELL_RESIZE = Object.freeze({
-    minWidth: 420,
-    minHeight: 320,
-    bottomGap: 16,
-});
-const SB_SHELL_TOGGLE_GUARD_MS = 260;
 const SB_INIT_RETRY_DELAY_MS = 150;
 const SB_INIT_MAX_RETRIES = 30;
 
@@ -525,47 +637,9 @@ const SB_MESSAGE_STYLES = Object.freeze([
     { id: '2', label: 'Document', icon: 'fa-file-lines' },
 ]);
 
-const SB_WORLD_INFO_SUBTITLE_HTML = 'Advanced: Modify lorebooks for character cards here. For more information, read the guide found <a class="notes-link" href="https://docs.sillytavern.app/usage/core-concepts/worldinfo/" target="_blank" rel="noopener noreferrer">here</a>.';
 const SB_SAMPLING_SUBTITLE_HTML = 'Modify model text parameters here - useful for dialing in responses! If you\'re unsure what these all mean, check out <a class="notes-link" href="https://rentry.org/samplersettings" target="_blank" rel="noopener noreferrer">Geechan\'s guide on sampling.</a>';
 
-const SB_CHARACTER_TAB_COPY = Object.freeze({
-    characters: {
-        title: 'Character Menu',
-        subtitle: 'View or create character cards here for your roleplays and chats!',
-        description: 'Move between characters, groups, personas, lore, and imports without leaving the writing workspace.',
-    },
-    groups: {
-        title: 'Group Menu',
-        subtitle: 'View or create group chats here for your roleplays and chats!',
-        description: 'Sort group chats, check members, and return to character cards without losing your place.',
-    },
-    conversation: {
-        title: 'Conversation Mode',
-        subtitle: SB_SHELL_SUBTITLE_PLACEHOLDER,
-        description: 'Tune schedules, cooldowns, format prompts, and DM helpers without opening a group chat.',
-    },
-    editor: {
-        title: 'Card Editor',
-        subtitle: 'Edit your character cards or group chats in great detail here!',
-        description: 'Use the subtabs to keep core identity, definitions, greetings, and metadata separated.',
-    },
-    'world-info': {
-        title: 'World Info',
-        subtitle: SB_WORLD_INFO_SUBTITLE_HTML,
-        subtitleIsHtml: true,
-        description: 'Create, edit, import, and activate World Info entries without leaving the Characters menu.',
-    },
-    persona: {
-        title: 'Persona',
-        subtitle: 'Edit your own persona here for roleplay and chats!',
-        description: 'Edit persona details, locks, and defaults in the same flow as your character work.',
-    },
-    import: {
-        title: 'Import',
-        subtitle: 'Directly import character cards here from various sources.',
-        description: 'PNG, JSON, YAML, CHARX, BYAF, and supported URL imports stay one tab away.',
-    },
-});
+const SB_WORLD_INFO_SUBTITLE_HTML = 'Advanced: Modify lorebooks for character cards here. For more information, read the guide found <a class="notes-link" href="https://docs.sillytavern.app/usage/core-concepts/worldinfo/" target="_blank" rel="noopener noreferrer">here</a>.';
 
 const SB_CHARACTER_EDITOR_SUB_TABS = Object.freeze([
     'char-info',
@@ -577,16 +651,52 @@ const SB_CHARACTER_EDITOR_DEFAULT_SUB_TAB = 'char-info';
 const SB_CHARACTER_EDITOR_SPOILER_FREE_VISIBLE_TABS = Object.freeze(['char-info', 'metadata']);
 
 const SB_CHARACTER_PANEL_TABS = Object.freeze([
-    { id: 'characters', label: 'Characters', icon: 'fa-address-book' },
-    { id: 'groups', label: 'Groups', icon: 'fa-users' },
-    { id: 'editor', label: 'Editor', icon: 'fa-pen-to-square' },
-    { id: 'world-info', label: 'World Info', icon: 'fa-book-atlas' },
-    { id: 'persona', label: 'Persona', icon: 'fa-face-smile' },
-    { id: 'import', label: 'Import', icon: 'fa-file-import' },
+    {
+        id: 'characters',
+        label: 'Characters',
+        icon: 'fa-address-book',
+        tooltip: 'Open and manage character cards',
+        description: 'View or create character cards here for your roleplays and chats!',
+    },
+    {
+        id: 'groups',
+        label: 'Groups',
+        icon: 'fa-users',
+        tooltip: 'Open and manage group conversations',
+        description: 'View or create group chats here for your roleplays and chats!',
+    },
+    {
+        id: 'editor',
+        label: 'Editor',
+        icon: 'fa-pen-to-square',
+        tooltip: 'Edit character cards and groups',
+        description: 'Edit your character cards or group chats in great detail here!',
+    },
+    {
+        id: 'world-info',
+        label: 'World Info',
+        icon: 'fa-book-atlas',
+        tooltip: 'Manage lorebooks and world information',
+        description: SB_WORLD_INFO_SUBTITLE_HTML,
+        descriptionIsHtml: true,
+    },
+    {
+        id: 'persona',
+        label: 'Persona',
+        icon: 'fa-face-smile',
+        tooltip: 'Manage user persona/personality',
+        description: 'Edit your own persona here for roleplay and chats!',
+    },
+    {
+        id: 'import',
+        label: 'Import',
+        icon: 'fa-file-import',
+        tooltip: 'Add or import new character cards',
+        description: 'Directly import character cards here from various sources.',
+    },
 ]);
 const SB_CHARACTER_PANEL_DEFAULT_TAB = 'characters';
 
-const SB_PERSONA_HELP_LINK_HTML = '<a class="notes-link sb-character-title-help" href="https://docs.sillytavern.app/usage/core-concepts/personas/" target="_blank"><span class="fa-solid fa-circle-question note-link-span"></span></a>';
 
 const SB_SHELLS = Object.freeze({
     left: {
@@ -596,49 +706,55 @@ const SB_SHELLS = Object.freeze({
         hostIconSelector: '#leftNavDrawerIcon',
         proxyButtonId: 'sb-left-shell-toggle',
         proxyIcon: 'fa-bars',
-        proxyLabel: 'Workspace',
-        title: 'Workspace',
+        proxyLabel: 'Backend',
+        title: 'Backend',
         subtitle: '', // Removed redundant workspace subtext (PR #145 expansion)
-        searchPlaceholder: 'Find presets, samplers, lore, or tools...',
+        searchPlaceholder: 'Find connections, prompts, samplers, or agents...',
         storageKey: SB_STORAGE_KEYS.leftTab,
-        defaultTabId: 'presets',
+        defaultTabId: 'connections',
         baseTab: {
-            id: 'presets',
-            label: 'Presets',
-            icon: 'fa-sliders',
-            description: 'Change or modify your Chat Completion presets, settings, and/or prompts here. We recommend our included Geechan and Pura presets if you\'re unsure.',
+            id: 'connections',
+            label: 'Connections',
+            icon: 'fa-plug',
+            tooltip: 'Modify the API connection to the model backend',
+            description: 'Configure the model backend for all AI character responses. We recommend OpenRouter if you\'re unsure.',
         },
-        embeddedTabs: [
-            {
-                id: 'api',
-                drawerId: 'sys-settings-button',
-                label: 'API',
-                icon: 'fa-plug',
-                description: 'Configure the model backend for all AI character responses. We recommend OpenRouter if you\'re unsure.',
-            },
-            {
-                id: 'advanced-formatting',
-                drawerId: 'advanced-formatting-button',
-                label: 'Formatting',
-                icon: 'fa-text-height',
-                description: 'Change Text Completion templates and system prompts here!',
-            },
-        ],
+        embeddedTabs: [],
         customTabs: [
             {
                 id: 'sampling',
                 label: 'Sampling',
                 icon: 'fa-wave-square',
+                tooltip: 'Adjust model samplers and parameters',
                 description: SB_SAMPLING_SUBTITLE_HTML,
                 descriptionIsHtml: true,
                 searchPlaceholder: 'Search temperature, top p, repetition penalty, or backend samplers',
                 searchExamples: ['temperature', 'top p', 'repetition penalty'],
             },
             {
+                id: 'prompting',
+                label: 'Prompting',
+                icon: 'fa-sliders',
+                tooltip: 'Change, update, or edit presets and prompts',
+                description: 'Configure Chat Completion presets, prompt templates, and text formatting.',
+                searchPlaceholder: 'Search presets, instruct mode, markdown, or decorators',
+                searchExamples: ['presets', 'instruct', 'markdown', 'decorators'],
+            },
+            {
                 id: 'agents',
                 label: 'Agents',
                 icon: 'fa-robot',
+                tooltip: 'Interact with accompanying pre, post, and sidecar agents',
                 description: 'Enable, disable, or modify in-chat agents here. Can be configured as pre-gen, sidecar, or post-gen.',
+            },
+            {
+                id: 'context',
+                label: 'Context',
+                icon: 'fa-text-height',
+                tooltip: 'Set miscellaneous formatting settings for the model backend',
+                description: 'Configure context templates and regex text transformations.',
+                searchPlaceholder: 'Search context templates, regex, or text replacements',
+                searchExamples: ['context', 'regex', 'replacement'],
             },
         ],
     },
@@ -652,17 +768,18 @@ const SB_SHELLS = Object.freeze({
         proxyLabel: 'Customize',
         title: 'Customize',
         subtitle: 'Personalize your workspace, add/remove extensions, modify server settings, or check logs here.',
-        searchPlaceholder: 'Search themes, top bar, backgrounds, or extensions',
-        searchExamples: ['theme', 'top bar', 'Appearance', 'notify extension updates'],
+        searchPlaceholder: 'Search themes, interface, messages, or extensions',
+        searchExamples: ['theme', 'top bar', 'messages', 'extensions'],
         storageKey: SB_STORAGE_KEYS.rightTab,
-        defaultTabId: 'settings',
+        defaultTabId: 'appearance',
         baseTab: {
-            id: 'settings',
-            label: 'Settings',
-            icon: 'fa-screwdriver-wrench',
-            description: 'Modify and customise SillyBunny\'s general appearance and configuration here.',
-            searchPlaceholder: 'Search Appearance, top bar, chat style, blur, or update notices',
-            searchExamples: ['theme', 'top bar', 'Appearance', 'notify extension updates'],
+            id: 'appearance',
+            label: 'Appearance',
+            icon: 'fa-palette',
+            tooltip: 'Change or modify the appearance of the SillyBunny graphical shell',
+            description: 'Customize SillyBunny\'s visual appearance, themes, backgrounds, and UI scale.',
+            searchPlaceholder: 'Search themes, backgrounds, blur, or UI scale',
+            searchExamples: ['theme', 'background', 'blur', 'scale'],
         },
         embeddedTabs: [
             {
@@ -670,34 +787,46 @@ const SB_SHELLS = Object.freeze({
                 drawerId: 'extensions-settings-button',
                 label: 'Extensions',
                 icon: 'fa-cubes',
+                tooltip: 'Manage and view all installed extensions',
                 description: 'Install, manage, and configure SillyTavern extensions here. Backwards compatibility isn\'t guaranteed, but should be applicable.',
                 searchPlaceholder: 'Search themes, Quick Reply, Dialogue Colors, or Image Gen',
                 searchExamples: ['themes', 'Quick Reply', 'Dialogue Colors', 'Image Gen'],
             },
-            {
-                id: 'background',
-                drawerId: 'backgrounds-button',
-                label: 'Background',
-                icon: 'fa-panorama',
-                description: 'Change the appearance of the background surrounding your chats here!',
-                searchPlaceholder: 'Search background names, blur, fit, or vibe words',
-                searchExamples: ['cozy', 'landscape', 'blur', 'fit'],
-            },
         ],
         customTabs: [
             {
-                id: 'server',
-                label: 'Server',
-                icon: 'fa-server',
-                description: 'Edit SillyBunny backend settings and configuration here.',
-                searchPlaceholder: 'Search update, restart, config.yaml, or branch',
-                searchExamples: ['update', 'restart', 'config.yaml', 'branch'],
+                id: 'interface',
+                label: 'Interface',
+                icon: 'fa-screwdriver-wrench',
+                tooltip: 'Toggle UI settings',
+                description: 'Configure interface behavior, power user features, and UI preferences.',
+                searchPlaceholder: 'Search top bar, auto-scroll, power user, or chat features',
+                searchExamples: ['top bar', 'auto-scroll', 'power user'],
             },
             {
-                id: 'console-logs',
-                label: 'Console Logs',
+                id: 'messages',
+                label: 'Messages',
+                icon: 'fa-message',
+                tooltip: 'View all chat-related settings and configuration',
+                description: 'Configure message display, actions, swipes, and interaction preferences.',
+                searchPlaceholder: 'Search message actions, swipes, auto-scroll, or display',
+                searchExamples: ['swipes', 'message actions', 'auto-scroll'],
+            },
+            {
+                id: 'data-security',
+                label: 'Data & Security',
+                icon: 'fa-server',
+                tooltip: 'View SillyBunny\'s server configuration and backend',
+                description: 'Manage the SillyBunny backend and server settings here.',
+                searchPlaceholder: 'Search backup, data path, security, or config.yaml',
+                searchExamples: ['backup', 'data path', 'security'],
+            },
+            {
+                id: 'logs',
+                label: 'Logs',
                 icon: 'fa-terminal',
-                description: 'View all SillyBunny logs for easy troubleshooting here.',
+                tooltip: 'View and gather SillyBunny\'s backend logs',
+                description: 'View SillyBunny logs for advanced troubleshooting or bug reporting.',
                 searchPlaceholder: 'Search error, warning, npm, bun, or extension logs',
                 searchExamples: ['error', 'warning', 'npm', 'bun'],
             },
@@ -705,32 +834,14 @@ const SB_SHELLS = Object.freeze({
     },
 });
 
-function renderShellSubtitle(target, subtitle, { isHtml = false } = {}) {
-    if (!(target instanceof HTMLElement)) {
-        return;
-    }
-
-    target.textContent = '';
-    if (isHtml) {
-        target.insertAdjacentHTML('beforeend', subtitle || '');
-        // Subtitles render single-line with text-overflow: ellipsis; expose the
-        // full text as a tooltip so truncated copy stays readable.
-        target.title = target.textContent.trim();
-        return;
-    }
-
-    target.textContent = subtitle || '';
-    target.title = (subtitle || '').trim();
-}
-
 const SB_DRAWER_ROUTES = Object.freeze({
-    'user-settings-button': { shell: 'right', tab: 'settings' },
-    'sys-settings-button': { shell: 'left', tab: 'api' },
-    'advanced-formatting-button': { shell: 'left', tab: 'advanced-formatting' },
+    'user-settings-button': { shell: 'right', tab: 'appearance' },
+    'sys-settings-button': { shell: 'left', tab: 'connections' },
+    'advanced-formatting-button': { shell: 'left', tab: 'context' },
     'WI-SP-button': { shell: 'characters', tab: 'world-info' },
     'extensions-settings-button': { shell: 'right', tab: 'extensions' },
     'persona-management-button': { shell: 'characters', tab: 'persona' },
-    'backgrounds-button': { shell: 'right', tab: 'background' },
+    'backgrounds-button': { shell: 'right', tab: 'appearance' },
 });
 
 const SB_SEARCH_TARGET_SELECTOR = [
@@ -738,6 +849,7 @@ const SB_SEARCH_TARGET_SELECTOR = [
     '.checkbox_label',
     '.menu_button',
     '.inline-drawer-toggle',
+    `.${SB_FLAT_SECTION_HEADER_CLASS}`,
     '.standoutHeader',
     '.range-block-title',
     '.range-block-header',
@@ -751,6 +863,27 @@ const SB_SEARCH_TARGET_SELECTOR = [
     '.ch_name',
 ].join(', ');
 
+/**
+ * Subset of `SB_SEARCH_TARGET_SELECTOR` that reads as a section name rather than a control.
+ *
+ * The sidebar treats a hit here as specific enough to reveal a tab, because the tab's name is
+ * unlikely to be on screen while the section it holds is discoverable. Everything else the index
+ * collects — individual checkboxes, selects, buttons — is a leaf control whose match says very
+ * little about the tab, so it is left to the universal search panel, which is built for browsing.
+ */
+const SB_SIDEBAR_SECTION_MATCH_SELECTOR = [
+    'h3',
+    'h4',
+    'h5',
+    '.standoutHeader',
+    '.range-block-title',
+    '.range-block-header',
+    '.extension_name',
+    '.inline-drawer-toggle',
+    `.${SB_FLAT_SECTION_HEADER_CLASS}`,
+    '.ch_name',
+].join(', ');
+
 const SB_UNIVERSAL_SEARCH_PLACEHOLDER = 'Type to search...';
 const SB_UNIVERSAL_SEARCH_IDLE_TITLE = 'Search all settings';
 const SB_UNIVERSAL_SEARCH_IDLE_HINT = 'Jump to any workspace or customization control from one place.';
@@ -758,7 +891,6 @@ const SB_UNIVERSAL_SEARCH_EMPTY_HINT = 'Could not find query. Try a broader term
 const SB_UNIVERSAL_SEARCH_RESULT_LIMIT = 10;
 const SB_MOBILE_QUICK_ACTION_LIMIT = sbMobileShellLifecycle.railModel.limits.quickActionLimit;
 const SB_MOBILE_QUICK_ACTION_ICON_FALLBACK = sbMobileShellLifecycle.railModel.limits.iconFallback;
-let sbIsSyncingRailActions = false;
 const SB_MOBILE_NAV_CLOSED_ICON = 'fa-compass';
 const SB_MOBILE_VIEWPORT_RESET_FOLLOWUP_MS = 350;
 const SB_MOBILE_NAV_LAYOUTS = Object.freeze(['horizontal', 'vertical']);
@@ -800,11 +932,11 @@ const SB_TOPBAR_CLUSTERS = Object.freeze([
         leadId: 'sb-left-shell-toggle',
         railId: 'sb-topbar-cluster-workspace',
         pages: Object.freeze([
-            { value: 'left:presets', shellKey: 'left', tabId: 'presets' },
-            { value: 'left:api', shellKey: 'left', tabId: 'api' },
+            { value: 'left:connections', shellKey: 'left', tabId: 'connections' },
             { value: 'left:sampling', shellKey: 'left', tabId: 'sampling' },
-            { value: 'left:advanced-formatting', shellKey: 'left', tabId: 'advanced-formatting' },
+            { value: 'left:prompting', shellKey: 'left', tabId: 'prompting' },
             { value: 'left:agents', shellKey: 'left', tabId: 'agents' },
+            { value: 'left:context', shellKey: 'left', tabId: 'context' },
         ]),
     },
     {
@@ -812,11 +944,12 @@ const SB_TOPBAR_CLUSTERS = Object.freeze([
         leadId: 'sb-right-shell-toggle',
         railId: 'sb-topbar-cluster-customize',
         pages: Object.freeze([
-            { value: 'right:settings', shellKey: 'right', tabId: 'settings' },
+            { value: 'right:appearance', shellKey: 'right', tabId: 'appearance' },
+            { value: 'right:interface', shellKey: 'right', tabId: 'interface' },
+            { value: 'right:messages', shellKey: 'right', tabId: 'messages' },
             { value: 'right:extensions', shellKey: 'right', tabId: 'extensions' },
-            { value: 'right:background', shellKey: 'right', tabId: 'background' },
-            { value: 'right:server', shellKey: 'right', tabId: 'server' },
-            { value: 'right:console-logs', shellKey: 'right', tabId: 'console-logs' },
+            { value: 'right:data-security', shellKey: 'right', tabId: 'data-security' },
+            { value: 'right:logs', shellKey: 'right', tabId: 'logs' },
         ]),
     },
     {
@@ -834,7 +967,7 @@ const SB_TOPBAR_CLUSTERS = Object.freeze([
 ]);
 const SB_TOPBAR_PAGE_TARGETS = Object.freeze(SB_TOPBAR_CLUSTERS.flatMap(cluster => cluster.pages));
 
-// SillyBunny: Home and Characters remain as Layer 2 anchors. Workspace and Customize are redundant
+// SillyBunny: Home and Characters remain as Layer 2 anchors. Backend and Customize are redundant
 // once all of their pages are shown, so CSS hides those two only while icons-only mode is active.
 const SB_TOPBAR_ANCHOR_IDS = Object.freeze([
     'sb-home-toggle',
@@ -919,16 +1052,7 @@ const sbState = {
         dismissBound: false,
         activeIndex: -1,
     },
-    shellSizing: {
-        overrides: {
-            left: normalizeShellSize(safeGetItem(SB_STORAGE_KEYS.leftShellSize)),
-            right: normalizeShellSize(safeGetItem(SB_STORAGE_KEYS.rightShellSize)),
-        },
-        snapToChatWidth: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.desktopShellSnapToChatWidth), true),
-        activeResize: null,
-    },
     characterDrawer: {
-        rightLocked: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.characterDrawerRightLocked), false),
         stateObserver: null,
         observedOpen: null,
         lastTab: 'characters',
@@ -1127,14 +1251,10 @@ function getQuickActionState(mode) {
     return mode === 'desktop' ? sbState.desktopQuickActions : sbState.mobileQuickActions;
 }
 
-function getActiveShellRailMode() {
-    return isMobileViewport() ? 'mobile' : 'desktop';
-}
-
 function getMobileNavCustomizeLocationLabel(mode = 'mobile') {
     return getNavState(mode).layout === 'horizontal'
-        ? 'Show Workspace and Customize buttons in top bar'
-        : 'Show Workspace and Customize shortcuts in each side rail';
+        ? 'Show Backend and Customize buttons in top bar'
+        : 'Show Backend and Customize shortcuts in each side rail';
 }
 
 function normalizeMobileNavReplacementTarget(value) {
@@ -1148,47 +1268,6 @@ function getMobileNavReplacementTargetConfig(target = sbState.mobileNav.replacem
     const normalizedTarget = normalizeMobileNavReplacementTarget(target);
     return SB_MOBILE_NAV_PAGE_TARGETS.find(item => item.value === normalizedTarget)
         ?? SB_MOBILE_NAV_PAGE_TARGETS[0];
-}
-
-function createNavReplacementQuickAction(target) {
-    const config = getMobileNavReplacementTargetConfig(target);
-    return normalizeMobileQuickAction({
-        type: 'tab',
-        shellKey: config.shellKey,
-        tabId: config.tabId,
-        icon: config.icon,
-        label: config.label,
-    });
-}
-
-function normalizeShellSize(value) {
-    let source = value;
-
-    if (typeof source === 'string') {
-        const trimmedValue = source.trim();
-
-        if (!trimmedValue) {
-            return null;
-        }
-
-        try {
-            source = JSON.parse(trimmedValue);
-        } catch {
-            return null;
-        }
-    }
-
-    const width = Number(source?.width);
-    const height = Number(source?.height);
-
-    if (!Number.isFinite(width) || !Number.isFinite(height)) {
-        return null;
-    }
-
-    return {
-        width: Math.max(0, Math.round(width)),
-        height: Math.max(0, Math.round(height)),
-    };
 }
 
 function normalizeSurfaceTransparency(value) {
@@ -1422,7 +1501,6 @@ function setQuickActionsForMode(mode, actions, { persist = true } = {}) {
 
         renderMobileQuickActionSettingsList('desktop');
         refreshMobileQuickActionSearchResults('desktop');
-        syncMobileShellRailActions();
         return;
     }
 
@@ -1435,7 +1513,6 @@ function setQuickActionsForMode(mode, actions, { persist = true } = {}) {
     renderMobileQuickActionSettingsList('mobile');
     refreshMobileQuickActionSearchResults('mobile');
     refreshMobileNavQuickActions();
-    syncMobileShellRailActions();
 }
 
 function setMobileQuickActions(actions, options = {}) {
@@ -1570,10 +1647,6 @@ function restorePersistedTopbarState() {
     sbState.topbarIconsOnly.desktop = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.desktopTopbarIconsOnly), sbState.topbarIconsOnly.desktop);
     sbState.topbarIconsOnly.mobile = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.mobileTopbarIconsOnly), sbState.topbarIconsOnly.mobile);
     sbState.bottomChatBar.visible = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.bottomChatBarVisible), sbState.bottomChatBar.visible);
-    sbState.shellSizing.snapToChatWidth = normalizeStoredBoolean(
-        safeGetItem(SB_STORAGE_KEYS.desktopShellSnapToChatWidth),
-        sbState.shellSizing.snapToChatWidth,
-    );
     sbState.mobileNav.layout = normalizeMobileNavLayout(safeGetItem(SB_STORAGE_KEYS.mobileNavLayout));
     sbState.mobileNav.iconOnly = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.mobileNavIconOnly), sbState.mobileNav.iconOnly);
     sbState.mobileNav.showCustomize = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.mobileNavShowCustomize), sbState.mobileNav.showCustomize);
@@ -1588,10 +1661,6 @@ function restorePersistedTopbarState() {
     sbState.desktopNav.replacementTarget = normalizeMobileNavReplacementTarget(safeGetItem(SB_STORAGE_KEYS.desktopNavReplacementTarget));
     sbState.desktopQuickActions = loadDesktopQuickActions();
     sbState.mobileQuickActions = loadMobileQuickActions();
-    sbState.characterDrawer.rightLocked = normalizeStoredBoolean(
-        getPersistentStorageItem(SB_STORAGE_KEYS.characterDrawerRightLocked),
-        sbState.characterDrawer.rightLocked,
-    );
 }
 
 function clampTopbarOffset(offset) {
@@ -1732,8 +1801,6 @@ function setMobileNavLayout(layout, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.mobileNavLayout, nextLayout);
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1757,8 +1824,6 @@ function setMobileNavShowCustomize(enabled, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.mobileNavShowCustomize, String(nextEnabled));
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1772,7 +1837,6 @@ function setMobileNavShowQuickActions(enabled, { persist = true } = {}) {
     }
 
     refreshMobileNavQuickActions();
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1786,7 +1850,6 @@ function setMobileNavReplaceQuickActions(enabled, { persist = true } = {}) {
     }
 
     refreshMobileNavQuickActions();
-    syncMobileShellRailActions();
     updateMobileNavButtonLabel();
     updateThemePickerUi();
 }
@@ -1811,8 +1874,6 @@ function setDesktopNavLayout(layout, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.desktopNavLayout, nextLayout);
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1836,8 +1897,6 @@ function setDesktopNavShowCustomize(enabled, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.desktopNavShowCustomize, String(nextEnabled));
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1849,8 +1908,6 @@ function setDesktopNavShowQuickActions(enabled, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.desktopNavShowQuickActions, String(nextEnabled));
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1862,8 +1919,6 @@ function setDesktopNavReplaceQuickActions(enabled, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.desktopNavReplaceQuickActions, String(nextEnabled));
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -1874,8 +1929,6 @@ function setDesktopNavReplacementTarget(target, { persist = true } = {}) {
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.desktopNavReplacementTarget, nextTarget);
     }
-
-    syncMobileShellRailActions();
     updateThemePickerUi();
 }
 
@@ -2074,80 +2127,6 @@ function setTopbarIconsOnly(mode, enabled, { persist = true } = {}) {
     }
 
     updateThemePickerUi();
-}
-
-function setDesktopShellSnapToChatWidth(enabled, { persist = true } = {}) {
-    const nextEnabled = Boolean(enabled);
-    sbState.shellSizing.snapToChatWidth = nextEnabled;
-    document.documentElement.dataset.sbDesktopShellSnapToChatWidth = String(nextEnabled);
-
-    if (persist) {
-        safeSetItem(SB_STORAGE_KEYS.desktopShellSnapToChatWidth, String(nextEnabled));
-    }
-
-    syncDesktopShellSizing();
-    updateThemePickerUi();
-}
-
-function syncCharacterDrawerLockButton() {
-    const button = document.getElementById('sb-character-right-lock');
-    if (!(button instanceof HTMLButtonElement)) {
-        return;
-    }
-
-    const isRightLocked = Boolean(sbState.characterDrawer.rightLocked);
-    setButtonPressed(button, isRightLocked);
-    button.title = isRightLocked ? 'Keep Characters centered' : 'Lock Characters to right';
-    button.setAttribute('aria-label', button.title);
-}
-
-function syncCharacterDrawerLockPosition() {
-    const panel = getCharacterPanel();
-    if (!(panel instanceof HTMLElement)) {
-        return;
-    }
-
-    if (isMovingUIActive()) {
-        if (panel.dataset.sbCharacterLockInline === 'right') {
-            for (const property of ['left', 'right', 'margin-left', 'margin-right']) {
-                panel.style.removeProperty(property);
-            }
-
-            delete panel.dataset.sbCharacterLockInline;
-        }
-
-        return;
-    }
-
-    if (!sbState.characterDrawer.rightLocked || isMobileViewport()) {
-        if (panel.dataset.sbCharacterLockInline === 'right') {
-            for (const property of ['left', 'right', 'margin-left', 'margin-right']) {
-                panel.style.removeProperty(property);
-            }
-
-            delete panel.dataset.sbCharacterLockInline;
-        }
-        return;
-    }
-
-    panel.style.setProperty('left', 'auto', 'important');
-    panel.style.setProperty('right', '0px', 'important');
-    panel.style.setProperty('margin-left', '0px', 'important');
-    panel.style.setProperty('margin-right', '0px', 'important');
-    panel.dataset.sbCharacterLockInline = 'right';
-}
-
-function setCharacterDrawerRightLock(enabled, { persist = true } = {}) {
-    const nextEnabled = Boolean(enabled);
-    sbState.characterDrawer.rightLocked = nextEnabled;
-    document.documentElement.dataset.sbCharacterDrawerLock = nextEnabled ? 'right' : 'center';
-
-    if (persist) {
-        setPersistentStorageItem(SB_STORAGE_KEYS.characterDrawerRightLocked, String(nextEnabled));
-    }
-
-    syncCharacterDrawerLockPosition();
-    syncCharacterDrawerLockButton();
 }
 
 /*
@@ -2372,7 +2351,10 @@ function setUniversalSearchOpenState(isOpen, { focusInput = false } = {}) {
         focusUniversalSearchInput(input);
     }
 
-    queueMobileShellDrawerBoundsSync();
+    const searchToggle = document.getElementById('sb-topbar-search-toggle');
+    searchToggle?.classList.toggle('is-open', nextOpenState);
+    searchToggle?.setAttribute('aria-expanded', String(nextOpenState));
+
     syncShortcutButtonActiveStates();
 }
 
@@ -2438,106 +2420,6 @@ function getCharacterPanelSearchEntries() {
 
 function isMobileViewport() {
     return window.matchMedia(SB_MOBILE_MEDIA_QUERY).matches;
-}
-
-function prefersReducedMotion() {
-    return prefersShellReducedMotion();
-}
-
-function getShellProxyButton(shellKey) {
-    const shellConfig = getShellConfig(shellKey);
-    const proxyButton = shellConfig?.proxyButtonId ? document.getElementById(shellConfig.proxyButtonId) : null;
-
-    if (proxyButton instanceof HTMLElement && isActuallyVisible(proxyButton)) {
-        return proxyButton;
-    }
-
-    // SillyBunny: Workspace and Customize are hidden in icons-only mode, and Workspace is also
-    // hidden on phones. Fall back to the cluster icon so focus does not silently drop to <body>.
-    const activeTabId = getShellState(shellKey)?.activeTabId;
-    const pageButton = activeTabId
-        ? document.querySelector(`[data-sb-topbar-page="${CSS.escape(`${shellKey}:${activeTabId}`)}"]`)
-        : null;
-
-    if (pageButton instanceof HTMLElement && isActuallyVisible(pageButton)) {
-        return pageButton;
-    }
-
-    return proxyButton instanceof HTMLElement ? proxyButton : null;
-}
-
-function getShellActivePanel(shellState) {
-    return shellState?.tabs.get(shellState.activeTabId)?.panel ?? null;
-}
-
-function getShellFocusTarget(shellState) {
-    if (shellState?.headerTitle instanceof HTMLElement) {
-        return shellState.headerTitle;
-    }
-
-    const panel = getShellActivePanel(shellState);
-    const focusable = Array.from(panel?.querySelectorAll(SB_SHELL_FOCUSABLE_SELECTOR) ?? [])
-        .find(element => element instanceof HTMLElement
-            && isActuallyVisible(element)
-            && !element.closest('[hidden], [aria-hidden="true"], [inert]'));
-
-    if (focusable instanceof HTMLElement) {
-        return focusable;
-    }
-
-    return shellState?.nav instanceof HTMLElement ? shellState.nav : null;
-}
-
-function focusShellPanel(shellKey, { force = false } = {}) {
-    const shellState = getShellState(shellKey);
-    const shellRoot = shellState?.root;
-
-    if (!(shellRoot instanceof HTMLElement) || !shellRoot.classList.contains('openDrawer')) {
-        return;
-    }
-
-    const activeElement = document.activeElement;
-    if (!force && activeElement instanceof HTMLElement && shellRoot.contains(activeElement)) {
-        return;
-    }
-
-    const target = getShellFocusTarget(shellState);
-    if (target instanceof HTMLElement) {
-        target.focus({ preventScroll: true });
-    }
-}
-
-function rememberShellFocusOrigin(shellKey) {
-    const shellState = getShellState(shellKey);
-    const shellRoot = shellState?.root;
-    const activeElement = document.activeElement;
-
-    if (!shellState || !(activeElement instanceof HTMLElement)) {
-        return;
-    }
-
-    if (shellRoot instanceof HTMLElement && shellRoot.contains(activeElement)) {
-        return;
-    }
-
-    shellState.restoreFocusTarget = activeElement;
-}
-
-function restoreShellFocus(shellKey) {
-    const shellState = getShellState(shellKey);
-    const restoreTarget = shellState?.restoreFocusTarget;
-    const proxyButton = getShellProxyButton(shellKey);
-    const target = restoreTarget instanceof HTMLElement && document.contains(restoreTarget)
-        ? restoreTarget
-        : proxyButton;
-
-    if (shellState) {
-        delete shellState.restoreFocusTarget;
-    }
-
-    if (target instanceof HTMLElement && !target.hasAttribute('disabled')) {
-        target.focus({ preventScroll: true });
-    }
 }
 
 function getLayoutViewportScrollAnchor() {
@@ -2623,40 +2505,12 @@ function scrollElementIntoManagedView(target, { block = 'nearest', behavior = 'a
     return true;
 }
 
-function scrollShellTabButtonIntoView(nav, button, { smooth = false } = {}) {
-    if (!(nav instanceof HTMLElement) || !(button instanceof HTMLElement)) {
-        return;
-    }
-
-    if (!isActuallyVisible(button)) {
-        return;
-    }
-
-    const navRect = nav.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    const leftOverflow = buttonRect.left - navRect.left;
-    const rightOverflow = buttonRect.right - navRect.right;
-
-    if (leftOverflow >= 0 && rightOverflow <= 0) {
-        return;
-    }
-
-    nav.scrollBy({
-        left: leftOverflow < 0 ? leftOverflow : rightOverflow,
-        behavior: smooth && !prefersReducedMotion() ? 'smooth' : 'auto',
-    });
-}
-
 function isTouchOnlyDesktopViewport() {
     const hasHover = window.matchMedia('(hover: hover), (any-hover: hover)').matches;
     const hasFinePointer = window.matchMedia('(pointer: fine), (any-pointer: fine)').matches;
     const isTouchMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
 
     return isTouchMac || (navigator.maxTouchPoints > 0 && !hasHover && !hasFinePointer);
-}
-
-function canResizeDesktopShells() {
-    return !isMobileViewport() && !isTouchOnlyDesktopViewport();
 }
 
 function readFiniteViewportNumber(value, fallback = 0) {
@@ -2715,7 +2569,7 @@ function isChatComposerEditableElement(element) {
 }
 
 function hasOpenMobileShellDrawer() {
-    return getMobileShellBoundDrawers().some(drawer => drawer.classList.contains('openDrawer'));
+    return sbSettingsState.open;
 }
 
 function shouldUseStableIOSPanelViewport(layoutViewport, visualViewportSize) {
@@ -2854,10 +2708,6 @@ function getShellViewportSize() {
 }
 
 function syncShellViewportBounds() {
-    if (sbIsSyncingRailActions) {
-        return;
-    }
-
     const root = document.documentElement;
     const viewportSize = getShellViewportSize();
     const topOffset = Math.max(0, Math.round(getResolvedShellTopbarOffset()));
@@ -3067,117 +2917,6 @@ function scheduleMobilePopupKeyboardSync() {
     sbMobilePopupKeyboardSyncTimer = window.setTimeout(syncMobilePopupKeyboardShift, 400);
 }
 
-function getMobileShellBoundDrawers() {
-    return Array.from(new Set([
-        ...document.querySelectorAll('#left-nav-panel, #user-settings-block, .sb-shell-root, #right-nav-panel'),
-        ...document.querySelectorAll('#top-settings-holder #right-nav-panel'),
-    ])).filter(drawer => drawer instanceof HTMLElement);
-}
-
-function applyMobileDrawerBoundsDecision(drawer, decision) {
-    if (!(drawer instanceof HTMLElement) || !decision) {
-        return;
-    }
-
-    if (decision.action === sbMobileShellLifecycle.drawerBounds.action.BIND) {
-        drawer.dataset.sbMobileViewportBound = 'true';
-    } else if (decision.action === sbMobileShellLifecycle.drawerBounds.action.CLEAR) {
-        delete drawer.dataset.sbMobileViewportBound;
-    }
-
-    for (const property of decision.styleRemovals) {
-        if (drawer.style.getPropertyValue(property) || drawer.style.getPropertyPriority(property)) {
-            drawer.style.removeProperty(property);
-        }
-    }
-
-    for (const { property, value, priority } of decision.styleWrites) {
-        if (drawer.style.getPropertyValue(property) !== value || drawer.style.getPropertyPriority(property) !== priority) {
-            drawer.style.setProperty(property, value, priority);
-        }
-    }
-}
-
-function syncMobileShellDrawerBounds() {
-    const drawers = getMobileShellBoundDrawers();
-
-    if (!drawers.length) {
-        return;
-    }
-
-    const mobileViewport = isMobileViewport();
-    const viewportSize = mobileViewport ? getShellViewportSize() : null;
-    const baseTopOffset = mobileViewport ? getResolvedShellTopbarOffset() : 0;
-
-    for (const drawer of drawers) {
-        const isOpen = drawer.classList.contains('openDrawer');
-        const drawerStyles = mobileViewport && isOpen ? window.getComputedStyle(drawer) : null;
-
-        applyMobileDrawerBoundsDecision(drawer, sbMobileShellLifecycle.drawerBounds.resolveBounds({
-            isMobileViewport: mobileViewport,
-            isOpen,
-            isViewportBound: drawer.dataset.sbMobileViewportBound === 'true',
-            viewportHeight: viewportSize?.height ?? 0,
-            viewportTop: viewportSize?.top ?? 0,
-            baseTopOffset,
-            shellGap: drawerStyles ? Number.parseFloat(drawerStyles.getPropertyValue('--sb-mobile-shell-gap')) || 0 : 0,
-        }));
-    }
-}
-
-let sbMobileShellDrawerBoundsFrameId = 0;
-let sbMobileShellDrawerBoundsFollowupId = 0;
-
-function queueMobileShellDrawerBoundsSync() {
-    const schedule = sbMobileShellLifecycle.viewportSync.resolveDrawerBoundsSchedule({
-        isMobileViewport: isMobileViewport(),
-        hasAnimationFrame: typeof window.requestAnimationFrame === 'function',
-        followupDelayMs: SB_MOBILE_VIEWPORT_RESET_FOLLOWUP_MS,
-    });
-
-    if (!schedule.shouldSchedule) {
-        return;
-    }
-
-    if (sbMobileShellDrawerBoundsFrameId && typeof window.cancelAnimationFrame === 'function') {
-        window.cancelAnimationFrame(sbMobileShellDrawerBoundsFrameId);
-        sbMobileShellDrawerBoundsFrameId = 0;
-    }
-    if (sbMobileShellDrawerBoundsFollowupId) {
-        window.clearTimeout(sbMobileShellDrawerBoundsFollowupId);
-        sbMobileShellDrawerBoundsFollowupId = 0;
-    }
-
-    const sync = () => {
-        sbMobileShellDrawerBoundsFrameId = 0;
-        syncShellViewportBounds();
-        syncMobileShellDrawerBounds();
-    };
-
-    if (schedule.useAnimationFrame) {
-        sbMobileShellDrawerBoundsFrameId = window.requestAnimationFrame(sync);
-    } else {
-        sync();
-    }
-
-    sbMobileShellDrawerBoundsFollowupId = window.setTimeout(() => {
-        sbMobileShellDrawerBoundsFollowupId = 0;
-        sync();
-    }, schedule.followupDelayMs);
-}
-
-function isMovingUIActive() {
-    return document.body?.classList.contains('movingUI') ?? false;
-}
-
-function isDesktopResizableShell(shellKey) {
-    return shellKey === 'left' || shellKey === 'right' || shellKey === 'characters';
-}
-
-function getShellSizingKey(shellKey) {
-    return ['left', 'right', 'characters'].includes(shellKey) ? 'right' : shellKey;
-}
-
 function getShellAccountStorage() {
     const storage = getSillyTavernContext()?.accountStorage;
 
@@ -3226,41 +2965,6 @@ function setPersistentStorageItem(key, value) {
     getShellAccountStorage()?.setItem(key, value);
 }
 
-function getPersistedShellSize(shellKey) {
-    const storageKey = getShellSizeStorageKey(shellKey);
-
-    if (!storageKey) {
-        return null;
-    }
-
-    const localSize = normalizeShellSize(safeGetItem(storageKey));
-    const accountStorage = getShellAccountStorage();
-    const accountSize = accountStorage ? normalizeShellSize(accountStorage.getItem(storageKey)) : null;
-
-    if (accountSize) {
-        if (!areShellSizesEqual(localSize, accountSize)) {
-            safeSetItem(storageKey, JSON.stringify(accountSize));
-        }
-
-        return accountSize;
-    }
-
-    if (localSize && accountStorage) {
-        accountStorage.setItem(storageKey, JSON.stringify(localSize));
-    }
-
-    return localSize;
-}
-
-function hydratePersistedShellSizes() {
-    const persistedSize = getPersistedShellSize('right') ?? getPersistedShellSize('left');
-
-    if (persistedSize) {
-        sbState.shellSizing.overrides.left = persistedSize;
-        sbState.shellSizing.overrides.right = persistedSize;
-    }
-}
-
 function getResolvedShellTopbarOffset() {
     const docEl = document.documentElement;
     const docTop = (docEl instanceof HTMLElement && docEl.getClientRects().length > 0)
@@ -3306,545 +3010,6 @@ function getResolvedShellTopbarOffset() {
     }
 
     return fallbackTopOffset;
-}
-
-function getShellViewportTop(root, viewportSize = getShellViewportSize()) {
-    let top = getResolvedShellTopbarOffset();
-
-    if (root instanceof HTMLElement && root.classList.contains('openDrawer') && root.getClientRects().length > 0) {
-        const rect = root.getBoundingClientRect();
-        if (Number.isFinite(rect.top)) {
-            top = rect.top;
-        }
-    }
-
-    return clampNumber(Math.round(top), viewportSize.top, viewportSize.bottom);
-}
-
-function getChatViewportWidth(viewportSize = getShellViewportSize()) {
-    const chatShell = document.getElementById('sheld');
-
-    if (chatShell instanceof HTMLElement && chatShell.getClientRects().length > 0) {
-        const rect = chatShell.getBoundingClientRect();
-        const visibleWidth = Math.min(rect.right, viewportSize.right) - Math.max(rect.left, viewportSize.left);
-
-        if (Number.isFinite(visibleWidth) && visibleWidth > 0) {
-            return Math.round(visibleWidth);
-        }
-    }
-
-    const sheldWidthStr = window.getComputedStyle(document.documentElement).getPropertyValue('--sheldWidth').trim();
-    const sheldWidthValue = Number.parseFloat(sheldWidthStr);
-
-    if (!Number.isFinite(sheldWidthValue)) {
-        return viewportSize.width;
-    }
-
-    if (sheldWidthStr.endsWith('px')) {
-        return Math.round(sheldWidthValue);
-    }
-
-    return Math.round((sheldWidthValue / 100) * viewportSize.width);
-}
-
-function isShellSnapToChatWidthEnabled(shellKey) {
-    return Boolean(sbState.shellSizing.snapToChatWidth)
-        && isDesktopResizableShell(shellKey)
-        && !isMobileViewport();
-}
-
-function getShellSizeStorageKey(shellKey) {
-    const sizingKey = getShellSizingKey(shellKey);
-
-    if (sizingKey === 'left') {
-        return SB_STORAGE_KEYS.leftShellSize;
-    }
-
-    if (sizingKey === 'right') {
-        return SB_STORAGE_KEYS.rightShellSize;
-    }
-
-    return '';
-}
-
-function getDesktopShellDimensions(shellKey = '') {
-    const viewportSize = getShellViewportSize();
-    const viewportWidth = viewportSize.width;
-    const viewportHeight = viewportSize.height;
-    const maxShellWidth = shellKey === 'right' ? Math.min(SB_DESKTOP_SHELL_LAYOUT.maxWidth, 760) : SB_DESKTOP_SHELL_LAYOUT.maxWidth;
-
-    if (isShellSnapToChatWidthEnabled(shellKey)) {
-        const snappedWidth = clampNumber(
-            getChatViewportWidth(viewportSize),
-            Math.min(SB_DESKTOP_SHELL_LAYOUT.minWidth, viewportWidth),
-            viewportWidth,
-        );
-
-        return {
-            width: snappedWidth,
-            maxWidth: snappedWidth,
-        };
-    }
-
-    if (
-        ['left', 'right'].includes(shellKey)
-        && viewportWidth >= SB_DESKTOP_SHELL_LAYOUT.laptopViewportMin
-        && viewportWidth <= SB_DESKTOP_SHELL_LAYOUT.laptopViewportMax
-    ) {
-        const laptopWidth = clampNumber(
-            viewportWidth * SB_DESKTOP_SHELL_LAYOUT.laptopRatio,
-            SB_DESKTOP_SHELL_LAYOUT.laptopMinWidth,
-            SB_DESKTOP_SHELL_LAYOUT.laptopMaxWidth,
-        );
-        const maxWidth = Math.max(0, viewportWidth - SB_DESKTOP_SHELL_LAYOUT.laptopGutter);
-        const resolvedWidth = Math.min(laptopWidth, maxWidth);
-
-        return {
-            width: resolvedWidth,
-            maxWidth: resolvedWidth,
-        };
-    }
-
-    if (isMobileViewport() || (viewportHeight <= SB_DESKTOP_SHELL_LAYOUT.fullWidthMaxHeight && shellKey !== 'characters')) {
-        return {
-            width: viewportWidth,
-            maxWidth: viewportWidth,
-        };
-    }
-
-    if (viewportWidth <= SB_DESKTOP_SHELL_LAYOUT.compactViewportWidth) {
-        const compactWidth = Math.max(0, Math.min(SB_DESKTOP_SHELL_LAYOUT.compactMaxWidth, viewportWidth - SB_DESKTOP_SHELL_LAYOUT.compactGap));
-        return {
-            width: compactWidth,
-            maxWidth: compactWidth,
-        };
-    }
-
-    // SillyBunny: cap shell width to the active chat width (--sheldWidth) so settings
-    // panels narrow when the user reduces the chat width, matching standard ST behaviour.
-    const sheldWidthStr = window.getComputedStyle(document.documentElement).getPropertyValue('--sheldWidth').trim();
-    const sheldWidthVw = parseFloat(sheldWidthStr);
-    const chatWidthPx = Number.isFinite(sheldWidthVw) ? Math.round((sheldWidthVw / 100) * viewportWidth) : viewportWidth;
-    const desiredWidth = clampNumber(
-        Math.min(viewportWidth * SB_DESKTOP_SHELL_LAYOUT.ratio, chatWidthPx),
-        SB_DESKTOP_SHELL_LAYOUT.minWidth,
-        maxShellWidth,
-    );
-    const gutter = clampNumber(
-        viewportWidth * SB_DESKTOP_SHELL_LAYOUT.gutterRatio,
-        SB_DESKTOP_SHELL_LAYOUT.gutterMin,
-        SB_DESKTOP_SHELL_LAYOUT.gutterMax,
-    );
-    const maxWidth = Math.max(0, viewportWidth - gutter);
-    const resolvedWidth = Math.min(desiredWidth, maxWidth);
-
-    return {
-        width: resolvedWidth,
-        maxWidth: resolvedWidth,
-    };
-}
-
-function getDesktopShellResizeBounds(shellKey = '') {
-    const viewportSize = getShellViewportSize();
-    const viewportWidth = Math.max(0, Math.round(viewportSize.width));
-    const viewportHeight = Math.max(0, Math.round(viewportSize.height));
-    const root = isDesktopResizableShell(shellKey) ? getResizableShellRoot(shellKey) : null;
-    const shellTop = getShellViewportTop(root, viewportSize);
-    const defaultDimensions = getDesktopShellDimensions(shellKey);
-    const defaultWidth = Math.max(0, Math.min(Math.round(defaultDimensions.width), viewportWidth));
-    const snapWidth = isShellSnapToChatWidthEnabled(shellKey) ? defaultWidth : null;
-    const maxHeight = Math.max(0, Math.round(viewportHeight - shellTop - SB_DESKTOP_SHELL_RESIZE.bottomGap));
-
-    return {
-        defaultWidth,
-        defaultHeight: maxHeight,
-        minWidth: snapWidth ?? Math.min(SB_DESKTOP_SHELL_RESIZE.minWidth, viewportWidth),
-        maxWidth: snapWidth ?? viewportWidth,
-        minHeight: Math.min(SB_DESKTOP_SHELL_RESIZE.minHeight, maxHeight),
-        maxHeight,
-    };
-}
-
-function clampShellSize(size, bounds = getDesktopShellResizeBounds()) {
-    const normalizedSize = normalizeShellSize(size);
-
-    if (!normalizedSize) {
-        return null;
-    }
-
-    return {
-        width: clampNumber(normalizedSize.width, bounds.minWidth, bounds.maxWidth),
-        height: clampNumber(normalizedSize.height, bounds.minHeight, bounds.maxHeight),
-    };
-}
-
-function areShellSizesEqual(left, right) {
-    return Boolean(left) && Boolean(right)
-        && left.width === right.width
-        && left.height === right.height;
-}
-
-function getShellSizeOverride(shellKey) {
-    return isDesktopResizableShell(shellKey) ? sbState.shellSizing.overrides.right ?? sbState.shellSizing.overrides.left ?? null : null;
-}
-
-function setShellSizeOverride(shellKey, size, { persist = true } = {}) {
-    if (!isDesktopResizableShell(shellKey)) {
-        return null;
-    }
-
-    const nextSize = clampShellSize(size, getDesktopShellResizeBounds(shellKey));
-
-    sbState.shellSizing.overrides.left = nextSize;
-    sbState.shellSizing.overrides.right = nextSize;
-
-    if (!persist) {
-        return nextSize;
-    }
-
-    const accountStorage = getShellAccountStorage();
-    const storageKeys = [SB_STORAGE_KEYS.leftShellSize, SB_STORAGE_KEYS.rightShellSize];
-
-    if (nextSize) {
-        const serializedSize = JSON.stringify(nextSize);
-        for (const storageKey of storageKeys) {
-            safeSetItem(storageKey, serializedSize);
-            accountStorage?.setItem(storageKey, serializedSize);
-        }
-    } else {
-        for (const storageKey of storageKeys) {
-            safeRemoveItem(storageKey);
-            accountStorage?.removeItem(storageKey);
-        }
-    }
-
-    return nextSize;
-}
-
-function applyDesktopShellSize(root, size) {
-    root.style.setProperty('width', `${size.width}px`, 'important');
-    root.style.setProperty('max-width', `${size.width}px`, 'important');
-    root.style.setProperty('height', `${size.height}px`, 'important');
-    root.style.setProperty('max-height', `${size.height}px`, 'important');
-    root.dataset.sbShellInlineSize = 'true';
-}
-
-function clearDesktopShellSize(root) {
-    root.style.removeProperty('width');
-    root.style.removeProperty('max-width');
-    root.style.removeProperty('height');
-    root.style.removeProperty('max-height');
-    delete root.dataset.sbShellInlineSize;
-}
-
-function syncDesktopShellSizing() {
-    if (sbIsSyncingRailActions) {
-        return;
-    }
-
-    hydratePersistedShellSizes();
-
-    const resizingEnabled = canResizeDesktopShells();
-
-    for (const shellKey of ['left', 'right', 'characters']) {
-        const root = shellKey === 'characters'
-            ? getCharacterPanel()
-            : document.getElementById(getShellConfig(shellKey).rootPanelId);
-        if (!(root instanceof HTMLElement)) {
-            continue;
-        }
-
-        const dimensions = getDesktopShellDimensions(shellKey);
-        const bounds = getDesktopShellResizeBounds(shellKey);
-
-        if (isMobileViewport()) {
-            clearDesktopShellSize(root);
-            root.classList.remove('sb-shell-can-resize');
-            syncShellResizeHandleValue(shellKey, null);
-            continue;
-        }
-
-        if (shellKey === 'characters' && isMovingUIActive()) {
-            if (root.dataset.sbShellInlineSize === 'true') {
-                clearDesktopShellSize(root);
-            }
-
-            root.classList.remove('sb-shell-can-resize');
-            syncShellResizeHandleValue(shellKey, null);
-            continue;
-        }
-
-        const { width } = dimensions;
-        let sizeToApply = {
-            width,
-            height: bounds.defaultHeight,
-        };
-
-        const storedOverride = getShellSizeOverride(shellKey);
-        if (resizingEnabled && storedOverride) {
-            const clampedOverride = clampShellSize(storedOverride, bounds);
-            if (clampedOverride) {
-                sizeToApply = clampedOverride;
-
-                if (!areShellSizesEqual(storedOverride, clampedOverride)) {
-                    setShellSizeOverride(shellKey, clampedOverride);
-                } else {
-                    sbState.shellSizing.overrides[getShellSizingKey(shellKey)] = clampedOverride;
-                }
-            }
-        }
-
-        applyDesktopShellSize(root, sizeToApply);
-        root.classList.toggle('sb-shell-can-resize', resizingEnabled);
-        syncShellResizeHandleValue(shellKey, sizeToApply);
-    }
-
-    syncCharacterDrawerLockPosition();
-}
-
-function getResizableShellRoot(shellKey) {
-    if (shellKey === 'characters') {
-        return getCharacterPanel();
-    }
-
-    return document.getElementById(getShellConfig(shellKey).rootPanelId);
-}
-
-function isPrimaryShellResizeStart(event) {
-    if (event && 'isPrimary' in event && event.isPrimary === false) {
-        return false;
-    }
-
-    return event?.button === undefined || event.button === 0 || event.pointerType === 'touch';
-}
-
-function bindShellResizeHandle(handle, shellKey) {
-    stopProxyPointerPropagation(handle);
-    configureShellResizeHandle(handle, shellKey);
-    handle.addEventListener('pointerdown', event => beginShellResize(shellKey, event));
-    handle.addEventListener('mousedown', event => {
-        if (event.defaultPrevented || sbState.shellSizing.activeResize) {
-            return;
-        }
-
-        beginShellResize(shellKey, event);
-    });
-    handle.addEventListener('keydown', event => handleShellResizeKeydown(shellKey, event));
-}
-
-function configureShellResizeHandle(handle, shellKey) {
-    const bounds = getDesktopShellResizeBounds(shellKey);
-    const currentSize = getShellSizeOverride(shellKey) ?? {
-        width: bounds.defaultWidth,
-        height: bounds.defaultHeight,
-    };
-    const label = shellKey === 'characters' ? 'Characters' : getShellConfig(shellKey)?.title || 'panel';
-
-    handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'horizontal');
-    handle.setAttribute('aria-label', `Resize ${label} panel`);
-    handle.setAttribute('aria-valuemin', String(bounds.minWidth));
-    handle.setAttribute('aria-valuemax', String(bounds.maxWidth));
-    handle.setAttribute('aria-valuenow', String(Math.round(currentSize.width)));
-    handle.setAttribute('aria-valuetext', `${Math.round(currentSize.width)} pixels wide, ${Math.round(currentSize.height)} pixels tall`);
-    handle.tabIndex = canResizeDesktopShells() ? 0 : -1;
-}
-
-function syncShellResizeHandleValue(shellKey, size) {
-    const root = getResizableShellRoot(shellKey);
-    const shellState = getShellState(shellKey);
-    const handle = shellState?.resizeHandle ?? root?.querySelector(':scope > .sb-shell-resize-handle, .sb-shell-resize-handle');
-    if (!(handle instanceof HTMLElement)) {
-        return;
-    }
-
-    if (!size) {
-        configureShellResizeHandle(handle, shellKey);
-        return;
-    }
-
-    configureShellResizeHandle(handle, shellKey);
-    handle.setAttribute('aria-valuenow', String(Math.round(size.width)));
-    handle.setAttribute('aria-valuetext', `${Math.round(size.width)} pixels wide, ${Math.round(size.height)} pixels tall`);
-}
-
-function handleShellResizeKeydown(shellKey, event) {
-    if (!canResizeDesktopShells() || !isDesktopResizableShell(shellKey)) {
-        return;
-    }
-
-    const root = getResizableShellRoot(shellKey);
-    if (!(root instanceof HTMLElement) || !root.classList.contains('openDrawer')) {
-        return;
-    }
-
-    const bounds = getDesktopShellResizeBounds(shellKey);
-    const currentRect = root.getBoundingClientRect();
-    const currentSize = clampShellSize({
-        width: currentRect.width || bounds.defaultWidth,
-        height: currentRect.height || bounds.defaultHeight,
-    }, bounds);
-
-    if (!currentSize) {
-        return;
-    }
-
-    const step = event.shiftKey ? 72 : 24;
-    let nextSize = currentSize;
-
-    if (event.key === 'ArrowLeft') {
-        nextSize = { ...currentSize, width: currentSize.width - step };
-    } else if (event.key === 'ArrowRight') {
-        nextSize = { ...currentSize, width: currentSize.width + step };
-    } else if (event.key === 'ArrowUp') {
-        nextSize = { ...currentSize, height: currentSize.height - step };
-    } else if (event.key === 'ArrowDown') {
-        nextSize = { ...currentSize, height: currentSize.height + step };
-    } else if (event.key === 'Home') {
-        nextSize = { ...currentSize, width: bounds.minWidth };
-    } else if (event.key === 'End') {
-        nextSize = { ...currentSize, width: bounds.maxWidth };
-    } else {
-        return;
-    }
-
-    const clampedSize = clampShellSize(nextSize, bounds);
-    if (!clampedSize) {
-        return;
-    }
-
-    event.preventDefault();
-    setShellSizeOverride(shellKey, clampedSize);
-    applyDesktopShellSize(root, clampedSize);
-    syncShellResizeHandleValue(shellKey, clampedSize);
-}
-
-function beginShellResize(shellKey, event) {
-    if (!canResizeDesktopShells() || !isDesktopResizableShell(shellKey) || !isPrimaryShellResizeStart(event)) {
-        return;
-    }
-
-    if (shellKey === 'characters' && isMovingUIActive()) {
-        return;
-    }
-
-    const root = getResizableShellRoot(shellKey);
-    if (!(root instanceof HTMLElement) || !root.classList.contains('openDrawer')) {
-        return;
-    }
-
-    if (typeof sbState.shellSizing.activeResize?.cleanup === 'function') {
-        sbState.shellSizing.activeResize.cleanup();
-    }
-
-    const handle = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    const bounds = getDesktopShellResizeBounds(shellKey);
-    const startRect = root.getBoundingClientRect();
-    const startSize = clampShellSize({
-        width: startRect.width || bounds.defaultWidth,
-        height: startRect.height || bounds.defaultHeight,
-    }, bounds);
-
-    if (!startSize) {
-        return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    document.body.classList.add('sb-shell-resizing');
-    root.classList.add('sb-shell-resize-active');
-    setShellSizeOverride(shellKey, startSize, { persist: false });
-
-    const pointerId = typeof event.pointerId === 'number' ? event.pointerId : null;
-    const moveEventName = pointerId === null ? 'mousemove' : 'pointermove';
-    const upEventName = pointerId === null ? 'mouseup' : 'pointerup';
-    const cancelEventName = pointerId === null ? 'mouseleave' : 'pointercancel';
-
-    const cleanup = () => {
-        if (pointerId !== null && handle && typeof handle.releasePointerCapture === 'function') {
-            try {
-                handle.releasePointerCapture(pointerId);
-            } catch {
-                // Ignore pointer capture cleanup failures.
-            }
-        }
-
-        window.removeEventListener(moveEventName, onPointerMove);
-        window.removeEventListener(upEventName, onPointerUp);
-        window.removeEventListener(cancelEventName, onPointerUp);
-        document.body.classList.remove('sb-shell-resizing');
-        root.classList.remove('sb-shell-resize-active');
-
-        if (sbState.shellSizing.activeResize?.pointerId === pointerId) {
-            sbState.shellSizing.activeResize = null;
-        }
-    };
-
-    const onPointerMove = moveEvent => {
-        if (pointerId !== null && moveEvent.pointerId !== pointerId) {
-            return;
-        }
-
-        moveEvent.preventDefault();
-        const widthDelta = shellKey === 'characters' && sbState.characterDrawer.rightLocked
-            ? event.clientX - moveEvent.clientX
-            : moveEvent.clientX - event.clientX;
-        const nextSize = clampShellSize({
-            width: startSize.width + widthDelta,
-            height: startSize.height + (moveEvent.clientY - event.clientY),
-        }, bounds);
-
-        if (!nextSize) {
-            return;
-        }
-
-        sbState.shellSizing.overrides[getShellSizingKey(shellKey)] = nextSize;
-        applyDesktopShellSize(root, nextSize);
-        syncShellResizeHandleValue(shellKey, nextSize);
-    };
-
-    const onPointerUp = endEvent => {
-        if (pointerId !== null && endEvent.pointerId !== pointerId) {
-            return;
-        }
-
-        const activeSize = getShellSizeOverride(shellKey) ?? startSize;
-        cleanup();
-        setShellSizeOverride(shellKey, activeSize);
-        syncShellResizeHandleValue(shellKey, activeSize);
-        syncDesktopShellSizing();
-    };
-
-    sbState.shellSizing.activeResize = {
-        shellKey,
-        pointerId,
-        cleanup,
-    };
-
-    if (pointerId !== null && handle && typeof handle.setPointerCapture === 'function') {
-        try {
-            handle.setPointerCapture(pointerId);
-        } catch {
-            // Ignore pointer capture failures.
-        }
-    }
-
-    window.addEventListener(moveEventName, onPointerMove);
-    window.addEventListener(upEventName, onPointerUp);
-    window.addEventListener(cancelEventName, onPointerUp);
-}
-
-function ensureShellReady(shellKey) {
-    if (!getShellConfig(shellKey)) {
-        return false;
-    }
-
-    if (getShellState(shellKey)) {
-        return true;
-    }
-
-    buildShell(shellKey);
-    return Boolean(getShellState(shellKey));
 }
 
 function syncExistingMobileNavQuickActions(overlay) {
@@ -5015,12 +4180,14 @@ function getTopbarGroupOrder({ iconsOnly, mobile }) {
     const quickAccessIds = SB_SHORTCUT_SLOTS.map(side => getShortcutButtonId(side));
     // The divider spans ride the order too; CSS decides when they are visible.
     const left = [
-        'sb-hamburger',
         workspace.leadId,
         workspace.railId,
         'sb-topbar-divider-customize',
         customize.leadId,
         customize.railId,
+        // SillyBunny: permanent search lives left of the quick-access divider, mobile divider before it — feat/v1.9.0-ui-overhaul
+        'sb-topbar-divider-search-mobile',
+        'sb-topbar-search-toggle',
     ];
     // The extension slot leads the right group in every mode: syncTopbarGroupOrder() re-appends
     // every listed id, so an unlisted element would be pushed to the front of the group as a side
@@ -5038,8 +4205,8 @@ function getTopbarGroupOrder({ iconsOnly, mobile }) {
         right.push('sb-shortcut-slot6', 'sb-shortcut-slot5', 'sb-shortcut-right', 'sb-topbar-divider-quick-right');
     }
 
-    // The home divider marks the Home|Characters boundary while icons-only mode is on.
-    right.push('sb-home-toggle', 'sb-topbar-divider-home');
+    // SillyBunny: mode toggle stays in right group — feat/v1.9.0-ui-overhaul
+    right.push('sb-mode-toggle', 'sb-topbar-divider-mode-mobile', 'sb-home-toggle', 'sb-topbar-divider-home');
 
     if (iconsOnly && mobile) {
         // The characters pages ride the strip, so the divider marks where they start there;
@@ -7900,125 +7067,8 @@ function queueTopbarPageStateSync() {
     });
 }
 
-function forceDrawerState(drawerRootOrId, shouldOpen, drawerIconOrSelector = null) {
-    const el = typeof drawerRootOrId === 'string'
-        ? document.getElementById(drawerRootOrId)
-        : drawerRootOrId;
-    if (!(el instanceof HTMLElement)) return;
-    el.classList.toggle('openDrawer', Boolean(shouldOpen));
-    el.classList.toggle('closedDrawer', !shouldOpen);
-    syncDrawerIconState(drawerIconOrSelector, shouldOpen);
-    queueMobileModalStateSync();
-    queueTopbarPageStateSync();
-}
-
-function getShellMotionTrigger(shellKey) {
-    const buttonId = shellKey === 'characters'
-        ? 'sb-character-toggle'
-        : getShellConfig(shellKey)?.proxyButtonId;
-    return buttonId ? document.getElementById(buttonId) : null;
-}
-
-function animateShellOpen(shellRoot, shellKey) {
-    if (!(shellRoot instanceof HTMLElement)) {
-        return;
-    }
-
-    const trigger = getShellMotionTrigger(shellKey);
-    stopMotion(shellRoot);
-    // Mobile: scale only. A full-viewport fade hides the zoom from the trigger; the Characters
-    // drawer's opacity is pinned by mobile CSS, so this keeps all three shells identical.
-    const keyframes = isMobileViewport()
-        ? [
-            { scale: '0.96' },
-            { scale: '1' },
-        ]
-        : [
-            { opacity: 0, transform: 'scale(0.96)' },
-            { opacity: 1, transform: 'scale(1)' },
-        ];
-    animateIn(shellRoot, keyframes, {
-        ...SPRING_SHEET,
-        styles: { 'transform-origin': originFrom(trigger, shellRoot) },
-    });
-}
-
-function closeShellDrawer(shellRoot, shellKey, close) {
-    if (isMobileViewport() || prefersReducedMotion() || typeof shellRoot.animate !== 'function') {
-        close();
-        return;
-    }
-
-    // The character drawer's layout hangs off `#right-nav-panel.openDrawer` selectors (header,
-    // hidden description, list sizing). animateOut() commits the closed state first, so the panel
-    // reflowed mid-fade; fade with the open layout and commit the close when the fade ends.
-    if (shellKey === 'characters') {
-        playShellDrawerExit(shellRoot, shellKey, close);
-        return;
-    }
-
-    animateOut(shellRoot, SHELL_DRAWER_EXIT_KEYFRAMES, close, {
-        enabled: !isMobileViewport(),
-        duration: MOTION_FAST,
-        easing: MOTION_EASE_OUT_CUBIC,
-        styles: getShellDrawerExitStyles(shellRoot, shellKey),
-    });
-}
-
-const SHELL_DRAWER_EXIT_KEYFRAMES = Object.freeze([
-    { opacity: 1, transform: 'scale(1)' },
-    { opacity: 0, transform: 'scale(0.98)' },
-]);
-
-function playShellDrawerExit(shellRoot, shellKey, close) {
-    let closed = false;
-    const commit = () => {
-        if (closed) {
-            return;
-        }
-        closed = true;
-        close();
-    };
-    sbState.characterDrawer.closing = true;
-    playMotion(shellRoot, SHELL_DRAWER_EXIT_KEYFRAMES, {
-        duration: MOTION_FAST,
-        easing: MOTION_EASE_OUT_CUBIC,
-        fill: 'forwards',
-        inert: true,
-        styles: { ...getShellDrawerExitStyles(shellRoot, shellKey), 'pointer-events': 'none' },
-        // onEnd also runs when a reopen cancels the exit, so the close is always committed once.
-        onEnd: () => {
-            sbState.characterDrawer.closing = false;
-            commit();
-        },
-    });
-}
-
-function getShellDrawerExitStyles(shellRoot, shellKey) {
-    const trigger = getShellMotionTrigger(shellKey);
-    const rect = shellRoot.getBoundingClientRect();
-    return {
-        display: 'flex',
-        position: 'fixed',
-        left: `${rect.left}px`,
-        top: `${rect.top}px`,
-        right: 'auto',
-        bottom: 'auto',
-        width: `${rect.width}px`,
-        height: `${rect.height}px`,
-        'min-width': '0',
-        'min-height': '0',
-        'max-width': `${rect.width}px`,
-        'max-height': `${rect.height}px`,
-        margin: '0',
-        visibility: 'visible',
-        'z-index': 'var(--sb-z-shell-panel)',
-        'transform-origin': originFrom(trigger, shellRoot),
-    };
-}
-
 function isShellOpen(shellKey) {
-    return isDrawerActuallyOpen(getShellConfig(shellKey).rootPanelId);
+    return isSettingsPageHosting(shellKey);
 }
 
 function isShellTabOpen(shellKey, tabId) {
@@ -8027,8 +7077,7 @@ function isShellTabOpen(shellKey, tabId) {
 }
 
 function isCharacterPanelOpen() {
-    // A drawer fading out still carries .openDrawer; it already counts as closed.
-    return !sbState.characterDrawer.closing && isDrawerActuallyOpen('right-nav-panel');
+    return isSettingsPageHosting('characters');
 }
 
 function getActiveCharacterPanelTab() {
@@ -8146,8 +7195,14 @@ function ensureCharacterListToolbarLayout() {
         actionBar.insertBefore(buttonBar, afterAction);
     }
 
-    if (pagination instanceof HTMLElement && pagination.parentElement !== actionBar) {
-        actionBar.insertBefore(pagination, buttonBar.nextSibling);
+    if (pagination instanceof HTMLElement) {
+        if (isMobileViewport()) {
+            if (pagination.parentElement !== fixedTop.parentElement) {
+                fixedTop.after(pagination);
+            }
+        } else if (pagination.parentElement !== actionBar) {
+            actionBar.insertBefore(pagination, buttonBar.nextSibling);
+        }
     }
 
     if (searchButton instanceof HTMLElement && searchButton.parentElement !== buttonBar) {
@@ -8843,13 +7898,25 @@ function setCharacterShellMode(mode) {
     }
 }
 
+// Creator opens a saved card in the editor without selecting its chat; the avatar is
+// consumed by the next in-place editor activation.
+let pendingCharacterEditorAvatar = null;
+
 function openCharacterPanelTab(tabId, { avatar = null } = {}) {
+    // SillyBunny: Characters lives in the full-screen settings page (feat/v1.9.0-ui-overhaul).
+    const normalizedTabId = normalizeCharacterPanelTab(tabId);
+    pendingCharacterEditorAvatar = normalizedTabId === 'editor' ? avatar : null;
+    if (isSettingsPageHosting('characters')) {
+        activateSettingsTab('characters', normalizedTabId);
+        return;
+    }
+
+    openSettingsPage('characters', normalizedTabId);
+}
+
+function activateCharacterPanelTabInPlace(tabId) {
     const normalizedTabId = normalizeCharacterPanelTab(tabId);
     sbState.characterDrawer.lastTab = normalizedTabId;
-
-    if (isMobileViewport()) {
-        requestMobileSectionView('characters', 'section');
-    }
 
     if (normalizedTabId !== 'editor') {
         setCharacterEditorFullscreenState(false);
@@ -8859,58 +7926,27 @@ function openCharacterPanelTab(tabId, { avatar = null } = {}) {
         preloadPanelStylesheets('characters', normalizedTabId);
     }
 
-    if (!isCharacterPanelOpen()) {
-        toggleCharacterPanel({ preferredTab: normalizedTabId, editorAvatar: avatar });
-    } else {
-        applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-            surface: sbMobileShellLifecycle.overlays.surface.CHARACTER_PANEL,
-            isMobileViewport: isMobileViewport(),
-        }));
-    }
-
-    const activateRequestedTab = () => {
-        const panel = getCharacterPanel();
-        if (normalizedTabId === 'persona') {
-            setCharacterPanelMenuType(panel, 'persona');
-            openCharacterPersonaTab();
-        } else if (normalizedTabId === 'import') {
-            setCharacterPanelMenuType(panel, 'import');
-            openCharacterImportTab();
-        } else if (normalizedTabId === 'groups') {
-            setCharacterPanelMenuType(panel, 'groups');
-            void showCharacterListView('groups');
-        } else if (normalizedTabId === 'editor') {
-            setCharacterPanelMenuType(panel, 'character_edit');
-            void openCharacterEditorTab(avatar);
-        } else if (normalizedTabId === 'world-info') {
-            setCharacterPanelMenuType(panel, 'world-info');
-            openCharacterWorldInfoTab();
-        } else {
-            setCharacterPanelMenuType(panel, 'characters');
-            void showCharacterListView();
-        }
-    };
-
-    window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(activateRequestedTab);
-    });
-}
-
-function restoreLastCharacterPanelView(editorAvatar = null) {
-    const lastTab = sbState.characterDrawer.lastTab || 'characters';
-
-    if (lastTab === 'persona') {
+    const panel = getCharacterPanel();
+    if (normalizedTabId === 'persona') {
+        setCharacterPanelMenuType(panel, 'persona');
         openCharacterPersonaTab();
-    } else if (lastTab === 'import') {
+    } else if (normalizedTabId === 'import') {
+        setCharacterPanelMenuType(panel, 'import');
         openCharacterImportTab();
-    } else if (lastTab === 'world-info') {
-        openCharacterWorldInfoTab();
-    } else if (lastTab === 'groups') {
+    } else if (normalizedTabId === 'groups') {
+        setCharacterPanelMenuType(panel, 'groups');
         void showCharacterListView('groups');
-    } else if (lastTab === 'editor') {
-        void openCharacterEditorTab(editorAvatar);
+    } else if (normalizedTabId === 'editor') {
+        setCharacterPanelMenuType(panel, 'character_edit');
+        const avatar = pendingCharacterEditorAvatar;
+        pendingCharacterEditorAvatar = null;
+        void openCharacterEditorTab(avatar);
+    } else if (normalizedTabId === 'world-info') {
+        setCharacterPanelMenuType(panel, 'world-info');
+        openCharacterWorldInfoTab();
     } else {
-        void showCharacterListView('characters');
+        setCharacterPanelMenuType(panel, 'characters');
+        void showCharacterListView();
     }
 }
 
@@ -8962,7 +7998,6 @@ function syncCharacterShellTabs(activeTab = null) {
         syncCharacterListControls(menuType);
     }
 
-    syncCharacterHeaderCopy(normalizedTab);
     syncCharacterModeToggle();
 
     panel?.querySelectorAll('[data-sb-character-tab]').forEach(tab => {
@@ -9001,30 +8036,6 @@ function syncCharacterShellTabs(activeTab = null) {
                 label: tabConfig?.label || normalizedTab,
             },
         }));
-    }
-}
-
-function syncCharacterHeaderCopy(activeTab = 'characters') {
-    const copy = SB_CHARACTER_TAB_COPY[activeTab] ?? SB_CHARACTER_TAB_COPY.characters;
-    const panel = getCharacterPanel();
-    const title = panel?.querySelector('.sb-character-shell-header .sb-shell-title');
-    const subtitle = panel?.querySelector('.sb-character-shell-header .sb-shell-subtitle');
-    const description = panel?.querySelector('.sb-character-shell-header .sb-shell-description');
-
-    if (title instanceof HTMLElement) {
-        title.textContent = '';
-        title.append(document.createTextNode(copy.title));
-        if (activeTab === 'persona') {
-            title.insertAdjacentHTML('beforeend', SB_PERSONA_HELP_LINK_HTML);
-        }
-    }
-
-    if (subtitle instanceof HTMLElement) {
-        renderShellSubtitle(subtitle, copy.subtitle, { isHtml: copy.subtitleIsHtml === true });
-    }
-
-    if (description instanceof HTMLElement) {
-        description.textContent = copy.description;
     }
 }
 
@@ -9115,14 +8126,6 @@ function resetCharacterPanelView() {
     syncCharacterShellTabs('characters');
 }
 
-function setCharacterDrawerHostOverflow(shouldOpen) {
-    const host = getCharacterDrawerHost();
-
-    if (host instanceof HTMLElement) {
-        host.style.overflow = shouldOpen ? 'visible' : '';
-    }
-}
-
 function syncCharacterDrawerStateFromDom({ force = false } = {}) {
     const panel = getCharacterPanel();
 
@@ -9136,7 +8139,6 @@ function syncCharacterDrawerStateFromDom({ force = false } = {}) {
     }
 
     sbState.characterDrawer.observedOpen = isOpen;
-    setCharacterDrawerHostOverflow(isOpen);
     syncDrawerIconState('#rightNavDrawerIcon', isOpen);
     syncDrawerIconState('#WIDrawerIcon', isOpen && panel.dataset.menuType === 'world-info');
     syncCharacterEditorFullscreenAvailability();
@@ -9179,69 +8181,10 @@ function bindCharacterDrawerStateObserver() {
 }
 
 function closeCharacterPanel() {
-    const panel = getCharacterPanel();
-    const shouldResetViewport = panel instanceof HTMLElement
-        && (panel.classList.contains('openDrawer') || (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement)));
-
     setCharacterEditorFullscreenState(false);
-
-    if (sbState.characterDrawer.closing) {
-        return;
+    if (isSettingsPageHosting('characters')) {
+        closeSettingsPage();
     }
-
-    if (panel instanceof HTMLElement && panel.classList.contains('openDrawer')) {
-        closeShellDrawer(panel, 'characters', () => {
-            forceDrawerState(panel, false, '#rightNavDrawerIcon');
-            syncDrawerIconState('#WIDrawerIcon', false);
-            setCharacterDrawerHostOverflow(false);
-            syncChatbarVisibilityState();
-            syncMobileShellDrawerBounds();
-            queueMobileShellDrawerBoundsSync();
-            queueMobileModalStateSync();
-            if (shouldResetViewport) {
-                requestMobileViewportReset();
-            }
-        });
-        return;
-    }
-
-    if (panel instanceof HTMLElement && document.activeElement instanceof HTMLElement && panel.contains(document.activeElement)) {
-        document.activeElement.blur();
-    }
-
-    syncDrawerIconState('#WIDrawerIcon', false);
-    setCharacterDrawerHostOverflow(false);
-    syncChatbarVisibilityState();
-    syncMobileShellDrawerBounds();
-    queueMobileShellDrawerBoundsSync();
-    queueMobileModalStateSync();
-
-    if (shouldResetViewport) {
-        requestMobileViewportReset();
-    }
-}
-
-function ensureCharacterResizeHandle() {
-    const panel = getCharacterPanel();
-    if (!(panel instanceof HTMLElement)) {
-        return null;
-    }
-
-    let handle = panel.querySelector(':scope > .sb-shell-resize-handle');
-    if (handle instanceof HTMLElement) {
-        return handle;
-    }
-
-    handle = createElement('div', {
-        className: 'sb-shell-resize-handle',
-        attrs: {
-            title: 'Resize Characters panel',
-        },
-    });
-
-    bindShellResizeHandle(handle, 'characters');
-    panel.appendChild(handle);
-    return handle;
 }
 
 let characterToggleDispatchGuard = false;
@@ -9303,38 +8246,18 @@ document.addEventListener('click', (e) => {
     characterToggleSkipExtensionIntercept = false;
 }, true);
 
-function toggleCharacterPanel({ preferredTab = null, editorAvatar = null } = {}) {
-    injectCharacterDrawerControls();
-    ensureCharacterResizeHandle();
-
+function toggleCharacterPanel({ preferredTab = null } = {}) {
     if (isCharacterPanelOpen()) {
         closeCharacterPanel();
         return;
     }
 
-    // Reopening during the exit fade: cancelling commits the pending close, then the open runs.
-    stopMotion(getCharacterPanel());
-
     const normalizedPreferredTab = preferredTab ? normalizeCharacterPanelTab(preferredTab) : '';
-    if (normalizedPreferredTab) {
-        sbState.characterDrawer.lastTab = normalizedPreferredTab;
-    }
 
-    applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-        surface: sbMobileShellLifecycle.overlays.surface.CHARACTER_PANEL,
-        isMobileViewport: isMobileViewport(),
-    }));
-    closeAllDropdowns({ except: 'characters', closeSurfaces: false });
-    restoreLastCharacterPanelView(editorAvatar);
-
-    // iOS Safari clips position:fixed inside overflow:hidden ancestors.
-    // Temporarily allow overflow on the parent so the panel renders.
-    setCharacterDrawerHostOverflow(true);
 
     // SillyBunny: dispatch a cancelable click on the native Characters toggle to give
     // extensions like CharacterLibrary a chance to intercept. If they preventDefault(),
-    // they handle the UI themselves and we yield. Otherwise, we proceed with shell's
-    // normal open flow (Sillyanonymous/SillyTavern-CharacterLibrary#28).
+    // they handle the UI themselves and we yield (Sillyanonymous/SillyTavern-CharacterLibrary#28).
     if (characterToggleSkipExtensionIntercept) {
         characterToggleSkipExtensionIntercept = false;
     } else {
@@ -9346,36 +8269,13 @@ function toggleCharacterPanel({ preferredTab = null, editorAvatar = null } = {})
             nativeToggle.dispatchEvent(clickEvent);
             characterToggleDispatchGuard = false;
             if (clickEvent.defaultPrevented) {
-                setCharacterDrawerHostOverflow(false);
                 return;
             }
         }
     }
 
-    // No extension intercepted — proceed with shell's normal open flow.
-    // SillyBunny: open the character drawer directly via forceDrawerState instead of
-    // synthetic-clicking the hidden native toggle. The old approach triggered handlers
-    // anchored to the hidden toggle's zero-size bounding rect, breaking extensions that
-    // anchor dropdowns/popups to native toggle positions (e.g. CharacterLibrary).
-    forceDrawerState('right-nav-panel', true, '#rightNavDrawerIcon');
-    animateShellOpen(document.getElementById('right-nav-panel'), 'characters');
-    syncMobileShellDrawerBounds();
-    queueMobileShellDrawerBoundsSync();
-
-    window.requestAnimationFrame(() => {
-        if (!isCharacterPanelOpen()) {
-            forceDrawerState('right-nav-panel', true, '#rightNavDrawerIcon');
-            animateShellOpen(document.getElementById('right-nav-panel'), 'characters');
-        }
-
-        restoreLastCharacterPanelView(editorAvatar);
-
-        syncChatbarVisibilityState();
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        syncDesktopShellSizing();
-        queueMobileModalStateSync();
-    });
+    // SillyBunny: the floating drawer is retired; Characters opens in the settings page.
+    openSettingsPage('characters', normalizedPreferredTab || sbState.characterDrawer.lastTab || SB_CHARACTER_PANEL_DEFAULT_TAB);
 }
 
 function closeAllDropdowns({ except = '', closeSurfaces = true } = {}) {
@@ -9401,50 +8301,21 @@ function closeAllDropdowns({ except = '', closeSurfaces = true } = {}) {
 }
 
 function toggleShellPanel(shellKey, tabId = null) {
-    if (shellKey === 'characters') {
-        if (isCharacterPanelTabOpen(tabId)) {
-            closeCharacterPanel();
-            return;
-        }
-
-        openCharacterPanelTab(tabId);
-        return;
-    }
-
     if (shellKey === 'left' && tabId === 'world-info') {
-        // SillyBunny: final guard for old code paths that still ask for the
-        // removed left-shell World Info route.
-        openCharacterPanelTab('world-info');
+        shellKey = 'characters';
+    }
+
+    if (shellKey === 'characters') {
+        toggleSettingsPage('characters', tabId ? normalizeCharacterPanelTab(tabId) : null);
         return;
     }
 
-    if (!ensureShellReady(shellKey)) {
+    if (!getShellConfig(shellKey)) {
         return;
     }
 
     preloadPanelStylesheets(shellKey, tabId);
-
-    if (tabId ? isShellTabOpen(shellKey, tabId) : isShellOpen(shellKey)) {
-        if (wasShellJustOpened(shellKey)) {
-            return;
-        }
-
-        closeShell(shellKey);
-        return;
-    }
-
-    rememberShellFocusOrigin(shellKey);
-    const shellSurface = getMobileShellSurfaceForShell(shellKey);
-    if (shellSurface) {
-        applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-            surface: shellSurface,
-            isMobileViewport: isMobileViewport(),
-        }));
-        closeAllDropdowns({ except: shellKey, closeSurfaces: false });
-    } else {
-        closeAllDropdowns({ except: shellKey });
-    }
-    window.requestAnimationFrame(() => openShell(shellKey, tabId));
+    toggleSettingsPage(shellKey, tabId);
 }
 
 function preloadPanelStylesheets(shellKey, tabId = null) {
@@ -9613,21 +8484,8 @@ function observeProxyButton(buttonId, iconSelector) {
 }
 
 function activateCharacterTopbarButton() {
-    if (isTopbarIconsOnlyActive()) {
-        openCharacterPanelTab(SB_CHARACTER_PANEL_DEFAULT_TAB);
-        return;
-    }
-
-    toggleCharacterPanel();
-}
-
-function wasShellJustOpened(shellKey) {
-    const shellState = getShellState(shellKey);
-    if (!shellState) {
-        return false;
-    }
-
-    return (performance.now() - Number(shellState.lastOpenedAt || 0)) < SB_SHELL_TOGGLE_GUARD_MS;
+    // SillyBunny: route through the full-screen settings page for consistency (feat/v1.9.0-ui-overhaul)
+    toggleSettingsPage('characters');
 }
 
 function buildUniversalSearchRow() {
@@ -9776,28 +8634,15 @@ function buildTopBar() {
         attrs: { 'data-sb-topbar-slot-empty': 'true' },
     });
 
-    const mobileButton = createElement('button', {
-        id: 'sb-hamburger',
-        className: 'sb-proxy-button sb-mobile-toggle',
-        attrs: {
-            type: 'button',
-            title: 'Open navigation',
-            'aria-label': 'Open navigation',
-            'aria-expanded': 'false',
-        },
-    });
-    mobileButton.innerHTML = `<i class="fa-solid ${SB_MOBILE_NAV_CLOSED_ICON}" aria-hidden="true"></i>`;
-    stopProxyPointerPropagation(mobileButton);
-    mobileButton.addEventListener('click', toggleMobileNav);
-
+    // SillyBunny: left/right shell toggles now open the full-screen settings page (feat/v1.9.0-ui-overhaul)
     const leftButton = createProxyButton(
         {
             id: 'sb-left-shell-toggle',
             icon: getShellConfig('left').proxyIcon,
             label: getShellConfig('left').proxyLabel,
-            title: 'Open workspace tools',
+            title: 'Open backend tools (Ctrl+U)',
         },
-        () => toggleShellPanel('left'),
+        () => toggleSettingsPage('left'),
     );
 
     const homeButton = createProxyButton(
@@ -9805,7 +8650,7 @@ function buildTopBar() {
             id: 'sb-home-toggle',
             icon: 'fa-house',
             label: 'Home',
-            title: 'Return to the landing page',
+            title: 'Return to the landing page (Ctrl+O)',
         },
         () => {
             closeMobileNav();
@@ -9818,9 +8663,9 @@ function buildTopBar() {
             id: 'sb-right-shell-toggle',
             icon: getShellConfig('right').proxyIcon,
             label: getShellConfig('right').proxyLabel,
-            title: 'Open customization tools',
+            title: 'Open customization tools (Ctrl+I)',
         },
-        () => toggleShellPanel('right'),
+        () => toggleSettingsPage('right'),
     );
 
     const charactersButton = createProxyButton(
@@ -9828,7 +8673,7 @@ function buildTopBar() {
             id: 'sb-character-toggle',
             icon: 'fa-address-card',
             label: 'Characters',
-            title: 'Open character management',
+            title: 'Open character management (Ctrl+P)',
         },
         activateCharacterTopbarButton,
     );
@@ -9840,7 +8685,7 @@ function buildTopBar() {
             icon: leftShortcutConfig.icon,
             label: leftShortcutConfig.label,
             title: `Quick access: ${leftShortcutConfig.label}`,
-            className: 'sb-proxy-button-icon-only',
+            className: 'sb-proxy-button-icon-only sb-desktop-setting',
         },
         () => activateShortcutTarget(getShortcutTarget('left')),
     );
@@ -9853,7 +8698,7 @@ function buildTopBar() {
             icon: rightShortcutConfig.icon,
             label: rightShortcutConfig.label,
             title: `Quick access: ${rightShortcutConfig.label}`,
-            className: 'sb-proxy-button-icon-only',
+            className: 'sb-proxy-button-icon-only sb-desktop-setting',
         },
         () => activateShortcutTarget(getShortcutTarget('right')),
     );
@@ -9890,12 +8735,52 @@ function buildTopBar() {
     const charactersRail = buildTopbarPageRail(charactersCluster.railId, charactersCluster.pages);
     const customizeDivider = createTopbarClusterDivider('sb-topbar-divider-customize');
     const quickActionsLeftDivider = createTopbarClusterDivider('sb-topbar-divider-quick-left');
+    quickActionsLeftDivider.classList.add('sb-desktop-setting');
     const quickActionsRightDivider = createTopbarClusterDivider('sb-topbar-divider-quick-right');
+    quickActionsRightDivider.classList.add('sb-desktop-setting');
     const homeDivider = createTopbarClusterDivider('sb-topbar-divider-home');
     const charactersDivider = createTopbarClusterDivider('sb-topbar-divider-characters');
+    const searchMobileDivider = createTopbarClusterDivider('sb-topbar-divider-search-mobile');
+    searchMobileDivider.classList.add('sb-mobile-setting');
+    const modeMobileDivider = createTopbarClusterDivider('sb-topbar-divider-mode-mobile');
+    modeMobileDivider.classList.add('sb-mobile-setting');
 
-    leftGroup.append(mobileButton, leftButton, workspaceRail, customizeDivider, rightButton, customizeRail, quickActionsLeftDivider, leftShortcut, desktopShortcutButtons.slot3, desktopShortcutButtons.slot4);
-    rightGroup.append(extensionSlot, desktopShortcutButtons.slot6, desktopShortcutButtons.slot5, rightShortcut, quickActionsRightDivider, homeButton, homeDivider, charactersDivider, charactersButton, charactersRail);
+    // SillyBunny: search toggle (left group, after Customize) + mode toggle (right group, before Home) — feat/v1.9.0-ui-overhaul
+    const searchToggle = createProxyButton(
+        {
+            id: 'sb-topbar-search-toggle',
+            icon: 'fa-magnifying-glass',
+            label: 'Search',
+            title: 'Search settings (Ctrl+F)',
+            className: 'sb-proxy-button-icon-only',
+        },
+        () => {
+            const searchState = getUniversalSearchState();
+            const nextOpen = !searchState.expanded;
+            if (nextOpen) {
+                closeAllDropdowns({ except: 'search', closeSurfaces: false });
+            }
+            setUniversalSearchOpenState(nextOpen, { focusInput: nextOpen });
+        },
+    );
+    // The document-level dismiss handler ignores clicks on marked triggers; without this
+    // the same click that opens the search row immediately closes it again.
+    searchToggle.dataset.sbUniversalSearchTrigger = 'true';
+
+    const modeToggle = createProxyButton(
+        {
+            id: 'sb-mode-toggle',
+            icon: 'fa-masks-theater',
+            label: 'Mode',
+            title: 'Switch chat mode (Ctrl+M)',
+            className: 'sb-proxy-button-icon-only',
+        },
+        () => openModeDropdown(),
+    );
+    modeToggle.setAttribute('aria-haspopup', 'menu');
+
+    leftGroup.append(leftButton, workspaceRail, customizeDivider, rightButton, customizeRail, searchMobileDivider, searchToggle, quickActionsLeftDivider, leftShortcut, desktopShortcutButtons.slot3, desktopShortcutButtons.slot4);
+    rightGroup.append(extensionSlot, desktopShortcutButtons.slot6, desktopShortcutButtons.slot5, rightShortcut, quickActionsRightDivider, modeToggle, modeMobileDivider, homeButton, homeDivider, charactersDivider, charactersButton, charactersRail);
     topBarInner.append(leftGroup, centerGroup, rightGroup);
     primaryRow.appendChild(topBarInner);
 
@@ -10173,6 +9058,11 @@ function createOnDemandShellPanel(shellKey, tabConfig, build) {
         try {
             const loaded = await build();
             panel.replaceChildren(...loaded.panel.childNodes);
+            // Sections built here may author their own drawers, so the flatten runs again on the
+            // finished panel rather than relying on the one the split did.
+            if (!SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabConfig.id)) {
+                flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
+            }
             const tab = getShellState(shellKey)?.tabs.get(tabConfig.id);
             if (tab) {
                 tab.searchRoot = loaded.searchRoot;
@@ -10194,27 +9084,6 @@ function createOnDemandShellPanel(shellKey, tabConfig, build) {
         onActivate: () => void lifecycle.activate().catch(showError),
         onDeactivate: lifecycle.deactivate,
     };
-}
-
-function closeFocusedShell() {
-    const activeElement = document.activeElement;
-
-    if (!(activeElement instanceof HTMLElement)) {
-        return false;
-    }
-
-    const shellRoot = activeElement.closest('.sb-shell-root.openDrawer');
-    if (!(shellRoot instanceof HTMLElement)) {
-        return false;
-    }
-
-    const shellKey = shellRoot.dataset.sbShellKey;
-    if (!shellKey || !getShellState(shellKey)) {
-        return false;
-    }
-
-    closeShell(shellKey);
-    return true;
 }
 
 function moveChildrenIntoContainer(sourceElement, targetElement) {
@@ -10730,8 +9599,10 @@ function drawerHasControls(drawer) {
 }
 
 function hideEmptyGroupedSettingsDrawers() {
+    // Flattened sections are skipped: they have no `.inline-drawer-content` left, so the control
+    // test below would report them empty and hide a section that only exists while expanded.
     document.querySelectorAll('#range_block_openai .sb-openai-settings-drawer, #textgenerationwebui_api-settings .sb-textgen-drawers > .inline-drawer').forEach(drawer => {
-        if (!(drawer instanceof HTMLElement)) {
+        if (!(drawer instanceof HTMLElement) || !drawer.classList.contains('inline-drawer')) {
             return;
         }
 
@@ -10814,7 +9685,7 @@ function syncSamplingPanelControls(root) {
         if (!Object.values(priorityRows).some(row => row.children.length) && !grid.children.length && !multiGrid.children.length) {
             grid.appendChild(createElement('p', {
                 className: 'sb-sampling-note',
-                text: 'Sampler controls are not ready yet. Reopen the Workspace menu after settings finish loading.',
+                text: 'Sampler controls are not ready yet. Reopen the Backend menu after settings finish loading.',
             }));
         }
 
@@ -11454,8 +10325,15 @@ async function handleSillyTavernZipImport(file) {
     }
 }
 
-function injectSillyTavernImportCard() {
-    const importOutlet = document.getElementById('sb-import-tools-outlet');
+function injectSillyTavernImportCard(host = null) {
+    // Import & Restore lives on the Data & Security tab, so the card belongs in the outlet the
+    // import drawer carries there. The caller passes that outlet once the panel is built, because
+    // the drawer is detached while the settings panel initializes and its outlet cannot be looked
+    // up by id at that point. The theme block fallback keeps the card reachable if the drawer is
+    // ever missing from the markup.
+    const importOutlet = host instanceof HTMLElement
+        ? host
+        : document.getElementById('sb-import-tools-outlet');
     const themeBlock = document.getElementById('UI-presets-block');
     const cardHost = importOutlet instanceof HTMLElement
         ? importOutlet
@@ -12329,30 +11207,6 @@ function createDesktopNavLayoutSettingsGroup() {
     return createNavigationSettingsGroup('desktop');
 }
 
-function createDesktopShellSizingSettingsGroup() {
-    const group = createElement('section', {
-        className: 'sb-theme-slider-group sb-desktop-shell-sizing-group sb-desktop-setting',
-    });
-    const header = createElement('div', { className: 'sb-mobile-nav-settings-header' });
-    const title = createElement('strong', { text: 'Panel Sizing' });
-    const description = createElement('p', {
-        className: 'sb-theme-slider-caption',
-        text: 'Keep Workspace, Customize, and Characters aligned with the active chat width.',
-    });
-    const snapChoice = createMobileNavChoice({
-        id: 'sb-desktop-shell-snap-to-chat-input',
-        type: 'checkbox',
-        value: 'snap-to-chat-width',
-        label: 'Snap to chat width',
-        icon: 'fa-arrows-left-right-to-line',
-        onChange: input => setDesktopShellSnapToChatWidth(input.checked),
-    });
-
-    header.append(title, description);
-    group.append(header, snapChoice);
-    return group;
-}
-
 function createPaperTextureSettingsGroup() {
     const group = createElement('section', {
         className: 'sb-theme-slider-group sb-paper-texture-group',
@@ -12635,7 +11489,6 @@ function injectThemePicker() {
     });
     const topbarLabelSettingsGroup = createTopbarLabelSettingsGroup();
     const desktopNavLayoutSettingsGroup = createDesktopNavLayoutSettingsGroup();
-    const desktopShellSizingSettingsGroup = createDesktopShellSizingSettingsGroup();
     const mobileNavLayoutSettingsGroup = createMobileNavLayoutSettingsGroup();
     const desktopSettingsDivider = createMobileNavDivider();
     const mobileSettingsDivider = createMobileNavDivider();
@@ -12665,7 +11518,6 @@ function injectThemePicker() {
         desktopSettingsOutlet.replaceChildren(
             desktopNavLayoutSettingsGroup,
             desktopSettingsDivider,
-            desktopShellSizingSettingsGroup,
             desktopButtonSliderGroup,
             desktopCompactModeSettingsGroup,
             desktopBottomChatBarSettingsGroup,
@@ -12692,7 +11544,6 @@ function injectThemePicker() {
         card.append(
             desktopNavLayoutSettingsGroup,
             desktopSettingsDivider,
-            desktopShellSizingSettingsGroup,
             desktopButtonSliderGroup,
             desktopCompactModeSettingsGroup,
             desktopBottomChatBarSettingsGroup,
@@ -12735,7 +11586,6 @@ function updateThemePickerUi() {
     const desktopNavShowQuickActionsInput = document.getElementById('sb-desktop-nav-show-quick-actions-input');
     const desktopNavReplaceQuickActionsInput = document.getElementById('sb-desktop-nav-replace-quick-actions-input');
     const desktopNavReplacementSelect = document.getElementById('sb-desktop-nav-replacement-select');
-    const desktopShellSnapToChatInput = document.getElementById('sb-desktop-shell-snap-to-chat-input');
     const mobileNavIconOnlyInput = document.getElementById('sb-mobile-nav-icon-only-input');
     const mobileNavShowCustomizeInput = document.getElementById('sb-mobile-nav-show-customize-input');
     const mobileNavShowQuickActionsInput = document.getElementById('sb-mobile-nav-show-quick-actions-input');
@@ -12928,12 +11778,6 @@ function updateThemePickerUi() {
         desktopNavReplacementSelect.closest('.sb-mobile-nav-replacement-field')?.classList.toggle('is-disabled', !sbState.desktopNav.replaceQuickActions);
     }
 
-    if (desktopShellSnapToChatInput instanceof HTMLInputElement) {
-        desktopShellSnapToChatInput.checked = sbState.shellSizing.snapToChatWidth;
-        const choice = desktopShellSnapToChatInput.closest('.sb-mobile-nav-choice');
-        choice?.classList.toggle('is-selected', sbState.shellSizing.snapToChatWidth);
-    }
-
     if (mobileNavIconOnlyInput instanceof HTMLInputElement) {
         mobileNavIconOnlyInput.checked = sbState.mobileNav.iconOnly;
         const choice = mobileNavIconOnlyInput.closest('.sb-mobile-nav-choice');
@@ -13122,6 +11966,15 @@ function getSearchSectionLabel(element, fallback) {
         }
     }
 
+    // Flattened subsections are no longer drawers, so they are checked separately: without this a
+    // control lifted out of, say, Auto-swipe would report the enclosing drawer's name instead.
+    const flatSection = element.closest(`.${SB_FLAT_SECTION_CLASS}`);
+    if (flatSection instanceof HTMLElement) {
+        const heading = flatSection.querySelector(`:scope > .${SB_FLAT_SECTION_HEADER_CLASS}`);
+        const text = String(heading?.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (text && text !== fallback) return text;
+    }
+
     const preferred = element.closest('.persona_management_global_settings')
         ?? element.closest('.bg-header-row-1')
         ?? element.closest('.bg-header-row-2')
@@ -13131,7 +11984,7 @@ function getSearchSectionLabel(element, fallback) {
     return text || fallback;
 }
 
-function collectGlobalSearchMatches(query) {
+function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_LIMIT } = {}) {
     const normalizedQuery = normalizeText(query);
 
     if (!normalizedQuery) {
@@ -13166,6 +12019,10 @@ function collectGlobalSearchMatches(query) {
                     ...entry,
                     shellKey,
                     shellLabel,
+                    // Whether the hit sits on a section-name element. The universal search panel
+                    // ignores this; the sidebar needs it to tell a page-level hit from a control.
+                    headingMatch: entry.element instanceof HTMLElement
+                        && entry.element.matches(SB_SIDEBAR_SECTION_MATCH_SELECTOR),
                     score: Number(exactMatch) * 100 + Number(startsWithQuery) * 10 - entry.displayText.length / 1000,
                 };
                 const matchKey = [
@@ -13192,7 +12049,7 @@ function collectGlobalSearchMatches(query) {
 
     return Array.from(matches.values())
         .sort((left, right) => right.score - left.score)
-        .slice(0, SB_UNIVERSAL_SEARCH_RESULT_LIMIT);
+        .slice(0, limit);
 }
 
 function getTabSearchEntries(tabState, { includeThemeCard = false } = {}) {
@@ -13319,36 +12176,6 @@ async function activateMobileQuickAction(action) {
     revealSearchMatch(action.shellKey, match);
 }
 
-function activateMobileNavAction(action) {
-    const normalizedAction = normalizeMobileQuickAction(action);
-    if (!normalizedAction) {
-        return;
-    }
-
-    if (isMobileViewport()) {
-        closeMobileNav();
-    }
-
-    if (normalizedAction.type === 'custom') {
-        activateMobileQuickAction(normalizedAction);
-        return;
-    }
-
-    if (normalizedAction.type === 'shell') {
-        closeAllDropdowns({ except: normalizedAction.shellKey });
-        openShell(normalizedAction.shellKey);
-        return;
-    }
-
-    if (normalizedAction.shellKey === 'characters') {
-        openCharacterPanelTab(normalizedAction.tabId);
-        return;
-    }
-
-    closeAllDropdowns({ except: normalizedAction.shellKey });
-    openShell(normalizedAction.shellKey, normalizedAction.tabId);
-}
-
 async function renderUniversalSearchResults(query) {
     const searchState = getUniversalSearchState();
     const results = searchState.results;
@@ -13445,7 +12272,18 @@ async function renderUniversalSearchResults(query) {
         );
     }
 
+    const wasVisible = results.classList.contains('is-visible');
     results.classList.add('is-visible');
+
+    // Animate the results panel on first appearance
+    if (!wasVisible) {
+        stopMotion(results);
+        animateIn(results, [
+            { opacity: 0, transform: 'translateY(-4px)' },
+            { opacity: 1, transform: 'translateY(0)' },
+        ], { duration: MOTION_FAST });
+    }
+
     setUniversalSearchActiveIndex(results.querySelector('.sb-search-result') ? 0 : -1);
 }
 
@@ -13509,7 +12347,10 @@ function pulseSearchTarget(target) {
     }
 
     const drawer = target.closest('.inline-drawer');
-    const highlightTarget = drawer instanceof HTMLElement ? drawer : target;
+    const flatSection = target.closest(`.${SB_FLAT_SECTION_CLASS}`);
+    const highlightTarget = flatSection instanceof HTMLElement
+        ? flatSection
+        : drawer instanceof HTMLElement ? drawer : target;
 
     document.querySelectorAll('.' + SB_SEARCH_HIGHLIGHT_CLASS)
         .forEach(el => el.classList.remove(SB_SEARCH_HIGHLIGHT_CLASS));
@@ -13525,8 +12366,11 @@ function revealSettingsCategoryFor(target) {
         return;
     }
 
-    const settingsContent = document.getElementById('user-settings-block-content');
-    if (!settingsContent || !settingsContent.contains(target)) {
+    // Phase 6A: content is split across three permanent containers, so a match can live in any
+    // of them rather than all settings living in one block.
+    const roots = getUserSettingsContentRoots();
+    const settingsContent = roots.find(root => root.contains(target));
+    if (!settingsContent) {
         return;
     }
 
@@ -13596,7 +12440,7 @@ function revealSearchMatch(shellKey, match) {
     }, 40);
 }
 
-function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
+function setActiveTab(shellKey, tabId) {
     const shellState = getShellState(shellKey);
     const shellConfig = getShellConfig(shellKey);
 
@@ -13619,150 +12463,103 @@ function setActiveTab(shellKey, tabId, { focusButton = false } = {}) {
 
     for (const [currentTabId, tabState] of shellState.tabs.entries()) {
         const isActive = currentTabId === tabId;
-        const isHiddenRailDuplicate = tabState.button?.classList.contains('sb-shell-tab-mobile-rail-hidden') ?? false;
-        tabState.button?.classList.toggle('is-active', isActive);
-        tabState.button?.setAttribute('aria-selected', String(isActive));
-        tabState.button?.setAttribute('tabindex', isActive && !isHiddenRailDuplicate ? '0' : '-1');
         tabState.panel.classList.toggle('sb-shell-panel-active', isActive);
         tabState.panel.setAttribute('aria-hidden', String(!isActive));
         // Invalidate search index when switching to a tab so stale DOM isn't searched
         if (isActive) tabState.searchIndex = null;
     }
 
-    syncMobileShellRailActionState(shellKey, tabId);
     queueTopbarPageStateSync();
 
     const activeTab = shellState.tabs.get(tabId);
-    shellState.headerTitle.textContent = activeTab.label;
-    renderShellSubtitle(shellState.headerSubtitle, activeTab.description ?? '', { isHtml: activeTab.descriptionIsHtml === true });
-    scrollShellTabButtonIntoView(shellState.nav, activeTab.button, { smooth: focusButton });
-    shellState.updateNavScrollIndicators?.();
-
-    if (focusButton && isActuallyVisible(activeTab.button)) {
-        activeTab.button?.focus({ preventScroll: true });
-    } else if (isShellOpen(shellKey)) {
-        window.requestAnimationFrame(() => focusShellPanel(shellKey, { force: true }));
-    }
 
     if (previousTab && previousTab.id !== activeTab.id) {
         previousTab.onDeactivate?.();
     }
 
-    const shellRoot = document.getElementById(shellConfig.rootPanelId);
-    if (shellRoot instanceof HTMLElement && shellRoot.classList.contains('openDrawer')) {
+    if (isSettingsPageHosting(shellKey)) {
         activeTab.onActivate?.();
+        flattenSettingsPanelDrawers(shellKey, tabId);
         dispatchShellTabActivated(shellKey, activeTab);
         queueMobileShellActivationRefresh();
     }
 }
 
+// SillyBunny: every shell lives in the full-screen settings page (feat/v1.9.0-ui-overhaul).
 function openShell(shellKey, tabId = null) {
     if (shellKey === 'left' && tabId === 'world-info') {
-        // SillyBunny: final guard for old code paths that still ask for the
-        // removed left-shell World Info route.
+        // World Info moved from the Backend shell into Characters.
         openCharacterPanelTab('world-info');
         return;
     }
 
-    const shellConfig = getShellConfig(shellKey);
-    const shellState = getShellState(shellKey);
-    const shellRoot = document.getElementById(shellConfig.rootPanelId);
-
-    if (!shellState || !(shellRoot instanceof HTMLElement)) {
+    if (shellKey === 'characters') {
+        openCharacterPanelTab(tabId ?? SB_CHARACTER_PANEL_DEFAULT_TAB);
         return;
     }
 
-    const shellSurface = getMobileShellSurfaceForShell(shellKey);
-    if (shellSurface) {
-        applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-            surface: shellSurface,
-            isMobileViewport: isMobileViewport(),
-        }));
-    } else {
-        closeMobileNav();
-    }
-    rememberShellFocusOrigin(shellKey);
-
-    if (tabId) {
-        if (isMobileViewport()) {
-            requestMobileSectionView(shellKey, 'section');
-        }
-        setActiveTab(shellKey, tabId);
-    }
-
-    shellState.lastOpenedAt = performance.now();
-
-    if (isDrawerActuallyOpen(shellRoot)) {
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        syncDesktopShellSizing();
-        window.requestAnimationFrame(() => focusShellPanel(shellKey));
-        return;
-    }
-
-    if (shellRoot.classList.contains('openDrawer')) {
-        forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
-        animateShellOpen(shellRoot, shellKey);
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        syncDesktopShellSizing();
-        window.requestAnimationFrame(() => focusShellPanel(shellKey));
-        return;
-    }
-
-    if (!shellRoot.classList.contains('openDrawer')) {
-        forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
-        animateShellOpen(shellRoot, shellKey);
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        window.requestAnimationFrame(() => {
-            if (!isDrawerActuallyOpen(shellRoot)) {
-                forceDrawerState(shellRoot, true, shellConfig.hostIconSelector);
-                animateShellOpen(shellRoot, shellKey);
-            }
-            syncMobileShellDrawerBounds();
-            queueMobileShellDrawerBoundsSync();
-            syncDesktopShellSizing();
-            focusShellPanel(shellKey);
-        });
+    if (getShellConfig(shellKey)) {
+        openSettingsPage(shellKey, tabId);
     }
 }
 
 function closeShell(shellKey) {
-    const shellConfig = getShellConfig(shellKey);
-    const shellState = getShellState(shellKey);
-    const shellRoot = document.getElementById(shellConfig.rootPanelId);
+    if (isSettingsPageHosting(shellKey)) {
+        closeSettingsPage();
+    }
+}
 
-    if (!(shellRoot instanceof HTMLElement) || !shellRoot.classList.contains('openDrawer')) {
+/**
+ * Phase 6F: the Chat Completion presets block opened with a 60px card carrying the
+ * "Chat Completion Presets" label and four icon buttons, directly above a second row holding the
+ * preset select and three more icon buttons. Two stacked rows of unlabeled icons above the first
+ * real setting read as pure chrome, and the label duplicated the tab's own header, so the card and
+ * the select row become one row: label, select, then all seven actions together.
+ *
+ * Nodes are moved rather than rebuilt. Every action binds by id at init or through a delegated
+ * `data-preset-manager-*` handler, so position is irrelevant; the label keeps its `data-i18n`
+ * span and stays in the search index. The emptied card is hidden instead of removed so the
+ * `#openai_api-presets > div` insertion point the ChatCompletionTabs extension anchors its tab bar
+ * to is still the container's first child.
+ */
+function mergeOpenAIPresetToolbarRow(root) {
+    if (!(root instanceof HTMLElement)) {
         return;
     }
 
-    shellState?.tabs.get(shellState.activeTabId)?.onDeactivate?.();
+    const container = root.querySelector('#openai_api-presets > div');
+    const card = container?.querySelector(':scope > .standoutHeader');
+    const row = container?.querySelector(':scope > .flex-container.flexNoGap');
 
-    if (!isDrawerActuallyOpen(shellRoot)) {
-        forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        requestMobileViewportReset();
+    if (!(card instanceof HTMLElement) || !(row instanceof HTMLElement)) {
         return;
     }
 
-    const shouldRestoreFocus = document.activeElement instanceof HTMLElement && shellRoot.contains(document.activeElement);
-    if (shouldRestoreFocus) {
-        document.activeElement.blur();
+    if (row.classList.contains(SB_PRESET_TOOLBAR_ROW_CLASS)) {
+        return;
     }
 
-    closeShellDrawer(shellRoot, shellKey, () => {
-        forceDrawerState(shellRoot, false, shellConfig.hostIconSelector);
-        syncMobileShellDrawerBounds();
-        queueMobileShellDrawerBoundsSync();
-        requestMobileViewportReset();
-        if (shouldRestoreFocus) {
-            window.requestAnimationFrame(() => restoreShellFocus(shellKey));
-        } else {
-            delete shellState?.restoreFocusTarget;
+    const label = card.querySelector(':scope > strong');
+    const cardActions = card.querySelector(':scope > .flex-container');
+    const rowActions = row.querySelector(':scope > .flex-container.marginLeft5');
+
+    if (!(rowActions instanceof HTMLElement)) {
+        return;
+    }
+
+    if (cardActions instanceof HTMLElement) {
+        while (cardActions.firstChild) {
+            rowActions.appendChild(cardActions.firstChild);
         }
-    });
+        cardActions.remove();
+    }
+
+    if (label instanceof HTMLElement) {
+        row.insertBefore(label, row.firstChild);
+    }
+
+    row.classList.add(SB_PRESET_TOOLBAR_ROW_CLASS);
+    card.classList.add(SB_PRESET_TOOLBAR_CARD_CLASS);
 }
 
 function buildShell(shellKey) {
@@ -13785,239 +12582,65 @@ function buildShell(shellKey) {
     moveChildrenIntoContainer(shellRoot, originalContent);
     originalContent.querySelector('#settingsSearch')?.classList.add('sb-legacy-search-hidden');
 
+    // The settings page supplies its own sidebar, title header, and close button, so the
+    // in-shell header and horizontal tab rail are no longer built.
     const frame = createElement('div', { className: 'sb-shell-frame' });
-    const navWrapper = createElement('div', { className: 'sb-shell-nav-wrapper' });
-    const navScrollLeft = createElement('button', {
-        className: 'sb-shell-nav-scroll sb-shell-nav-scroll-left',
-        attrs: {
-            type: 'button',
-            'aria-label': `Scroll ${shellConfig.title} sections left`,
-        },
-    });
-    const nav = createElement('nav', {
-        className: 'sb-shell-nav',
-        attrs: {
-            role: 'tablist',
-            'aria-label': `${shellConfig.title} sections`,
-            'aria-orientation': 'horizontal',
-        },
-    });
-    const navScrollRight = createElement('button', {
-        className: 'sb-shell-nav-scroll sb-shell-nav-scroll-right',
-        attrs: {
-            type: 'button',
-            'aria-label': `Scroll ${shellConfig.title} sections right`,
-        },
-    });
-    navScrollLeft.innerHTML = '<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>';
-    navScrollRight.innerHTML = '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>';
-    navWrapper.append(navScrollLeft, nav, navScrollRight);
-
-    const scrollNavByPage = direction => {
-        const scrollRequest = sbMobileShellLifecycle.nav.resolvePageScroll({
-            direction,
-            clientWidth: nav.clientWidth,
-            prefersReducedMotion: prefersReducedMotion(),
-        });
-
-        nav.scrollBy(scrollRequest);
-    };
-
-    let navTouchDrag = null;
-    let suppressNavClickUntil = 0;
-
-    const clearNavTouchDrag = () => {
-        navTouchDrag = null;
-    };
-
-    const finishNavTouchDrag = event => {
-        const dragEnd = sbMobileShellLifecycle.nav.resolveDragEnd({
-            dragState: navTouchDrag,
-            nowMs: Date.now(),
-        });
-
-        if (dragEnd.suppressClickUntil) {
-            suppressNavClickUntil = dragEnd.suppressClickUntil;
-        }
-
-        if (dragEnd.shouldStopPropagation) {
-            event.stopPropagation();
-        }
-
-        navTouchDrag = dragEnd.dragState;
-    };
-
-    const beginNavTouchDrag = event => {
-        const touch = event.touches?.[0];
-
-        navTouchDrag = sbMobileShellLifecycle.nav.createDragState({
-            isMobileViewport: isMobileViewport(),
-            touch,
-            scrollLeft: nav.scrollLeft,
-        });
-    };
-
-    const updateNavTouchDrag = event => {
-        if (!navTouchDrag) {
-            return;
-        }
-
-        const dragMove = sbMobileShellLifecycle.nav.resolveDragMove({
-            dragState: navTouchDrag,
-            touch: event.touches?.[0],
-        });
-        navTouchDrag = dragMove.dragState;
-
-        if (!navTouchDrag) {
-            return;
-        }
-
-        if (dragMove.shouldPreventDefault && event.cancelable) {
-            event.preventDefault();
-        }
-
-        if (dragMove.shouldStopPropagation) {
-            event.stopPropagation();
-        }
-
-        if (dragMove.nextScrollLeft !== null) {
-            nav.scrollLeft = dragMove.nextScrollLeft;
-            updateNavScrollIndicators();
-        }
-    };
-
-    const suppressClickAfterNavDrag = event => {
-        if (!sbMobileShellLifecycle.nav.shouldSuppressClick({
-            nowMs: Date.now(),
-            suppressClickUntil: suppressNavClickUntil,
-        })) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-    };
-
-    const updateNavScrollIndicators = () => {
-        const { canScrollLeft, canScrollRight } = sbMobileShellLifecycle.nav.resolveScrollIndicators({
-            scrollLeft: nav.scrollLeft,
-            clientWidth: nav.clientWidth,
-            scrollWidth: nav.scrollWidth,
-        });
-
-        navWrapper.classList.toggle('sb-can-scroll-left', canScrollLeft);
-        navWrapper.classList.toggle('sb-can-scroll-right', canScrollRight);
-        navScrollLeft.disabled = !canScrollLeft;
-        navScrollRight.disabled = !canScrollRight;
-    };
-
-    nav.addEventListener('scroll', updateNavScrollIndicators, { passive: true });
-    nav.addEventListener('click', suppressClickAfterNavDrag, true);
-    nav.addEventListener('touchstart', beginNavTouchDrag, { passive: true });
-    nav.addEventListener('touchmove', updateNavTouchDrag, { passive: false });
-    nav.addEventListener('touchend', finishNavTouchDrag, { passive: true });
-    nav.addEventListener('touchcancel', clearNavTouchDrag, { passive: true });
-    window.addEventListener('resize', updateNavScrollIndicators, { passive: true });
-    navScrollLeft.addEventListener('click', () => scrollNavByPage(-1));
-    navScrollRight.addEventListener('click', () => scrollNavByPage(1));
-
-    setTimeout(updateNavScrollIndicators, 100);
-
     const main = createElement('div', { className: 'sb-shell-main' });
-    const header = createElement('div', { className: 'sb-shell-header' });
-    const closeButton = createElement('button', {
-        className: 'sb-shell-close',
-        attrs: {
-            type: 'button',
-            title: `Close ${shellConfig.title}`,
-            'aria-label': `Close ${shellConfig.title}`,
-        },
-    });
-    const eyebrow = createElement('div', { className: 'sb-shell-kicker', text: shellConfig.title });
-    const title = createElement('h2', { className: 'sb-shell-title', text: shellConfig.baseTab.label, attrs: { tabindex: '-1' } });
-    const subtitle = createElement('p', { className: 'sb-shell-subtitle' });
-    const shellDescription = createElement('p', { className: 'sb-shell-description', text: shellConfig.subtitle });
     const panelBody = createElement('div', { className: 'sb-shell-body' });
-    const resizeHandle = createElement('div', {
-        className: 'sb-shell-resize-handle',
-        attrs: {
-            title: `Resize ${shellConfig.title}`,
-        },
-    });
 
-    closeButton.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
-    renderShellSubtitle(subtitle, shellConfig.baseTab.description ?? '', { isHtml: shellConfig.baseTab.descriptionIsHtml === true });
-    closeButton.addEventListener('click', () => closeShell(shellKey));
-    shellRoot.addEventListener('keydown', event => {
-        if (event.key !== 'Escape') {
-            return;
-        }
-
-        if (closeFocusedShell()) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    });
-    bindShellResizeHandle(resizeHandle, shellKey);
-
-    header.append(closeButton, eyebrow, title, subtitle, shellDescription);
-    main.append(header, panelBody);
-    frame.append(navWrapper, main, resizeHandle);
+    main.append(panelBody);
+    frame.append(main);
     shellRoot.appendChild(frame);
 
     const shellState = {
-        activeTabId: shellConfig.defaultTabId,
-        lastOpenedAt: 0,
+        activeTabId: migrateTabId(shellKey, shellConfig.storageKey ? safeGetItem(shellConfig.storageKey) : null) || shellConfig.defaultTabId,
         tabs: new Map(),
-        nav,
-        headerTitle: title,
-        headerSubtitle: subtitle,
         root: shellRoot,
-        resizeHandle,
-        updateNavScrollIndicators,
     };
 
     sbState.shells[shellKey] = shellState;
 
-    let wasOpen = shellRoot.classList.contains('openDrawer');
-    new MutationObserver(() => {
-        const isOpen = shellRoot.classList.contains('openDrawer');
-
-        if (isOpen === wasOpen) {
-            return;
-        }
-
-        wasOpen = isOpen;
-
-        if (isOpen) {
-            shellState.lastOpenedAt = performance.now();
-            if (isMobileViewport()) {
-                closeMobileNav();
-            }
-            syncDesktopShellSizing();
-            const activeTab = shellState.tabs.get(shellState.activeTabId);
-            activeTab?.onActivate?.();
-            dispatchShellTabActivated(shellKey, activeTab);
-            queueMobileShellActivationRefresh();
-            updateNavScrollIndicators();
-            window.requestAnimationFrame(() => focusShellPanel(shellKey));
-            queueMobileModalStateSync();
-            return;
-        }
-
-        shellState.tabs.get(shellState.activeTabId)?.onDeactivate?.();
-        queueMobileModalStateSync();
-    }).observe(shellRoot, { attributes: true, attributeFilter: ['class'] });
-
     const basePanel = createShellPanel(shellConfig.baseTab);
-    basePanel.scroller.appendChild(originalContent);
-    if (shellKey === 'right') {
+
+    // For left shell, base tab is 'connections' (sys-settings-button content)
+    // For right shell, base tab is 'appearance' (user-settings-button content)
+    // Phase 6A/6B/6C: each Customize tab owns a permanent container built once by
+    // splitUserSettingsContent(). The block the settings were authored in is left in the document
+    // for the sake of ids that are looked up globally, but nothing paints it any more.
+    let userSettingsSplit = null;
+    if (shellKey === 'left') {
+        const apiDrawerPrep = prepareEmbeddedDrawer('sys-settings-button');
+        if (apiDrawerPrep) {
+            basePanel.scroller.appendChild(apiDrawerPrep.drawer);
+        }
+    } else if (shellKey === 'right') {
+        userSettingsSplit = splitUserSettingsContent(originalContent);
+
+        if (userSettingsSplit) {
+            basePanel.scroller.appendChild(userSettingsSplit.appearance);
+        }
+
+        // The split empties the block, so what is left -- the legacy header rows, the search input,
+        // and the emptied columns -- is parked on the shell root and hidden. Keeping it attached
+        // rather than detaching it leaves `#user-settings-block-content` resolvable by id for
+        // third-party drawers and for the drawer-state code that looks the emptied section up.
+        originalContent.classList.add('sb-legacy-settings-remainder');
+        shellRoot.appendChild(originalContent);
+
+        // Backgrounds is its own top-level drawer outside the settings block, so it is appended
+        // separately rather than being part of the split.
+        const backgroundsPrep = prepareEmbeddedDrawer('backgrounds-button');
+        if (backgroundsPrep) {
+            basePanel.scroller.appendChild(backgroundsPrep.drawer);
+        }
+
         basePanel.ensureReady = initializeSettingsPanel;
-        basePanel.onActivate = () => void initializeSettingsPanel().catch(error => {
+        basePanel.onActivate = () => initializeSettingsPanel().catch(error => {
             console.error('[SillyBunny] Could not initialize settings:', error);
             toastr.error(String(error.message || error));
         });
     }
+
     registerShellTab(shellKey, shellConfig.baseTab, basePanel);
 
     const registerEmbeddedTab = (embeddedTab) => {
@@ -14031,28 +12654,38 @@ function buildShell(shellKey) {
         registerShellTab(shellKey, embeddedTab, embeddedPanel, prepared.drawerContent);
     };
 
-    const leadingEmbeddedTabId = shellKey === 'left' ? 'api' : null;
-    const leadingEmbeddedTab = shellConfig.embeddedTabs.find(tab => tab.id === leadingEmbeddedTabId);
-    if (leadingEmbeddedTab) {
-        registerEmbeddedTab(leadingEmbeddedTab);
-    }
-
-    const samplingTab = shellConfig.customTabs.find(tab => tab.id === 'sampling');
-    if (samplingTab) {
-        const samplingPanel = createOnDemandShellPanel(shellKey, samplingTab, buildSamplingPanel);
-        registerShellTab(shellKey, samplingTab, samplingPanel, samplingPanel.searchRoot);
-    }
-
+    // Register embedded tabs
     for (const embeddedTab of shellConfig.embeddedTabs) {
-        if (embeddedTab.id === leadingEmbeddedTabId) {
-            continue;
-        }
-
         registerEmbeddedTab(embeddedTab);
     }
 
+    // Handle custom tabs
     for (const customTab of shellConfig.customTabs) {
         if (customTab.id === 'sampling') {
+            const samplingPanel = createOnDemandShellPanel(shellKey, customTab, buildSamplingPanel);
+            registerShellTab(shellKey, customTab, samplingPanel, samplingPanel.searchRoot);
+            continue;
+        }
+
+        if (customTab.id === 'prompting') {
+            // Prompting tab gets presets drawer content (the original left shell content)
+            const promptingPanel = createShellPanel(customTab);
+            if (shellKey === 'left') {
+                mergeOpenAIPresetToolbarRow(originalContent);
+                promptingPanel.scroller.appendChild(originalContent);
+            }
+            registerShellTab(shellKey, customTab, promptingPanel, originalContent);
+            continue;
+        }
+
+        if (customTab.id === 'context') {
+            // Context tab gets advanced formatting drawer content
+            const formattingPrep = prepareEmbeddedDrawer('advanced-formatting-button');
+            if (formattingPrep) {
+                const contextPanel = createShellPanel(customTab);
+                contextPanel.scroller.appendChild(formattingPrep.drawer);
+                registerShellTab(shellKey, customTab, contextPanel, formattingPrep.drawerContent);
+            }
             continue;
         }
 
@@ -14062,21 +12695,61 @@ function buildShell(shellKey) {
             continue;
         }
 
-        if (customTab.id === 'server') {
-            const serverPanel = createOnDemandShellPanel(shellKey, customTab, async () => (await loadServerTools()).buildServerAdminPanel());
+        if (customTab.id === 'messages') {
+            // Phase 6B: Messages owns a permanent container built once by splitUserSettingsContent().
+            const panel = createShellPanel(customTab);
+            if (userSettingsSplit) {
+                panel.scroller.appendChild(userSettingsSplit.messages);
+            }
+            panel.ensureReady = initializeSettingsPanel;
+            registerShellTab(shellKey, customTab, panel);
+            continue;
+        }
+
+        if (customTab.id === 'interface') {
+            // Phase 6C: Interface owns a permanent container built once by splitUserSettingsContent().
+            const panel = createShellPanel(customTab);
+            if (userSettingsSplit) {
+                panel.scroller.appendChild(userSettingsSplit.interface);
+            }
+            panel.ensureReady = initializeSettingsPanel;
+            registerShellTab(shellKey, customTab, panel);
+            continue;
+        }
+
+        if (customTab.id === 'data-security') {
+            const serverPanel = createOnDemandShellPanel(shellKey, customTab, async () => {
+                const loaded = await (await loadServerTools()).buildServerAdminPanel();
+
+                // The split lifts Import & Restore out of the settings block because it manages saved
+                // data rather than appearance. It leads the panel, ahead of the server cards, because
+                // bringing an existing setup over is the first thing a user comes here to do.
+                const dataSecurityContent = userSettingsSplit?.dataSecurity;
+                if (dataSecurityContent instanceof HTMLElement) {
+                    loaded.searchRoot?.prepend(dataSecurityContent);
+                    // The container was detached while the settings panel initialized, so the work
+                    // that normally runs there — opening the drawers and restoring their stored open
+                    // state — could not reach it. It is done now that the tree is attached.
+                    openAllInlineDrawers(dataSecurityContent);
+                    bindInlineDrawerPersistence(dataSecurityContent);
+                    injectSillyTavernImportCard(dataSecurityContent.querySelector('#sb-import-tools-outlet'));
+                }
+
+                return loaded;
+            });
             registerShellTab(shellKey, customTab, serverPanel, serverPanel.searchRoot);
             continue;
         }
 
-        if (customTab.id === 'console-logs') {
-            const consoleLogsPanel = createOnDemandShellPanel(shellKey, customTab, async () => (await loadServerTools()).buildConsoleLogsPanel());
-            registerShellTab(shellKey, customTab, consoleLogsPanel, consoleLogsPanel.searchRoot);
+        if (customTab.id === 'logs') {
+            const logsPanel = createOnDemandShellPanel(shellKey, customTab, async () => (await loadServerTools()).buildConsoleLogsPanel());
+            registerShellTab(shellKey, customTab, logsPanel, logsPanel.searchRoot);
         }
     }
 
     panelBody.append(...Array.from(shellState.tabs.values()).map(tabState => tabState.panel));
 
-    const storedTabId = migrateLegacyWorldInfoRoute(safeGetItem(shellConfig.storageKey));
+    const storedTabId = migrateTabId(shellKey, migrateLegacyWorldInfoRoute(safeGetItem(shellConfig.storageKey)));
     const nextActiveTab = shellState.tabs.has(storedTabId) ? storedTabId : shellConfig.defaultTabId;
     setActiveTab(shellKey, nextActiveTab);
 }
@@ -14088,68 +12761,9 @@ function registerShellTab(shellKey, tabConfig, panelBundle, explicitSearchRoot =
         return;
     }
 
-    const button = createElement('button', {
-        className: 'sb-shell-tab',
-        attrs: {
-            type: 'button',
-            role: 'tab',
-            tabindex: '-1',
-            'aria-selected': 'false',
-            'aria-label': tabConfig.label,
-            title: tabConfig.label,
-            'data-sb-tab': tabConfig.id,
-        },
-    });
-
-    button.innerHTML = `
-        <i class="fa-solid ${tabConfig.icon}" aria-hidden="true"></i>
-        <span class="sb-shell-tab-copy">
-            <strong>${tabConfig.label}</strong>
-        </span>
-    `;
-
-    button.addEventListener('click', () => {
-        setActiveTab(shellKey, tabConfig.id, { focusButton: false });
-        openShell(shellKey);
-    });
-
-    button.addEventListener('keydown', event => {
-        const buttons = Array.from(shellState.nav.querySelectorAll('.sb-shell-tab[data-sb-tab]')).filter(
-            item => item instanceof HTMLElement && !item.classList.contains('sb-shell-tab-mobile-rail-hidden'),
-        );
-        const currentIndex = buttons.indexOf(button);
-
-        if (currentIndex === -1) {
-            return;
-        }
-
-        const lastIndex = buttons.length - 1;
-        let nextIndex = currentIndex;
-
-        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-            nextIndex = currentIndex === lastIndex ? 0 : currentIndex + 1;
-        } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-            nextIndex = currentIndex === 0 ? lastIndex : currentIndex - 1;
-        } else if (event.key === 'Home') {
-            nextIndex = 0;
-        } else if (event.key === 'End') {
-            nextIndex = lastIndex;
-        } else {
-            return;
-        }
-
-        event.preventDefault();
-        const nextButton = buttons[nextIndex];
-        const nextTabId = nextButton?.getAttribute('data-sb-tab');
-
-        if (nextTabId) {
-            setActiveTab(shellKey, nextTabId, { focusButton: true });
-        }
-    });
-
+    // Tab buttons live in the settings page sidebar; the shell only tracks panel state.
     shellState.tabs.set(tabConfig.id, {
         ...tabConfig,
-        button,
         panel: panelBundle.panel,
         searchRoot: explicitSearchRoot ?? panelBundle.searchRoot ?? panelBundle.scroller,
         searchIndex: null,
@@ -14157,293 +12771,6 @@ function registerShellTab(shellKey, tabConfig, panelBundle, explicitSearchRoot =
         onActivate: panelBundle.onActivate ?? tabConfig.onActivate ?? null,
         onDeactivate: panelBundle.onDeactivate ?? tabConfig.onDeactivate ?? null,
     });
-    shellState.nav.appendChild(button);
-    shellState.updateNavScrollIndicators?.();
-    syncMobileShellRailActions(shellKey);
-}
-
-function createMobileShellRailDivider(label) {
-    return createElement('div', {
-        className: 'sb-shell-rail-divider',
-        attrs: {
-            role: 'separator',
-            'aria-label': label,
-        },
-    });
-}
-
-function createMobileShellRailButton(item, actionHandler, className = '') {
-    const action = normalizeMobileQuickAction({
-        type: item.type || 'tab',
-        shellKey: item.shellKey,
-        tabId: item.tabId,
-        icon: item.icon,
-        label: item.label,
-        sectionLabel: item.sectionLabel,
-        displayText: item.displayText,
-        dedupeKey: item.dedupeKey,
-    });
-
-    if (!action) {
-        return null;
-    }
-
-    const buttonAttrs = {
-        type: 'button',
-        title: action.label,
-        'aria-label': action.label,
-        'data-sb-rail-action': getMobileQuickActionKey(action),
-        'data-sb-rail-type': action.type,
-        'data-sb-rail-shell-key': action.shellKey,
-    };
-
-    if (action.tabId) {
-        buttonAttrs['data-sb-rail-tab-id'] = action.tabId;
-    }
-
-    const button = createElement('button', {
-        className: ['sb-shell-tab', 'sb-shell-rail-action', className].filter(Boolean).join(' '),
-        attrs: buttonAttrs,
-    });
-    const icon = createElement('i', {
-        className: `fa-solid ${action.icon || SB_MOBILE_QUICK_ACTION_ICON_FALLBACK}`,
-        attrs: {
-            'aria-hidden': 'true',
-        },
-    });
-    const copy = createElement('span', { className: 'sb-shell-tab-copy' });
-    const label = createElement('strong', { text: action.label });
-
-    copy.appendChild(label);
-    button.append(icon, copy);
-    button.addEventListener('click', () => actionHandler(action));
-    return button;
-}
-
-function createRailActionGroup(actions, groupLabel, className = '') {
-    const railGroup = createElement('div', {
-        className: ['sb-shell-rail-group', className].filter(Boolean).join(' '),
-        attrs: {
-            'aria-label': groupLabel,
-        },
-    });
-
-    for (const action of actions) {
-        const button = createMobileShellRailButton(action, activateMobileNavAction, 'sb-shell-rail-customize-action');
-        if (button) {
-            railGroup.appendChild(button);
-        }
-    }
-
-    return railGroup;
-}
-
-function getBuiltInRailActionsForShell(shellKey) {
-    const shellState = getShellState(shellKey);
-    if (!shellState?.tabs) {
-        return [];
-    }
-
-    const actions = [];
-    for (const tabState of shellState.tabs.values()) {
-        actions.push({
-            type: 'tab',
-            shellKey,
-            tabId: tabState.id,
-            icon: tabState.icon,
-            label: tabState.label,
-        });
-    }
-    return actions;
-}
-
-function getAllBuiltInRailActionKeys() {
-    const actionKeys = new Set();
-
-    for (const [shellKey, shellConfig] of Object.entries(SB_SHELLS)) {
-        const tabConfigs = [
-            shellConfig.baseTab,
-            ...(Array.isArray(shellConfig.embeddedTabs) ? shellConfig.embeddedTabs : []),
-            ...(Array.isArray(shellConfig.customTabs) ? shellConfig.customTabs : []),
-        ];
-
-        for (const tabConfig of tabConfigs) {
-            if (!tabConfig?.id) {
-                continue;
-            }
-
-            actionKeys.add(getMobileQuickActionKey({
-                type: 'tab',
-                shellKey,
-                tabId: tabConfig.id,
-                icon: tabConfig.icon,
-                label: tabConfig.label,
-            }));
-        }
-    }
-
-    return actionKeys;
-}
-
-function getBuiltInRailLabelForShell(shellKey) {
-    return shellKey === 'right' ? 'Customize' : 'Workspace';
-}
-
-function syncMobileShellRailActionState(activeShellKey = '', activeTabId = '') {
-    document.querySelectorAll('.sb-shell-rail-action[data-sb-rail-shell-key]').forEach(button => {
-        if (!(button instanceof HTMLElement)) {
-            return;
-        }
-
-        const isActive = button.dataset.sbRailShellKey === activeShellKey && button.dataset.sbRailTabId === activeTabId;
-        button.classList.toggle('is-active', isActive);
-        button.setAttribute('aria-selected', String(isActive));
-        if (isActive) {
-            button.setAttribute('aria-current', 'page');
-        } else {
-            button.removeAttribute('aria-current');
-        }
-    });
-}
-
-function syncMobileShellRailTabVisibility(shellState, currentShellKey, hideCustomizeTabs) {
-    for (const tabState of shellState.tabs.values()) {
-        if (!(tabState.button instanceof HTMLElement)) {
-            continue;
-        }
-
-        const shouldHide = hideCustomizeTabs;
-        const isActive = tabState.id === shellState.activeTabId;
-        tabState.button.classList.toggle('sb-shell-tab-mobile-rail-hidden', shouldHide);
-        tabState.button.setAttribute('aria-hidden', String(shouldHide));
-        tabState.button.setAttribute('tabindex', isActive && !shouldHide ? '0' : '-1');
-        tabState.button.toggleAttribute('inert', shouldHide);
-    }
-}
-
-function syncMobileShellRailActions(shellKey = null) {
-    const shellKeys = shellKey ? [shellKey] : ['left', 'right'];
-    const railMode = getActiveShellRailMode();
-    const navState = getNavState(railMode);
-    const hasVerticalRail = navState.layout === 'vertical';
-    const railQuickActionState = getQuickActionState(railMode);
-
-    const prevSyncingRail = sbIsSyncingRailActions;
-    sbIsSyncingRailActions = true;
-
-    try {
-        for (const currentShellKey of shellKeys) {
-            const shellState = getShellState(currentShellKey);
-            if (!(shellState?.nav instanceof HTMLElement)) {
-                continue;
-            }
-
-            let shouldHideCustomizeTabs = false;
-
-            const createRailBlock = (position) => createElement('div', {
-                className: `sb-shell-rail-shortcuts sb-shell-rail-shortcuts-${position}`,
-                attrs: {
-                    'aria-hidden': 'false',
-                },
-            });
-
-            let beforeBlock = null;
-            let afterBlock = null;
-
-            if (hasVerticalRail) {
-                const builtInRailLabel = getBuiltInRailLabelForShell(currentShellKey);
-                const replacementAction = railMode === 'desktop' && navState.replaceQuickActions
-                    ? createNavReplacementQuickAction(navState.replacementTarget)
-                    : null;
-                const railActionPlan = sbMobileShellLifecycle.railModel.resolveActionVisibility({
-                    hasVerticalRail,
-                    showCustomize: hasVerticalRail || navState.showCustomize,
-                    showQuickActions: navState.showQuickActions,
-                    builtInActions: getBuiltInRailActionsForShell(currentShellKey),
-                    builtInActionKeys: Array.from(getAllBuiltInRailActionKeys()),
-                    quickActions: railQuickActionState,
-                    replacementAction,
-                    builtInGroupLabel: builtInRailLabel,
-                });
-                shouldHideCustomizeTabs = railActionPlan.shouldHideCustomizeTabs;
-
-                const createQuickActionsGroup = (actions) => {
-                    const quickActionsGroup = createElement('div', {
-                        className: 'sb-shell-rail-group sb-shell-rail-group-quick-actions',
-                        attrs: {
-                            'aria-label': 'Quick Actions',
-                        },
-                    });
-
-                    if (actions.length) {
-                        for (const action of actions) {
-                            const button = createMobileShellRailButton(action, activateMobileNavAction, 'sb-shell-rail-quick-action');
-                            if (button) {
-                                quickActionsGroup.appendChild(button);
-                            }
-                        }
-                    } else {
-                        quickActionsGroup.appendChild(createElement('div', {
-                            className: 'sb-shell-rail-empty',
-                            text: 'No Quick Actions',
-                        }));
-                    }
-
-                    return quickActionsGroup;
-                };
-
-                const pendingBefore = createRailBlock('before');
-
-                for (const group of railActionPlan.beforeGroups) {
-                    pendingBefore.appendChild(createMobileShellRailDivider(group.label));
-                    pendingBefore.appendChild(createRailActionGroup(
-                        group.actions,
-                        group.label,
-                        `sb-shell-rail-group-${group.label.toLowerCase()}`,
-                    ));
-                }
-
-                if (pendingBefore.children.length > 0) {
-                    beforeBlock = pendingBefore;
-                }
-
-                if (railActionPlan.afterGroups.length > 0) {
-                    const pendingAfter = createRailBlock('after');
-                    for (const group of railActionPlan.afterGroups) {
-                        pendingAfter.append(
-                            createMobileShellRailDivider(group.label),
-                            createQuickActionsGroup(group.actions),
-                        );
-                    }
-                    afterBlock = pendingAfter;
-                }
-            }
-
-            shellState.nav.querySelectorAll('.sb-shell-rail-shortcuts').forEach(element => element.remove());
-            syncMobileShellRailTabVisibility(shellState, currentShellKey, shouldHideCustomizeTabs);
-
-            if (beforeBlock) {
-                shellState.nav.prepend(beforeBlock);
-            }
-            if (afterBlock) {
-                shellState.nav.appendChild(afterBlock);
-            }
-
-            shellState.updateNavScrollIndicators?.();
-        }
-
-        const activeShellKey = ['left', 'right'].find(currentShellKey => isShellOpen(currentShellKey)) ?? (shellKeys.length === 1 ? shellKeys[0] : '');
-        const activeShellState = activeShellKey ? getShellState(activeShellKey) : null;
-        syncMobileShellRailActionState(activeShellKey, activeShellState?.activeTabId ?? '');
-    } finally {
-        if (!prevSyncingRail) {
-            requestAnimationFrame(() => {
-                sbIsSyncingRailActions = false;
-            });
-        } else {
-            sbIsSyncingRailActions = prevSyncingRail;
-        }
-    }
 }
 
 function routeDrawerTarget(targetId) {
@@ -14481,7 +12808,6 @@ function queueMobileShellActivationRefresh() {
         return;
     }
 
-    queueMobileShellDrawerBoundsSync();
     queueMobileViewportStateSync();
 }
 
@@ -14609,21 +12935,6 @@ function bindWorldInfoRoute() {
 
             return false;
         });
-}
-
-function activateMobileNavPageTarget(target) {
-    const config = getMobileNavReplacementTargetConfig(target);
-
-    closeMobileNav();
-
-    if (config.shellKey === 'characters') {
-        openCharacterPanelTab(config.tabId);
-        return;
-    }
-
-    if (config.shellKey && config.tabId) {
-        openShell(config.shellKey, config.tabId);
-    }
 }
 
 function updateMobileNavButtonLabel() {
@@ -14893,35 +13204,6 @@ function setMobileNavOpenState(isOpen) {
     }
 }
 
-function toggleMobileNav() {
-    const overlay = ensureMobileNavReady();
-
-    if (!(overlay instanceof HTMLElement)) {
-        return;
-    }
-
-    const isOpen = !overlay.hidden && overlay.getAttribute('aria-hidden') === 'false';
-    const toggleIntent = sbMobileShellLifecycle.nav.resolveToggleIntent({
-        isMobileViewport: isMobileViewport(),
-        isReplacementEnabled: sbState.mobileNav.replaceQuickActions,
-        isOpen,
-    });
-
-    if (toggleIntent.action === MOBILE_SHELL_NAV_TOGGLE_ACTION.ACTIVATE_PAGE_TARGET) {
-        activateMobileNavPageTarget(sbState.mobileNav.replacementTarget);
-        return;
-    }
-
-    if (toggleIntent.shouldCloseCompetingPanels) {
-        applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-            surface: sbMobileShellLifecycle.overlays.surface.NAV,
-            isMobileViewport: isMobileViewport(),
-        }));
-    }
-
-    setMobileNavOpenState(toggleIntent.action === MOBILE_SHELL_NAV_TOGGLE_ACTION.OPEN_NAV);
-}
-
 function closeMobileNav() {
     setMobileNavOpenState(false);
 }
@@ -14933,22 +13215,12 @@ function injectCharacterDrawerControls() {
     bindCharacterDrawerEscapeHandler();
     bindCreatorNotesFullscreen();
 
-    const shellCloseButton = document.getElementById('sb_character_shell_close');
-    if (shellCloseButton instanceof HTMLButtonElement && shellCloseButton.dataset.sbBound !== 'true') {
-        shellCloseButton.dataset.sbBound = 'true';
-        shellCloseButton.addEventListener('click', () => closeCharacterPanel());
-    }
-
     const modeToggle = document.getElementById('sb_character_mode_toggle');
     if (modeToggle instanceof HTMLElement && modeToggle.dataset.sbBound !== 'true') {
+        // SillyBunny: mode toggle removed from Characters panel (feat/v1.9.0-ui-overhaul).
+        // Binding retained as a no-op guard so upstream code paths that call
+        // injectCharacterDrawerControls don't error when the element is absent.
         modeToggle.dataset.sbBound = 'true';
-        modeToggle.querySelectorAll('[data-sb-character-mode]').forEach((button) => {
-            if (!(button instanceof HTMLButtonElement)) {
-                return;
-            }
-
-            button.addEventListener('click', () => setCharacterShellMode(button.dataset.sbCharacterMode));
-        });
     }
 
     if (document.documentElement.dataset.sbCharacterModeStateBound !== 'true') {
@@ -15085,8 +13357,12 @@ function setInlineDrawerExpanded(drawer, expand) {
 }
 
 function getLegacySettingsDrawerStorageKey(drawer) {
-    const root = document.getElementById('user-settings-block-content');
-    if (!(root instanceof HTMLElement) || !(drawer instanceof HTMLElement) || !root.contains(drawer)) {
+    if (!(drawer instanceof HTMLElement)) {
+        return null;
+    }
+
+    const root = getUserSettingsContentRoots().find(candidate => candidate.contains(drawer));
+    if (!root) {
         return null;
     }
 
@@ -15258,6 +13534,25 @@ function bindInlineDrawerPersistence(root = document) {
     }
 }
 
+/**
+ * Re-flattens drawers that a panel authored after its own activation pass had already run.
+ *
+ * The Prompt Manager rebuilds its header with `innerHTML` on every render, which brings back the
+ * collapsible `#completion_prompt_manager_drawer` band each time -- one refresh after the tab was
+ * flattened. The persistence observer already watches these subtrees and is the only thing that
+ * reliably fires afterwards, so the flatten rides along with the same debounce. It is idempotent,
+ * and it skips any panel with no drawers left, so the common case is one query per panel.
+ */
+function reflattenRuntimeDrawers() {
+    for (const panel of document.querySelectorAll('section.sb-shell-panel[data-sb-panel]')) {
+        const tabId = panel.dataset.sbPanel;
+        if (SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) || !panel.querySelector('.inline-drawer')) {
+            continue;
+        }
+        flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
+    }
+}
+
 function queueInlineDrawerPersistenceBind() {
     if (sbInlineDrawerPersistenceQueued) {
         return;
@@ -15267,13 +13562,14 @@ function queueInlineDrawerPersistenceBind() {
     window.requestAnimationFrame(() => {
         sbInlineDrawerPersistenceQueued = false;
         bindInlineDrawerPersistence(document.body);
+        reflattenRuntimeDrawers();
     });
 }
 
 function getInlineDrawerPersistenceRoots() {
     return [
         document.getElementById('left-nav-panel'),
-        document.getElementById('user-settings-block-content'),
+        ...getUserSettingsContentRoots(),
         document.getElementById('WorldInfo'),
         getCharacterPanel(),
     ].filter(element => element instanceof HTMLElement);
@@ -15315,13 +13611,8 @@ function syncMobileViewportState() {
     });
     const stepHandlers = {
         [viewportSyncStep.SYNC_SHELL_VIEWPORT_BOUNDS]: () => syncShellViewportBounds(),
-        [viewportSyncStep.SYNC_MOBILE_SHELL_DRAWER_BOUNDS]: () => {
-            syncMobileShellDrawerBounds();
-        },
         [viewportSyncStep.CLOSE_MOBILE_NAV]: () => closeMobileNav(),
         [viewportSyncStep.CLOSE_MOBILE_CHAT_TOOLS]: () => closeMobileChatTools(),
-        [viewportSyncStep.SYNC_MOBILE_SHELL_RAIL_ACTIONS]: () => syncMobileShellRailActions(),
-        [viewportSyncStep.SYNC_DESKTOP_SHELL_SIZING]: () => syncDesktopShellSizing(),
         [viewportSyncStep.APPLY_TOPBAR_OFFSET]: () => applyTopbarOffset(),
         [viewportSyncStep.SYNC_CHATBAR_VISIBILITY_STATE]: () => syncChatbarVisibilityState(),
         [viewportSyncStep.UPDATE_TOP_BAR_BRAND]: () => updateTopBarBrand(),
@@ -15360,6 +13651,27 @@ function queueMobileViewportStateSync() {
         sbMobileViewportStateFrameId = 0;
         syncMobileViewportState();
     });
+}
+
+const sbMobileShellUiState = { initialized: false };
+
+function initializeMobileShellUi() {
+    if (sbMobileShellUiState.initialized) {
+        return;
+    }
+    sbMobileShellUiState.initialized = true;
+
+    document.documentElement.dataset.sbMobileUi = 'chat-bar';
+    initializeMobileBottomBar();
+    applyMobileShellUiState();
+
+    window.matchMedia(SB_MOBILE_MEDIA_QUERY).addEventListener('change', applyMobileShellUiState);
+}
+
+function applyMobileShellUiState() {
+    const isMobile = isMobileViewport();
+    document.documentElement.dataset.sbMobileUiMode = isMobile ? 'mobile' : 'desktop';
+    syncMobileBottomBar(isMobile);
 }
 
 function reinitSelect2AfterShell() {
@@ -16296,8 +14608,6 @@ function initAll() {
     restorePersistedTopbarState();
     seedTopbarScaleDefaults();
     hideHostToggles();
-    forceDrawerState(leftShellRoot, false, getShellConfig('left').hostIconSelector);
-    forceDrawerState(rightShellRoot, false, getShellConfig('right').hostIconSelector);
     buildShell('left');
     buildShell('right');
     buildMobileNav();
@@ -16305,14 +14615,13 @@ function initAll() {
     injectCharacterDrawerControls();
     bindCharacterEditorExitButton();
     bindCharacterDrawerStateObserver();
+    prewarmSettingsPageRoots();
     applyShellTheme();
     setFrontendIconPreference(sbState.frontendIcon, { persist: false });
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
     setPaperTextureEnabled(sbState.paperTextureEnabled, { persist: false });
     setPaperTextureOpacity(sbState.paperTextureOpacity, { persist: false });
     setCompactMode(sbState.compactMode, { persist: false });
-    setDesktopShellSnapToChatWidth(sbState.shellSizing.snapToChatWidth, { persist: false });
-    setCharacterDrawerRightLock(sbState.characterDrawer.rightLocked, { persist: false });
     setTopbarScale('desktop', sbState.topbarScale.desktop, { persist: false });
     setTopbarScale('mobile', sbState.topbarScale.mobile, { persist: false });
     setBottomBarScale(sbState.bottomBarScale, { persist: false });
@@ -16322,7 +14631,6 @@ function initAll() {
     applyMobileNavPreferences();
     bindComposerControlPlacement();
     initChatAvatarVariables();
-    syncDesktopShellSizing();
     buildTopBar();
     // Must follow buildTopBar(): it rearranges the buttons that call creates.
     applyTopbarIconsOnlyPreference();
@@ -16345,6 +14653,10 @@ function initAll() {
     bindWorldInfoRoute();
     bindCharacterEditorSubTabs();
     applyDefaultDrawerStates();
+    // SillyBunny: Phase 1 — settings page + mode toggle + keyboard shortcuts (feat/v1.9.0-ui-overhaul)
+    initSettingsPageClose();
+    initModeToggle();
+    initSettingsKeyboardShortcuts();
     bindInlineDrawerAutoCloseToggle();
     syncMobileViewportState();
 
@@ -16353,7 +14665,6 @@ function initAll() {
     window.visualViewport?.addEventListener('resize', queueMobileViewportStateSync, { passive: true });
     // SillyBunny: iOS can move visualViewport.offsetTop without resizing while the keyboard is open.
     window.visualViewport?.addEventListener('scroll', queueMobileViewportStateSync, { passive: true });
-    window.visualViewport?.addEventListener('resize', syncDesktopShellSizing, { passive: true });
 
     // SillyBunny: keep focused inputs in mobile settings drawers above the
     // virtual keyboard. The fixed/clipped body blocks native scrolling, so the
@@ -16385,12 +14696,6 @@ function initAll() {
         document.addEventListener('focusout', handleMobileKeyboardFocusOut);
     }
 
-    // SillyBunny: re-sync shell width when the chat width slider changes so settings
-    // panels narrow alongside the chat container (matches standard ST behaviour).
-    $(document).on('input change mouseup touchend', '#chat_width_slider', () => {
-        syncDesktopShellSizing();
-    });
-
     // Reinitialize Select2 widgets after shell reparents DOM elements.
     // Select2 bindings break when elements are moved in the DOM.
     reinitSelect2AfterShell();
@@ -16398,7 +14703,7 @@ function initAll() {
     // Group Advanced Formatting sections into collapsible drawers
     groupAdvancedFormattingIntoDrawers();
 
-    initializeMobileSectionNav();
+    initializeMobileShellUi();
     initializeMessageActions();
     initializeToastMotion();
 
@@ -16455,9 +14760,8 @@ function initAll() {
         setTopbarIconsOnly(mode, value) {
             setTopbarIconsOnly(mode, value);
         },
-        setDesktopShellSnapToChatWidth(value) {
-            setDesktopShellSnapToChatWidth(value);
-        },
+        // Kept as a no-op for extensions; panels are no longer resizable drawers.
+        setDesktopShellSnapToChatWidth() {},
         setMessageStyle,
         openChatTools() {
             if (isMobileViewport()) {
@@ -16500,6 +14804,912 @@ function initAll() {
         getCompactMode() {
             return sbState.compactMode;
         },
+    });
+}
+
+// ── Phase 1: settings page + mode pill + keyboard shortcuts ──────────────
+// SillyBunny feat/v1.9.0-ui-overhaul
+
+const sbSettingsState = {
+    open: false,
+    activeShell: null, // 'left' | 'right'
+    activeTabId: null,
+    // Incremented each time a transition starts; guards stale callbacks after a
+    // fast reopen or close.
+    closeGen: 0,
+    pageAnimation: null,
+    closeTimer: 0,
+    // Mobile only: tracks whether the content pane is visible (true) or the
+    // sidebar is visible (false). Always false on desktop.
+    mobileContentView: false,
+};
+
+function getSettingsPage() {
+    return document.getElementById('sb-settings-page');
+}
+
+function clearSettingsAnimationState() {
+    if (sbSettingsState.pageAnimation) {
+        sbSettingsState.pageAnimation.onfinish = null;
+        sbSettingsState.pageAnimation.cancel();
+        sbSettingsState.pageAnimation = null;
+    }
+
+    if (sbSettingsState.closeTimer) {
+        clearTimeout(sbSettingsState.closeTimer);
+        sbSettingsState.closeTimer = 0;
+    }
+}
+
+function animateSettingsPage(page, direction, onFinish) {
+    if (typeof page.animate !== 'function') {
+        onFinish();
+        return;
+    }
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isOpening = direction === 'in';
+    const animation = page.animate(
+        reducedMotion
+            ? [{ opacity: isOpening ? 0 : 1 }, { opacity: isOpening ? 1 : 0 }]
+            : [
+                {
+                    opacity: isOpening ? 0 : 1,
+                    transform: isOpening ? 'scale(0.96)' : 'scale(1)',
+                },
+                {
+                    opacity: isOpening ? 1 : 0,
+                    transform: isOpening ? 'scale(1)' : 'scale(0.97)',
+                },
+            ],
+        {
+            duration: reducedMotion ? (isOpening ? 200 : 150) : (isOpening ? 250 : 200),
+            easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+            fill: 'forwards',
+        },
+    );
+
+    sbSettingsState.pageAnimation = animation;
+    animation.onfinish = () => {
+        if (sbSettingsState.pageAnimation !== animation) {
+            return;
+        }
+        sbSettingsState.pageAnimation = null;
+        animation.cancel();
+        onFinish();
+    };
+}
+
+function getSettingsPageTabs(shellKey) {
+    if (shellKey === 'characters') {
+        return [...SB_CHARACTER_PANEL_TABS];
+    }
+
+    const shellConfig = getShellConfig(shellKey);
+    return [
+        shellConfig?.baseTab,
+        ...(shellConfig?.embeddedTabs ?? []),
+        ...(shellConfig?.customTabs ?? []),
+    ].filter(Boolean);
+}
+
+function getSettingsPageRoot(shellKey) {
+    if (shellKey === 'characters') {
+        return getCharacterPanel();
+    }
+
+    const shellConfig = getShellConfig(shellKey);
+    return shellConfig ? document.getElementById(shellConfig.rootPanelId) : null;
+}
+
+function isSettingsPageHosting(shellKey) {
+    return sbSettingsState.open && sbSettingsState.activeShell === shellKey;
+}
+
+// The page swaps shell sections itself, so only the floating mobile surfaces (nav, chat
+// tools, connection strip) are closed here; closing a shell surface would close the page.
+function closeMobileSurfacesForSettingsPage(shellKey) {
+    const surface = sbMobileShellLifecycle.overlays.surface;
+    const shellSurfaces = new Set([surface.LEFT_SHELL, surface.RIGHT_SHELL, surface.CHARACTER_PANEL]);
+    const decision = sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
+        surface: getMobileShellSurfaceForShell(shellKey),
+        isMobileViewport: isMobileViewport(),
+    });
+
+    applyMobileSurfaceExclusivity({
+        closeSurfaces: decision.closeSurfaces.filter(closeSurfaceKey => !shellSurfaces.has(closeSurfaceKey)),
+    });
+}
+
+function openSettingsPage(shellKey, tabId = null) {
+    const page = getSettingsPage();
+    if (!(page instanceof HTMLElement)) {
+        return;
+    }
+
+    const tabs = getSettingsPageTabs(shellKey);
+    const resolvedTab = tabs.find(tab => tab.id === tabId)?.id
+        ?? (shellKey === 'characters' ? sbState.characterDrawer.lastTab : getShellState(shellKey)?.activeTabId)
+        ?? getShellConfig(shellKey)?.defaultTabId
+        ?? tabs[0]?.id
+        ?? null;
+
+    // Already showing this section: switch tabs in place instead of replaying the open.
+    if (isSettingsPageHosting(shellKey)) {
+        if (resolvedTab && resolvedTab !== sbSettingsState.activeTabId) {
+            activateSettingsTab(shellKey, resolvedTab);
+        }
+        return;
+    }
+
+    closeMobileSurfacesForSettingsPage(shellKey);
+
+    const wasOpen = sbSettingsState.open;
+    const previousShell = sbSettingsState.activeShell;
+
+    sbSettingsState.open = true;
+    sbSettingsState.activeShell = shellKey;
+    sbSettingsState.closeGen++;
+    clearSettingsAnimationState();
+
+    if (previousShell && previousShell !== shellKey) {
+        deactivateSettingsPageRoot(previousShell);
+    }
+
+    closeAllDropdowns({ except: shellKey, closeSurfaces: false });
+    document.getElementById('sb-persona-picker')?.remove();
+    document.getElementById('sb-mode-menu')?.remove();
+
+    buildSettingsPageFor(shellKey, resolvedTab);
+    mountShellRootInSettingsPage(shellKey, resolvedTab);
+    syncSettingsPageActiveButton();
+
+    page.classList.remove('sb-settings-page--content');
+    sbSettingsState.mobileContentView = false;
+
+    // On mobile, if opening with a saved tab (not explicitly requested), show content
+    // immediately to restore the exact state the user left. If the section was explicitly
+    // opened (tabId provided), show the sidebar first to let the user choose.
+    if (isMobileViewport() && !tabId && resolvedTab) {
+        page.classList.add('sb-settings-page--content');
+        sbSettingsState.mobileContentView = true;
+    }
+
+    document.documentElement.dataset.sbSettingsOpen = 'true';
+
+    if (wasOpen) {
+        // Switching sections while open: no page-level animation, just swap content.
+        page.hidden = false;
+        return;
+    }
+
+    page.hidden = false;
+    animateSettingsPage(page, 'in', () => {});
+
+    if (isMobileViewport()) {
+        document.querySelector('.sb-settings-tab')?.focus({ preventScroll: true });
+    } else {
+        document.getElementById('sb-settings-close')?.focus({ preventScroll: true });
+    }
+}
+
+function closeSettingsPage() {
+    const page = getSettingsPage();
+    if (!(page instanceof HTMLElement) || !sbSettingsState.open) {
+        return;
+    }
+
+    sbSettingsState.open = false;
+    sbSettingsState.mobileContentView = false;
+    const closingShell = sbSettingsState.activeShell;
+    sbSettingsState.activeTabId = null;
+    delete document.documentElement.dataset.sbSettingsOpen;
+
+    const closeGen = ++sbSettingsState.closeGen;
+    clearSettingsAnimationState();
+    deactivateSettingsPageRoot(closingShell);
+
+    const finishClose = () => {
+        if (sbSettingsState.closeGen !== closeGen) {
+            return;
+        }
+        page.hidden = true;
+        if (sbSettingsState.closeTimer) {
+            clearTimeout(sbSettingsState.closeTimer);
+            sbSettingsState.closeTimer = 0;
+        }
+        sbSettingsState.activeShell = null;
+        syncChatbarVisibilityState();
+        requestMobileViewportReset();
+    };
+
+    animateSettingsPage(page, 'out', finishClose);
+    // Fallback for browsers that do not deliver a Web Animations finish event.
+    sbSettingsState.closeTimer = setTimeout(finishClose, 300);
+
+    syncSettingsPageActiveButton();
+}
+
+function toggleSettingsPage(shellKey, tabId = null) {
+    if (isSettingsPageHosting(shellKey)) {
+        // A different tab of the open section switches in place; the same section closes.
+        if (tabId && tabId !== sbSettingsState.activeTabId) {
+            activateSettingsTab(shellKey, tabId);
+            return;
+        }
+        closeSettingsPage();
+        return;
+    }
+
+    openSettingsPage(shellKey, tabId);
+}
+
+/**
+ * Writes the page heading for a tab: the label as the title, the tab's long-form description as
+ * the sub-title beneath it.
+ *
+ * The description may be authored as HTML (the sampling sub-title links to an external guide), so
+ * it is written with `innerHTML` when flagged. Everything else goes through `textContent`, and a
+ * tab with no description clears the sub-title rather than leaving the previous one behind.
+ *
+ * @param {{label?: string, description?: string, descriptionIsHtml?: boolean}|null|undefined} tab
+ */
+function renderSettingsPageHeading(tab) {
+    const titleEl = document.getElementById('sb-settings-content-title');
+    const subtitleEl = document.getElementById('sb-settings-content-subtitle');
+    if (titleEl) {
+        titleEl.textContent = tab?.label ?? '';
+    }
+    if (!subtitleEl) {
+        return;
+    }
+    const description = tab?.description ?? '';
+    if (tab?.descriptionIsHtml === true) {
+        subtitleEl.innerHTML = description;
+    } else {
+        subtitleEl.textContent = description;
+    }
+}
+
+function buildSettingsPageFor(shellKey, tabId) {
+    const tabList = document.getElementById('sb-settings-tab-list');
+    const titleEl = document.getElementById('sb-settings-content-title');
+    if (!tabList || !titleEl) {
+        return;
+    }
+
+    const allTabs = getSettingsPageTabs(shellKey);
+    if (!allTabs.length) {
+        return;
+    }
+    const sectionTitle = shellKey === 'characters' ? 'Characters' : getShellConfig(shellKey).title;
+
+    const resolvedTabId = allTabs.find(t => t.id === tabId)?.id ?? allTabs[0]?.id ?? null;
+    sbSettingsState.activeTabId = resolvedTabId;
+
+    tabList.replaceChildren();
+
+    for (const tab of allTabs) {
+        const button = createElement('button', {
+            className: 'sb-settings-tab',
+            attrs: {
+                type: 'button',
+                role: 'tab',
+                'aria-selected': String(tab.id === resolvedTabId),
+                'data-sb-settings-tab': tab.id,
+                // Short action-oriented hint; the tab's `description` is the page sub-title instead.
+                title: tab.tooltip ?? '',
+            },
+        });
+        button.innerHTML = `<i class="fa-solid ${tab.icon}" aria-hidden="true"></i><span>${tab.label}</span>`;
+        button.addEventListener('click', () => activateSettingsTab(shellKey, tab.id));
+        tabList.appendChild(button);
+    }
+
+    const sidebarTitleEl = document.getElementById('sb-settings-sidebar-title');
+    if (sidebarTitleEl) {
+        sidebarTitleEl.textContent = sectionTitle;
+    }
+    const activeTab = allTabs.find(t => t.id === resolvedTabId);
+    renderSettingsPageHeading(activeTab ?? { label: sectionTitle });
+
+    // Re-apply an active sidebar filter to the freshly built tab list.
+    const searchInput = document.getElementById('sb-settings-search-input');
+    if (searchInput instanceof HTMLInputElement && searchInput.value.trim()) {
+        void filterSettingsSidebarTabs(searchInput.value);
+    }
+}
+
+// SillyTavern's keyboard.js MutationObserver rescans a node's whole subtree on every class
+// write, even a redundant one. These roots are huge, so batch the change and skip no-ops.
+function setRootClassState(element, classStates) {
+    const next = new Set(element.classList);
+    for (const [className, enabled] of Object.entries(classStates)) {
+        if (enabled) {
+            next.add(className);
+        } else {
+            next.delete(className);
+        }
+    }
+
+    const nextClassName = Array.from(next).join(' ');
+    if (nextClassName !== element.className) {
+        element.className = nextClassName;
+    }
+}
+
+function setRootAttribute(element, name, value) {
+    if (element.getAttribute(name) !== value) {
+        element.setAttribute(name, value);
+    }
+}
+
+// Shell roots are moved into the page once and stay there; switching sections only
+// toggles which one is active. Reparenting on every open forced a full style and layout
+// pass over each panel, which stalled the first frames of the open animation.
+function mountShellRootInSettingsPage(shellKey, tabId = null) {
+    const host = document.getElementById('sb-settings-shell-host');
+    const root = getSettingsPageRoot(shellKey);
+    if (!(host instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+        return;
+    }
+
+    if (root.parentElement !== host) {
+        stopMotion(root);
+        host.appendChild(root);
+    }
+
+    for (const child of host.children) {
+        if (child !== root && child.classList.contains('sb-settings-active-root')) {
+            child.classList.remove('sb-settings-active-root');
+        }
+    }
+
+    const isCharacters = shellKey === 'characters';
+    // The character panel's layout hangs off `#right-nav-panel.openDrawer`; pinnedOpen keeps
+    // SillyTavern's outside-click auto-close from collapsing it while it lives in the page.
+    setRootClassState(root, {
+        'sb-settings-mounted-shell': true,
+        'sb-settings-active-root': true,
+        closedDrawer: false,
+        openDrawer: isCharacters,
+        pinnedOpen: isCharacters,
+    });
+    setRootAttribute(root, 'aria-hidden', 'false');
+
+    if (isCharacters) {
+        injectCharacterDrawerControls();
+        activateCharacterPanelTabInPlace(tabId ?? SB_CHARACTER_PANEL_DEFAULT_TAB);
+        syncChatbarVisibilityState();
+        return;
+    }
+
+    const shellState = getShellState(shellKey);
+    if (!shellState) {
+        return;
+    }
+
+    const targetTab = tabId ?? shellState.activeTabId ?? getShellConfig(shellKey).defaultTabId;
+    if (targetTab && targetTab !== shellState.activeTabId && shellState.tabs.has(targetTab)) {
+        // setActiveTab runs the activation hooks itself while the page hosts this shell.
+        setActiveTab(shellKey, targetTab);
+        return;
+    }
+
+    const activeTab = shellState.tabs.get(shellState.activeTabId);
+    activeTab?.onActivate?.();
+    // The flatten is part of activation, so the already-active tab has to run it too -- otherwise
+    // the base tab, which is active before the page is ever mounted, is the one panel that never
+    // gets flattened.
+    flattenSettingsPanelDrawers(shellKey, shellState.activeTabId);
+    dispatchShellTabActivated(shellKey, activeTab);
+    queueMobileShellActivationRefresh();
+}
+
+// Roots move into the settings host at startup so SillyTavern's native drawer toggles can
+// never reopen them as floating drawers in their original holders.
+function prewarmSettingsPageRoots() {
+    const host = document.getElementById('sb-settings-shell-host');
+    if (!(host instanceof HTMLElement)) {
+        return;
+    }
+
+    for (const shellKey of ['left', 'right', 'characters']) {
+        const root = getSettingsPageRoot(shellKey);
+        if (!(root instanceof HTMLElement) || root.parentElement === host) {
+            continue;
+        }
+
+        host.appendChild(root);
+        setRootClassState(root, {
+            'sb-settings-mounted-shell': true,
+            'sb-settings-active-root': false,
+            openDrawer: false,
+            closedDrawer: false,
+            pinnedOpen: false,
+        });
+        setRootAttribute(root, 'aria-hidden', 'true');
+    }
+}
+
+function deactivateSettingsPageRoot(shellKey) {
+    const root = getSettingsPageRoot(shellKey);
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
+
+    if (document.activeElement instanceof HTMLElement && root.contains(document.activeElement)) {
+        document.activeElement.blur();
+    }
+
+    if (shellKey === 'characters') {
+        setCharacterEditorFullscreenState(false);
+    } else {
+        const shellState = getShellState(shellKey);
+        shellState?.tabs.get(shellState.activeTabId)?.onDeactivate?.();
+    }
+
+    setRootClassState(root, {
+        'sb-settings-active-root': false,
+        openDrawer: false,
+        pinnedOpen: false,
+    });
+    setRootAttribute(root, 'aria-hidden', 'true');
+}
+
+function setSettingsMobileContentView(showContent) {
+    const page = getSettingsPage();
+    if (!(page instanceof HTMLElement)) {
+        return;
+    }
+    sbSettingsState.mobileContentView = showContent;
+    page.classList.toggle('sb-settings-page--content', showContent);
+
+    if (showContent) {
+        document.getElementById('sb-settings-close')?.focus({ preventScroll: true });
+    } else {
+        // Return focus to the active sidebar tab when going back.
+        const activeTab = document.querySelector('.sb-settings-tab[aria-selected="true"]');
+        activeTab?.focus({ preventScroll: true });
+    }
+}
+
+function activateSettingsTab(shellKey, tabId) {
+    const tabList = document.getElementById('sb-settings-tab-list');
+    if (!tabList) {
+        return;
+    }
+
+    const allTabs = getSettingsPageTabs(shellKey);
+    const selectedTab = allTabs.find(tab => tab.id === tabId);
+    if (!selectedTab) {
+        return;
+    }
+
+    sbSettingsState.activeTabId = tabId;
+
+    if (shellKey === 'characters') {
+        activateCharacterPanelTabInPlace(tabId);
+    } else {
+        setActiveTab(shellKey, tabId);
+    }
+
+    tabList.querySelectorAll('.sb-settings-tab').forEach(button => {
+        button.setAttribute('aria-selected', String(button.dataset.sbSettingsTab === tabId));
+    });
+
+    renderSettingsPageHeading(selectedTab);
+
+    if (isMobileViewport()) {
+        setSettingsMobileContentView(true);
+    }
+}
+
+function syncSettingsPageActiveButton() {
+    for (const cluster of SB_TOPBAR_CLUSTERS) {
+        const leadButton = document.getElementById(cluster.leadId);
+        if (!(leadButton instanceof HTMLElement)) {
+            continue;
+        }
+
+        const isActive = sbSettingsState.open && (
+            (cluster.key === 'workspace' && sbSettingsState.activeShell === 'left') ||
+            (cluster.key === 'customize' && sbSettingsState.activeShell === 'right') ||
+            (cluster.key === 'characters' && sbSettingsState.activeShell === 'characters')
+        );
+        leadButton.classList.toggle('sb-settings-active', isActive);
+    }
+}
+
+function setSettingsSidebarSearchOpen(isOpen, { focusInput = false } = {}) {
+    const toggleBtn = document.getElementById('sb-settings-search-toggle');
+    const searchRow = document.getElementById('sb-settings-search-row');
+    const searchInput = document.getElementById('sb-settings-search-input');
+    if (!(toggleBtn instanceof HTMLElement) || !(searchRow instanceof HTMLElement)) {
+        return;
+    }
+
+    toggleBtn.setAttribute('aria-expanded', String(isOpen));
+    searchRow.classList.toggle('is-expanded', isOpen);
+    searchRow.setAttribute('aria-hidden', String(!isOpen));
+
+    if (isOpen && focusInput && searchInput instanceof HTMLElement) {
+        // Defer slightly so the max-height transition has started before focus shifts.
+        setTimeout(() => searchInput.focus(), 50);
+    } else if (!isOpen && searchInput instanceof HTMLInputElement) {
+        searchInput.value = '';
+        void filterSettingsSidebarTabs('');
+    }
+}
+
+function initSettingsPageClose() {
+    const closeButton = document.getElementById('sb-settings-close');
+    if (closeButton instanceof HTMLButtonElement && closeButton.dataset.sbBound !== 'true') {
+        closeButton.dataset.sbBound = 'true';
+        closeButton.addEventListener('click', closeSettingsPage);
+    }
+
+    // Back button: mobile only — returns from content view to sidebar view.
+    const backButton = document.getElementById('sb-settings-back');
+    if (backButton instanceof HTMLButtonElement && backButton.dataset.sbBound !== 'true') {
+        backButton.dataset.sbBound = 'true';
+        backButton.addEventListener('click', () => {
+            setSettingsMobileContentView(false);
+        });
+    }
+
+    const page = getSettingsPage();
+    if (page instanceof HTMLElement && page.dataset.sbBound !== 'true') {
+        page.dataset.sbBound = 'true';
+        page.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                closeSettingsPage();
+            }
+        });
+    }
+
+    // Sidebar search toggle button expands/collapses the search row.
+    const searchToggleBtn = document.getElementById('sb-settings-search-toggle');
+    if (searchToggleBtn instanceof HTMLButtonElement && searchToggleBtn.dataset.sbBound !== 'true') {
+        searchToggleBtn.dataset.sbBound = 'true';
+        searchToggleBtn.addEventListener('click', () => {
+            const isExpanded = searchToggleBtn.getAttribute('aria-expanded') === 'true';
+            setSettingsSidebarSearchOpen(!isExpanded, { focusInput: !isExpanded });
+        });
+    }
+
+    // Sidebar search: narrow the tab list to pages whose name or contents match.
+    const searchInput = document.getElementById('sb-settings-search-input');
+    if (searchInput instanceof HTMLInputElement && searchInput.dataset.sbBound !== 'true') {
+        searchInput.dataset.sbBound = 'true';
+        searchInput.addEventListener('input', () => void filterSettingsSidebarTabs(searchInput.value));
+        searchInput.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && searchInput.value) {
+                event.preventDefault();
+                event.stopPropagation();
+                searchInput.value = '';
+                void filterSettingsSidebarTabs('');
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                const firstMatch = document.querySelector('.sb-settings-tab:not(.sb-settings-tab--filtered)');
+                firstMatch?.click();
+            }
+        });
+    }
+}
+
+let sbSettingsSidebarFilterRequest = 0;
+
+function settingsTabLabelMatches(label, query) {
+    const normalizedLabel = normalizeText(label);
+    if (normalizedLabel.includes(query)) {
+        return true;
+    }
+
+    // Word-initial matching, e.g. "cl" for Console Logs.
+    const initials = normalizedLabel.split(/[\s-]+/).filter(Boolean).map(word => word[0]).join('');
+    return query.length > 1 && initials.startsWith(query.replace(/\s+/g, ''));
+}
+
+async function filterSettingsSidebarTabs(rawQuery) {
+    const request = ++sbSettingsSidebarFilterRequest;
+    const query = normalizeText(rawQuery);
+    const shellKey = sbSettingsState.activeShell;
+    const tabList = document.getElementById('sb-settings-tab-list');
+    if (!(tabList instanceof HTMLElement)) {
+        return;
+    }
+
+    const applyFilter = contentMatches => {
+        let visibleCount = 0;
+        for (const button of tabList.querySelectorAll('.sb-settings-tab')) {
+            const label = button.textContent ?? '';
+            const tabId = button.dataset.sbSettingsTab;
+            const labelMatch = Boolean(query) && settingsTabLabelMatches(label, query);
+            // Label hits always keep their tab. A content hit only reveals a tab when the label
+            // itself did not match, so typing "Logs" opens Logs rather than every tab that happens
+            // to mention logs somewhere in its body.
+            const isMatch = !query || labelMatch || contentMatches.has(tabId);
+            const byContent = Boolean(query) && isMatch && !labelMatch;
+            button.classList.toggle('sb-settings-tab--filtered', !isMatch);
+            button.classList.toggle('sb-settings-tab--by-content', byContent);
+            button.setAttribute('aria-hidden', String(!isMatch));
+            button.tabIndex = isMatch ? 0 : -1;
+            // Label hits render above content hits; `order` does it without touching DOM order,
+            // which keeps keyboard traversal stable while a filter is active.
+            button.style.order = !query || labelMatch ? '0' : '1';
+            visibleCount += Number(isMatch);
+        }
+
+        let empty = tabList.querySelector('.sb-settings-tab-empty');
+        if (query && visibleCount === 0) {
+            if (!empty) {
+                empty = createElement('p', { className: 'sb-settings-tab-empty', text: 'No matching pages' });
+                tabList.appendChild(empty);
+            }
+        } else {
+            empty?.remove();
+        }
+    };
+
+    // Label matches apply immediately; content matches refine once the search index is ready.
+    applyFilter(new Set());
+    if (!query || !shellKey) {
+        return;
+    }
+
+    await prepareShellSearch();
+    if (request !== sbSettingsSidebarFilterRequest || sbSettingsState.activeShell !== shellKey) {
+        return;
+    }
+
+    const contentMatches = new Set();
+    for (const match of collectGlobalSearchMatches(query, { limit: Infinity })) {
+        const matchShell = match.shellKey === 'left' && match.tabId === 'world-info' ? 'characters' : match.shellKey;
+        if (matchShell === shellKey && match.tabId && match.headingMatch === true) {
+            contentMatches.add(match.tabId);
+        }
+    }
+    applyFilter(contentMatches);
+}
+
+// ── Mode toggle (top-bar direct toggle) ─────────────────────────────────
+
+const SB_CHAT_MODES = Object.freeze([
+    { id: 'roleplay', label: 'Roleplay', icon: 'fa-masks-theater', description: 'Classic character-driven chat mode' },
+    { id: 'conversation', label: 'Conversation', icon: 'fa-comments', description: 'Direct conversational AI mode' },
+    { id: 'creator', label: 'Creator', icon: 'fa-pen-ruler', description: 'Draft and polish character cards' },
+]);
+
+function getActiveChatMode() {
+    if (document.getElementById('sheld')?.dataset.sbCreatorMode === 'on') {
+        return 'creator';
+    }
+    return conversationState.conversationWorkspaceOpen ? 'conversation' : 'roleplay';
+}
+
+function syncModeToggleButton() {
+    const mode = SB_CHAT_MODES.find(entry => entry.id === getActiveChatMode()) ?? SB_CHAT_MODES[0];
+    const modeToggleBtn = document.getElementById('sb-mode-toggle');
+    if (!(modeToggleBtn instanceof HTMLElement)) {
+        return;
+    }
+
+    const btnIcon = modeToggleBtn.querySelector(':scope > i');
+    if (btnIcon) {
+        btnIcon.className = `fa-solid ${mode.icon}`;
+    }
+    const label = modeToggleBtn.querySelector(':scope > span');
+    if (label) {
+        label.textContent = mode.label;
+    }
+    const title = `Chat mode: ${mode.label} (Ctrl+M)`;
+    modeToggleBtn.title = title;
+    modeToggleBtn.setAttribute('aria-label', title);
+}
+
+function setModeMenuOpenState(isOpen) {
+    const btn = document.getElementById('sb-mode-toggle');
+    if (btn instanceof HTMLElement) {
+        btn.classList.toggle('is-open', isOpen);
+        btn.setAttribute('aria-expanded', String(isOpen));
+    }
+}
+
+function closeModeDropdown({ restoreFocus = false } = {}) {
+    const menu = document.getElementById('sb-mode-menu');
+    if (!menu) {
+        return;
+    }
+
+    setModeMenuOpenState(false);
+    animateOut(menu, [
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+        { opacity: 0, transform: 'translateY(-4px) scale(0.97)' },
+    ], () => {
+        menu.remove();
+        if (restoreFocus) {
+            document.getElementById('sb-mode-toggle')?.focus({ preventScroll: true });
+        }
+    }, { duration: MOTION_FAST });
+}
+
+// Ctrl+M stays a Roleplay ↔ Conversation toggle; from Creator it returns to Roleplay.
+function toggleChatMode() {
+    const next = getActiveChatMode() === 'roleplay' ? 'conversation' : 'roleplay';
+    setCharacterShellMode(next);
+}
+
+function openModeDropdown() {
+    if (document.getElementById('sb-mode-menu')) {
+        closeModeDropdown({ restoreFocus: true });
+        return;
+    }
+
+    const activeMode = getActiveChatMode();
+    const menu = createElement('div', {
+        id: 'sb-mode-menu',
+        attrs: {
+            role: 'menu',
+            'aria-label': 'Switch chat mode',
+        },
+    });
+
+    for (const mode of SB_CHAT_MODES) {
+        const isActive = mode.id === activeMode;
+        const item = createElement('button', {
+            className: `sb-mode-menu-item${isActive ? ' is-active' : ''}`,
+            attrs: {
+                type: 'button',
+                role: 'menuitemradio',
+                'aria-checked': String(isActive),
+            },
+        });
+        item.innerHTML = `<i class="fa-solid ${mode.icon} sb-mode-menu-icon" aria-hidden="true"></i><span class="sb-mode-menu-label">${mode.label}</span><span class="sb-mode-menu-desc">${mode.description}</span><i class="fa-solid fa-check sb-mode-menu-check" aria-hidden="true"></i>`;
+        item.addEventListener('click', () => {
+            closeModeDropdown({ restoreFocus: true });
+            if (mode.id !== getActiveChatMode()) {
+                setCharacterShellMode(mode.id);
+            }
+        });
+        menu.appendChild(item);
+    }
+
+    menu.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeModeDropdown({ restoreFocus: true });
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const items = Array.from(menu.querySelectorAll('.sb-mode-menu-item'));
+            const current = items.indexOf(document.activeElement);
+            const next = event.key === 'ArrowDown'
+                ? (current + 1) % items.length
+                : (current - 1 + items.length) % items.length;
+            items[next]?.focus();
+        }
+    });
+
+    const dismiss = event => {
+        if (!document.body.contains(menu)) {
+            document.removeEventListener('pointerdown', dismiss, true);
+            return;
+        }
+        const btn = document.getElementById('sb-mode-toggle');
+        if (menu.contains(event.target) || btn?.contains(event.target)) {
+            return;
+        }
+        document.removeEventListener('pointerdown', dismiss, true);
+        closeModeDropdown();
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+
+    document.body.appendChild(menu);
+    setModeMenuOpenState(true);
+
+    const btn = document.getElementById('sb-mode-toggle');
+    if (btn instanceof HTMLElement) {
+        const rect = btn.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth || 240;
+        const left = Math.min(rect.left + rect.width / 2 - menuWidth / 2, window.innerWidth - menuWidth - 8);
+        menu.style.setProperty('--sb-mode-menu-top', `${rect.bottom + 6}px`);
+        menu.style.setProperty('--sb-mode-menu-left', `${Math.max(8, left)}px`);
+    }
+
+    animateIn(menu, [
+        { opacity: 0, transform: 'translateY(-4px) scale(0.97)' },
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+    ], { duration: MOTION_FAST });
+    menu.querySelector('.sb-mode-menu-item')?.focus();
+
+    window.requestAnimationFrame(() => {
+        (menu.querySelector('.sb-mode-menu-item.is-active') ?? menu.querySelector('.sb-mode-menu-item'))?.focus();
+    });
+}
+
+function initModeToggle() {
+    if (document.documentElement.dataset.sbModeToggleBound === 'true') {
+        return;
+    }
+    document.documentElement.dataset.sbModeToggleBound = 'true';
+    window.addEventListener('sb:conversation-workspace-state-changed', syncModeToggleButton);
+    window.addEventListener('sb:creator-workspace-state-changed', syncModeToggleButton);
+    syncModeToggleButton();
+}
+
+// ── Global keyboard shortcuts ────────────────────────────────────────────
+
+/**
+ * Keyboard routes for the top-bar destinations.
+ *
+ * Keys track the top bar left-to-right so the row reads as one memorised sequence. Bare `Ctrl`
+ * bindings are safe here because none of them are text-editing keys; `Ctrl+U` (view source) and
+ * `Ctrl+P` (print) can still be claimed by the browser first, and no page can prevent that, so the
+ * binding is best-effort rather than exclusive.
+ *
+ * The runs go through `openShell()` rather than the top bar's own `toggleSettingsPage()`, so they
+ * land on the remembered tab inside a section that is already open instead of closing it. There is
+ * no separate key for closing; Escape and the close button already cover that.
+ */
+const SB_SETTINGS_SHORTCUTS = Object.freeze([
+    { key: 'u', run: () => openShell('left') },
+    { key: 'i', run: () => openShell('right') },
+    { key: 'o', run: () => { closeMobileNav(); void returnToLandingPage(); } },
+    { key: 'p', run: () => openShell('characters') },
+]);
+
+function initSettingsKeyboardShortcuts() {
+    if (document.documentElement.dataset.sbSettingsShortcutsBound === 'true') {
+        return;
+    }
+
+    document.documentElement.dataset.sbSettingsShortcutsBound = 'true';
+
+    document.addEventListener('keydown', event => {
+        const isMac = navigator.platform?.toUpperCase().includes('MAC');
+        const ctrl = isMac ? event.metaKey : event.ctrlKey;
+        if (!ctrl || event.altKey) {
+            return;
+        }
+
+        const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+        if (!key) {
+            return;
+        }
+
+        // `Ctrl+F` works inside a field on purpose: it opens search rather than the browser's own
+        // find, which cannot reach into the settings page. The destination shortcuts are the
+        // opposite -- while the user is typing, a stray `Ctrl+P` must not navigate away.
+        const active = document.activeElement;
+        const isEditable = active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement ||
+            active?.isContentEditable === true;
+
+        if (key === 'f') {
+            if (isEditable) {
+                return;
+            }
+
+            event.preventDefault();
+            setUniversalSearchOpenState(true, { focusInput: true });
+            return;
+        }
+
+        if (key === 'm') {
+            event.preventDefault();
+            toggleChatMode();
+            return;
+        }
+
+        const shortcut = SB_SETTINGS_SHORTCUTS.find(entry => entry.key === key);
+        // Shift-qualified browser chords stay the browser's: `Ctrl+Shift+I` is DevTools inspect and
+        // `Ctrl+Shift+P` is Firefox private browsing, so the destination keys fire unshifted only.
+        if (!shortcut || isEditable || event.shiftKey) {
+            return;
+        }
+
+        event.preventDefault();
+        shortcut.run();
     });
 }
 

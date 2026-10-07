@@ -74,6 +74,44 @@
     <!-- top bar central settings buttons -->
     <div id="top-bar">
     </div>
+    <!-- SillyBunny: full-screen settings page — replaces drawer overlays (feat/v1.9.0-ui-overhaul) -->
+    <div id="sb-settings-page" hidden aria-modal="true" role="dialog" aria-label="Settings">
+        <div id="sb-settings-inner">
+            <aside id="sb-settings-sidebar" aria-label="Settings navigation">
+                <div id="sb-settings-sidebar-header">
+                    <span id="sb-settings-sidebar-title"></span>
+                    <button id="sb-settings-search-toggle" type="button" class="sb-settings-search-toggle-btn" aria-label="Search settings" aria-expanded="false">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div id="sb-settings-search-row" aria-hidden="true">
+                    <label class="sb-settings-search-field">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <input id="sb-settings-search-input" type="search" class="text_pole" placeholder="Search..." aria-label="Search settings" autocomplete="off" spellcheck="false">
+                    </label>
+                </div>
+                <nav id="sb-settings-tab-list" role="tablist" aria-orientation="vertical"></nav>
+            </aside>
+            <div id="sb-settings-content">
+                <header id="sb-settings-content-header">
+                    <button id="sb-settings-back" type="button" class="sb-settings-back-button" aria-label="Back to settings navigation">
+                        <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                    </button>
+                    <div class="sb-settings-header-spacer" aria-hidden="true"></div>
+                    <div class="sb-settings-heading">
+                        <h2 id="sb-settings-content-title" class="sb-settings-title"></h2>
+                        <p id="sb-settings-content-subtitle" class="sb-settings-subtitle"></p>
+                    </div>
+                    <button id="sb-settings-close" type="button" class="sb-settings-close-button" aria-label="Close settings">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </header>
+                <div id="sb-settings-body" class="sb-settings-body">
+                    <div id="sb-settings-shell-host"></div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="top-settings-holder">
         <!-- background selection menu -->
         <div id="ai-config-button" class="drawer">
@@ -5244,7 +5282,7 @@
                         </div>
                         <div name="themeElements" class="flex-container flexFlowColumn flexNoGap">
                             <!-- <h4><span data-i18n="UI Colors">Theme Settings</span></h4> -->
-                            <div name="AvatarAndChatDisplay" class="flex-container flexFlowColumn">
+                            <div name="AvatarAndChatDisplay" class="flex-container flexFlowColumn ds-pref-group">
                                 <div class="flex-container alignItemsBaseline" title="This style applies to all avatars globaly, including your Persona, Character Management, Account selection, etc." data-i18n="[title]This style applies to all avatars globaly, including your Persona, Character Management, Account selection, etc.">
                                     <span data-i18n="Avatar Style:">Avatars:</span>
                                     <select id="avatar_style" class="widthNatural flex1 margin0 text_pole">
@@ -5444,7 +5482,7 @@
                                     <div class="sb-settings-subdrawer-toolbar">
                                         <small>Keep motion, blur, timestamps, and message chrome in one easier-to-scan group.</small>
                                     </div>
-                                    <div name="themeToggles">
+                                    <div name="themeToggles" class="ds-pref-group">
                                 <!-- <h4 data-i18n="Theme Toggles">Theme Toggles</h4> -->
 
                                 <label for="reduced_motion" class="checkbox_label" title="Disable animations and transitions" data-i18n="[title]Disables animations and transitions">
@@ -5551,7 +5589,7 @@
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
                             </div>
                             <div class="inline-drawer-content flex-container flexFlowColumn sb-settings-subdrawer-body" style="display:none">
-                        <div name="CharacterHandlingToggles">
+                        <div name="CharacterHandlingToggles" class="ds-pref-group">
                             <h4 data-i18n="Character Handling">
                                 Character Handling
                             </h4>
@@ -5602,7 +5640,7 @@
 
                         </div>
 
-                        <div name="MiscellaneousToggles">
+                        <div name="MiscellaneousToggles" class="ds-pref-group">
                             <h4><span data-i18n="Miscellaneous">Miscellaneous</span></h4>
                             <div class="flex-container flexGap2">
                                 <div id="reload_chat" class="menu_button whitespacenowrap" data-i18n="[title]Reload and redraw the currently open chat" title="Reload and redraw the currently open chat.">
@@ -6596,7 +6634,10 @@
             <nav id="right-nav-panel" class="drawer-content closedDrawer fillRight sb-shell-root" tabindex="-1">
                 <div id="right-nav-panelheader" class="fa-solid fa-grip drag-grabber">
                 </div>
-                <div class="sb-shell-nav-wrapper sb-character-shell-nav-wrapper">
+                <!-- The settings page sidebar renders the character sections; these hidden
+                     buttons stay as the state markers that syncCharacterShellTabs, the
+                     universal search index, and helper targets address by data attribute. -->
+                <div class="sb-character-shell-nav-markers" hidden aria-hidden="true">
                     <div class="sb-shell-nav sb-character-shell-nav" role="tablist" aria-label="Character sections" aria-orientation="horizontal">
                         <button id="sb_character_tab_characters" class="sb-shell-tab is-active" type="button" role="tab" aria-selected="true" data-sb-character-tab="characters">
                             <i class="fa-solid fa-address-book" aria-hidden="true"></i>
@@ -6624,29 +6665,7 @@
                         </button>
                     </div>
                 </div>
-                <div class="sb-shell-header sb-character-shell-header">
-                    <button id="sb_character_shell_close" class="sb-shell-close" type="button" title="Close Characters" aria-label="Close Characters">
-                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                    </button>
-                    <div id="sb_character_mode_toggle" class="sb-character-shell-mode-toggle" role="radiogroup" aria-label="Workspace mode">
-                        <button type="button" class="sb-character-shell-mode-button is-active" data-sb-character-mode="roleplay" role="radio" aria-checked="true">
-                            <i class="fa-solid fa-masks-theater" aria-hidden="true"></i>
-                            <span>Roleplay</span>
-                        </button>
-                        <button type="button" class="sb-character-shell-mode-button" data-sb-character-mode="conversation" role="radio" aria-checked="false">
-                            <i class="fa-solid fa-comments" aria-hidden="true"></i>
-                            <span>Conversation</span>
-                        </button>
-                        <button type="button" class="sb-character-shell-mode-button" data-sb-character-mode="creator" role="radio" aria-checked="false">
-                            <i class="fa-solid fa-pen-ruler" aria-hidden="true"></i>
-                            <span>Creator</span>
-                        </button>
-                    </div>
-                    <div class="sb-shell-kicker" data-i18n="Characters">Characters</div>
-                    <h2 class="sb-shell-title" tabindex="-1" data-i18n="Character Menu">Character Menu</h2>
-                    <p class="sb-shell-subtitle" data-i18n="View or create character cards here for your roleplays and chats!">View or create character cards here for your roleplays and chats!</p>
-                    <p class="sb-shell-description" data-i18n="Move between characters, groups, personas, lore, and imports without leaving the writing workspace.">Move between characters, groups, personas, lore, and imports without leaving the writing workspace.</p>
-                </div>
+
                 <div id="CharListButtonAndHotSwaps" class="flex-container flexnowrap">
                     <div class="flexFlowColumn flex-container">
                         <div id="rm_button_panel_pin_div" class="alignitemsflexstart" title="Locked = Character Management panel will stay open" data-i18n="[title]Locked = Character Management panel will stay open">

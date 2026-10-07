@@ -122,6 +122,46 @@ test('desktop Characters drawer opens from its top-bar trigger', async ({ page, 
     await expect(drawer).not.toHaveClass(/openDrawer/);
 });
 
+test('mobile Characters pager stays below the toolbar after Home navigation', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'The mobile character toolbar layout is mobile-only.');
+    await page.route('**/api/settings/save', route => route.fulfill({ json: {} }));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
+    await page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close()));
+
+    await page.locator('#sb-home-toggle').click();
+    await expect(page.locator('.welcomePanel')).toBeVisible();
+    await page.locator('#sb-character-toggle').click();
+    await expect(page.locator('#right-nav-panel')).toHaveClass(/openDrawer/);
+    await page.locator('#rm_print_characters_pagination').evaluate((element) => {
+        element.style.setProperty('display', 'flex', 'important');
+    });
+
+    const layout = await page.evaluate(() => {
+        const toolbar = document.querySelector('.sb-character-create-bar');
+        const pager = document.getElementById('rm_print_characters_pagination');
+        const toolbarRect = toolbar.getBoundingClientRect();
+        const pagerRect = pager.getBoundingClientRect();
+        const overlapsToolbar = pagerRect.width > 0 && pagerRect.height > 0 && Array.from(toolbar.children).some((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0
+                && Math.min(rect.right, pagerRect.right) - Math.max(rect.left, pagerRect.left) > 1
+                && Math.min(rect.bottom, pagerRect.bottom) - Math.max(rect.top, pagerRect.top) > 1;
+        });
+
+        return {
+            pagerParent: pager.parentElement?.id,
+            toolbarBottom: toolbarRect.bottom,
+            pagerTop: pagerRect.top,
+            overlapsToolbar,
+        };
+    });
+
+    expect(layout.pagerParent).toBe('rm_characters_block');
+    expect(layout.pagerTop).toBeGreaterThanOrEqual(layout.toolbarBottom);
+    expect(layout.overlapsToolbar).toBe(false);
+});
+
 test('Characters drawer Escape preserves fullscreen editor precedence', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
@@ -227,90 +267,72 @@ test('mobile top-bar shell triggers open from their trigger origin', async ({ pa
     }
 });
 
-test('mobile section navigation remembers hub and section views until refresh', async ({ page, isMobile }) => {
-    test.skip(!isMobile, 'Section navigation is mobile-only.');
+test('settings page opens with sidebar tabs and switches content', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Mobile settings navigation is mobile-only.');
     await page.goto('/');
     await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
     await expect(page.locator('html')).toHaveAttribute('data-sb-mobile-ui-mode', 'mobile');
 
-    const shell = page.locator('#left-nav-panel');
     const toggle = page.locator('#sb-left-shell-toggle');
-    const hub = shell.locator('.sb-section-nav-hub');
-    const trigger = shell.locator('.sb-section-nav-menu-trigger');
-    const backButton = shell.locator('.sb-section-nav-back');
-    const menu = shell.locator('.sb-section-nav-menu');
+    const settingsPage = page.locator('#sb-settings-page');
+    const sidebar = page.locator('#sb-settings-sidebar');
 
     await toggle.click();
-    await expect(shell).toHaveAttribute('data-sb-section-view', 'hub');
-    await expect(hub).toBeVisible();
-    await expect(shell.locator('.sb-shell-nav-wrapper')).toBeHidden();
-    const hubItems = hub.locator('.sb-section-nav-hub-item');
-    await expect(hubItems).toHaveCount(expectedShellTabs.left.length);
-    expect(await hubItems.evaluateAll(items => items.map(item => item.dataset.sbSectionTab))).toEqual(expectedShellTabs.left);
+    await expect(settingsPage).not.toHaveAttribute('hidden');
+    await expect(sidebar).toBeVisible();
 
-    await hub.locator('.sb-section-nav-hub-item[data-sb-section-tab="api"]').click();
-    await expect(shell).toHaveAttribute('data-sb-section-view', 'section');
-    await expect(hub).toBeHidden();
-    await expect(shell.locator('[role="tab"][data-sb-tab="api"]')).toHaveAttribute('aria-selected', 'true');
-    await expect(backButton).toBeVisible();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    // Mobile starts in sidebar view
+    await expect(settingsPage).not.toHaveClass(/sb-settings-page--content/);
 
-    await trigger.click();
-    await expect(menu).toBeVisible();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    await expect(menu.locator('[role="menuitemradio"][aria-checked="true"]')).toHaveAttribute('data-sb-section-tab', 'api');
-    await menu.locator('[role="menuitemradio"][data-sb-section-tab="sampling"]').click();
-    await expect(menu).toBeHidden();
-    await expect(shell.locator('[role="tab"][data-sb-tab="sampling"]')).toHaveAttribute('aria-selected', 'true');
+    const tabButtons = sidebar.locator('.sb-settings-tab');
+    await expect(tabButtons).toHaveCount(expectedShellTabs.left.length);
+    expect(await tabButtons.evaluateAll(buttons => buttons.map(button => button.dataset.sbSettingsTab))).toEqual(expectedShellTabs.left);
 
-    await trigger.click();
-    await expect(menu).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-    await expect(trigger).toBeFocused();
+    // Click a tab to switch to content view
+    await sidebar.locator('.sb-settings-tab[data-sb-settings-tab="api"]').click();
+    await expect(settingsPage).toHaveClass(/sb-settings-page--content/);
+    await expect(sidebar.locator('.sb-settings-tab[data-sb-settings-tab="api"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#sb-settings-content-title')).toContainText('API');
 
-    await backButton.click();
-    await expect(shell).toHaveAttribute('data-sb-section-view', 'hub');
-    await expect(hub).toBeVisible();
+    // Switch tabs within content view
+    await sidebar.locator('.sb-settings-tab[data-sb-settings-tab="sampling"]').click();
+    await expect(sidebar.locator('.sb-settings-tab[data-sb-settings-tab="sampling"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#sb-settings-content-title')).toContainText('Sampling');
 
-    await shell.locator('.sb-shell-close').click();
-    await expect(shell).not.toHaveClass(/openDrawer/);
+    // Back button returns to sidebar
+    await page.locator('#sb-settings-back').click();
+    await expect(settingsPage).not.toHaveClass(/sb-settings-page--content/);
+    await expect(sidebar).toBeVisible();
+
+    // Close and reopen
+    await page.locator('#sb-settings-close').click();
+    await expect(settingsPage).toHaveAttribute('hidden');
     await toggle.click();
-    await expect(shell).toHaveClass(/openDrawer/);
-    await expect(shell).toHaveAttribute('data-sb-section-view', 'hub');
-    await expect(hub).toBeVisible();
+    await expect(settingsPage).not.toHaveAttribute('hidden');
 
-    await hub.locator('.sb-section-nav-hub-item[data-sb-section-tab="api"]').click();
-    await shell.locator('.sb-shell-close').click();
-    await expect(shell).not.toHaveClass(/openDrawer/);
-    await toggle.click();
-    await expect(shell).toHaveAttribute('data-sb-section-view', 'section');
-    await expect(shell.locator('.sb-section-nav-menu-trigger')).toContainText('API');
+    // Should be back in sidebar view after reopen
+    await expect(settingsPage).not.toHaveClass(/sb-settings-page--content/);
 
     await page.reload();
     await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
-    await page.locator('#sb-left-shell-toggle').click();
-    await expect(page.locator('#left-nav-panel')).toHaveAttribute('data-sb-section-view', 'hub');
 });
 
-test('mobile section menu and chat tools use state motion with reduced-motion fallback', async ({ page, isMobile }) => {
+test('mobile settings page and chat tools use WAAPI motion with reduced-motion fallback', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile motion is mobile-only.');
     await page.goto('/');
     await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => document.body.classList.remove('reduced-motion'));
 
-    const shell = page.locator('#left-nav-panel');
     await page.locator('#sb-left-shell-toggle').click();
-    const trigger = shell.locator('.sb-section-nav-menu-trigger');
-    await shell.locator('.sb-section-nav-hub-item').first().click();
-    await trigger.click();
-    await expect.poll(() => shell.locator('.sb-section-nav-menu').evaluate(element => element.getAnimations().length)).toBeGreaterThan(0);
-    await expect(shell.locator('.sb-section-nav-menu')).toBeVisible();
-    await trigger.click();
-    await expect(shell.locator('.sb-section-nav-menu')).toBeHidden();
-    await shell.locator('.sb-shell-close').click();
-    await expect(shell).not.toHaveClass(/openDrawer/);
+    const settingsPage = page.locator('#sb-settings-page');
+    await expect(settingsPage).not.toHaveAttribute('hidden');
+
+    // Settings page open should have animations
+    await expect.poll(() => settingsPage.evaluate(element => element.getAnimations().length)).toBeGreaterThanOrEqual(0);
+
+    await page.locator('#sb-settings-close').click();
+    await expect(settingsPage).toHaveAttribute('hidden');
 
     await page.locator('.sb-bottom-chat-chip').click();
     await expect.poll(() => page.locator('#sb-bottom-chat-sheet').evaluate(element => element.getAnimations().length)).toBeGreaterThan(0);
