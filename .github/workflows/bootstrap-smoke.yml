@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   posix:
-    name: Bootstrap smoke (${{ matrix.os }}, ${{ matrix.runtime }}${{ matrix.fresh_bun && ', fresh bun' || '' }})
+    name: Bootstrap smoke (${{ matrix.os }}, ${{ matrix.runtime }}${{ matrix.fresh_bun && ', fresh bun' || '' }}${{ matrix.fresh_node && ', fresh node' || '' }})
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +46,13 @@ jobs:
             runtime: bun
             expect: bun
             fresh_bun: false
+          # The genuine first-run Mac: hide every preinstalled Node.js so the
+          # installer has to download the pinned build from nodejs.org.
+          - os: macos-latest
+            runtime: default
+            expect: node
+            fresh_bun: false
+            fresh_node: true
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -64,6 +71,9 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js
+        # setup-node adds its folder through GITHUB_PATH, which the runner puts
+        # back in front of PATH on every later step, so it cannot be hidden.
+        if: '!matrix.fresh_node'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
@@ -104,21 +114,74 @@ jobs:
           fi
           test ! -x "$BUN_INSTALL/bin/bun"
 
+      - name: Hide preinstalled Node.js so the installer must download it
+        if: matrix.fresh_node
+        run: |
+          set -euo pipefail
+          # install-prerequisites.sh also searches /opt/homebrew/bin and /usr/local/bin.
+          for dir in /opt/homebrew/bin /usr/local/bin; do
+            for tool in node npm npx corepack; do
+              if [[ -e "$dir/$tool" || -L "$dir/$tool" ]]; then
+                sudo mv "$dir/$tool" "$dir/$tool.hidden-by-smoke"
+              fi
+            done
+          done
+          trimmed_path=''
+          IFS=':' read -r -a path_entries <<< "$PATH"
+          for dir in "${path_entries[@]}"; do
+            [[ -n "$dir" && ! -x "$dir/node" ]] || continue
+            trimmed_path="${trimmed_path:+$trimmed_path:}$dir"
+          done
+          # GITHUB_ENV would fold PATH back into the runner's own PATH, so the
+          # trimmed value is stored separately and re-applied in each later step.
+          export SILLYBUNNY_NODE_INSTALL="$RUNNER_TEMP/node-fresh"
+          {
+            echo "TRIMMED_PATH=$trimmed_path"
+            echo "SILLYBUNNY_NODE_INSTALL=$SILLYBUNNY_NODE_INSTALL"
+          } >> "$GITHUB_ENV"
+          export PATH="$trimmed_path"
+          if command -v node >/dev/null 2>&1; then
+            echo "Node.js is still resolvable at $(command -v node); this leg would not exercise the download." >&2
+            exit 1
+          fi
+          test ! -e "$SILLYBUNNY_NODE_INSTALL"
+
       - name: Run install.sh against this checkout
         run: |
           set -euo pipefail
+          if [[ -n "${TRIMMED_PATH:-}" ]]; then export PATH="$TRIMMED_PATH"; fi
           git branch --force bootstrap-smoke HEAD
+          if [[ "${{ matrix.fresh_node }}" == true ]] && command -v node >/dev/null 2>&1; then
+            echo "Node.js is resolvable at $(command -v node); the fresh-node leg would not exercise the download." >&2
+            exit 1
+          fi
           bash scripts/bootstrap/install.sh \
             --repo "$GITHUB_WORKSPACE" \
             --ref bootstrap-smoke \
             --dir "$RUNNER_TEMP/SillyBunny" \
-            --no-start
+            --no-start 2>&1 | tee "$RUNNER_TEMP/install.log"
+          if [[ "${{ matrix.fresh_node }}" == true ]]; then
+            grep -F "Downloading Node.js" "$RUNNER_TEMP/install.log"
+          fi
           test -f "$RUNNER_TEMP/SillyBunny/server.js"
           test "$(git -C "$RUNNER_TEMP/SillyBunny" rev-parse HEAD)" = "$(git rev-parse HEAD)"
+
+      - name: Assert the installer downloaded Node.js
+        if: matrix.fresh_node
+        run: |
+          set -euo pipefail
+          # npm is a `#!/usr/bin/env node` script, so node must be on PATH to run it.
+          export PATH="$SILLYBUNNY_NODE_INSTALL/bin:$TRIMMED_PATH"
+          test "$(command -v node)" = "$SILLYBUNNY_NODE_INSTALL/bin/node"
+          node --version
+          npm --version
+          # Later steps read the dependency marker with node.
+          echo "TRIMMED_PATH=$SILLYBUNNY_NODE_INSTALL/bin:$TRIMMED_PATH" >> "$GITHUB_ENV"
 
       - name: Boot the installed copy through start.sh
         run: |
           set -euo pipefail
+          if [[ -n "${TRIMMED_PATH:-}" ]]; then export PATH="$TRIMMED_PATH"; fi
           # Fail loudly if anything already holds the port, so a readiness probe
           # cannot be satisfied by a process other than the one we launched.
           if curl --fail --silent --max-time 2 http://127.0.0.1:4444/ > /dev/null 2>&1; then
@@ -203,6 +266,7 @@ jobs:
       - name: Rerunning install.sh updates instead of reinstalling
         run: |
           set -euo pipefail
+          if [[ -n "${TRIMMED_PATH:-}" ]]; then export PATH="$TRIMMED_PATH"; fi
           head_before="$(git -C "$RUNNER_TEMP/SillyBunny" rev-parse HEAD)"
           output="$(bash scripts/bootstrap/install.sh \
             --repo "$GITHUB_WORKSPACE" \
@@ -212,6 +276,57 @@ jobs:
           printf '%s\n' "$output"
           grep -F "already installed" <<< "$output"
           test "$(git -C "$RUNNER_TEMP/SillyBunny" rev-parse HEAD)" = "$head_before"
+
+      # macOS ships bash 3.2 as /bin/bash, and the wizard only runs on a terminal,
+      # so the flag-driven steps above never reach it. expect (part of macOS)
+      # supplies the terminal; cancelling at the summary keeps it offline.
+      - name: Wizard answers parse under the system /bin/bash
+        if: runner.os == 'macOS' && matrix.runtime == 'default' && !matrix.fresh_node
+        run: |
+          set -euo pipefail
+          /bin/bash --version | head -n 1
+          target="$RUNNER_TEMP/wizard-install"
+          cat > "$RUNNER_TEMP/wizard.exp" <<'EXP'
+          set timeout 60
+          proc fail {msg} { puts "\nWizard check failed: $msg"; exit 1 }
+          spawn -noecho /bin/bash scripts/bootstrap/install.sh
+          expect {
+              -ex "Where should SillyBunny be installed?" {}
+              eof { fail "installer exited before the install-directory question" }
+              timeout { fail "no install-directory question" }
+          }
+          expect -ex "> "
+          send -- "$env(WIZARD_TARGET)\r"
+          expect {
+              -ex "Migrate from an older installation?" {}
+              eof { fail "installer exited before the migrate question" }
+              timeout { fail "no migrate question" }
+          }
+          expect -ex "> "
+          send -- "\r"
+          expect {
+              -ex "Which JavaScript runtime" { fail "runtime question shown on macOS" }
+              -ex "Start SillyBunny when setup finishes?" {}
+              eof { fail "installer exited before the start question" }
+              timeout { fail "no start question" }
+          }
+          send -- "N\r"
+          expect {
+              -ex "bad substitution" { fail "answer parsing needs a newer bash" }
+              -ex "Start after install: No" {}
+              eof { fail "installer exited before the summary" }
+              timeout { fail "no summary showing the uppercase N answer" }
+          }
+          expect {
+              -ex "Press Enter to begin" {}
+              eof { fail "installer exited before the begin prompt" }
+              timeout { fail "no begin prompt" }
+          }
+          send -- "\003"
+          expect eof
+          EXP
+          WIZARD_TARGET="$target" expect -f "$RUNNER_TEMP/wizard.exp"
+          test ! -e "$target"
 
   windows:
     name: Bootstrap smoke (${{ matrix.runtime }})

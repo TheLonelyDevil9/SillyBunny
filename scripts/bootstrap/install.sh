@@ -52,7 +52,8 @@ Options:
   --migrate-from <path>   Copy data, settings, plugins and extensions from an
                           old non-Git (ZIP) install. The old folder is not changed.
   --use-bun               Force Bun as the runtime (default on Linux/Windows)
-  --use-node              Force Node.js as the runtime (default on macOS)
+  --use-node              Force Node.js as the runtime (default on macOS,
+                          where it is installed automatically if missing)
   --no-start              Install only; do not start SillyBunny afterwards
   -h, --help              Show this help
 EOF
@@ -237,6 +238,28 @@ install_git() {
 
     hash -r
     have_working_git || die "Git was installed, but 'git' is still unavailable in this shell."
+}
+
+# macOS runs SillyBunny on Node.js (Bun idles at high CPU there, oven-sh/bun#26415).
+# The clone's own prerequisites script installs Node.js when it is missing, so a
+# --no-start install is ready to run too. Best effort: the clone and any migration
+# are already done, and clones of older refs (e.g. a pinned tag) whose prerequisites
+# script cannot install Node.js on macOS exit non-zero here.
+install_macos_node() {
+    [[ "$(uname -s 2>/dev/null)" == Darwin ]] || return 0
+    if [[ "$runtime_override" == bun ]]; then
+        return 0
+    fi
+    # start.sh honours the same override, e.g. `curl -fsSL <url> | SILLYBUNNY_USE_BUN=1 bash`.
+    local forced
+    forced="$(printf '%s' "${SILLYBUNNY_USE_BUN:-}" | tr '[:upper:]' '[:lower:]')"
+    case "$forced" in
+        1|true|yes|on) return 0 ;;
+    esac
+    if ! bash "$install_dir/scripts/install-prerequisites.sh" --require-node-runtime --skip-bun; then
+        log 'Node.js was not installed automatically; the install itself is complete.'
+        log 'Install Node.js from https://nodejs.org so start.sh can run SillyBunny on it.'
+    fi
 }
 
 # Prints the data root relative to the install folder, or an absolute path.
@@ -458,7 +481,9 @@ run_wizard() {
         printf '  Bun is faster; Node.js is the fallback for systems where Bun has issues.\n'
         printf '  [B]un / [n]ode (default: Bun) '
         read -r answer
-        case "${answer,,}" in
+        # ${answer,,} needs bash 4; macOS ships bash 3.2 as /bin/bash.
+        answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+        case "$answer" in
             n|node) runtime_override='node' ;;
             *)      runtime_override='bun'  ;;
         esac
@@ -468,7 +493,8 @@ run_wizard() {
     printf '\n'
     printf 'Start SillyBunny when setup finishes? [Y/n] '
     read -r answer
-    case "${answer,,}" in
+    answer="$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')"
+    case "$answer" in
         n|no) start_after=0 ;;
     esac
 
@@ -525,6 +551,7 @@ main() {
             die "$install_dir already has an install. Migrate into a new folder with --dir."
         fi
         update_install
+        install_macos_node
         start_install
         return
     fi
@@ -548,6 +575,8 @@ main() {
     if [[ -n "$migrate_from" ]]; then
         migrate_old_install
     fi
+
+    install_macos_node
 
     start_install
 }
