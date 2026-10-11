@@ -62,8 +62,8 @@ import {
     flattenNestedSettingsDrawers,
     splitUserSettingsContent,
 } from './sillybunny-settings-content.js';
-import { normalizeSettingsDetail, normalizeSettingsPresentation } from './sillybunny-settings-presentation.js';
-import { createSubpageStack, SB_SUBPAGE_STORE_CLASS } from './sillybunny-settings-subpage.js';
+import { normalizeBackendSettingsRows, normalizeSettingsDetail, normalizeSettingsPresentation } from './sillybunny-settings-presentation.js';
+import { createSubpageStack, SB_SUBPAGE_DURATION, SB_SUBPAGE_STORE_CLASS } from './sillybunny-settings-subpage.js';
 import { SB_SUBPAGE_BUILDERS } from './sillybunny-settings-subpage-descriptors.js';
 import { createConnectionsPanel } from './sillybunny-connections-panel.js';
 
@@ -117,23 +117,10 @@ function initializeSettingsPanel() {
 const SB_COLLAPSIBLE_DRAWER_TAB_IDS = Object.freeze(new Set(['extensions', 'agents']));
 
 /**
- * Phase 6H: the panels presented as a sliding list-plus-detail stack.
- *
- * These three were the last ones still made of accordions, and they are also the three whose
- * settings arrive from somewhere other than this file -- Extensions is written by whatever extension
- * is loaded, while Connections and Prompting are upstream's blocks. The stack owns their
- * presentation entirely, so the flatten, the section order, and the two-line normalizer all stand
- * down for them: those passes exist to box loose rows and add a description between a heading and
- * its content, and on these panels there is no heading to work from and no shape they can describe
- * (Connections alone got 43 boxes out of the normalizer, because thirty-odd hidden per-provider forms
- * read as thirty-odd sections).
- *
- * Extensions and Agents were already left alone by the drawer passes, for the reason given on
- * `SB_COLLAPSIBLE_DRAWER_TAB_IDS`; the stack is what replaces them there. Agents is not listed here
- * because it does not need stacking: the in-chat-agents extension already presents its own dashboard
- * as a list that opens editors, so it gets the shared row and button styling and keeps its layout.
+ * Extensions owns independently authored sections, so it retains the sliding detail stack.
+ * Prompting uses its live backend groups on one scrolling page instead.
  */
-const SB_SUBPAGE_TAB_IDS = Object.freeze(new Set(['extensions', 'prompting']));
+const SB_SUBPAGE_TAB_IDS = Object.freeze(new Set(['extensions']));
 
 /**
  * Whether a panel's presentation is owned by the subpage stack rather than by the settings passes.
@@ -209,6 +196,66 @@ function installSettingsSubpage(shellKey, tabId) {
     stack.setRows(built.rows);
     sbSubpageStacks.set(key, stack);
 
+    // SillyBunny: Extensions — the manage/install/notify header and the Download Extensions &
+    // Assets section are always visible, above the extension row list. Move them out of the store
+    // (where the CSS hides them) and into the list page heading so they are never hidden.
+    if (tabId === 'extensions' && panel instanceof HTMLElement) {
+        const notifyLabel   = panel.querySelector('label[for="extensions_notify_updates"]');
+        const manageBtn     = panel.querySelector('#extensions_details');
+        const installBtn    = panel.querySelector('#third_party_extension_button');
+
+        if (notifyLabel || manageBtn || installBtn) {
+            const pill = document.createElement('div');
+            pill.className = 'ds-pref-group sb-ext-actions-pill';
+
+            // Action buttons row (Manage + Install)
+            if (manageBtn instanceof HTMLElement || installBtn instanceof HTMLElement) {
+                const btnRow = document.createElement('div');
+                btnRow.className = 'sb-ext-action-buttons ds-row';
+                if (manageBtn instanceof HTMLElement) btnRow.appendChild(manageBtn);
+                if (installBtn instanceof HTMLElement) btnRow.appendChild(installBtn);
+                pill.appendChild(btnRow);
+            }
+
+            // Notify toggle row — normalize via a temp wrapper because normalizeBackendSettingsRows
+            // queries descendants; passing the label itself finds nothing.
+            if (notifyLabel instanceof HTMLElement) {
+                const wrapper = document.createElement('div');
+                wrapper.appendChild(notifyLabel);
+                normalizeBackendSettingsRows(wrapper, { fields: false });
+                pill.appendChild(notifyLabel);
+            }
+
+            stack.listHeading.appendChild(pill);
+        }
+
+        if (built.pinned instanceof HTMLElement) {
+            built.pinned.classList.add('sb-ext-pinned-section');
+            stack.listHeading.appendChild(built.pinned);
+
+            // SillyBunny: The assets extension mounts async and builds a closed inline-drawer.
+            // Watch the container and expand the drawer the moment content appears; a closed
+            // drawer here looks like just another extension entry instead of a feature panel.
+            const expandPinnedDrawer = (container) => {
+                const content = container.querySelector('.inline-drawer-content');
+                if (content instanceof HTMLElement) {
+                    // Set inline style — the drawer starts display:none via CSS class, not inline style,
+                    // so removeProperty would be a no-op; an explicit inline display wins.
+                    content.style.display = 'block';
+                }
+            };
+            // Run immediately in case extension already mounted before we got here
+            expandPinnedDrawer(built.pinned);
+            const pinnedObserver = new MutationObserver(() => {
+                expandPinnedDrawer(built.pinned);
+                if (built.pinned.querySelector('.inline-drawer-content')) {
+                    pinnedObserver.disconnect();
+                }
+            });
+            pinnedObserver.observe(built.pinned, { childList: true, subtree: true });
+        }
+    }
+
     if (built.observe instanceof HTMLElement) {
         // Extension containers mount over the first seconds after the panel is built, so the list is
         // rebuilt from the DOM rather than captured once.
@@ -221,6 +268,101 @@ function installSettingsSubpage(shellKey, tabId) {
 /** Phase 6F: marks the merged Chat Completion presets row and the chrome card it replaces. */
 const SB_PRESET_TOOLBAR_ROW_CLASS = 'sb-preset-toolbar-row';
 const SB_PRESET_TOOLBAR_CARD_CLASS = 'sb-preset-toolbar-card';
+const SB_PRESET_ACTION_GROUP_CLASS = 'sb-action-btn-group';
+
+const SB_PRESET_ACTION_LABELS = Object.freeze({
+    import: 'Import',
+    export: 'Export',
+    update: 'Update current preset',
+    rename: 'Rename',
+    new: 'Save preset as',
+    restore: 'Restore',
+    restoreDefaults: 'Restore default presets',
+    delete: 'Delete',
+    deleteAll: 'Delete presets in bulk',
+});
+
+function getPresetActionKind(button) {
+    if (!(button instanceof HTMLElement)) return null;
+    for (const kind of ['import', 'export', 'update', 'rename', 'new', 'restore', 'delete']) {
+        if (button.matches(`[data-preset-manager-${kind}]`)) return kind;
+    }
+    if (button.matches('[data-preset-manager-delete-all]')) {
+        return 'deleteAll';
+    }
+    if (button.matches('[data-preset-manager-restore-defaults]')) return 'restoreDefaults';
+    if (button.id === 'import_oai_preset') return 'import';
+    if (button.id === 'export_oai_preset') return 'export';
+    if (button.id === 'update_oai_preset') return 'update';
+    if (button.id === 'new_oai_preset') return 'new';
+    if (button.id === 'delete_oai_preset') return 'delete';
+    return null;
+}
+
+function groupPresetActions(actionContainer) {
+    const actions = [...actionContainer.querySelectorAll('.menu_button, .menu_button_icon')].filter(child => getPresetActionKind(child));
+    if (actions.length === 0) return;
+
+    const groups = new Map([
+        ['file', ['import', 'export']],
+        ['save', ['update', 'rename', 'new']],
+        ['restore', ['restore', 'restoreDefaults']],
+        ['destructive', ['delete', 'deleteAll']],
+    ]);
+    for (const [groupName, kinds] of groups) {
+        const wrapper = actionContainer.querySelector(`:scope > .${SB_PRESET_ACTION_GROUP_CLASS}--${groupName}`)
+            ?? createElement('span', { className: `${SB_PRESET_ACTION_GROUP_CLASS} ${SB_PRESET_ACTION_GROUP_CLASS}--${groupName}` });
+        for (const kind of kinds) {
+            const action = actions.find(button => getPresetActionKind(button) === kind);
+            if (action && action.parentElement !== wrapper) wrapper.append(action);
+        }
+        if (wrapper.childElementCount > 0 && wrapper.parentElement !== actionContainer) actionContainer.append(wrapper);
+    }
+}
+
+function enhancePresetActionButtons(root) {
+    if (!(root instanceof HTMLElement)) return;
+
+    const actionContainers = [
+        ...root.querySelectorAll('.sb-non-chat-preset-actions'),
+        ...root.querySelectorAll('#openai_api-presets .sb-preset-toolbar-row > .flex-container.marginLeft5'),
+    ];
+    for (const actionContainer of actionContainers) {
+        if (!(actionContainer instanceof HTMLElement)) continue;
+        for (const button of actionContainer.querySelectorAll('.menu_button, .menu_button_icon')) {
+            const kind = getPresetActionKind(button);
+            if (!kind) continue;
+            const label = SB_PRESET_ACTION_LABELS[kind];
+            // `toggle` with a force argument is a no-op when the state already matches; `add` always queues a
+            // class mutation, which wakes the keyboard-interactable observer on every Prompting activation.
+            button.classList.toggle('sb-action-btn', true);
+            button.classList.toggle('sb-action-btn--danger', kind === 'delete' || kind === 'deleteAll');
+            if (!button.querySelector(':scope > .sb-action-btn-label')) {
+                const labelId = `sb-preset-action-${actionContainer.closest('[id]')?.id}-${kind}-label`;
+                const attrs = ['restoreDefaults', 'deleteAll'].includes(kind) ? {} : { 'data-i18n': label };
+                const labelNode = createElement('span', { id: labelId, className: 'sb-action-btn-label', text: label, attrs });
+                button.append(labelNode);
+                button.setAttribute('aria-labelledby', labelId);
+            }
+            for (const icon of button.querySelectorAll(':scope > i')) icon.setAttribute('aria-hidden', 'true');
+        }
+        groupPresetActions(actionContainer);
+    }
+}
+
+function groupPromptingRowHelpers(root) {
+    for (const row of root.querySelectorAll('.sb-prompting-group-body .ds-row')) {
+        if (row.parentElement.matches('.sb-prompting-row-with-help') || row.closest('#completion_prompt_manager')) continue;
+        const helpers = [];
+        for (let helper = row.nextElementSibling; helper?.matches('.toggle-description, .notes, p, small'); helper = helper.nextElementSibling) {
+            helpers.push(helper);
+        }
+        if (helpers.length === 0) continue;
+        const wrapper = createElement('div', { className: 'sb-prompting-row-with-help' });
+        row.before(wrapper);
+        wrapper.append(row, ...helpers);
+    }
+}
 
 /**
  * Flattens drawers in every Backend and Customize panel, covering drawers authored after the split.
@@ -231,6 +373,7 @@ function flattenRightShellSettingsDrawers() {
         return;
     }
 
+    syncBackgroundSettingsSection();
     for (const [tabId, tabState] of shellState.tabs.entries()) {
         if (!SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) && !isSubpagePanel(tabId) && tabState.panel instanceof HTMLElement) {
             flattenNestedSettingsDrawers(tabState.panel, { includeTopLevel: true });
@@ -313,7 +456,7 @@ function openAllInlineDrawers(root = null) {
  * the split.
  *
  * The split flattens and orders the markup it relocates, but some sections author their drawers
- * at runtime -- `#sb-openai-output` builds four of them in `openai.js` once its panel is created,
+ * at runtime -- OpenAI groups are built in `openai.js` once its panel is created,
  * and Advanced Formatting and the Appearance theme card are assembled after the split -- so both
  * passes are repeated on activation. Both are idempotent, so re-running them costs queries and no
  * DOM churn.
@@ -324,15 +467,21 @@ function openAllInlineDrawers(root = null) {
  * @param {string} tabId
  */
 function flattenSettingsPanelDrawers(shellKey, tabId) {
+    if (shellKey === 'right') syncBackgroundSettingsSection();
     if (SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) || isSubpagePanel(tabId)) {
         return;
     }
 
     const panel = getShellState(shellKey)?.tabs.get(tabId)?.panel;
+    if (tabId === 'prompting') {
+        updatePromptingPanel(panel);
+        return;
+    }
     if (panel instanceof HTMLElement) {
         flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
         applySettingsSectionOrder(panel, tabId);
         normalizeSettingsPresentation(panel, { name: tabId });
+        if (tabId === 'context') positionAdvancedFormattingHelpLink();
     }
 }
 
@@ -476,7 +625,7 @@ const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
  * Drawers whose open state is written by their own code rather than by the generic persistence
  * scan, so the scan must not also write a key for them.
  *
- * 6F removed `sb-openai-budget`, `sb-openai-output` and `sb-openai-advanced` from this list: they
+ * 6F removed OpenAI drawer persistence from this list: the groups
  * are flattened now, and a flattened section is not a drawer -- it has no toggle and no content
  * wrapper -- so there is no open state left for either writer to persist.
  */
@@ -866,12 +1015,13 @@ const SB_SHELLS = Object.freeze({
             },
             {
                 id: 'context',
-                label: 'Context',
+                label: 'Formatting',
                 icon: 'fa-text-height',
                 tooltip: 'Set miscellaneous formatting settings for the model backend',
-                description: 'Configure context templates and regex text transformations.',
-                searchPlaceholder: 'Search context templates, regex, or text replacements',
-                searchExamples: ['context', 'regex', 'replacement'],
+                description: 'lorum ipsum',
+                searchPlaceholder: 'Search formatting, context templates, regex, or text replacements',
+                searchExamples: ['formatting', 'context', 'advanced formatting', 'regex', 'replacement'],
+                searchAliases: ['Context', 'Advanced Formatting'],
             },
         ],
     },
@@ -962,6 +1112,8 @@ const SB_DRAWER_ROUTES = Object.freeze({
 });
 
 const SB_SEARCH_TARGET_SELECTOR = [
+    '.ds-row-label',
+    '.ds-row-subtitle',
     'label',
     '.checkbox_label',
     '.menu_button',
@@ -2092,6 +2244,37 @@ function isCharacterEditorMenuType(menuType) {
     return ['character_edit', 'create'].includes(menuType ?? '');
 }
 
+// Row subtitles and section meta lines describe a setting rather than name it: they stay searchable,
+// but folding them into `textContent` turned every label into "NameDescription". Placeholder copy is
+// unwritten filler and is neither searchable nor shown.
+const SB_SEARCH_DESCRIPTION_SELECTOR = [
+    '.ds-row-subtitle',
+    '.sb-group-meta',
+    '.sb-settings-category-heading > small',
+    `.${SB_FLAT_SECTION_HEADER_CLASS} > .flex-container > small`,
+].join(', ');
+const SB_SEARCH_PLACEHOLDER_SELECTOR = '[data-sb-copy-placeholder]';
+
+/** Text inside `element`, leaving out descendants matching `skipSelector`. */
+function getSearchNodeText(element, skipSelector) {
+    if (!element.querySelector(skipSelector)) {
+        return element.textContent ?? '';
+    }
+    const parts = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const skipped = node.parentElement?.closest(skipSelector);
+        if (skipped && skipped !== element && element.contains(skipped)) continue;
+        parts.push(node.data);
+    }
+    return parts.join(' ');
+}
+
+/** The name a row or heading shows, without its description or placeholder copy. */
+function getSearchLabelText(element) {
+    return getSearchNodeText(element, `${SB_SEARCH_DESCRIPTION_SELECTOR}, ${SB_SEARCH_PLACEHOLDER_SELECTOR}`);
+}
+
 function getSearchTextCandidates(element) {
     const extensionContainer = element.closest('.extension_container');
     const extensionName = extensionContainer?.querySelector('.extension_name')?.textContent ?? '';
@@ -2109,7 +2292,7 @@ function getSearchTextCandidates(element) {
         element.matches('.extension_container, .extension_name')
             ? extensionContainer?.querySelector('.extension_name, .inline-drawer-header, .inline-drawer-toggle, h3, h4, strong')?.textContent
             : '',
-        element.textContent,
+        getSearchLabelText(element),
     ];
 
     return candidates
@@ -2128,6 +2311,7 @@ function getSearchDisplayText(element, fallback = '') {
 function getSearchText(element, sectionLabel = '') {
     return normalizeText([
         ...getSearchTextCandidates(element),
+        getSearchNodeText(element, SB_SEARCH_PLACEHOLDER_SELECTOR),
         sectionLabel,
     ].join(' '));
 }
@@ -2348,12 +2532,30 @@ function queueLayoutViewportScrollRestore(anchor) {
     window.setTimeout(() => restoreLayoutViewportScroll(anchor), 120);
 }
 
+const SB_MANAGED_SCROLL_CONTAINER_SELECTOR = '.sb-shell-panel-scroller, .scrollableInner, .scrollableInnerFull, .sb-search-results, #chat';
+
+/** Whether the element would actually move when scrolled, rather than only clipping. */
+function isScrollableContainer(element) {
+    if (element.scrollHeight - element.clientHeight <= 1) {
+        return false;
+    }
+    const overflowY = window.getComputedStyle(element).overflowY;
+    return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+}
+
 function getManagedScrollContainer(target) {
     if (!(target instanceof HTMLElement)) {
         return null;
     }
 
-    return target.closest('.sb-shell-panel-scroller, .scrollableInner, .scrollableInnerFull, .sb-search-results, #chat');
+    // Nearest match first: a panel can nest a taller, non-scrolling wrapper inside the element that
+    // really scrolls, and scrolling that wrapper moves nothing.
+    const candidates = [];
+    for (let element = target; element; element = element.parentElement) {
+        if (element.matches(SB_MANAGED_SCROLL_CONTAINER_SELECTOR)) candidates.push(element);
+    }
+
+    return candidates.find(isScrollableContainer) ?? candidates[0] ?? null;
 }
 
 function scrollElementIntoManagedView(target, { block = 'nearest', behavior = 'auto' } = {}) {
@@ -2812,7 +3014,14 @@ function scheduleMobilePopupKeyboardSync() {
     sbMobilePopupKeyboardSyncTimer = window.setTimeout(syncMobilePopupKeyboardShift, 400);
 }
 
+/** Account storage once its migration marker is present; init() never removes it, so it stays ready. */
+let sbReadyAccountStorage = null;
+
 function getShellAccountStorage() {
+    if (sbReadyAccountStorage) {
+        return sbReadyAccountStorage;
+    }
+
     const storage = getSillyTavernContext()?.accountStorage;
 
     if (!storage || typeof storage.getState !== 'function') {
@@ -2820,8 +3029,13 @@ function getShellAccountStorage() {
     }
 
     try {
+        // getState() deep-clones the whole store; only pay for it until readiness is observed once.
         const snapshot = storage.getState();
-        return snapshot && Object.hasOwn(snapshot, SB_ACCOUNT_STORAGE_READY_MARKER) ? storage : null;
+        if (!snapshot || !Object.hasOwn(snapshot, SB_ACCOUNT_STORAGE_READY_MARKER)) {
+            return null;
+        }
+        sbReadyAccountStorage = storage;
+        return storage;
     } catch {
         return null;
     }
@@ -3536,8 +3750,9 @@ async function handleClearCookiesAndCacheClick(event) {
     }
 }
 
-function bindClearCookiesAndCacheButton() {
-    const button = document.getElementById('clear_cookies_cache_button');
+/** @param {Document|HTMLElement} [root] */
+function bindClearCookiesAndCacheButton(root = document) {
+    const button = root.querySelector('#clear_cookies_cache_button');
     if (!(button instanceof HTMLButtonElement) || button.dataset.sbCookiesCacheBound === 'true') {
         return;
     }
@@ -8963,6 +9178,7 @@ function createOnDemandShellPanel(shellKey, tabConfig, build) {
                 flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
                 applySettingsSectionOrder(panel, tabConfig.id);
                 normalizeSettingsPresentation(panel, { name: tabConfig.id });
+                if (tabConfig.id === 'context') positionAdvancedFormattingHelpLink();
             }
             installSettingsSubpage(shellKey, tabConfig.id);
             const tab = getShellState(shellKey)?.tabs.get(tabConfig.id);
@@ -9028,11 +9244,62 @@ function prepareEmbeddedDrawer(drawerId, root = document) {
     return { drawer, drawerContent };
 }
 
+function syncBackgroundSettingsSection() {
+    const appearance = document.getElementById(SB_USER_SETTINGS_CONTAINER_IDS.appearance);
+    const gallery = document.getElementById('backgrounds-button');
+    if (!(appearance instanceof HTMLElement) || !(gallery instanceof HTMLElement)) return;
+
+    let section = appearance.querySelector('#sb-background-settings-section');
+    let changed = false;
+    if (!(section instanceof HTMLElement)) {
+        section = createElement('section', {
+            id: 'sb-background-settings-section',
+            className: `${SB_FLAT_SECTION_CLASS} sb-settings-category`,
+            attrs: { 'data-sb-category': 'background', 'data-settings-tab': 'appearance', 'aria-labelledby': 'sb-background-settings-heading' },
+        });
+        const header = createElement('div', { className: `${SB_FLAT_SECTION_HEADER_CLASS} sb-settings-category-header` });
+        const heading = createElement('div', { className: 'flex-container flexFlowColumn sb-settings-category-heading' });
+        heading.append(
+            createElement('h3', {
+                id: 'sb-background-settings-heading',
+                className: 'ds-pref-group-heading sb-settings-category-title',
+                text: 'Background',
+                attrs: { 'data-i18n': 'Background' },
+            }),
+            createElement('small', { text: 'lorum ipsum', attrs: { 'data-sb-copy-placeholder': 'true' } }),
+        );
+        header.append(heading);
+        section.append(header, createElement('div', { id: 'sb-background-settings-controls', className: 'ds-pref-group sb-settings-category-body' }));
+        appearance.append(section);
+        changed = true;
+    }
+
+    const controls = section.querySelector('#sb-background-settings-controls');
+    if (!(controls instanceof HTMLElement)) throw new Error('Missing Background settings control group.');
+
+    // The gallery owns its toolbar and layout; the normalizer must not box it around another pill.
+    if (gallery.dataset.sbPresentation !== 'manual') gallery.dataset.sbPresentation = 'manual';
+    // These rows are authored in three tabs, and Interface injects its slider after the initial split.
+    for (const id of ['background-blur-block', 'background-opacity-block', 'background_thumbnails_animation', 'sb-surface-transparency-input']) {
+        const row = document.getElementById(id)?.closest('.ds-row, .checkbox_label');
+        if (!(row instanceof HTMLElement) || row.parentElement === controls) continue;
+        controls.append(row);
+        changed = true;
+    }
+
+    if (gallery.parentElement !== section) {
+        section.append(gallery);
+        changed = true;
+    }
+    if (changed) invalidateUserSettingsTabSearchIndexes();
+}
+
 const SB_SAMPLING_BACKENDS = Object.freeze([
     {
         id: 'openai',
         apiIds: ['openai'],
         title: 'Chat Completions',
+        usesContextSettings: false,
         description: 'Uses the active Chat Completions provider and its provider-specific sampler support.',
         controls: [
             '#seed_openai',
@@ -9053,10 +9320,10 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         id: 'textgenerationwebui',
         apiIds: ['textgenerationwebui'],
         title: 'Text Completions',
+        usesContextSettings: true,
         description: 'Uses the selected Text Completions backend and sampler visibility rules.',
         controls: [
             '#seed_textgenerationwebui',
-            '#n_textgenerationwebui',
             '#samplerResetButton',
             '#sampler_order_block_kcpp',
             '#sampler_order_block_lcpp',
@@ -9109,7 +9376,8 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
     {
         id: 'kobold',
         apiIds: ['kobold', 'koboldhorde'],
-        title: 'Kobold / Horde',
+        title: 'Kobold/Horde',
+        usesContextSettings: true,
         description: 'Kobold Horde reuses Kobold sampler settings; Horde still requires a non-GUI preset.',
         controls: ['#temp', '#top_p', '#rep_pen'],
     },
@@ -9117,6 +9385,7 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         id: 'novel',
         apiIds: ['novel'],
         title: 'NovelAI',
+        usesContextSettings: true,
         description: 'Uses NovelAI preset sampling fields without changing the backend request format.',
         controls: [
             '#temp_novel',
@@ -9156,32 +9425,45 @@ const SB_LARGE_SAMPLING_CONTROLS = Object.freeze(new Set([
     '#sampler_priority_block_aphrodite',
 ]));
 
-const SB_COMPACT_PRIORITY_SAMPLING_CONTROLS = Object.freeze(new Set([
-    '#samplerResetButton',
-    '#n_textgenerationwebui',
-    '#seed_textgenerationwebui',
-    '#json_schema_block',
-]));
+const SB_SAMPLING_GROUPS = Object.freeze([
+    { id: 'presets', title: 'Presets' },
+    { id: 'sampling', title: 'Sampling' },
+    { id: 'penalties', title: 'Penalties & Repetition' },
+    { id: 'algorithms', title: 'Advanced Algorithms' },
+    { id: 'tokens', title: 'Token Control' },
+    { id: 'output', title: 'Output & Generation' },
+]);
 
-const SB_WIDE_PRIORITY_SAMPLING_CONTROLS = Object.freeze(new Set([
-    '#sampler_order_block_kcpp',
-    '#sampler_order_block_lcpp',
-    '#sampler_priority_block_ooba',
-    '#sampler_priority_block_aphrodite',
-]));
-
-const SB_AFTER_SAMPLER_CONTROLS = Object.freeze(new Set([
-    '#sampler_order_block_kcpp',
-    '#sampler_order_block_lcpp',
-    '#sampler_priority_block_ooba',
-    '#sampler_priority_block_aphrodite',
-    '#json_schema_block',
-]));
-
-const SB_BOTTOM_PRIORITY_SAMPLING_CONTROLS = Object.freeze(new Set([
-    '#banned_tokens_block_ooba',
-    '#logit_bias_block_ooba',
-]));
+// SillyBunny: use Text Completions' existing taxonomy without changing sampler state or requests.
+const SB_SAMPLING_GROUP_SELECTORS = Object.freeze({
+    penalties: new Set([
+        '#repetition_penalty_openai', '#freq_pen_openai', '#pres_pen_openai',
+        '#rep_pen_textgenerationwebui', '#rep_pen_range_textgenerationwebui',
+        '#rep_pen_slope_textgenerationwebui', '#rep_pen_decay_textgenerationwebui',
+        '#encoder_rep_pen_textgenerationwebui', '#freq_pen_textgenerationwebui',
+        '#presence_pen_textgenerationwebui', '#no_repeat_ngram_size_textgenerationwebui',
+        '#rep_pen', '#rep_pen_novel', '#rep_pen_size_novel', '#rep_pen_slope_novel',
+        '#rep_pen_freq_novel', '#rep_pen_presence_novel',
+    ]),
+    algorithms: new Set([
+        '#adaptive_p_block', '#smoothingBlock', '#xtc_block', '#dryBlock',
+        '#dynatemp_block_ooba', '#mirostat_block_ooba', '#beamSearchBlock', '#contrastiveSearchBlock',
+        '#mirostat_tau_novel', '#mirostat_lr_novel', '#math1_temp_novel',
+        '#math1_quad_novel', '#math1_quad_entropy_scale_novel',
+    ]),
+    tokens: new Set([
+        '#seed_openai', '#openai_logit_bias_preset', '#seed_textgenerationwebui',
+        '#min_length_textgenerationwebui', '#max_tokens_second_textgenerationwebui',
+        '#banned_tokens_block_ooba', '#logit_bias_block_ooba', '#min_length_novel',
+    ]),
+    output: new Set([
+        '#sampler_order_block_kcpp', '#sampler_order_block_lcpp', '#sampler_priority_block_ooba',
+        '#sampler_priority_block_aphrodite', '#json_schema_block', '#cfg_block_ooba', '#grammar_block_ooba',
+        '#do_sample_textgenerationwebui', '#add_bos_token_textgenerationwebui', '#ignore_eos_token_textgenerationwebui',
+        '#include_reasoning_textgenerationwebui', '#temperature_last_textgenerationwebui',
+        '#speculative_ngram_textgenerationwebui', '#spaces_between_special_tokens_textgenerationwebui',
+    ]),
+});
 
 const SB_MULTI_SAMPLING_CONTROLS = Object.freeze(new Set([
     '#adaptive_p_block',
@@ -9194,20 +9476,8 @@ const SB_MULTI_SAMPLING_CONTROLS = Object.freeze(new Set([
     '#contrastiveSearchBlock',
 ]));
 
-function getSamplingPriorityTier(selector) {
-    if (SB_AFTER_SAMPLER_CONTROLS.has(selector)) {
-        return 'after';
-    }
-
-    if (SB_BOTTOM_PRIORITY_SAMPLING_CONTROLS.has(selector)) {
-        return 'bottom';
-    }
-
-    if (SB_LARGE_SAMPLING_CONTROLS.has(selector)) {
-        return 'top';
-    }
-
-    return '';
+function getSamplingGroupId(selector) {
+    return Object.entries(SB_SAMPLING_GROUP_SELECTORS).find(([, selectors]) => selectors.has(selector))?.[0] ?? 'sampling';
 }
 
 function getSpecialTokenControlBlock() {
@@ -9442,6 +9712,14 @@ function getSamplingControlBlock(selector) {
         return input.closest('.flex-container.justifyCenter') ?? input.parentElement;
     }
 
+    if (SB_MULTI_SAMPLING_CONTROLS.has(selector) || input.matches('#cfg_block_ooba, #grammar_block_ooba, #json_schema_block, #banned_tokens_block_ooba, #logit_bias_block_ooba, [id^="sampler_order_block_"], [id^="sampler_priority_block_"]')) {
+        return input;
+    }
+
+    if (input.matches('input[type="checkbox"]')) {
+        return input.closest('.checkbox_label') ?? input.parentElement;
+    }
+
     return input.closest('.range-block')
         ?? input.closest('[data-tg-samplers]')
         ?? input.parentElement;
@@ -9456,15 +9734,13 @@ function buildSamplingControlCard(selector) {
     }
 
     const isTextGenSampler = controlBlock.hasAttribute('data-tg-samplers') || controlBlock.querySelector('[data-tg-samplers]');
-    const card = createElement('div', {
+    const isExpander = SB_MULTI_SAMPLING_CONTROLS.has(selector);
+    const card = createElement(isExpander ? 'details' : 'div', {
         className: [
             'sb-sampling-control-card',
             isTextGenSampler ? 'sb-sampling-textgen-card' : '',
             SB_LARGE_SAMPLING_CONTROLS.has(selector) ? 'sb-sampling-large-card' : '',
-            SB_COMPACT_PRIORITY_SAMPLING_CONTROLS.has(selector) ? 'sb-sampling-compact-priority-card' : '',
-            SB_WIDE_PRIORITY_SAMPLING_CONTROLS.has(selector) ? 'sb-sampling-wide-priority-card' : '',
-            SB_MULTI_SAMPLING_CONTROLS.has(selector) ? 'sb-sampling-multi-card' : '',
-            getSamplingPriorityTier(selector) ? `sb-sampling-priority-${getSamplingPriorityTier(selector)}` : '',
+            isExpander ? 'ds-row-expander' : 'sb-sampling-row',
         ].filter(Boolean).join(' '),
     });
     card.dataset.sbSamplingControl = selector;
@@ -9474,8 +9750,30 @@ function buildSamplingControlCard(selector) {
         }
     }
 
-    card.appendChild(controlBlock);
+    if (isExpander) {
+        const summary = createElement('summary', { className: 'ds-row' });
+        const text = createElement('div', { className: 'ds-row-text' });
+        const heading = controlBlock.querySelector(':scope > h4');
+        const label = createElement('span', { className: 'ds-row-label', text: heading?.textContent.replace(/\s+/g, ' ').trim() || 'lorum ipsum' });
+        if (label.textContent === 'lorum ipsum') label.dataset.sbCopyPlaceholder = 'true';
+        const tooltip = heading?.matches('[title], [data-sttt--title]') ? heading : heading?.querySelector('[title], [data-sttt--title]');
+        const subtitle = createElement('small', {
+            className: 'ds-row-subtitle',
+            text: tooltip?.getAttribute('title') || tooltip?.getAttribute('data-sttt--title') || 'lorum ipsum',
+        });
+        if (subtitle.textContent === 'lorum ipsum') subtitle.dataset.sbCopyPlaceholder = 'true';
+        text.append(label, subtitle);
+        summary.append(text);
+        const content = createElement('div', { className: 'ds-row-expander-content sb-sampling-multi-card' });
+        // SillyBunny: move header toggles into the expander body as full-width live preference rows.
+        for (const label of controlBlock.querySelectorAll(':scope > h4 .checkbox_label')) controlBlock.prepend(label);
+        content.append(controlBlock);
+        card.append(summary, content);
+    } else {
+        card.appendChild(controlBlock);
+    }
     decorateSamplingControlCard(card, selector);
+    normalizeBackendSettingsRows(card);
     return card;
 }
 
@@ -9517,30 +9815,40 @@ function updateSamplingCardVisibility(section) {
         return;
     }
 
-    section.querySelectorAll('[data-sb-sampling-control]').forEach(card => {
-        if (!(card instanceof HTMLElement)) {
-            return;
-        }
+    // Read every card's state before writing any `hidden`, so the pass costs one style flush, not one per card.
+    const cardVisibility = Array.from(section.querySelectorAll('[data-sb-sampling-control]'))
+        .filter(card => card instanceof HTMLElement)
+        .map(card => {
+            const content = card.querySelector(':scope > .ds-row-expander-content') ?? card;
+            const hasVisibleContent = Array.from(content.children).some(child => child instanceof HTMLElement
+                && !child.classList.contains('sb-sampling-transmission')
+                && !child.classList.contains('sb-chat-neutralize-row')
+                && getComputedStyle(child).display !== 'none');
+            return [card, hasVisibleContent];
+        });
+    for (const [card, hasVisibleContent] of cardVisibility) {
+        if (card.hidden !== !hasVisibleContent) card.hidden = !hasVisibleContent;
+    }
 
-        const hasVisibleContent = Array.from(card.children).some(child => child instanceof HTMLElement && getComputedStyle(child).display !== 'none');
-        card.hidden = !hasVisibleContent;
-    });
-
-    section.querySelectorAll('.sb-sampling-priority-row').forEach(row => {
-        if (!(row instanceof HTMLElement)) {
-            return;
-        }
-
-        row.hidden = !Array.from(row.children).some(child => child instanceof HTMLElement && !child.hidden);
-    });
-
-    section.querySelectorAll('.sb-sampling-multi-grid').forEach(row => {
-        if (!(row instanceof HTMLElement)) {
-            return;
-        }
-
-        row.hidden = !Array.from(row.children).some(child => child instanceof HTMLElement && !child.hidden);
-    });
+    // Track visibility as we write: `card.hidden` writes above have not been flushed yet, so a
+    // checkVisibility() here would force the very layout this function is trying to avoid.
+    const visibleCards = new Set(cardVisibility.filter(([, visible]) => visible).map(([card]) => card));
+    const activeApi = getCurrentMainApiValue();
+    const groups = [];
+    for (const group of section.querySelectorAll('[data-sb-sampling-group]')) {
+        if (!(group instanceof HTMLElement)) continue;
+        const hasSamplingCard = [...group.querySelectorAll('[data-sb-sampling-control]')].some(card => visibleCards.has(card));
+        const hasPresetRow = [...group.querySelectorAll('.sb-non-chat-preset-row, #openai_api-presets')]
+            .some(row => row instanceof HTMLElement && (row.checkVisibility?.() ?? row.getClientRects().length > 0));
+        const presetBackend = activeApi === 'koboldhorde' ? 'kobold' : activeApi;
+        const hasActivePreset = group.dataset.sbSamplingGroup === 'presets'
+            && ['textgenerationwebui', 'kobold', 'novel'].includes(presetBackend)
+            && group.querySelector(`#${presetBackend}_api-presets`) instanceof HTMLElement;
+        groups.push([group, !(hasSamplingCard || hasPresetRow || hasActivePreset)]);
+    }
+    for (const [group, hidden] of groups) {
+        if (group.hidden !== hidden) group.hidden = hidden;
+    }
 }
 
 function syncSamplingPanelControls(root) {
@@ -9550,22 +9858,16 @@ function syncSamplingPanelControls(root) {
 
     for (const backend of SB_SAMPLING_BACKENDS) {
         const section = root.querySelector(`#sb-sampling-${backend.id}`);
-        const priorityRows = {
-            top: section?.querySelector('.sb-sampling-priority-row[data-sb-priority-tier="top"]'),
-            bottom: section?.querySelector('.sb-sampling-priority-row[data-sb-priority-tier="bottom"]'),
-            after: section?.querySelector('.sb-sampling-after-row[data-sb-priority-tier="after"]'),
-        };
-        const grid = section?.querySelector('.sb-sampling-grid');
-        const multiGrid = section?.querySelector('.sb-sampling-multi-grid');
-        if (!Object.values(priorityRows).every(row => row instanceof HTMLElement) || !(grid instanceof HTMLElement) || !(multiGrid instanceof HTMLElement)) {
+        if (!(section instanceof HTMLElement)) {
             continue;
         }
 
         section.querySelector('.sb-sampling-note')?.remove();
 
         for (const selector of backend.controls) {
-            const tier = getSamplingPriorityTier(selector);
-            const target = tier ? priorityRows[tier] : (SB_MULTI_SAMPLING_CONTROLS.has(selector) ? multiGrid : grid);
+            const groupId = getSamplingGroupId(selector);
+            const target = section.querySelector(`[data-sb-sampling-group="${groupId}"] > .ds-pref-group`);
+            if (!(target instanceof HTMLElement)) throw new Error(`Missing Sampling group: ${backend.id}/${groupId}`);
             const existingCard = Array.from(section.querySelectorAll('[data-sb-sampling-control]'))
                 .find(card => card instanceof HTMLElement && card.dataset.sbSamplingControl === selector);
             if (existingCard instanceof HTMLElement && existingCard.children.length > 0) {
@@ -9584,8 +9886,8 @@ function syncSamplingPanelControls(root) {
             }
         }
 
-        if (!Object.values(priorityRows).some(row => row.children.length) && !grid.children.length && !multiGrid.children.length) {
-            grid.appendChild(createElement('p', {
+        if (!section.querySelector('[data-sb-sampling-control]')) {
+            section.appendChild(createElement('p', {
                 className: 'sb-sampling-note',
                 text: 'Sampler controls are not ready yet. Reopen the Backend menu after settings finish loading.',
             }));
@@ -9627,6 +9929,16 @@ function updateSamplingPanelVisibility(root) {
     }
 }
 
+function createBackendSectionHeader({ title = '', description, modeAttrs = {}, descriptionAttrs = {}, disclaimer = null }) {
+    const header = createElement('div', { className: 'sb-backend-section-header' });
+    const titleRow = createElement('div', { className: 'sb-backend-title-row' });
+    const mode = createElement('span', { className: 'sb-sampling-mode-pill', text: title, attrs: modeAttrs });
+    titleRow.append(mode);
+    header.append(titleRow, createElement('p', { text: description, attrs: descriptionAttrs }));
+    if (disclaimer) header.append(disclaimer);
+    return header;
+}
+
 function buildSamplingPanel() {
     const { panel, scroller } = createShellPanel({ id: 'sampling' });
     const column = createElement('div', {
@@ -9635,7 +9947,6 @@ function buildSamplingPanel() {
     });
 
     const sections = createElement('div', { className: 'sb-sampling-sections' });
-
     for (const backend of SB_SAMPLING_BACKENDS) {
         const section = createElement('section', {
             id: `sb-sampling-${backend.id}`,
@@ -9644,23 +9955,22 @@ function buildSamplingPanel() {
                 'data-sb-sampling-apis': backend.apiIds.join(','),
             },
         });
-        const header = createElement('div', { className: 'sb-sampling-section-header' });
-        const titleRow = createElement('div', { className: 'sb-sampling-title-row' });
-        const title = createElement('strong', { text: 'Sampling Backend' });
-        const mode = createElement('span', { className: 'sb-sampling-mode-pill', text: backend.title });
-        const description = createElement('p', { text: `Active backend samplers are shown here. ${backend.description}` });
-        const priorityStack = createElement('div', { className: 'sb-sampling-priority-stack' });
-        const priorityTop = createElement('div', { className: 'sb-sampling-priority-row sb-sampling-priority-row-top', attrs: { 'data-sb-priority-tier': 'top' } });
-        const priorityBottom = createElement('div', { className: 'sb-sampling-priority-row sb-sampling-priority-row-bottom', attrs: { 'data-sb-priority-tier': 'bottom' } });
-        const grid = createElement('div', { className: 'sb-sampling-grid' });
-        const multiGrid = createElement('div', { className: 'sb-sampling-multi-grid' });
-        const afterRow = createElement('div', { className: 'sb-sampling-priority-row sb-sampling-after-row', attrs: { 'data-sb-priority-tier': 'after' } });
-
-        titleRow.append(title, mode);
-        header.append(titleRow, description);
-
-        priorityStack.append(priorityTop, priorityBottom);
-        section.append(header, priorityStack, grid, multiGrid, afterRow);
+        const header = createBackendSectionHeader({
+            title: `Backend: ${backend.title}`,
+            description: `Active backend samplers are shown here. ${backend.description}`,
+        });
+        section.append(header);
+        for (const group of SB_SAMPLING_GROUPS) {
+            const category = createElement('section', {
+                className: 'sb-sampling-group',
+                attrs: { 'data-sb-sampling-group': group.id },
+            });
+            category.append(
+                createElement('h3', { className: 'ds-pref-group-heading', text: group.title }),
+                createElement('div', { className: 'ds-pref-group' }),
+            );
+            section.append(category);
+        }
         sections.appendChild(section);
     }
 
@@ -9672,6 +9982,16 @@ function buildSamplingPanel() {
 
     column.append(sections, empty);
     scroller.appendChild(column);
+    let visibilityQueued = false;
+    const visibilityObserver = new MutationObserver(mutations => {
+        if (visibilityQueued || !mutations.some(({ target }) => target instanceof HTMLElement && target.matches('[data-source], [data-tg-type], [data-tg-samplers]'))) return;
+        visibilityQueued = true;
+        window.requestAnimationFrame(() => {
+            visibilityQueued = false;
+            sections.querySelectorAll('.sb-sampling-section').forEach(updateSamplingCardVisibility);
+        });
+    });
+    visibilityObserver.observe(sections, { subtree: true, attributes: true, attributeFilter: ['style'] });
 
     $('#main_api').on('change.sbSamplingPanel', () => {
         if (isShellTabOpen('left', 'sampling')) updateSamplingPanelVisibility(column);
@@ -9704,6 +10024,13 @@ function buildInChatAgentsPanel() {
     `;
 
     const inChatAgentsContainer = createElement('div', { id: 'in_chat_agents_container' });
+    const normalizeGlobalSettings = () => normalizeBackendSettingsRows(column.querySelector('[data-sb-agent-global-settings]'));
+    const settingsObserver = new MutationObserver(() => {
+        if (!column.querySelector('[data-sb-agent-global-settings]')) return;
+        settingsObserver.disconnect();
+        normalizeGlobalSettings();
+    });
+    settingsObserver.observe(inChatAgentsContainer, { childList: true });
 
     column.append(callout, inChatAgentsContainer);
     scroller.appendChild(column);
@@ -9713,7 +10040,224 @@ function buildInChatAgentsPanel() {
         panel,
         button: null,
         searchRoot: column,
+        onActivate: normalizeGlobalSettings,
     };
+}
+
+function preparePromptingPanel(root) {
+    root.classList.add('sb-prompting-panel');
+    root.dataset.sbPresentation = 'manual';
+    const completionTabs = /** @type {{openAITabManager?: {refreshTabs: () => void}}|undefined} */ (window['ChatCompletionTabs']);
+    completionTabs?.openAITabManager?.refreshTabs();
+    const configuration = root.querySelector('#ai_response_configuration');
+    if (!(configuration instanceof HTMLElement)) return;
+
+    const disclaimer = createElement('div', { className: 'sb-backend-disclaimer', attrs: { 'data-sb-prompting-disclaimer': '' } });
+    const disclaimerCopy = createElement('p', { text: 'Note: advanced settings can be found in Formatting.' });
+    const context = createElement('button', {
+        className: 'menu_button',
+        text: 'Formatting',
+        attrs: { type: 'button', 'data-sb-prompting-formatting': '' },
+    });
+    context.addEventListener('click', () => openShell('left', 'context'));
+    disclaimer.append(disclaimerCopy, context);
+    const header = createBackendSectionHeader({
+        description: 'lorum ipsum',
+        modeAttrs: { 'data-sb-prompting-mode': '' },
+        descriptionAttrs: { 'data-sb-copy-placeholder': 'true' },
+        disclaimer,
+    });
+    configuration.prepend(header);
+    const presetsContainer = configuration.querySelector('#respective-presets-block');
+    if (presetsContainer instanceof HTMLElement) {
+        // PresetManager injects restore-default actions after the shell's first toolbar pass.
+        const actionsObserver = new MutationObserver(mutations => {
+            if (mutations.some(mutation => [...mutation.addedNodes].some(node => getPresetActionKind(node)))) enhancePresetActionButtons(root);
+        });
+        actionsObserver.observe(presetsContainer, { childList: true, subtree: true });
+    }
+
+    for (const [id, title] of [['respective-presets-block', 'Presets'], ['common-gen-settings-block', 'Generation Settings']]) {
+        const block = configuration.querySelector(`#${id}`);
+        if (!(block instanceof HTMLElement)) continue;
+        block.classList.add('sb-prompting-group');
+        block.prepend(createElement('h3', { className: 'ds-pref-group-heading', text: title }));
+        const body = createElement('div', { className: 'ds-pref-group sb-prompting-group-body' });
+        for (const child of [...block.children].slice(1)) body.append(child);
+        block.append(body);
+    }
+    const generation = configuration.querySelector('#pro-settings-block');
+    if (generation instanceof HTMLElement) {
+        for (const id of ['streaming_textgenerationwebui_block', 'streaming_kobold_block', 'streaming_novel_block']) {
+            const streaming = configuration.querySelector(`#${id}`);
+            if (streaming) generation.append(streaming);
+        }
+    }
+
+    const createPromptingGroup = (id, title) => {
+        const existing = configuration.querySelector(`#${CSS.escape(id)}`);
+        if (existing instanceof HTMLElement) return existing;
+        const group = createElement('section', { id, className: 'sb-prompting-group' });
+        group.append(
+            createElement('h3', { className: 'ds-pref-group-heading', text: title }),
+            createElement('div', { className: 'ds-pref-group sb-prompting-group-body' }),
+        );
+        configuration.append(group);
+        return group;
+    };
+
+    for (const [id, title] of [
+        ['sb-tc-sysprompt', 'System Prompt'],
+        ['sb-tc-instruct', 'Instruct Template'],
+        ['sb-tc-context', 'Context Template'],
+        ['sb-tc-names', 'Character Names'],
+        ['sb-reply-prefill', 'Reply Prefill'],
+    ]) createPromptingGroup(id, title);
+
+    // SillyBunny: keep range_block_openai around its groups for provider visibility and preset lookups.
+    const range = configuration.querySelector('#range_block_openai');
+    const advanced = configuration.querySelector('#advanced-ai-config-block');
+    if (range instanceof HTMLElement && advanced instanceof HTMLElement) advanced.prepend(range);
+    mergeOpenAIPresetToolbarRow(root);
+}
+
+function updatePromptingPanel(panel) {
+    if (!(panel instanceof HTMLElement)) return;
+    groupAdvancedFormattingIntoDrawers();
+    const root = panel.querySelector('.sb-prompting-panel');
+    if (!(root instanceof HTMLElement)) return;
+    const activeApi = getCurrentMainApiValue();
+    const backend = SB_SAMPLING_BACKENDS.find(entry => entry.apiIds.includes(activeApi));
+    const mode = root.querySelector('[data-sb-prompting-mode]');
+    const modeLabel = `Backend: ${backend?.title ?? activeApi}`;
+    if (mode && mode.textContent !== modeLabel) mode.textContent = modeLabel;
+    const disclaimer = root.querySelector('[data-sb-prompting-disclaimer]');
+    if (disclaimer instanceof HTMLElement) disclaimer.hidden = false;
+    for (const selector of ['[name="bindModelPresetBlock"]', '#AdvancedFormatting > .flex-container.alignItemsBaseline > .flex-container[data-cc-null]']) {
+        const tcPresetControl = root.querySelector(selector) ?? document.querySelector(selector);
+        if (tcPresetControl instanceof HTMLElement) tcPresetControl.hidden = activeApi === 'openai';
+    }
+
+    flattenNestedSettingsDrawers(root, { includeTopLevel: true });
+    const range = root.querySelector('#range_block_openai');
+    const managerGroup = root.querySelector('#sb-openai-prompt-manager');
+    const managerBlock = root.querySelector('#completion_prompt_manager')?.closest('.range-block');
+    // The Prompt Manager can mount after OpenAI's grouping pass; adopt its original live wrapper.
+    if (managerGroup instanceof HTMLElement && managerBlock instanceof HTMLElement && !managerGroup.contains(managerBlock)) {
+        (managerGroup.querySelector(':scope > .sb-prompting-group-body') ?? managerGroup).append(managerBlock);
+        managerGroup.style.display = '';
+    }
+    const isChatCompletion = activeApi === 'openai';
+    const promptingGroupIds = [
+        'sb-openai-budget', 'sb-openai-sampling', 'sb-openai-names', 'sb-openai-prefill',
+        'sb-openai-request', 'sb-openai-prompt-manager', 'sb-openai-prompts',
+        'sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names', 'sb-reply-prefill',
+    ];
+    for (const id of promptingGroupIds) {
+        const group = root.querySelector(`#${id}`);
+        if (!(group instanceof HTMLElement)) continue;
+        if (id.startsWith('sb-openai-') && range instanceof HTMLElement && group.parentElement !== range) range.append(group);
+        group.classList.toggle('sb-prompting-group', true);
+        if (id === 'sb-openai-budget') {
+            const title = group.querySelector('.sb-settings-flat-header b');
+            if (title && title.textContent !== 'Generation Settings') title.textContent = 'Generation Settings';
+        }
+        if (!group.querySelector(':scope > .sb-prompting-group-body')) {
+            const body = createElement('div', { className: 'ds-pref-group sb-prompting-group-body' });
+            for (const child of [...group.children]) {
+                if (!child.classList.contains('sb-settings-flat-header')) body.append(child);
+            }
+            group.append(body);
+        }
+        normalizeBackendSettingsRows(group);
+        const isTcGroup = id.startsWith('sb-tc-') || id === 'sb-reply-prefill';
+        const isCcGroup = id.startsWith('sb-openai-');
+        group.hidden = id === 'sb-openai-sampling' || (isTcGroup ? isChatCompletion : isCcGroup ? !isChatCompletion : false);
+    }
+    // SillyBunny: the Prompt Manager may mount late, so restore the complete Chat Completions order on every update.
+    // The check must be "is the tail already in this order", not "is this group last yet": `append` on a
+    // node that is already its parent's last child still performs a remove+insert, which is a childList
+    // mutation. This function runs from the drawer observer, so a per-group append kept re-triggering the
+    // observer every frame and re-flattening the whole Prompting panel in a loop.
+    if (range instanceof HTMLElement) {
+        const openAIReadingOrder = ['sb-openai-budget', 'sb-openai-prompt-manager', 'sb-openai-names', 'sb-openai-prefill', 'sb-openai-request', 'sb-openai-prompts'];
+        const orderedGroups = openAIReadingOrder
+            .map(id => root.querySelector(`#${id}`))
+            .filter(group => group instanceof HTMLElement);
+        const currentTail = Array.from(range.children).slice(-orderedGroups.length);
+        const isOrdered = orderedGroups.length > 0
+            && currentTail.length === orderedGroups.length
+            && currentTail.every((child, index) => child === orderedGroups[index]);
+
+        if (!isOrdered) {
+            for (const group of orderedGroups) range.append(group);
+        }
+    }
+
+    const tcOrder = ['sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names', 'sb-reply-prefill'];
+    const commonGroup = root.querySelector('#common-gen-settings-block');
+    if (commonGroup instanceof HTMLElement) {
+        let anchor = commonGroup;
+        for (const id of tcOrder) {
+            const group = root.querySelector(`#${id}`);
+            if (!(group instanceof HTMLElement)) continue;
+            if (group.parentElement !== anchor.parentElement || group.previousElementSibling !== anchor) {
+                anchor.after(group);
+            }
+            anchor = group;
+        }
+    }
+
+    const prefill = root.querySelector('[name="startReplyWithBlock"]') ?? document.querySelector('[name="startReplyWithBlock"]');
+    const prefillTarget = root.querySelector(isChatCompletion ? '#sb-openai-prefill' : '#sb-reply-prefill');
+    if (prefill instanceof HTMLElement && prefillTarget instanceof HTMLElement) {
+        const body = prefillTarget.querySelector(':scope > .sb-prompting-group-body') ?? prefillTarget;
+        if (prefill.parentElement !== body) body.append(prefill);
+        prefill.hidden = false;
+        prefillTarget.hidden = false;
+    }
+
+    // SillyBunny: the multiple-swipes control is authored as a data-tg-samplers wrapper,
+    // not a range-block. Move only that wrapper into the shared Generation Settings group.
+    const textgenSwipes = document.getElementById('n_textgenerationwebui')?.closest('[data-tg-samplers="n"]');
+    const generationBody = root.querySelector('#common-gen-settings-block > .sb-prompting-group-body');
+    if (textgenSwipes instanceof HTMLElement && generationBody instanceof HTMLElement && textgenSwipes.parentElement !== generationBody) {
+        generationBody.append(textgenSwipes);
+    }
+    const presets = root.querySelector('#respective-presets-block');
+    if (presets instanceof HTMLElement) normalizeBackendSettingsRows(presets);
+    const common = root.querySelector('#common-gen-settings-block');
+    if (common instanceof HTMLElement) {
+        const contextRow = common.querySelector('#max_context_block');
+        const quickContext = contextRow?.querySelector('.quick_context_size_container');
+        if (quickContext && contextRow) contextRow.after(quickContext);
+        normalizeBackendSettingsRows(common);
+    }
+    normalizeBackendSettingsRows(root, { fields: false });
+    hideEmptyGroupedSettingsDrawers();
+    mergeOpenAIPresetToolbarRow(root);
+    enhancePresetActionButtons(root);
+    groupPromptingRowHelpers(root);
+    // Batch writes and reads: interleaving `hidden` writes with checkVisibility() forces a style and
+    // layout flush per group, which is what made opening Prompting drop frames on slower devices.
+    const measured = [];
+    for (const group of root.querySelectorAll('.sb-openai-settings-drawer, .sb-textgen-drawers > .sb-settings-flat-section, .sb-prompting-group')) {
+        if (!(group instanceof HTMLElement)) continue;
+        if (group.id === 'sb-reply-prefill' && isChatCompletion) continue;
+        const shouldHideByMode = group.id === 'sb-openai-sampling'
+            || (group.id.startsWith('sb-openai-') && !isChatCompletion)
+            || ((group.id.startsWith('sb-tc-') || group.id === 'sb-reply-prefill') && isChatCompletion);
+        // The text-generation sampling sections are source containers for the separate Sampling tab,
+        // not Prompting content; only their live controls belong in the sampling cards.
+        const isSamplingSourceGroup = group.matches('.sb-textgen-drawers > .sb-settings-flat-section');
+        const hidesWhenEmpty = group.id.startsWith('sb-openai-') || group.id.startsWith('sb-tc-') || group.id === 'sb-reply-prefill';
+        const hidden = shouldHideByMode || isSamplingSourceGroup;
+        if (group.hidden !== hidden) group.hidden = hidden;
+        if (hidesWhenEmpty && !hidden) measured.push(group);
+    }
+    const emptyGroups = measured.filter(group => ![...group.querySelectorAll('input:not([type="hidden"]), select, textarea, button, .menu_button, [name="startReplyWithBlock"]')]
+        .some(control => control instanceof HTMLElement && (control.checkVisibility?.() ?? control.getClientRects().length > 0)));
+    for (const group of emptyGroups) group.hidden = true;
 }
 
 function getImporterState() {
@@ -9780,111 +10324,155 @@ function setServerAdminMessage(element, message, tone = 'neutral') {
     element.hidden = !element.textContent;
 }
 
-/**
- * Creates a collapsible inline-drawer for Advanced Formatting sections.
- * @param {string} id Drawer element ID
- * @param {string} title Drawer title
- * @param {string} description Short description
- * @returns {HTMLElement} The drawer element
- */
-function createAdvFormattingDrawer(id, title, description) {
-    const drawer = createElement('div', {
-        id,
-        className: 'inline-drawer wide100p flexFlowColumn sb-af-settings-drawer',
-    });
-    const header = createElement('div', { className: 'inline-drawer-toggle inline-drawer-header' });
-    const label = createElement('div', { className: 'flex-container flexFlowColumn' });
-    const titleEl = createElement('b');
-    titleEl.textContent = title;
-    label.appendChild(titleEl);
-    if (description) {
-        const desc = createElement('small', { className: 'sb-group-meta' });
-        desc.textContent = description;
-        label.appendChild(desc);
+function groupAdvancedFormattingIntoDrawers() {
+    const formatting = document.getElementById('AdvancedFormatting');
+    if (!(formatting instanceof HTMLElement)) return;
+    if (formatting.dataset.sbGrouped === 'true') {
+        updateFormattingGroupVisibility(formatting);
+        return;
     }
-    header.appendChild(label);
-    const icon = createElement('div', { className: 'fa-solid fa-circle-chevron-down inline-drawer-icon down' });
-    header.appendChild(icon);
-    drawer.appendChild(header);
-    const content = createElement('div', { className: 'inline-drawer-content' });
-    content.style.display = 'none';
-    drawer.appendChild(content);
-    return drawer;
+
+    const columns = formatting.querySelector('.flex-container.spaceEvenly');
+    const contextColumn = formatting.querySelector('#ContextSettings');
+    const instructColumn = formatting.querySelector('#InstructSettingsColumn');
+    const systemColumn = formatting.querySelector('#SystemPromptColumn');
+    if (!(columns instanceof HTMLElement) || !(contextColumn instanceof HTMLElement)
+        || !(instructColumn instanceof HTMLElement) || !(systemColumn instanceof HTMLElement)) return;
+
+    const startReplyWith = systemColumn.querySelector('[name="startReplyWithBlock"]');
+    if (startReplyWith instanceof HTMLElement) startReplyWith.hidden = true;
+
+    const createGroup = (id, title) => {
+        const group = createElement('section', { id, className: 'sb-prompting-group sb-formatting-group' });
+        group.append(
+            createElement('h3', { className: 'ds-pref-group-heading', text: title }),
+            createElement('div', { className: 'ds-pref-group sb-prompting-group-body' }),
+        );
+        formatting.append(group);
+        return group.querySelector('.sb-prompting-group-body');
+    };
+    const bodies = new Map([
+        ['tokenizer', createGroup('sb-af-tokenizer', 'Tokenizer & Padding')],
+        ['stopping', createGroup('sb-af-stopping', 'Stopping Strings')],
+        ['cleanup', createGroup('sb-af-cleanup', 'Text Cleanup')],
+        ['reasoning', createGroup('sb-af-reasoning', 'Reasoning')],
+        ['rendering', createGroup('sb-af-rendering', 'Rendering')],
+    ]);
+
+    const move = (target, body) => {
+        if (!(target instanceof HTMLElement) || !(body instanceof HTMLElement)) return;
+        body.append(target);
+    };
+    const moveClosest = (selector, body, ancestorSelector = null) => {
+        const target = formatting.querySelector(selector);
+        if (!(target instanceof HTMLElement)) return;
+        const resolved = ancestorSelector ? target.closest(ancestorSelector) : target;
+        move(resolved, body);
+    };
+
+    const prompting = getShellState('left')?.tabs.get('prompting')?.panel;
+    const promptingGroupBody = id => prompting?.querySelector(`#${id} > .sb-prompting-group-body`);
+    const moveToPrompting = (selector, id, ancestorSelector = null) => {
+        const target = formatting.querySelector(selector);
+        const body = promptingGroupBody(id);
+        if (!(target instanceof HTMLElement) || !(body instanceof HTMLElement)) return;
+        move(ancestorSelector ? target.closest(ancestorSelector) : target, body);
+    };
+
+    const groupBody = id => promptingGroupBody(id);
+    const movePromptingNode = (node, id) => {
+        const body = groupBody(id);
+        if (node instanceof HTMLElement && body instanceof HTMLElement && node.parentElement !== body) body.append(node);
+    };
+
+    moveToPrompting('[name="bindModelPresetBlock"]', 'respective-presets-block');
+    moveToPrompting('#AdvancedFormatting > .flex-container.alignItemsBaseline > .flex-container[data-cc-null]', 'respective-presets-block');
+    document.querySelectorAll('.sb-sampling-section').forEach(updateSamplingCardVisibility);
+    const systemPromptBlock = systemColumn.querySelector('#SystemPromptBlock');
+    movePromptingNode(systemColumn.querySelector(':scope > .title_restorable[data-cc-null]'), 'sb-tc-sysprompt');
+    movePromptingNode(systemPromptBlock, 'sb-tc-sysprompt');
+    moveToPrompting('#InstructSettingsColumn', 'sb-tc-instruct');
+    movePromptingNode(contextColumn.querySelector(':scope > div > .title_restorable'), 'sb-tc-context');
+    movePromptingNode(contextColumn.querySelector(':scope > div > .flex-container.flexNoGap'), 'sb-tc-context');
+    const storyBlock = formatting.querySelector('[data-cc-null]:has(#context_story_string)');
+    const contextBody = promptingGroupBody('sb-tc-context');
+    if (storyBlock instanceof HTMLElement && contextBody instanceof HTMLElement) move(storyBlock, contextBody);
+    movePromptingNode(contextColumn.querySelector(':scope > div > div > .flex-container.flexFlowColumn[data-cc-null]'), 'sb-tc-context');
+    movePromptingNode(contextColumn.querySelector(':scope > div > div > .flex-container[data-cc-null]'), 'sb-tc-context');
+    movePromptingNode(contextColumn.querySelector('#context_use_stop_strings')?.closest('label'), 'sb-tc-context');
+    movePromptingNode(contextColumn.querySelector('#context_names_as_stop_strings')?.closest('label'), 'sb-tc-context');
+    movePromptingNode(contextColumn.querySelector('#always-force-name2-checkbox')?.closest('label'), 'sb-tc-names');
+    moveClosest('[name="tokenizerSettingsBlock"]', bodies.get('tokenizer'));
+    moveClosest('div[data-cc-null][data-cc-chat-completion-visible]', bodies.get('stopping'));
+    moveClosest('#single_line', bodies.get('cleanup'), 'label');
+    moveClosest('#collapse-newlines-checkbox', bodies.get('cleanup'), 'label');
+    moveClosest('#trim_spaces', bodies.get('cleanup'), 'label');
+    moveClosest('#trim_sentences_checkbox', bodies.get('cleanup'), 'label');
+    const cleanupHeading = [...contextColumn.querySelectorAll('h4.standoutHeader')]
+        .find(heading => heading.textContent?.includes('Context Formatting'));
+    cleanupHeading?.setAttribute('hidden', '');
+    const reasoningWrapper = systemColumn.querySelector('div:has(.sb-reasoning-toggle-grid)');
+    if (reasoningWrapper instanceof HTMLElement) move(reasoningWrapper, bodies.get('reasoning'));
+    const renderingControl = formatting.querySelector('#markdown_escape_strings')?.parentElement?.parentElement;
+    if (renderingControl instanceof HTMLElement) move(renderingControl, bodies.get('rendering'));
+
+    const notice = document.getElementById('advanced-formatting-cc-notice');
+    if (notice instanceof HTMLElement) notice.hidden = true;
+    const miscHeading = [...systemColumn.querySelectorAll('h4')].find(heading => heading.textContent?.trim() === 'Miscellaneous');
+    if (miscHeading instanceof HTMLElement) miscHeading.hidden = true;
+    columns.hidden = true;
+    formatting.dataset.sbGrouped = 'true';
+    updateFormattingGroupVisibility(formatting);
+    // Normalize switch semantics for Formatting groups without restructuring.
+    for (const body of bodies.values()) {
+        normalizeBackendSettingsRows(body, { fields: false });
+    }
+
+    positionAdvancedFormattingHelpLink();
+    updatePromptingPanel(prompting);
 }
 
-/**
- * Wraps Advanced Formatting columns (Context Template, Instruct Template,
- * System Prompt, Reasoning) into collapsible drawers for better UX.
- */
-function groupAdvancedFormattingIntoDrawers() {
-    const $af = $('#AdvancedFormatting');
-    if ($af.length === 0 || $af.data('sb-grouped')) {
-        return;
+function positionAdvancedFormattingHelpLink() {
+    const formatting = document.getElementById('AdvancedFormatting');
+    if (!(formatting instanceof HTMLElement)) return;
+
+    // SillyBunny: the legacy Advanced Formatting help link lived in the old baseline bar. The
+    // presentation pass moves the title into the flat header but leaves that link behind, which
+    // renders the question mark on its own line below the title. Move the live link beside the
+    // title and remove the now-empty legacy wrapper after presentation has built the header.
+    const advancedHeader = formatting.querySelector(':scope > .sb-settings-flat-header');
+    if (advancedHeader instanceof HTMLElement && formatting.firstElementChild !== advancedHeader) {
+        formatting.prepend(advancedHeader);
     }
 
-    // The three-column container
-    const $columnsContainer = $af.find('.flex-container.spaceEvenly').first();
-    if ($columnsContainer.length === 0) {
-        return;
+    const advancedHeading = advancedHeader?.querySelector(':scope > .sb-settings-category-heading');
+    const notesLink = formatting.querySelector('a.notes-link[href*="advancedformatting"]');
+    const advancedTitle = advancedHeading?.querySelector(':scope > .sb-settings-category-title');
+    const legacyBar = formatting.querySelector(':scope > .flex-container.alignItemsBaseline');
+    if (legacyBar instanceof HTMLElement && legacyBar.childElementCount === 0) legacyBar.remove();
+    if (!(advancedHeader instanceof HTMLElement) || !(advancedHeading instanceof HTMLElement)
+        || !(notesLink instanceof HTMLElement) || !(advancedTitle instanceof HTMLElement)
+        || advancedHeading.querySelector(':scope > .sb-settings-category-title-row')) return;
+
+    const legacyTitle = notesLink.closest('h3');
+    const notesLegacyBar = legacyTitle?.closest('.flex-container.alignItemsBaseline');
+    const titleRow = createElement('div', { className: 'sb-settings-category-title-row' });
+    advancedTitle.before(titleRow);
+    titleRow.append(advancedTitle, notesLink);
+    legacyTitle?.remove();
+    if (notesLegacyBar instanceof HTMLElement && notesLegacyBar.childElementCount === 0) notesLegacyBar.remove();
+}
+
+function updateFormattingGroupVisibility(formatting) {
+    if (!(formatting instanceof HTMLElement)) return;
+    const groups = [...formatting.querySelectorAll('.sb-formatting-group')].filter(group => group instanceof HTMLElement);
+    // Unhide every group first, then measure all, then write: one layout flush instead of one per group.
+    for (const group of groups) {
+        if (group.hidden) group.hidden = false;
     }
-
-    const sections = [
-        {
-            id: 'sb-af-context',
-            title: 'Context Template',
-            description: 'Story string, separators, and context formatting options',
-            selector: '#ContextSettings',
-        },
-        {
-            id: 'sb-af-instruct',
-            title: 'Instruct Template',
-            description: 'Instruct mode sequences, wrapping, and activation',
-            selector: '#InstructSettingsColumn',
-        },
-        {
-            id: 'sb-af-sysprompt',
-            title: 'System Prompt',
-            description: 'System prompt, post-history instructions, and tokenizer',
-            selector: '#SystemPromptColumn',
-        },
-    ];
-
-    const $drawersContainer = $('<div>', { class: 'sb-af-drawers flex-container flexFlowColumn gap10' });
-
-    sections.forEach(section => {
-        const $col = $(section.selector).first();
-        if ($col.length === 0) return;
-
-        $col.detach();
-
-        const drawer = createAdvFormattingDrawer(section.id, section.title, section.description);
-        const content = drawer.querySelector('.inline-drawer-content');
-
-        // Remove the flex1 class so it fills the full width in stacked layout
-        $col.removeClass('flex1');
-        $col.addClass('wide100p');
-
-        content.appendChild($col[0]);
-        $drawersContainer.append(drawer);
-    });
-
-    // Also check if Reasoning section exists after the columns container
-    const $reasoning = $columnsContainer.nextAll().filter(function () {
-        return $(this).find('#reasoning_auto_parse').length > 0 || $(this).find('.sb-reasoning-toggle-grid').length > 0;
-    }).first();
-
-    if ($reasoning.length > 0) {
-        $reasoning.detach();
-        const drawer = createAdvFormattingDrawer('sb-af-reasoning', 'Reasoning', 'Auto-parse, formatting, and reasoning block settings');
-        const content = drawer.querySelector('.inline-drawer-content');
-        content.appendChild($reasoning[0]);
-        $drawersContainer.append(drawer);
-    }
-
-    // Replace the columns container with the stacked drawers
-    $columnsContainer.replaceWith($drawersContainer);
-
-    $af.data('sb-grouped', true);
+    const empty = groups.filter(group => ![...group.querySelectorAll('input, select, textarea, button, .menu_button')]
+        .some(control => control instanceof HTMLElement && (control.checkVisibility?.() ?? control.getClientRects().length > 0)));
+    for (const group of empty) group.hidden = true;
 }
 
 function updateSillyTavernImportInteractivity() {
@@ -10256,29 +10844,26 @@ function injectSillyTavernImportCard(host = null) {
         return;
     }
 
-    const card = createElement('section', { id: 'sb-import-card', className: 'sb-admin-card sb-import-card' });
-    const header = createElement('div', { className: 'sb-admin-card-header' });
-    const copy = createElement('div', { className: 'sb-admin-card-copy' });
-    const title = createElement('strong', { text: 'Import Your SillyTavern Setup' });
-    const description = createElement('p', { text: 'Bring over characters, chats, presets, themes, extensions, and account settings from an existing SillyTavern folder or backup ZIP without touching the filesystem manually.' });
+    const card = createElement('section', { id: 'sb-import-card', className: 'ds-pref-group sb-import-card', attrs: { 'data-sb-presentation': 'manual' } });
+    const header = createElement('div', { className: 'ds-row ds-row-actions' });
+    const copy = createElement('div', { className: 'ds-row-text' });
+    const title = createElement('strong', { className: 'ds-row-label', text: 'Import Your SillyTavern Setup' });
+    const description = createElement('p', { className: 'ds-row-subtitle', text: 'Bring over characters, chats, presets, themes, extensions, and account settings from an existing SillyTavern folder or backup ZIP without touching the filesystem manually.' });
+    const headerSuffix = createElement('div', { className: 'ds-row-suffix' });
     const badge = createElement('span', { className: 'sb-server-pill', text: 'Easy Import' });
     copy.append(title, description);
-    header.append(copy, badge);
+    headerSuffix.append(badge);
+    header.append(copy, headerSuffix);
 
-    const hintRow = createElement('div', { className: 'sb-import-hints' });
-    for (const label of ['Characters', 'Chats', 'Presets', 'Themes', 'Extensions']) {
-        hintRow.appendChild(createElement('span', { className: 'sb-import-chip', text: label }));
-    }
-
-    const grid = createElement('div', { className: 'sb-import-grid' });
-    const folderPane = createElement('div', { className: 'sb-import-pane' });
-    const folderTitle = createElement('strong', { text: 'Import From Folder Path' });
-    const folderBody = createElement('p', { text: 'Paste the path to your SillyTavern install, its `data` folder, or the specific user folder you want to import. Use the full import for everything, or sync just your third-party extensions with a detailed report.' });
-    const pathRow = createElement('div', { className: 'sb-import-path-row' });
+    const folderPane = createElement('div', { className: 'ds-row sb-import-pane' });
+    const folderCopy = createElement('div', { className: 'ds-row-text' });
+    const folderTitle = createElement('label', { className: 'ds-row-label', text: 'Import From Folder Path', attrs: { for: 'sb-import-path-input' } });
+    const folderBody = createElement('p', { className: 'ds-row-subtitle', text: 'Paste the path to your SillyTavern install, its `data` folder, or the specific user folder you want to import. Use the full import for everything, or sync just your third-party extensions with a detailed report.' });
+    const pathRow = createElement('div', { className: 'ds-row-suffix sb-import-path-row' });
     const actionRow = createElement('div', { className: 'sb-import-action-row' });
     const pathInput = createElement('input', {
         id: 'sb-import-path-input',
-        className: 'text_pole sb-import-path-input',
+        className: 'text_pole ds-control-flex sb-import-path-input',
         attrs: {
             type: 'text',
             placeholder: '/path/to/SillyTavern',
@@ -10298,13 +10883,16 @@ function injectSillyTavernImportCard(host = null) {
         attrs: { type: 'button' },
         html: '<i class="fa-solid fa-puzzle-piece" aria-hidden="true"></i><span>Sync Extensions</span>',
     });
-    pathRow.append(pathInput);
+    pathRow.append(pathInput, actionRow);
     actionRow.append(folderButton, syncButton);
-    folderPane.append(folderTitle, folderBody, pathRow, actionRow);
+    folderCopy.append(folderTitle, folderBody);
+    folderPane.append(folderCopy, pathRow);
 
-    const zipPane = createElement('div', { className: 'sb-import-pane' });
-    const zipTitle = createElement('strong', { text: 'Import From Backup ZIP' });
-    const zipBody = createElement('p', { text: 'Use the backup ZIP that SillyTavern exports. Pick the file here and SillyBunny will import it into this account.' });
+    const zipPane = createElement('div', { className: 'ds-row sb-import-pane' });
+    const zipCopy = createElement('div', { className: 'ds-row-text' });
+    const zipSuffix = createElement('div', { className: 'ds-row-suffix' });
+    const zipTitle = createElement('strong', { className: 'ds-row-label', text: 'Import From Backup ZIP' });
+    const zipBody = createElement('p', { className: 'ds-row-subtitle', text: 'Use the backup ZIP that SillyTavern exports. Pick the file here and SillyBunny will import it into this account.' });
     const zipButton = createElement('button', {
         className: 'menu_button menu_button_icon sb-server-action menu_button_primary',
         attrs: { type: 'button' },
@@ -10320,7 +10908,9 @@ function injectSillyTavernImportCard(host = null) {
         },
     });
     const zipFileName = createElement('small', { className: 'sb-import-file-name', text: 'No ZIP selected yet.' });
-    zipPane.append(zipTitle, zipBody, zipButton, zipFileInput, zipFileName);
+    zipCopy.append(zipTitle, zipBody, zipFileName);
+    zipSuffix.append(zipButton, zipFileInput);
+    zipPane.append(zipCopy, zipSuffix);
 
     const note = createElement('div', {
         className: 'sb-server-note sb-import-note',
@@ -10340,8 +10930,7 @@ function injectSillyTavernImportCard(host = null) {
     report.append(reportHeader, reportSummary, reportHelp, reportList);
     report.hidden = true;
 
-    grid.append(folderPane, zipPane);
-    card.append(header, hintRow, grid, note, report);
+    card.append(header, folderPane, zipPane, note, report);
     cardHost.prepend(card);
 
     getImporterState().refs = {
@@ -10403,10 +10992,11 @@ function createThemeSettingsDrawer({ id, title, content, className = '' }) {
 }
 
 function createThemeSliderGroup({ title, valueId, inputId, value, min, max, step, ariaLabel, caption, onInput, className = '' }) {
-    const sliderGroup = createElement('div', { className: `sb-theme-slider-group ${className}`.trim() });
-    const sliderHeader = createElement('div', { className: 'sb-theme-slider-header' });
-    const sliderTitle = createElement('strong', { text: title });
+    const sliderGroup = createElement('div', { className: `ds-row ds-row-slider ${className}`.trim() });
+    const sliderHeader = createElement('div', { className: 'ds-row-text' });
+    const sliderTitle = createElement('label', { className: 'ds-row-label', text: title, attrs: { for: inputId } });
     const sliderValue = createElement('span', { id: valueId, className: 'sb-theme-slider-value' });
+    const suffix = createElement('div', { className: 'ds-row-suffix' });
     const sliderInput = createElement('input', {
         id: inputId,
         className: 'sb-theme-slider-input',
@@ -10420,13 +11010,36 @@ function createThemeSliderGroup({ title, valueId, inputId, value, min, max, step
         },
     });
     const sliderCaption = createElement('p', {
-        className: 'sb-theme-slider-caption',
+        className: 'ds-row-subtitle',
         text: caption,
     });
 
-    sliderHeader.append(sliderTitle, sliderValue);
-    sliderGroup.append(sliderHeader, sliderInput, sliderCaption);
-    sliderInput.addEventListener('input', event => onInput(event.currentTarget?.value));
+    const numberInput = createElement('input', {
+        className: 'text_pole',
+        attrs: { type: 'number', min: String(min), max: String(max), step: String(step), value: String(value), 'aria-label': ariaLabel, 'data-sb-theme-slider-counter': inputId },
+    });
+    sliderHeader.append(sliderTitle, sliderCaption);
+    sliderValue.hidden = true;
+    suffix.append(sliderInput, numberInput, sliderValue);
+    sliderGroup.append(sliderHeader, suffix);
+    sliderInput.addEventListener('input', () => {
+        numberInput.value = sliderInput.value;
+        onInput(sliderInput.value);
+    });
+    numberInput.addEventListener('change', () => {
+        if (sliderInput.disabled || !numberInput.value || !numberInput.validity.valid) {
+            numberInput.value = sliderInput.value;
+            return;
+        }
+        sliderInput.value = numberInput.value;
+        numberInput.value = sliderInput.value;
+        onInput(sliderInput.value);
+    });
+    numberInput.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        numberInput.dispatchEvent(new Event('change'));
+    });
 
     return sliderGroup;
 }
@@ -11047,45 +11660,26 @@ function createPaperTextureSettingsGroup() {
 
 function createFrontendIconSettingsGroup() {
     const group = createElement('section', {
-        className: 'sb-interface-settings-group sb-frontend-icon-group',
+        className: 'ds-row sb-interface-settings-group sb-frontend-icon-group',
     });
-    const header = createElement('div', { className: 'sb-frontend-icon-header' });
-    const title = createElement('strong', { text: 'Frontend Icon' });
-    const description = createElement('p', {
-        className: 'sb-theme-slider-caption',
+    const header = createElement('div', { className: 'ds-row-text' });
+    const title = createElement('label', { className: 'ds-row-label', text: 'Frontend Icon', attrs: { for: 'sb-frontend-icon-select' } });
+    const description = createElement('small', {
+        className: 'ds-row-subtitle',
         text: 'Choose which SillyBunny icon appears in the app chrome, splash screen, and Home panel.',
     });
-    const options = createElement('div', { className: 'sb-frontend-icon-options' });
+    const suffix = createElement('div', { className: 'ds-row-suffix' });
+    const select = createElement('select', { id: 'sb-frontend-icon-select', className: 'ds-control-flex text_pole' });
 
     header.append(title, description);
 
     for (const icon of SB_FRONTEND_ICONS) {
-        const button = createElement('button', {
-            className: 'sb-theme-option sb-frontend-icon-option',
-            attrs: {
-                type: 'button',
-                'data-sb-frontend-icon-option': icon.id,
-            },
-        });
-        const preview = createElement('img', {
-            className: 'sb-frontend-icon-preview',
-            attrs: {
-                src: icon.src,
-                alt: '',
-                loading: 'lazy',
-            },
-        });
-        const copy = createElement('span', { className: 'sb-frontend-icon-copy' });
-        const label = createElement('span', { className: 'sb-theme-option-label', text: icon.label });
-        const meta = createElement('span', { className: 'sb-theme-option-meta', text: icon.description });
-
-        copy.append(label, meta);
-        button.append(preview, copy);
-        button.addEventListener('click', () => setFrontendIconPreference(icon.id));
-        options.appendChild(button);
+        select.appendChild(createElement('option', { text: icon.label, attrs: { value: icon.id } }));
     }
-
-    group.append(header, options);
+    select.value = sbState.frontendIcon;
+    select.addEventListener('change', () => setFrontendIconPreference(select.value));
+    suffix.appendChild(select);
+    group.append(header, suffix);
     return group;
 }
 
@@ -11154,17 +11748,18 @@ function createTopbarLabelSettingsGroup() {
     const mobileDescription = createElement('small', { text: 'Pick one option at a time.' });
     const mobileGrid = createElement('div', { className: 'sb-topbar-label-option-grid' });
     const customTextField = createElement('label', {
-        className: 'sb-topbar-custom-text-field',
+        className: 'ds-row sb-topbar-custom-text-field',
         attrs: {
             for: 'sb-topbar-custom-text-input',
         },
     });
-    const customTextHeading = createElement('div', { className: 'sb-topbar-label-section-heading' });
-    const customTextTitle = createElement('strong', { text: 'Custom Text Value' });
-    const customTextDescription = createElement('small', { text: 'This only appears in the top bar when the Custom Text checkbox is enabled above.' });
+    const customTextHeading = createElement('div', { className: 'ds-row-text' });
+    const customTextTitle = createElement('strong', { className: 'ds-row-label', text: 'Custom Text Value' });
+    const customTextDescription = createElement('small', { className: 'ds-row-subtitle', text: 'This only appears in the top bar when the Custom Text checkbox is enabled above.' });
+    const customTextSuffix = createElement('div', { className: 'ds-row-suffix' });
     const customTextInput = createElement('input', {
         id: 'sb-topbar-custom-text-input',
-        className: 'text_pole sb-topbar-custom-text-input',
+        className: 'text_pole ds-control-flex sb-topbar-custom-text-input',
         attrs: {
             type: 'text',
             maxlength: String(SB_TOPBAR_LABEL_CUSTOM_TEXT_MAX_LENGTH),
@@ -11216,7 +11811,8 @@ function createTopbarLabelSettingsGroup() {
 
     desktopSection.append(desktopHeading, desktopGrid);
     mobileSection.append(mobileHeading, mobileGrid);
-    customTextField.append(customTextHeading, customTextInput);
+    customTextSuffix.append(customTextInput);
+    customTextField.append(customTextHeading, customTextSuffix);
 
     return createThemeSettingsDrawer({
         id: 'sb-topbar-label-drawer',
@@ -11366,6 +11962,12 @@ function injectThemePicker() {
         );
     }
     themeBlock.append(card);
+    // SillyBunny: keep the shared injection path, then mount Interface controls in their own tab.
+    const interfaceRoot = document.getElementById(SB_USER_SETTINGS_CONTAINER_IDS.interface);
+    if (interfaceRoot instanceof HTMLElement) {
+        interfaceSettingsGroup.dataset.settingsTab = 'interface';
+        interfaceRoot.prepend(interfaceSettingsGroup);
+    }
     updateThemePickerUi();
 }
 
@@ -11387,11 +11989,9 @@ function updateThemePickerUi() {
     const paperTextureOpacityInput = document.getElementById('sb-paper-texture-opacity-input');
     const paperTextureOpacityValue = document.getElementById('sb-paper-texture-opacity-value');
 
-    for (const button of document.querySelectorAll('[data-sb-frontend-icon-option]')) {
-        const iconId = button.getAttribute('data-sb-frontend-icon-option');
-        const isActive = iconId === sbState.frontendIcon;
-        button.classList.toggle('is-selected', isActive);
-        button.setAttribute('aria-pressed', String(isActive));
+    const frontendIconSelect = document.getElementById('sb-frontend-icon-select');
+    if (frontendIconSelect instanceof HTMLSelectElement) {
+        frontendIconSelect.value = sbState.frontendIcon;
     }
 
     if (sliderInput instanceof HTMLInputElement) {
@@ -11520,13 +12120,23 @@ function updateThemePickerUi() {
         paperTextureOpacityInput.step = String(SB_PAPER_TEXTURE_OPACITY.step);
         paperTextureOpacityInput.value = String(sbState.paperTextureOpacity);
         paperTextureOpacityInput.disabled = !sbState.paperTextureEnabled;
-        paperTextureOpacityInput.closest('.sb-theme-slider-group')?.classList.toggle('is-disabled', !sbState.paperTextureEnabled);
+        paperTextureOpacityInput.closest('.ds-row-slider')?.classList.toggle('is-disabled', !sbState.paperTextureEnabled);
     }
 
     if (paperTextureOpacityValue instanceof HTMLElement) {
         paperTextureOpacityValue.textContent = formatPaperTextureOpacity(sbState.paperTextureOpacity);
     }
 
+    for (const counter of document.querySelectorAll('[data-sb-theme-slider-counter]')) {
+        if (!(counter instanceof HTMLInputElement)) continue;
+        const rangeId = counter.dataset.sbThemeSliderCounter;
+        if (!rangeId) continue;
+        const range = document.getElementById(rangeId);
+        if (range instanceof HTMLInputElement) {
+            counter.value = range.value;
+            counter.disabled = range.disabled;
+        }
+    }
     for (const button of document.querySelectorAll('[data-sb-message-style]')) {
         const isActive = button.getAttribute('data-sb-message-style') === getCurrentMessageStyle();
         button.classList.toggle('is-selected', isActive);
@@ -11542,9 +12152,18 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
 
     const entries = [];
     const seen = new Set();
-    const excludedSelector = includeThemeCard
-        ? '.sb-search-result, .sb-legacy-search-hidden, .sb-mobile-quick-actions-group, .sb-desktop-quick-actions-group'
-        : '.sb-search-result, .sb-theme-card, .sb-legacy-search-hidden';
+    // SillyBunny: subpage store children are hidden by CSS; clicking a search result that lands
+    // inside the store bypasses the subpage stack and triggers jQuery slideToggle on the old
+    // inline-drawer, injecting display:block and freezing the page. The row labels rendered
+    // outside the store already cover every section as the correct entry point.
+    const excludedSelector = [
+        '.sb-search-result',
+        '.sb-legacy-search-hidden',
+        // Unwritten placeholder copy is not a setting.
+        SB_SEARCH_PLACEHOLDER_SELECTOR,
+        ...(includeThemeCard ? ['.sb-mobile-quick-actions-group', '.sb-desktop-quick-actions-group'] : ['.sb-theme-card']),
+        `.${SB_SUBPAGE_STORE_CLASS}`,
+    ].join(', ');
 
     for (const element of searchRoot.querySelectorAll(SB_SEARCH_TARGET_SELECTOR)) {
         if (!(element instanceof HTMLElement)) {
@@ -11631,6 +12250,9 @@ function getPersonaSearchEntries(tabState) {
 }
 
 function getSearchSectionLabel(element, fallback) {
+    const sampler = element.closest('details[data-sb-sampling-control]');
+    const samplerTitle = sampler?.querySelector('summary .ds-row-label')?.textContent.trim();
+    if (samplerTitle) return samplerTitle;
     // For extension containers: use the extension's own name/header, not the parent tab label
     const extContainer = element.closest('.extension_container, [id$="-container"]');
     if (extContainer instanceof HTMLElement) {
@@ -11649,7 +12271,7 @@ function getSearchSectionLabel(element, fallback) {
     if (inlineDrawer instanceof HTMLElement) {
         const toggle = inlineDrawer.querySelector(':scope > .inline-drawer-toggle');
         if (toggle) {
-            const text = String(toggle.textContent ?? '').replace(/\s+/g, ' ').trim();
+            const text = getSearchLabelText(toggle).replace(/\s+/g, ' ').trim();
             if (text && text !== fallback) return text;
         }
     }
@@ -11659,7 +12281,7 @@ function getSearchSectionLabel(element, fallback) {
     const flatSection = element.closest(`.${SB_FLAT_SECTION_CLASS}`);
     if (flatSection instanceof HTMLElement) {
         const heading = flatSection.querySelector(`:scope > .${SB_FLAT_SECTION_HEADER_CLASS}`);
-        const text = String(heading?.textContent ?? '').replace(/\s+/g, ' ').trim();
+        const text = (heading ? getSearchLabelText(heading) : '').replace(/\s+/g, ' ').trim();
         if (text && text !== fallback) return text;
     }
 
@@ -11668,7 +12290,7 @@ function getSearchSectionLabel(element, fallback) {
         ?? element.closest('.bg-header-row-2')
         ?? element.closest('label, h3, h4, h5, strong');
 
-    const text = String(preferred?.textContent ?? fallback).replace(/\s+/g, ' ').trim();
+    const text = (preferred ? getSearchLabelText(preferred) : String(fallback ?? '')).replace(/\s+/g, ' ').trim();
     return text || fallback;
 }
 
@@ -11697,6 +12319,7 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
                     : [];
 
             for (const entry of [...tabState.searchIndex, ...extraEntries]) {
+                if (!isBackendSearchEntryAvailable(entry, tabState)) continue;
                 if (!searchTerms.every(term => entry.searchText.includes(term))) {
                     continue;
                 }
@@ -11740,6 +12363,15 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
         .slice(0, limit);
 }
 
+function isBackendSearchEntryAvailable(entry, tabState) {
+    if (!['sampling', 'prompting'].includes(tabState.id)) return true;
+    if (!(entry.element instanceof HTMLElement) || !tabState.searchRoot.contains(entry.element)) return false;
+    for (let element = entry.element; element && element !== tabState.searchRoot; element = element.parentElement) {
+        if (element.hidden || getComputedStyle(element).display === 'none') return false;
+    }
+    return true;
+}
+
 function getTabSearchEntries(tabState, { includeThemeCard = false } = {}) {
     const searchIndex = includeThemeCard ? createSearchIndex(tabState, { includeThemeCard }) : tabState.searchIndex;
 
@@ -11754,7 +12386,7 @@ function getTabSearchEntries(tabState, { includeThemeCard = false } = {}) {
             : tabState.id === 'characters'
                 ? getCharacterPanelSearchEntries()
                 : []),
-    ];
+    ].filter(entry => isBackendSearchEntryAvailable(entry, tabState));
 }
 
 function getMobileQuickActionSearchMatches(query) {
@@ -12004,6 +12636,13 @@ function setUniversalSearchActiveIndex(index) {
 }
 
 function expandHiddenAccordions(target) {
+    // SillyBunny: elements in the subpage store are hidden by CSS, not by a closed drawer;
+    // clicking their toggles fires jQuery slideToggle and injects inline display:block,
+    // overriding the store hide rule and bleeding the old panel into view.
+    if (target?.closest('.' + SB_SUBPAGE_STORE_CLASS)) {
+        return;
+    }
+
     const hiddenContents = [];
     let current = target.parentElement;
 
@@ -12011,6 +12650,7 @@ function expandHiddenAccordions(target) {
         if (current.classList.contains('inline-drawer-content') && getComputedStyle(current).display === 'none') {
             hiddenContents.push(current);
         }
+        if (current instanceof HTMLDetailsElement) current.open = true;
 
         current = current.parentElement;
     }
@@ -12118,6 +12758,41 @@ function revealSearchMatch(shellKey, match) {
     openShell(shellKey, match.tabId);
 
     window.setTimeout(() => {
+        // SillyBunny: subpage-hosted tabs route through the stack, not the old drawer routing.
+        // Matches inside the store would otherwise trigger jQuery slideToggle on inline-drawer
+        // toggles, injecting inline display:block and bleeding the old panel into view.
+        const stack = sbSubpageStacks.get(`${shellKey}:${match.tabId}`);
+        if (stack) {
+            const row = stack.rows.find(r => {
+                const source = r.source?.();
+                return source instanceof HTMLElement && source.contains(match.element);
+            });
+            if (row) {
+                stack.open(row.id);
+                const slideDelay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                    ? 0
+                    : SB_SUBPAGE_DURATION;
+                window.setTimeout(() => {
+                    if (!(match.element instanceof HTMLElement)) return;
+                    expandHiddenAccordions(match.element);
+                    scrollElementIntoManagedView(match.element, {
+                        block: 'center',
+                        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                    });
+                    pulseSearchTarget(match.element);
+                }, slideDelay + 40);
+                return;
+            }
+            if (match.element instanceof HTMLElement) {
+                scrollElementIntoManagedView(match.element, {
+                    block: 'center',
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                });
+                pulseSearchTarget(match.element);
+            }
+            return;
+        }
+
         revealSettingsCategoryFor(match.element);
         expandHiddenAccordions(match.element);
         scrollElementIntoManagedView(match.element, {
@@ -12175,6 +12850,7 @@ function setActiveTab(shellKey, tabId) {
 }
 
 // SillyBunny: every shell lives in the full-screen settings page (feat/v1.9.0-ui-overhaul).
+/** @param {string} shellKey @param {string|null} [tabId] */
 function openShell(shellKey, tabId = null) {
     if (shellKey === 'left' && tabId === 'world-info') {
         // World Info moved from the Backend shell into Characters.
@@ -12318,7 +12994,10 @@ function buildShell(shellKey) {
         });
         basePanel.scroller.appendChild(connectionsPanel.column);
         basePanel.searchRoot = connectionsPanel.column;
-        basePanel.onActivate = () => connectionsPanel.onActivate();
+        basePanel.onActivate = () => {
+            connectionsPanel.onActivate();
+            normalizeBackendSettingsRows(connectionsPanel.column, { fields: false });
+        };
         basePanel.connectionsPanel = connectionsPanel;
     } else if (shellKey === 'right') {
         userSettingsSplit = splitUserSettingsContent(originalContent);
@@ -12378,9 +13057,16 @@ function buildShell(shellKey) {
             // Prompting tab gets presets drawer content (the original left shell content)
             const promptingPanel = createShellPanel(customTab);
             if (shellKey === 'left') {
-                mergeOpenAIPresetToolbarRow(originalContent);
+                preparePromptingPanel(originalContent);
                 promptingPanel.scroller.appendChild(originalContent);
             }
+            promptingPanel.onActivate = () => {
+                updatePromptingPanel(promptingPanel.panel);
+                void getShellState('left')?.tabs.get('sampling')?.ensureReady?.().then(() => updatePromptingPanel(promptingPanel.panel));
+            };
+            $(document).on('change.sbPromptingPanel', '#main_api, #chat_completion_source, #textgen_type', () => {
+                window.requestAnimationFrame(() => updatePromptingPanel(promptingPanel.panel));
+            });
             registerShellTab(shellKey, customTab, promptingPanel, originalContent);
             continue;
         }
@@ -12391,6 +13077,10 @@ function buildShell(shellKey) {
             if (formattingPrep) {
                 const contextPanel = createShellPanel(customTab);
                 contextPanel.scroller.appendChild(formattingPrep.drawer);
+                contextPanel.onActivate = () => {
+                    groupAdvancedFormattingIntoDrawers();
+                    updateFormattingGroupVisibility(document.getElementById('AdvancedFormatting'));
+                };
                 registerShellTab(shellKey, customTab, contextPanel, formattingPrep.drawerContent);
             }
             continue;
@@ -12439,6 +13129,8 @@ function buildShell(shellKey) {
                     // state — could not reach it. It is done now that the tree is attached.
                     openAllInlineDrawers(dataSecurityContent);
                     bindInlineDrawerPersistence(dataSecurityContent);
+                    // SillyBunny: this action was detached when the initial shell bindings ran.
+                    bindClearCookiesAndCacheButton(dataSecurityContent);
                     injectSillyTavernImportCard(dataSecurityContent.querySelector('#sb-import-tools-outlet'));
                 } else {
                     // Without the split there is no Data & Security container to adopt, so the card
@@ -13246,15 +13938,29 @@ function bindInlineDrawerPersistence(root = document) {
  * flattened. The persistence observer already watches these subtrees and is the only thing that
  * reliably fires afterwards, so the flatten rides along with the same debounce. It is idempotent,
  * and it skips any panel with no drawers left, so the common case is one query per panel.
+ *
+ * Only a visible panel is re-flattened: every activation already runs the full pass through
+ * `flattenSettingsPanelDrawers`, so a hidden panel catches up when it is shown. Re-running it on
+ * hidden panels cost a full Prompting rebuild for unrelated mutations (closing search, hotkeys), and
+ * the Prompting pass decides group visibility with `checkVisibility()`, which is false for every
+ * control inside a hidden panel -- it hid each group until the next activation re-showed it. Each
+ * shell keeps its own active panel and the settings page can be closed, so the active class alone
+ * does not mean the panel is on screen.
  */
 function reflattenRuntimeDrawers() {
-    for (const panel of document.querySelectorAll('section.sb-shell-panel[data-sb-panel]')) {
+    for (const panel of document.querySelectorAll('section.sb-shell-panel.sb-shell-panel-active[data-sb-panel]')) {
+        if (!(panel.checkVisibility?.() ?? panel.getClientRects().length > 0)) continue;
         const tabId = panel.dataset.sbPanel;
+        if (tabId === 'prompting') {
+            updatePromptingPanel(panel);
+            continue;
+        }
         if (SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) || isSubpagePanel(tabId) || !panel.querySelector('.inline-drawer')) {
             continue;
         }
         flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
         normalizeSettingsPresentation(panel, { name: tabId });
+        if (tabId === 'context') positionAdvancedFormattingHelpLink();
     }
 }
 
@@ -14529,7 +15235,7 @@ function initAll() {
 
 const sbSettingsState = {
     open: false,
-    activeShell: null, // 'left' | 'right'
+    activeShell: /** @type {string|null} */ (null),
     activeTabId: null,
     // Incremented each time a transition starts; guards stale callbacks after a
     // fast reopen or close.
@@ -14638,6 +15344,7 @@ function closeMobileSurfacesForSettingsPage(shellKey) {
     });
 }
 
+/** @param {string} shellKey @param {string|null} [tabId] */
 function openSettingsPage(shellKey, tabId = null) {
     const page = getSettingsPage();
     if (!(page instanceof HTMLElement)) {
@@ -14816,6 +15523,7 @@ function buildSettingsPageFor(shellKey, tabId) {
                 'data-sb-settings-tab': tab.id,
                 // Short action-oriented hint; the tab's `description` is the page sub-title instead.
                 title: tab.tooltip ?? '',
+                'data-sb-search-aliases': (tab.searchAliases ?? []).join('|'),
             },
         });
         button.innerHTML = `<i class="fa-solid ${tab.icon}" aria-hidden="true"></i><span>${tab.label}</span>`;
@@ -14864,6 +15572,7 @@ function setRootAttribute(element, name, value) {
 // Shell roots are moved into the page once and stay there; switching sections only
 // toggles which one is active. Reparenting on every open forced a full style and layout
 // pass over each panel, which stalled the first frames of the open animation.
+/** @param {string} shellKey @param {string|null} [tabId] */
 function mountShellRootInSettingsPage(shellKey, tabId = null) {
     const host = document.getElementById('sb-settings-shell-host');
     const root = getSettingsPageRoot(shellKey);
@@ -14922,7 +15631,7 @@ function mountShellRootInSettingsPage(shellKey, tabId = null) {
     // SillyBunny: the stacked panels have their store wrapper and their stack built from the same
     // activation pass, and this path bypasses `setActiveTab` for the tab that is already active --
     // which is the base tab, every time the page is first mounted. Without this the first paint of
-    // an Extensions or Prompting panel is the raw legacy drawer: the wrapper that hides its children
+    // an Extensions panel is the raw legacy drawer: the wrapper that hides its children
     // does not exist yet, so all of its sections render at once.
     installSettingsSubpage(shellKey, shellState.activeTabId);
     dispatchShellTabActivated(shellKey, activeTab);
@@ -15123,15 +15832,17 @@ function initSettingsPageClose() {
 
 let sbSettingsSidebarFilterRequest = 0;
 
-function settingsTabLabelMatches(label, query) {
-    const normalizedLabel = normalizeText(label);
-    if (normalizedLabel.includes(query)) {
+function settingsTabLabelMatches(label, query, aliases = []) {
+    const labels = [label, ...aliases];
+    if (labels.some(value => normalizeText(value).includes(query))) {
         return true;
     }
 
     // Word-initial matching, e.g. "cl" for Console Logs.
-    const initials = normalizedLabel.split(/[\s-]+/).filter(Boolean).map(word => word[0]).join('');
-    return query.length > 1 && initials.startsWith(query.replace(/\s+/g, ''));
+    return query.length > 1 && labels.some(value => {
+        const initials = normalizeText(value).split(/[\s-]+/).filter(Boolean).map(word => word[0]).join('');
+        return initials.startsWith(query.replace(/\s+/g, ''));
+    });
 }
 
 async function filterSettingsSidebarTabs(rawQuery) {
@@ -15148,7 +15859,8 @@ async function filterSettingsSidebarTabs(rawQuery) {
         for (const button of tabList.querySelectorAll('.sb-settings-tab')) {
             const label = button.textContent ?? '';
             const tabId = button.dataset.sbSettingsTab;
-            const labelMatch = Boolean(query) && settingsTabLabelMatches(label, query);
+            const aliases = String(button.dataset.sbSearchAliases ?? '').split('|').filter(Boolean);
+            const labelMatch = Boolean(query) && settingsTabLabelMatches(label, query, aliases);
             // Label hits always keep their tab. A content hit only reveals a tab when the label
             // itself did not match, so typing "Logs" opens Logs rather than every tab that happens
             // to mention logs somewhere in its body.

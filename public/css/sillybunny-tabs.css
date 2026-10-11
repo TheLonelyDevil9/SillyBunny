@@ -1598,7 +1598,6 @@ body:not(.movingUI) .drawer-content.maximized {
 .sb-shell-callout,
 .sb-agent-hero,
 .sb-agent-card,
-.sb-admin-card,
 .sb-theme-card,
 .sb-theme-option,
 .sb-shell-empty-state {
@@ -2295,7 +2294,6 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 0 var(--sb-shell-space-lg) !important;
     aspect-ratio: auto;
     border-radius: var(--sb-radius-button, 14px);
     border: 1px solid color-mix(in srgb, var(--color-primary, var(--sb-accent)) 28%, var(--sb-shell-border) 72%);
@@ -3002,7 +3000,6 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 .sb-shell-callout,
 .sb-agent-hero,
 .sb-agent-card,
-.sb-admin-card,
 .sb-theme-card {
     border-radius: var(--sb-radius-lg, 22px);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
@@ -3015,7 +3012,6 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 .sb-shell-callout::before,
 .sb-agent-hero::before,
 .sb-agent-card::before,
-.sb-admin-card::before,
 .sb-theme-card::before {
     content: '';
     position: absolute;
@@ -3029,48 +3025,21 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 
 .sb-shell-callout,
 .sb-agent-hero,
-.sb-admin-card,
 .sb-theme-card {
     padding: var(--sb-shell-space-lg);
 }
 
 :root[data-sb-compact-mode='true'] .sb-shell-callout,
 :root[data-sb-compact-mode='true'] .sb-agent-hero,
-:root[data-sb-compact-mode='true'] .sb-admin-card,
 :root[data-sb-compact-mode='true'] .sb-theme-card {
     padding: var(--sb-shell-space-md);
 }
 
 .sb-shell-callout p,
 .sb-agent-hero p,
-.sb-admin-card p,
 .sb-theme-card p {
     margin: 8px 0 0;
     opacity: 0.75;
-}
-
-.sb-admin-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sb-shell-card-gap);
-}
-
-.sb-admin-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.sb-admin-card-copy {
-    min-width: 0;
-}
-
-.sb-admin-card-copy strong {
-    display: block;
-    font-size: var(--sb-type-control);
-    font-weight: var(--sb-weight-title);
-    line-height: var(--sb-line-title);
 }
 
 .sb-server-card {
@@ -3191,7 +3160,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
         var(--sb-thumbnail-field-track)
         var(--sb-thumbnail-separator-track)
         var(--sb-thumbnail-field-track);
-    grid-template-areas: "enabled format . quality";
+    grid-template-areas: "enabled enabled enabled enabled" ". format . quality";
     gap: 8px var(--sb-thumbnail-grid-gap);
     align-items: end;
 }
@@ -3317,70 +3286,41 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 }
 
 .sb-console-log-output.is-empty {
-    opacity: 0.74;
     font-style: italic;
+    color: var(--sb-input-placeholder);
 }
 
 .sb-import-card {
-    gap: var(--sb-shell-card-gap);
+    gap: 0;
     width: 100%;
     max-width: 100%;
     margin-bottom: var(--sb-shell-space-lg);
-    border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 28%, var(--sb-shell-border) 72%);
-}
-
-.sb-import-hints {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sb-shell-space-xs);
-}
-
-.sb-import-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 76%, transparent);
-    background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 10%, transparent);
-    font-size: var(--sb-type-caption);
-    line-height: 1.2;
-}
-
-.sb-import-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: var(--sb-shell-space-sm);
-    align-items: stretch;
 }
 
 .sb-import-pane {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sb-shell-space-sm);
     min-width: 0;
-    padding: var(--sb-shell-space-md);
-    border-radius: var(--sb-radius-md, 16px);
-    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 76%, transparent);
-    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
 }
 
 .sb-import-pane strong {
     font-size: var(--sb-type-control);
 }
 
-.sb-import-pane p,
 .sb-import-note {
     margin: 0;
-    color: color-mix(in srgb, var(--SmartThemeBodyColor) 82%, transparent);
+    color: var(--sb-input-placeholder);
     line-height: 1.45;
 }
 
 .sb-import-path-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
     gap: var(--sb-shell-space-sm);
+    flex: 1 1 0;
+}
+
+#sb-settings-page .sb-import-pane > .ds-row-text {
+    flex: 1 1 0;
 }
 
 .sb-import-action-row {
@@ -3388,6 +3328,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     flex-wrap: wrap;
     align-items: center;
     gap: var(--sb-shell-space-sm);
+    width: 100%;
 }
 
 .sb-import-action-row .sb-server-action {
@@ -3397,13 +3338,13 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 }
 
 .sb-import-action-row .sb-server-action.menu_button_primary,
-.sb-import-pane > .sb-server-action.menu_button_primary {
+.sb-import-pane .ds-row-suffix > .sb-server-action.menu_button_primary {
     color: var(--sb-on-accent, var(--SmartThemeBlurTintColor));
     text-shadow: none;
 }
 
 .sb-import-path-input {
-    flex: 1 1 260px;
+    flex: 0 1 auto;
     min-width: 0;
     width: 100%;
     max-width: 100%;
@@ -3417,7 +3358,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     min-height: 1.4em;
     font-size: calc(var(--mainFontSize) * 0.72);
     line-height: 1.4;
-    opacity: 0.72;
+    color: var(--sb-input-placeholder);
     overflow-wrap: anywhere;
 }
 
@@ -3509,7 +3450,6 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 }
 
 @media screen and (max-width: 900px) {
-    .sb-admin-card-header,
     .sb-server-config-meta {
         flex-direction: column;
         align-items: stretch;
@@ -3547,16 +3487,6 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
         gap: 8px;
     }
 
-    .sb-import-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .sb-import-pane {
-        gap: 8px;
-        padding: 14px;
-        border-radius: var(--sb-radius-md, 16px);
-    }
-
     .sb-import-path-input {
         flex-basis: auto;
     }
@@ -3577,32 +3507,18 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
 
 @media screen and (max-width: 620px) {
     .sb-import-card {
-        gap: 12px;
         margin-bottom: 14px;
     }
 
-    .sb-import-hints {
-        gap: 6px;
-    }
-
-    .sb-import-chip {
-        min-height: 24px;
-        padding: 0 8px;
-        font-size: var(--sb-type-caption);
-    }
-
-    .sb-import-pane,
     .sb-import-report {
         gap: 8px;
         padding: 12px;
     }
 
-    .sb-import-pane strong,
     .sb-import-report-header strong {
         font-size: var(--sb-type-meta);
     }
 
-    .sb-import-pane p,
     .sb-import-note,
     .sb-import-report-summary,
     .sb-import-report-help {
@@ -3611,7 +3527,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     }
 
     .sb-import-action-row .sb-server-action,
-    .sb-import-pane > .sb-server-action {
+    .sb-import-pane .ds-row-suffix > .sb-server-action {
         min-height: 42px;
         padding-block: 9px;
     }
@@ -3805,20 +3721,13 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     opacity: 0.72;
 }
 
-.sb-interface-settings-group {
+.sb-interface-settings-group:not(.ds-row) {
     display: flex;
     flex-direction: column;
     gap: var(--sb-shell-space-sm);
 }
 
-.sb-interface-settings-group.sb-theme-slider-group {
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-}
-
-.sb-interface-settings-group + .sb-interface-settings-group {
+.sb-interface-settings-group + .sb-interface-settings-group:not(.ds-row) {
     padding-top: var(--sb-shell-space-md);
     border-top: 1px solid color-mix(in srgb, var(--sb-shell-border) 62%, transparent);
 }
@@ -4474,7 +4383,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     min-height: var(--sb-composer-action-size, 30px) !important;
     max-height: var(--sb-composer-action-size, 30px) !important;
     flex: 0 0 var(--sb-composer-send-width, calc(var(--sb-composer-action-size, 30px) * 1.45)) !important;
-    border-radius: 50% !important;
+    border-radius: 50%;
 }
 
 #send_form .mes_stop,
@@ -4486,7 +4395,7 @@ body #right-nav-panel #HotSwapWrapper .hotswap > :is(.avatar, .character_select,
     min-height: var(--sb-composer-action-size, 30px) !important;
     max-height: var(--sb-composer-action-size, 30px) !important;
     flex: 0 0 var(--sb-composer-send-width, calc(var(--sb-composer-action-size, 30px) * 1.45)) !important;
-    border-radius: 50% !important;
+    border-radius: 50%;
 }
 
 @media screen and (min-width: 1001px) {
@@ -6775,7 +6684,6 @@ html:not([data-sb-mobile-ui-mode='mobile']) #form_sheld:not(:has(> #group_speake
     grid-row: 1;
     position: static;
     transform: none;
-    margin-left: 0 !important;
 }
 
 #right-nav-panel:is([data-menu-type="group_create"], [data-menu-type="group_edit"]) #GroupFavDelOkBack > #rm_group_restore_avatar {
@@ -7026,7 +6934,6 @@ html:not([data-sb-mobile-ui-mode='mobile']) #form_sheld:not(:has(> #group_speake
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     overflow: visible !important;
-    display: block !important;
     height: auto !important;
     display: block !important;
 }
@@ -7347,7 +7254,7 @@ body.big-avatars #rm_print_characters_block {
         #new_oai_preset,
         [data-preset-manager-rename='openai'],
         [data-preset-manager-delete-all='openai']
-    ) {
+    ):not(.sb-action-btn) {
         width: var(--sb-mobile-touch-target, 44px);
         min-width: var(--sb-mobile-touch-target, 44px);
         max-width: var(--sb-mobile-touch-target, 44px);
@@ -7919,10 +7826,11 @@ body.reduced-motion .sb-shell-main {
     background: var(--sb-layer-view);
 }
 
-/* Inactive hosted roots stay in place but skip rendering, so switching sections is cheap. */
-#sb-settings-shell-host > .sb-settings-mounted-shell:not(.sb-settings-active-root) {
+/* Inactive hosted roots stay in place but skip rendering, so switching sections is cheap. The
+   Characters selector outranks its ID-level layout rule below, so the inactive panel leaves the flow too. */
+#sb-settings-shell-host > .sb-settings-mounted-shell:not(.sb-settings-active-root),
+#sb-settings-shell-host > #right-nav-panel.sb-settings-mounted-shell:not(.sb-settings-active-root) {
     position: absolute !important;
-    inset: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
     content-visibility: hidden;
@@ -7933,51 +7841,42 @@ body.reduced-motion .sb-shell-main {
 #sb-settings-shell-host > #right-nav-panel.sb-settings-mounted-shell {
     position: static !important;
     inset: auto !important;
-    top: auto !important;
-    left: auto !important;
-    right: auto !important;
-    margin: 0 !important;
+    margin: 0;
     width: 100% !important;
-    min-width: 0 !important;
     max-width: none !important;
     height: 100% !important;
     max-height: none !important;
-    border-radius: 0 !important;
     transform: none !important;
 }
 
-#sb-settings-shell-host > #right-nav-panel.sb-settings-mounted-shell:not(.sb-settings-active-root) {
-    position: absolute !important;
-    inset: 0 !important;
-}
-
 #sb-settings-shell-host > .sb-settings-mounted-shell {
-    display: flex !important;
-    position: static !important;
+    display: flex;
+    position: static;
     inset: auto !important;
     width: 100% !important;
     height: 100% !important;
     max-width: none !important;
-    max-height: none !important;
+    max-height: none;
     min-width: 0 !important;
     min-height: 0 !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    overflow: hidden !important;
+    opacity: 1;
+    visibility: visible;
+    overflow: hidden;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    transform: none !important;
+    /* The host behind this root is an opaque --sb-layer-view fill, so the floating-drawer blur
+       from `.drawer-content` samples a flat colour: invisible, but it adds a backdrop pass to
+       every frame of the page open/close and tab-switch motion. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transform: none;
     pointer-events: auto !important;
 }
 
 #sb-settings-shell-host > .sb-settings-mounted-shell > .sb-shell-frame {
     width: 100%;
     height: 100%;
-}
-
-#sb-settings-shell-host > .sb-settings-mounted-shell .sb-shell-header {
-    display: none !important;
 }
 
 #sb-settings-shell-host > .sb-settings-mounted-shell .sb-shell-main {
@@ -8062,12 +7961,14 @@ body.reduced-motion .sb-shell-main {
 .ds-pref-group {
     display: flex;
     flex-direction: column;
+    gap: 0;
+    min-width: 0;
     border-radius: var(--sb-radius-lg, 16px);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
     box-shadow: none;
     overflow: hidden;
-    margin-bottom: 12px;
+    margin-bottom: 0;
 }
 
 .ds-pref-group-heading {
@@ -8085,7 +7986,9 @@ body.reduced-motion .sb-shell-main {
     gap: 12px;
     padding: 10px 16px;
     min-height: 52px;
+    min-width: 0;
     border-top: 1px solid var(--sb-shell-border);
+    box-sizing: border-box;
 }
 
 .ds-action-row:first-of-type {
@@ -8098,6 +8001,8 @@ body.reduced-motion .sb-shell-main {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .ds-action-row-title {
@@ -8109,7 +8014,8 @@ body.reduced-motion .sb-shell-main {
 
 .ds-action-row-desc {
     font-size: var(--sb-type-meta);
-    color: var(--sb-shell-text-secondary);
+    color: var(--sb-input-placeholder);
+    opacity: 1;
     line-height: 1.4;
 }
 
@@ -8118,6 +8024,713 @@ body.reduced-motion .sb-shell-main {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+/* SillyBunny: rows own their separator and inset; text wraps without compressing the suffix. */
+.ds-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 6px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+    background: transparent;
+    color: var(--sb-shell-text);
+    font-family: var(--mainFontFamily);
+    text-align: start;
+    box-sizing: border-box;
+}
+
+:root[data-sb-compact-mode='true'] .ds-row {
+    min-height: 44px;
+    padding-block: 6px;
+}
+
+.ds-row:has(.ds-row-subtitle),
+:root[data-sb-compact-mode='true'] .ds-row:has(.ds-row-subtitle) {
+    min-height: 52px;
+}
+
+.ds-pref-group > :is(.ds-row, .ds-row-expander):last-child {
+    border-bottom: 0;
+}
+
+.ds-row-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    gap: 2px;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.ds-row-label {
+    margin: 0;
+    font-size: var(--sb-type-control);
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--sb-shell-text);
+}
+
+.ds-row-subtitle {
+    margin: 0;
+    font-size: var(--sb-type-meta);
+    line-height: 1.4;
+    color: var(--sb-input-placeholder);
+    opacity: 1;
+}
+
+.ds-row-suffix {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 12px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.ds-row-suffix > :is(input, select, textarea) {
+    margin: 0;
+}
+
+.sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline) > :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image'])) {
+    flex: 1 1 190px;
+    min-width: 0;
+}
+
+.sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline):has(> :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image']))) > :is(label:not(.checkbox_label), small, span:not(.select2)) {
+    flex: 0 1 180px;
+    min-width: min(180px, 100%);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.ds-row:has(> .ds-row-suffix > .ds-control-flex) > .ds-row-text {
+    flex: 0 1 180px;
+}
+
+.ds-row:has(> .ds-row-suffix > .ds-control-flex) > .ds-row-suffix {
+    flex: 1 1 190px;
+}
+
+.ds-row-switch {
+    cursor: pointer;
+    transition: background-color var(--sb-transition-fast);
+}
+
+.ds-row-switch > input[type='checkbox'] {
+    order: 1;
+    flex: 0 0 auto;
+    margin: 0;
+    margin-inline-start: auto;
+}
+
+.ds-row-switch:has(input:disabled) {
+    cursor: not-allowed;
+}
+
+@media (hover: hover) {
+    .ds-row-switch:not(:has(input:disabled)):hover,
+    .ds-row-expander > summary.ds-row:hover {
+        background: var(--sb-flat-hover-bg);
+    }
+}
+
+.ds-row-switch:not(:has(input:disabled)):active,
+.ds-row-expander > summary.ds-row:active {
+    background: var(--sb-flat-active-bg);
+}
+
+.ds-row-slider > .ds-row-text {
+    flex: 1 1 180px;
+}
+
+.ds-row-slider > .ds-row-suffix {
+    flex: 1 1 320px;
+}
+
+@media screen and (min-width: 621px) {
+    #sb-interface-content .sb-frontend-icon-group > .ds-row-text {
+        flex: 1 1 180px;
+    }
+
+    #sb-interface-content .sb-frontend-icon-group > .ds-row-suffix {
+        flex: 1 1 320px;
+    }
+}
+
+.ds-row-slider > .ds-row-suffix > input[type='range'] {
+    flex: 1 1 190px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.ds-row-slider > .ds-row-suffix > input[type='number'] {
+    flex: 0 0 5.5em;
+    width: 5.5em;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+}
+
+/* Native details owns disclosure and keyboard state; child rows supply the body's insets. */
+.ds-row-expander {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+}
+
+.ds-row-expander > summary.ds-row {
+    border-bottom: 0;
+    list-style: none;
+    cursor: pointer;
+    transition: background-color var(--sb-transition-fast);
+}
+
+.ds-row-expander > summary.ds-row::-webkit-details-marker {
+    display: none;
+}
+
+.ds-row-expander > summary.ds-row::after {
+    content: '';
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    margin-inline: 2px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform var(--sb-transition-fast);
+}
+
+.ds-row-expander[open] > summary.ds-row::after {
+    transform: rotate(225deg);
+}
+
+.ds-row-expander > summary.ds-row:focus-visible {
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
+}
+
+.ds-row-expander-content {
+    min-width: 0;
+    border-top: 1px solid var(--sb-shell-border);
+}
+
+.ds-row-expander-content > .ds-row:last-child {
+    border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ds-row-switch,
+    .ds-row-expander > summary.ds-row,
+    .ds-row-expander > summary.ds-row::after {
+        transition: none;
+    }
+}
+
+body.reduced-motion :is(.ds-row-switch, .ds-row-expander > summary.ds-row),
+body.reduced-motion .ds-row-expander > summary.ds-row::after {
+    transition: none;
+}
+
+/* SillyBunny: Backend groups retain their live controls and use the shared preference-row metrics. */
+.sb-sampling-group {
+    min-width: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-group > .ds-pref-group {
+    margin: 0;
+    padding: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-group > .ds-pref-group > .sb-sampling-control-card {
+    border-top: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-control-card {
+    display: block;
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+    border-radius: 0;
+    background: transparent;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-group > .ds-pref-group > .sb-sampling-control-card:not([hidden]):not(:has(~ .sb-sampling-control-card:not([hidden]))) {
+    border-bottom: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-control-card:not(.sb-settings-row-wrapper) {
+    padding: 12px;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-control-card:has(> .ds-row),
+#sb-settings-page .sb-sampling-panel .ds-row-expander {
+    padding: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-control-card > .ds-row {
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+}
+
+#sb-settings-page .sb-sampling-panel [data-sb-sampling-control='#openai_logit_bias_preset'] > .ds-row > .ds-row-suffix {
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1 1 320px;
+}
+
+#sb-settings-page .sb-sampling-panel [data-sb-sampling-control='#openai_logit_bias_preset'] :is(.openai_logit_bias_preset_form, .inline-drawer) {
+    min-width: 0;
+    width: 100%;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-slider {
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    gap: 12px;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-slider .ds-row-label {
+    display: block;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-slider > .ds-row-text {
+    flex: 1 1 180px;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-slider > .ds-row-suffix {
+    flex: 1 1 320px;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-suffix input[type='range'] {
+    flex: 1 1 140px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .ds-row-suffix .neo-range-input {
+    flex: 0 0 5.5em;
+    width: 5.5em;
+    min-width: 0;
+    margin: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-transmission,
+#sb-settings-page .sb-sampling-panel .sb-chat-neutralize-row {
+    margin: 0;
+    padding: 8px 12px;
+    border-top: 0;
+}
+
+@media screen and (min-width: 621px) {
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .ds-row {
+        min-height: 36px;
+        padding: 4px 16px;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .ds-row:has(.ds-row-subtitle) {
+        min-height: 44px;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-transmission,
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-chat-neutralize-row {
+        padding: 4px 16px;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel :is(button, select, input:not([type='checkbox'], [type='radio'], [type='hidden'], [type='file']), .menu_button) {
+        min-height: 32px;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-multi-card .ds-row {
+        align-items: center;
+    }
+
+    /* Keep the thin trough while enlarging its interactive area beyond the legacy 4px height. */
+    #sb-settings-page .sb-sampling-panel input[type='range'] {
+        background: linear-gradient(color-mix(in srgb, var(--SmartThemeBodyColor) 16%, transparent) 0 0) center / 100% 4px no-repeat !important;
+    }
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-multi-card > * {
+    min-width: 0;
+    margin: 0;
+    gap: 0;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-multi-card > * > h4:not(:has(input)),
+#sb-settings-page .sb-sampling-panel .sb-sampling-multi-card hr {
+    display: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-multi-card > * > .flexFlowRow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Legacy sampler grids also match migrated rows; the live rows own their layout and insets. */
+#sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-multi-card .ds-row {
+    display: flex;
+    gap: 12px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-multi-card .ds-row-label {
+    min-height: 0;
+    padding: 0;
+    justify-content: flex-start;
+    text-align: start;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-multi-card :is(.ds-row, .sb-settings-row-wrapper):last-child {
+    border-bottom: 0;
+}
+
+@media screen and (max-width: 620px) {
+    #sb-settings-page .sb-sampling-panel [data-sb-sampling-control='#openai_logit_bias_preset'] > .ds-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #sb-settings-page .sb-sampling-panel [data-sb-sampling-control='#openai_logit_bias_preset'] > .ds-row > :is(.ds-row-text, .ds-row-suffix) {
+        flex: 0 0 auto;
+        width: 100%;
+    }
+
+    #sb-settings-page .sb-sampling-panel .openai_logit_bias_preset_form {
+        flex-wrap: wrap;
+    }
+
+    #sb-settings-page .sb-sampling-panel .openai_logit_bias_preset_form > select {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+}
+
+#sb-settings-page .sb-prompting-panel #ai_response_configuration,
+#sb-settings-page .sb-prompting-panel #advanced-ai-config-block,
+#sb-settings-page .sb-prompting-panel #range_block_openai {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sb-shell-section-gap);
+    min-width: 0;
+    width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel :is(.sb-prompting-group, .sb-prompting-group-body) {
+    min-width: 0;
+    width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel .sb-prompting-group-body {
+    padding: 0;
+    margin: 0;
+}
+
+#sb-settings-page .sb-prompting-panel .sb-prompting-group-body .flex-container {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel .sb-prompting-group-body :is(input, select, textarea) {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .ds-pref-group.sb-prompting-group-body > :not(.ds-row, .ds-row-expander, .sb-settings-flat-header, .sb-preset-toolbar-row, .sb-non-chat-preset-row) {
+    padding-inline: 0;
+    border-top: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body :is(.sb-settings-row-wrapper, .sb-settings-flat-section, div:has(> .ds-row)) {
+    padding-inline: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body :is(.sb-settings-flat-header, .toggle-description:where(:not(.ds-row-subtitle)), .range-block:where(:not(.ds-row, .sb-settings-row-wrapper)):where(:not(:has(.ds-row, .toggle-description)))) {
+    padding-inline: 16px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .range-block:not(.ds-row):has(.ds-row, .toggle-description) {
+    padding-inline: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .toggle-description:not(.ds-row-subtitle) {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .ds-row .toggle-description {
+    padding-inline: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-row-with-help {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-row-with-help > .ds-row {
+    border-bottom: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-row-with-help > :is(.toggle-description, .notes, p, small) {
+    margin: 0;
+    padding: 0 16px 8px;
+    border: 0;
+    box-sizing: border-box;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-row-with-help > :last-child {
+    padding-bottom: 10px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .sb-setting-inline-help .toggle-description {
+    padding-inline: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .sb-setting-inline-help:where(:not(.ds-row)) {
+    padding-inline: 16px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel :is(#kobold_api-presets, #novel_api-presets, #textgenerationwebui_api-presets, #openai_api-presets) > div:where(:not(.sb-preset-toolbar-row, .sb-non-chat-preset-row)) {
+    padding-inline: 0;
+}
+
+.sb-action-btn-group {
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+}
+
+#sb-settings-page .sb-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    min-height: 32px;
+    height: auto;
+    max-height: none;
+    padding: 5px 10px;
+    gap: 6px;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 80%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    color: var(--SmartThemeBodyColor);
+    font-family: inherit;
+    font-size: calc(var(--mainFontSize) * 0.82);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 150ms ease, border-color 150ms ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#sb-settings-page .sb-action-btn > .sb-action-btn-label {
+    flex: 0 0 auto;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+#sb-settings-page .sb-action-btn:hover {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
+    border-color: color-mix(in srgb, var(--sb-shell-border, var(--SmartThemeBorderColor)) 100%, transparent);
+}
+
+#sb-settings-page .sb-action-btn:active {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent);
+}
+
+#sb-settings-page .sb-action-btn:focus-visible {
+    outline: 2px solid var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor)));
+    outline-offset: 2px;
+}
+
+#sb-settings-page .sb-action-btn--danger {
+    color: var(--color-danger, #fb7185);
+    border-color: color-mix(in srgb, var(--color-danger, #fb7185) 30%, transparent);
+}
+
+#sb-settings-page .sb-action-btn--danger:hover {
+    background: color-mix(in srgb, var(--color-danger, #fb7185) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-danger, #fb7185) 55%, transparent);
+}
+
+#sb-settings-page #openai_api-presets .sb-preset-toolbar-row > .flex-container.marginLeft5 {
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+#sb-settings-page #openai_api-presets .sb-preset-toolbar-row > .flex-container.marginLeft5 > .sb-action-btn-group {
+    max-width: 100%;
+}
+
+@media screen and (max-width: 450px) {
+    #sb-settings-page .sb-action-btn {
+        flex: 1 1 auto;
+        min-width: 90px;
+        padding: 5px 8px;
+        font-size: calc(var(--mainFontSize) * 0.76);
+    }
+
+    #sb-settings-page :is(.sb-preset-toolbar-row, .sb-non-chat-preset-row) .sb-action-btn-group {
+        display: flex;
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+}
+
+#sb-settings-page .sb-prompting-panel .sb-prompting-group > .sb-settings-flat-header {
+    margin-bottom: 8px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel .sb-prompting-group-body .ds-row {
+    width: 100%;
+    margin: 0;
+    padding: 6px 16px;
+    border-top: 0;
+    border-radius: 0;
+}
+
+#sb-settings-page .sb-prompting-panel .sb-prompting-group-body .range-block:not(.ds-row) {
+    width: 100%;
+    min-height: 0;
+}
+
+/* SillyBunny: Formatting groups use the same heading + one preference-pill anatomy as Presets.
+   The legacy Advanced Formatting card wrapped each body in a second tinted box with its own shadow,
+   so fields looked nested and heavier than every other settings group. */
+#sb-settings-page #AdvancedFormatting > .sb-formatting-group {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+}
+
+#sb-settings-page #AdvancedFormatting > .sb-formatting-group::before {
+    content: none;
+}
+
+#sb-settings-page .sb-prompting-panel #pro-settings-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel #pro-settings-block > .ds-row {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel #pro-settings-block .ds-row-suffix > [data-randomization-disabled] {
+    flex: 0 0 5.5em;
+    width: 5.5em;
+}
+
+#sb-settings-page .sb-prompting-panel #pro-settings-block .ds-row-suffix .neo-range-input {
+    width: 100%;
+    min-width: 0;
+}
+
+#sb-settings-page .sb-prompting-panel #common-gen-settings-block hr {
+    display: none;
+}
+
+#sb-settings-page .sb-prompting-panel #pro-settings-block > [id^='streaming_'] {
+    width: 100%;
+    margin: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-prompting-panel :is(.sb-preset-toolbar-row, .sb-non-chat-preset-row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 0;
+}
+
+#sb-settings-page .sb-prompting-panel :is(.sb-preset-toolbar-row, .sb-non-chat-preset-row) > select {
+    flex: 1 1 240px;
+    width: 100%;
+    min-width: 0;
+}
+
+#sb-settings-page .sb-prompting-panel :is(.sb-preset-toolbar-row, .sb-non-chat-preset-row) > .flex-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+}
+
+/* The order pass also marks a wrapper it emptied with `hidden`, but `.flex-container` and
+   `.flexFlowColumn` set `display` on most of them and would paint the leftover heading anyway. */
+#sb-settings-page .sb-sampling-panel [hidden],
+#sb-settings-page .sb-prompting-panel [hidden],
+#sb-settings-page [data-sb-emptied-by-order] {
+    display: none !important;
+}
+
+@media screen and (max-width: 620px) {
+    #sb-settings-page .sb-sampling-panel .ds-row-slider {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #sb-settings-page .sb-sampling-panel .ds-row-slider > :is(.ds-row-text, .ds-row-suffix) {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell [data-sb-agent-global-settings] .ica--profile-label.ds-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #sb-settings-page .sb-settings-mounted-shell [data-sb-agent-global-settings] .ica--profile-label.ds-row > :is(.ds-row-text, .ds-row-suffix) {
+        flex-basis: auto;
+        width: 100%;
+    }
+}
+
+#sb-settings-page [data-sb-agent-global-settings] .ica--textarea-fullscreen-wrapper {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 100%;
 }
 
 /* Expander rows: new visual layer on top of existing .inline-drawer machinery */
@@ -8182,8 +8795,13 @@ body.reduced-motion .sb-shell-main {
 /* ── Phase 2: settings page contextual overrides (feat/v1.9.0-ui-overhaul) ─ */
 
 /* The legacy settings column holds no settings after the Phase 6 split — it is left in the
-   document so ids like #user-settings-block-content stay resolvable, but nothing paints it. */
-.sb-settings-mounted-shell .sb-legacy-settings-remainder {
+   document so ids like #user-settings-block-content stay resolvable, but nothing paints it. Hosted
+   shells drop their own header, and top-level subdrawers their toggle header, because the sidebar
+   tab already names the section. */
+.sb-settings-mounted-shell .sb-legacy-settings-remainder,
+#sb-settings-shell-host > .sb-settings-mounted-shell .sb-shell-header,
+.sb-settings-mounted-shell .sb-settings-subdrawer > .inline-drawer-toggle.settings-section-header,
+.sb-settings-mounted-shell .sb-settings-subdrawer > .inline-drawer-header.settings-section-header {
     display: none !important;
 }
 
@@ -8203,8 +8821,8 @@ body.reduced-motion .sb-shell-main {
     padding: 0 !important;
     overflow: hidden !important;
     clip-path: inset(50%) !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* The two source pickers the panel mirrors in its own combo row, and the headings that name them.
@@ -8229,17 +8847,6 @@ body.reduced-motion .sb-shell-main {
 .highlighted-drawer {
     border-color: var(--color-primary, var(--sb-accent, #c9c6a8)) !important;
     box-shadow: 0 0 10px color-mix(in srgb, var(--color-primary, var(--sb-accent, #c9c6a8)) 30%, transparent) !important;
-}
-
-/* Two-column layout stacks to a single column inside the settings content area */
-.sb-settings-mounted-shell #user-settings-block #user-settings-block-content {
-    flex-direction: column !important;
-}
-
-/* Top-level subdrawer toggle headers are suppressed — sidebar tab already names the section */
-.sb-settings-mounted-shell .sb-settings-subdrawer > .inline-drawer-toggle.settings-section-header,
-.sb-settings-mounted-shell .sb-settings-subdrawer > .inline-drawer-header.settings-section-header {
-    display: none !important;
 }
 
 /* Top-level subdrawer body is always expanded inside the settings page */
@@ -8303,8 +8910,8 @@ body.reduced-motion .sb-shell-main {
     padding: 0 0 8px;
 }
 
-/* The heading reproduces `.ds-pref-group-heading` so a flattened subsection reads as the same
-   kind of label as the grouped card above it, and its text lands on the same 16px inset. */
+/* SillyBunny: flat-section headers use the same compact two-line anatomy as Messages category
+   headers. The title itself carries the body-scale type; the header owns the small metadata line. */
 .sb-settings-mounted-shell .sb-settings-flat-header {
     display: flex;
     /* The drawer header it replaces used `space-between`, and the Prompting and Advanced Formatting
@@ -8313,7 +8920,7 @@ body.reduced-motion .sb-shell-main {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 10px 16px 4px;
+    padding: 0 4px;
     margin: 0;
     min-height: 0;
     background: transparent;
@@ -8323,20 +8930,22 @@ body.reduced-motion .sb-shell-main {
     color: var(--sb-shell-text-secondary);
 }
 
-/* A flattened drawer that was a section in its own right keeps the header it had while it was
-   still collapsible: 52px floor, 10px/16px inset, title on the body scale. The base rule above is
-   the *subsection* label -- the small dim caption that sits over rows lifted out of someone else's
-   card -- and applying it to a top-level section demotes every section title in Backend and
-   Customize to a 33px caption. The `:has()` rule further down raises the headers that carry a
-   description line; this one covers the single-line ones, and comes first so that a header with a
-   description still wins on the shared metric. */
+/* Top-level flat sections keep the same category-header metric rather than becoming a larger
+   legacy drawer bar. The title column below restores the body-scale title and metadata spacing. */
 #sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-section-top > .sb-settings-flat-header {
-    min-height: 52px;
-    padding: 10px 16px;
+    min-height: 0;
+    padding: 0 4px;
     gap: 12px;
-    font-size: var(--sb-type-body);
-    line-height: 1.3;
-    color: var(--sb-shell-text);
+    font-size: var(--sb-type-meta);
+    line-height: 1.4;
+    color: var(--sb-shell-text-secondary);
+}
+
+/* Category spacing is owned by the section margin and the preference pill. The legacy drawer
+   separator is not part of the Messages reference anatomy, so do not draw a rule above migrated
+   top-level categories. */
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-section-top {
+    border-top: 0;
 }
 
 /* A flattened section is a heading in the enclosing body's flow, not a card of its own: it must
@@ -8344,7 +8953,6 @@ body.reduced-motion .sb-shell-main {
    drawer, and those treatments would otherwise stack a tinted box inside a tinted box. */
 .sb-settings-mounted-shell .sb-settings-flat-section.sb-settings-subdrawer,
 .sb-settings-mounted-shell .sb-settings-flat-section.sb-theme-settings-drawer,
-.sb-settings-mounted-shell .sb-settings-flat-section.sb-accent-profiles-panel,
 .sb-settings-mounted-shell .sb-settings-flat-section.sb-openai-settings-drawer {
     margin: 0;
     background: transparent;
@@ -8382,41 +8990,92 @@ body.reduced-motion .sb-shell-main {
     color: inherit;
 }
 
-/* A header carrying a description reads at the row metric rather than at body leading: title on
-   the body scale, description on the meta scale, 2px apart, 52px floor. The Prompting and Advanced
-   Formatting drawers build their own header markup and so miss the `height: 52px; line-height: 1.25`
-   that `.sb-settings-subdrawer` headers inherit, which left them at 73-78px against 52px elsewhere
-   for the same two-line shape. Scoped through `#sb-settings-page` because the enclosing
-   `#openai_settings .flex-container` gap is ID-weighted.
- *
- * The flat-header selector covers the same shape after flattening. A flattened section keeps the
- * markup and the two-line content but loses `.inline-drawer-header`, so without it the header drops
- * to the 33px label metric and the section it titles changes height the moment it is flattened. */
-#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small),
+/* A flat header carrying a description uses the same two-line metric as a Messages category header.
+   Scoped through `#sb-settings-page` because the enclosing `#openai_settings .flex-container` gap is
+   ID-weighted. */
 #sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header:has(> .flex-container > small) {
+    min-height: 0;
+    padding: 0 4px;
+    gap: 12px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header > .sb-settings-category-heading {
+    gap: 2px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header .sb-settings-category-heading :is(b, strong, h3, h4, .sb-settings-category-title) {
+    /* Body scale, not the metadata scale: a flat header title matches the 15px title of every
+       Messages category header. Descendant rather than child because some legacy headers wrap the
+       title in an additional flex column. */
+    font-size: var(--sb-type-body);
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: 0;
+    color: var(--sb-shell-text);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header .sb-settings-category-heading :is(small, .ds-row-subtitle) {
+    /* The 2px gap above is the whole separation; the group-meta rule adds its own top margin. */
+    margin: 0;
+    font-size: var(--sb-type-meta);
+    line-height: 1.4;
+    color: var(--sb-shell-text-secondary);
+    opacity: 1;
+}
+
+/* UI Theme and a few upstream headings keep their visible copy in a nested span. Reset the old
+   tracked title treatment so the visible text, not only its parent h4, matches Messages. */
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-category-heading .sb-settings-category-title > span {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-category-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-category-title-row > .notes-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    color: var(--sb-shell-text-secondary);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-category-title-row .note-link-span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: var(--sb-type-meta);
+}
+
+/* Legacy collapsible expanders are a separate interaction pattern from the flat category headers;
+   keep their row metric and disclosure affordance intact. */
+#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) {
     min-height: 52px;
     padding: 10px 16px;
     gap: 12px;
 }
 
-#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container,
-#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header:has(> .flex-container > small) > .flex-container {
+#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container {
     gap: 2px;
 }
 
-#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container b,
-#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header:has(> .flex-container > small) > .flex-container b {
-    /* Body scale, not the row scale: a drawer header's title matches the 15px title of every
-       single-line header beside it, and the height comes out of tight leading instead. Descendant
-       rather than child because the sampling header wraps its title in a help-link row. */
+#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container > b {
     font-size: var(--sb-type-body);
     font-weight: 700;
     line-height: 1.3;
 }
 
-#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container > small,
-#sb-settings-page .sb-settings-mounted-shell .sb-settings-flat-header:has(> .flex-container > small) > .flex-container > small {
-    /* The 2px gap above is the whole separation; the group-meta rule adds its own top margin. */
+#sb-settings-page .sb-settings-mounted-shell .inline-drawer-header:has(> .flex-container > small) > .flex-container > small {
     margin: 0;
     font-size: var(--sb-type-meta);
     line-height: 1.4;
@@ -8425,8 +9084,8 @@ body.reduced-motion .sb-shell-main {
 
 /* Rows lifted out of a flattened drawer lose the spacing the enclosing expander used to draw, so
    they get the grouped row metric back: 44px tall, 16px inset, separator between rows. */
-.sb-settings-mounted-shell .sb-settings-flat-section > .checkbox_label,
-.sb-settings-mounted-shell .sb-settings-flat-section > .flex-container {
+.sb-settings-mounted-shell .sb-settings-flat-section > .checkbox_label:not(.ds-row),
+.sb-settings-mounted-shell .sb-settings-flat-section > .flex-container:not(.ds-row, .sb-settings-row-wrapper) {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -8505,11 +9164,11 @@ body.reduced-motion .sb-shell-main {
     /* Source panels can author a checkbox row outside the normalized category/flat-section
        wrappers. Keep hover feedback on the row that owns the control rather than tinting its whole
        parent card. */
-    #sb-settings-page .sb-settings-mounted-shell .checkbox_label:hover {
+    #sb-settings-page .sb-settings-mounted-shell .checkbox_label:not(.ds-row-switch):hover {
         background: var(--sb-flat-hover-bg);
     }
 
-    .sb-settings-mounted-shell .sb-settings-flat-section > .checkbox_label:hover,
+    .sb-settings-mounted-shell .sb-settings-flat-section > .checkbox_label:not(.ds-row-switch):hover,
     .sb-settings-mounted-shell .sb-settings-flat-section > .flex-container:not(.flexFlowColumn):has(> .checkbox_label, > input, > select, > textarea, > .menu_button, > .menu_button_icon):hover {
         background: var(--sb-flat-hover-bg);
     }
@@ -8517,8 +9176,8 @@ body.reduced-motion .sb-shell-main {
 
 /* Loose rows inside a drawer body are brought up to the grouped row metric, so a checkbox reads
    the same whether it sits in a `.ds-pref-group` card or directly under a section heading. */
-.sb-settings-mounted-shell .sb-settings-subdrawer-body > .checkbox_label,
-.sb-settings-mounted-shell .sb-settings-subdrawer-body > .flex-container > .checkbox_label {
+.sb-settings-mounted-shell .sb-settings-subdrawer-body > .checkbox_label:not(.ds-row),
+.sb-settings-mounted-shell .sb-settings-subdrawer-body > .flex-container > .checkbox_label:not(.ds-row) {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -8537,14 +9196,14 @@ body.reduced-motion .sb-shell-main {
 }
 
 @media (hover: hover) {
-    .sb-settings-mounted-shell .sb-settings-subdrawer-body > .checkbox_label:hover,
-    .sb-settings-mounted-shell .sb-settings-subdrawer-body > .flex-container > .checkbox_label:hover {
+    .sb-settings-mounted-shell .sb-settings-subdrawer-body > .checkbox_label:not(.ds-row-switch):hover,
+    .sb-settings-mounted-shell .sb-settings-subdrawer-body > .flex-container > .checkbox_label:not(.ds-row-switch):hover {
         background: var(--sb-flat-hover-bg);
     }
 }
 
 /* Checkbox label rows get action-row spacing when inside a mounted settings pref group */
-.sb-settings-mounted-shell .ds-pref-group .checkbox_label {
+.sb-settings-mounted-shell .ds-pref-group .checkbox_label:not(.ds-row) {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -8561,12 +9220,12 @@ body.reduced-motion .sb-shell-main {
 }
 
 @media (hover: hover) {
-    .sb-settings-mounted-shell .ds-pref-group .checkbox_label:hover {
+    .sb-settings-mounted-shell .ds-pref-group .checkbox_label:not(.ds-row-switch):hover {
         background: var(--sb-flat-hover-bg);
     }
 }
 
-.sb-settings-mounted-shell .ds-pref-group .checkbox_label small {
+.sb-settings-mounted-shell .ds-pref-group .checkbox_label small:not(.ds-row-subtitle) {
     flex: 1;
     font-size: var(--sb-type-control);
     color: var(--sb-shell-text);
@@ -8594,8 +9253,8 @@ body.reduced-motion .sb-shell-main {
 }
 
 /* Flex-container select rows get action-row spacing */
-.sb-settings-mounted-shell .ds-pref-group .flex-container.alignitemscenter,
-.sb-settings-mounted-shell .ds-pref-group .flex-container.alignItemsBaseline {
+.sb-settings-mounted-shell .ds-pref-group .flex-container.alignitemscenter:not(.ds-row, .sb-settings-row-wrapper),
+.sb-settings-mounted-shell .ds-pref-group .flex-container.alignItemsBaseline:not(.ds-row, .sb-settings-row-wrapper) {
     padding: 10px 16px;
     min-height: 48px;
     gap: 12px;
@@ -8655,13 +9314,9 @@ body.reduced-motion .sb-shell-main {
    preference groups are borderless boxed lists, and no repeated card grids). The tiles stay as a
    multi-column inline section, minus their chrome, and the group's row separators stay out of a
    grid, where a per-tile hairline would read as a floating line above every checkbox. */
-#sb-settings-page .sb-settings-mounted-shell .ds-pref-group .checkbox_label {
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group .checkbox_label:not(.ds-row-switch) {
     background: transparent;
     border-radius: 0;
-}
-
-#sb-settings-page #ThemeTogglesSection [name="themeToggles"] > .checkbox_label {
-    border: 0;
 }
 
 /* Sentence case, like every other group label on the page (DESIGN.md Sentence Case Rule). The
@@ -8715,6 +9370,7 @@ body.reduced-motion .sb-shell-main {
     font-size: var(--sb-type-meta);
     line-height: 1.4;
     color: var(--sb-shell-text-secondary);
+    opacity: 1;
 }
 
 /* The category body is the same Libadwaita preference pill as every other group; its children are
@@ -8734,7 +9390,7 @@ body.reduced-motion .sb-shell-main {
    lists, and no repeated card grids). The tiles stay as a multi-column inline section, minus their
    chrome, and the group's row separators stay out of a grid, where a per-tile hairline would read
    as a floating line above every checkbox. */
-#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :is(.checkbox_label, .flex-container, .sb-settings-flat-section) {
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :is(.checkbox_label, .flex-container, .sb-settings-flat-section):not(.ds-row-switch) {
     background: transparent;
     border-radius: 0;
     box-shadow: none;
@@ -8744,7 +9400,11 @@ body.reduced-motion .sb-shell-main {
     margin: 0;
 }
 
-#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :not(.checkbox_label, .flex-container.alignitemscenter, .flex-container.alignItemsBaseline, .sb-settings-flat-section) {
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group {
+    gap: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :not(.checkbox_label, .flex-container.alignitemscenter, .flex-container.alignItemsBaseline, .sb-settings-flat-section, .ds-row, .ds-row-expander, .sb-sampling-control-card, .sb-settings-row-wrapper) {
     padding: 10px 16px;
 }
 
@@ -8752,10 +9412,560 @@ body.reduced-motion .sb-shell-main {
     border-top: 1px solid var(--sb-shell-border);
 }
 
-/* The order pass marks a wrapper it emptied with `hidden`, but `.flex-container` and
-   `.flexFlowColumn` set `display` on most of them and would paint the leftover heading anyway. */
-#sb-settings-page [data-sb-emptied-by-order] {
-    display: none !important;
+/* Migrated rows own their geometry and bottom separators. Legacy group rules above otherwise
+   add a second separator and inset the expander body, including its already-inset child rows. */
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > .ds-row {
+    padding: 6px 16px;
+    border-top: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row:has(.ds-row-subtitle) {
+    min-height: 52px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > .ds-row-expander {
+    padding: 0;
+    border-top: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :is(.ds-row, .ds-row-expander) + * {
+    border-top: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :not(.ds-row, .ds-row-expander) + :is(.ds-row, .ds-row-expander) {
+    border-top: 1px solid var(--sb-shell-border);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row .ds-row-subtitle {
+    flex: 0 0 auto;
+    font-size: var(--sb-type-meta);
+    color: var(--sb-input-placeholder);
+}
+
+/* SillyBunny: Customize preserves upstream nodes while replacing their legacy row geometry. */
+#sb-settings-page .sb-settings-mounted-shell :is(.ds-pref-group, .sb-settings-flat-section) > .ds-row {
+    flex: 0 0 auto;
+    flex-direction: row;
+    width: 100%;
+    gap: 12px;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-label > :is(small, span) {
+    font-size: inherit;
+    color: inherit;
+    opacity: 1;
+}
+
+#sb-settings-page .ds-row-switch {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    padding: 6px 16px;
+    gap: 12px;
+}
+
+#sb-settings-page .ds-row-switch:has(.ds-row-subtitle) {
+    min-height: 52px;
+}
+
+.ds-row-switch > .ds-row-suffix,
+#sb-settings-page .ds-row-switch > .ds-row-suffix {
+    display: flex;
+    flex: 0 0 42px;
+    align-items: center;
+    justify-content: flex-end;
+    width: 42px;
+    margin-inline-start: auto;
+}
+
+/* Only structural wrappers are marked; panel and card gutters remain outside row geometry. */
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-row-wrapper {
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-settings-row-wrapper > .ds-row-switch:last-child {
+    border-bottom: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-suffix > :is(input, select, textarea) {
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-suffix > :is(input[type='number'], textarea) {
+    width: min(100%, 280px);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-slider > .ds-row-suffix > input[type='number'] {
+    width: 5.5em;
+}
+
+#sb-settings-page :is(#UI-language-block, #account_controls).ds-row {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    padding: 6px 16px;
+    gap: 12px;
+}
+
+#sb-settings-page #user-settings-utility-actions {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+#sb-settings-page #user-settings-utility-actions .sb-settings-utility-action {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+#sb-settings-page #color-picker-block {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 0;
+}
+
+#sb-settings-page #color-picker-block > .ds-pref-group {
+    margin: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell :is(.sb-settings-row-stack, .checkbox-container, [name='themeToggles'], .auto_swipe, .auto_continue_settings_block) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell [data-sb-settings-compound] .ds-row {
+    width: 100%;
+    flex: 0 0 auto;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .auto_continue_settings_block .ds-row-label {
+    flex: 0 0 auto;
+    align-items: flex-start;
+    text-align: start;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-suffix > .doubleRangeContainer {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell :is(.sb-topbar-label-option-grid, .sb-compact-mode-group) {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* SillyBunny: Top Bar Label options are preference rows in the settings shell, not the old
+   640px choice-card grid. Let their switches use the shared trailing-suffix position. */
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-section {
+    width: 100%;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-section-heading {
+    padding-inline: 16px;
+    gap: 2px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-section-heading > strong {
+    font-size: var(--sb-type-body);
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-section-heading > small {
+    font-size: var(--sb-type-meta);
+    line-height: 1.4;
+    opacity: 1;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-option-grid {
+    width: 100%;
+    max-width: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell :is(.sb-topbar-label-option, .sb-compact-mode-option, .sb-mobile-nav-choice, .sb-topbar-custom-text-field).ds-row {
+    flex-direction: row;
+    width: 100%;
+    gap: 12px;
+    justify-content: flex-start;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    text-align: start;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-label :is(.sb-topbar-label-option-copy, .sb-compact-mode-copy, .sb-mobile-nav-choice-copy) > strong {
+    font: inherit;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-topbar-label-option-copy {
+    align-items: flex-start;
+    text-align: start;
+}
+
+#sb-settings-page .sb-theme-slider-value[hidden] {
+    display: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group .sb-theme-slider-group:not(.ds-row) {
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group .sb-theme-slider-group.sb-mobile-quick-actions-group {
+    gap: 12px;
+    padding: 10px 16px;
+}
+
+#sb-settings-page :is(#sb-desktop-settings-outlet, #sb-mobile-settings-outlet) {
+    gap: 0;
+    padding: 0;
+}
+
+#sb-settings-page :is(#sb-desktop-settings-outlet, #sb-mobile-settings-outlet) > .sb-theme-slider-group {
+    border-top: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+}
+
+#sb-settings-page :is(#sb-desktop-settings-outlet, #sb-mobile-settings-outlet) > .sb-theme-slider-group:last-child {
+    border-bottom: 0;
+}
+
+#sb-settings-page :is(#sb-desktop-settings-outlet, #sb-mobile-settings-outlet) > .ds-row {
+    border-top: 0;
+}
+
+#sb-settings-page .sb-mobile-nav-settings-divider {
+    display: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-mobile-nav-settings-header {
+    padding: 12px 16px 6px;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-mobile-nav-settings-header > strong {
+    font-size: var(--sb-type-control);
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-row-switch > .ds-row-text > .ds-row-label > .sb-mobile-nav-choice-icon,
+#sb-settings-page .sb-settings-mounted-shell .ds-row-switch.sb-mobile-nav-choice::before,
+#sb-settings-page .sb-settings-mounted-shell .ds-row-switch.sb-topbar-label-option::before,
+#sb-settings-page .sb-settings-mounted-shell .ds-row-switch.sb-compact-mode-option::before {
+    display: none;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group:has(> #sb-import-tools-outlet) {
+    background: transparent;
+    padding: 0;
+}
+
+#sb-settings-page #sb-import-tools-outlet {
+    gap: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+}
+
+#sb-settings-page #sb-import-card {
+    padding: 0;
+}
+
+#sb-settings-page .sb-import-card > .sb-import-note {
+    border-radius: 0;
+    border-inline: 0;
+    border-bottom: 0;
+    background: transparent;
+}
+
+#sb-settings-page .sb-console-log-column > .ds-pref-group {
+    margin: 0;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > .sb-console-log-frame {
+    padding: 0;
+    overflow: hidden;
+}
+
+#sb-settings-page .sb-console-log-output {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--sb-shell-text);
+    background: var(--sb-composer-input-bg);
+}
+
+#sb-settings-page .sb-console-log-card > .sb-server-note {
+    border-radius: 0;
+    border-inline: 0;
+    border-bottom: 0;
+    background: transparent;
+}
+
+:root[data-sb-surface-tone='light'] #sb-settings-page .sb-console-log-actions .sb-server-pill[data-tone='good'] {
+    color: color-mix(in srgb, var(--color-success, var(--sb-color-success)) 80%, black);
+}
+
+:root[data-sb-surface-tone='light'] #sb-settings-page .sb-console-log-actions .sb-server-pill[data-tone='warn'] {
+    color: color-mix(in srgb, var(--color-warning, var(--sb-color-warning)) 80%, black);
+}
+
+:root[data-sb-surface-tone='light'] #sb-settings-page .sb-console-log-actions .sb-server-pill[data-tone='danger'] {
+    color: color-mix(in srgb, var(--color-danger, var(--sb-color-danger)) 80%, black);
+}
+
+#sb-settings-page .sb-console-log-actions,
+#sb-settings-page .ds-row-actions > .ds-row-suffix {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#sb-settings-page .sb-console-log-actions {
+    margin: 0;
+}
+
+#sb-settings-page .sb-console-log-actions > button {
+    width: auto;
+}
+
+/* Server Tools uses the same named category and boxed-list primitives as the other Backend tabs.
+   The controls are still created on demand so their existing refs and handlers remain untouched. */
+#sb-settings-page .sb-server-column > .sb-settings-category {
+    margin-bottom: 24px;
+}
+
+#sb-settings-page .sb-server-column > .sb-settings-category:last-child {
+    margin-bottom: 0;
+}
+
+#sb-settings-page .sb-server-column .sb-server-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+#sb-settings-page .sb-server-column .sb-server-stat {
+    display: flex;
+    min-height: 44px;
+    padding: 6px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--sb-shell-border);
+    border-radius: 0;
+    background: transparent;
+}
+
+#sb-settings-page .sb-server-column .sb-server-stat:last-child {
+    border-bottom: 0;
+}
+
+#sb-settings-page .sb-server-column .sb-server-stat-value {
+    font-size: var(--sb-type-control);
+    font-weight: 500;
+}
+
+#sb-settings-page .sb-server-column .sb-server-actions {
+    display: flex;
+    min-height: 52px;
+    padding-block: 8px;
+}
+
+#sb-settings-page .sb-server-column .sb-server-actions > .ds-row-suffix {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+#sb-settings-page .sb-server-column .sb-server-actions .sb-server-action {
+    width: auto;
+    min-width: 0;
+}
+
+#sb-settings-page .sb-server-column .sb-thumbnail-card .sb-server-actions {
+    grid-template-columns: none;
+}
+
+#sb-settings-page .sb-server-column .sb-thumbnail-size-row {
+    min-height: 44px;
+    padding: 6px 16px;
+}
+
+#sb-settings-page .sb-server-column .sb-thumbnail-dimensions {
+    flex: 1 1 320px;
+}
+
+#sb-settings-page .sb-server-column .sb-thumbnail-dimensions > .sb-thumbnail-number {
+    flex: 1 1 100px;
+    width: auto;
+}
+
+#sb-settings-page .sb-server-column .sb-settings-category-body > .sb-server-note,
+#sb-settings-page .sb-server-column .sb-settings-category-body > .sb-server-config-meta {
+    border-inline: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+#sb-settings-page .sb-console-log-actions {
+    gap: 8px;
+}
+
+#sb-settings-page .ds-button-group {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: stretch;
+    gap: 0;
+}
+
+#sb-settings-page .ds-button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 80%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    color: var(--sb-shell-text);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-console-log-actions .ds-button-group > .ds-button:first-child {
+    border-radius: var(--sb-radius-control) 0 0 var(--sb-radius-control) !important;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-console-log-actions .ds-button-group > .ds-button:last-child {
+    border-radius: 0 var(--sb-radius-control) var(--sb-radius-control) 0 !important;
+}
+
+#sb-settings-page .ds-button + .ds-button {
+    border-inline-start: 0;
+}
+
+#sb-settings-page .ds-button:hover {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
+}
+
+#sb-settings-page .ds-button:active {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent);
+}
+
+#sb-settings-page .ds-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+#sb-settings-page .ds-button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
+}
+
+@media (pointer: coarse) {
+    #sb-settings-page .sb-console-log-actions .ds-button {
+        min-height: 44px;
+    }
+}
+
+#sb-settings-page .sb-console-log-card .sb-console-log-toolbar {
+    border-bottom: 1px solid var(--sb-shell-border);
+}
+
+#sb-settings-page .sb-console-log-card .sb-console-log-frame {
+    padding: 0;
+    overflow: hidden;
+}
+
+#sb-settings-page .sb-console-log-card .sb-server-note {
+    border-radius: 0;
+    border-inline: 0;
+    background: transparent;
+}
+
+.ds-pref-group > .flex-container.alignitemscenter,
+.sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline):has(> :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image']))) {
+    flex-wrap: nowrap;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* Upstream widthNatural resets min-width as important. Only settings fields opt into shrinking;
+   its intrinsic sizing still applies in chat, World Info and other non-settings surfaces. */
+.sb-settings-mounted-shell .ds-control-flex.widthNatural,
+.sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline) > :is(select, textarea, input).widthNatural {
+    min-width: 0 !important;
+}
+
+@media screen and (max-width: 620px) {
+    #sb-settings-page .sb-settings-mounted-shell .ds-row:is(.ds-row-slider, .ds-row-actions, .sb-import-pane),
+    #sb-settings-page .sb-settings-mounted-shell .ds-row:has(> .ds-row-suffix > input[type='number']),
+    #sb-settings-page .sb-settings-mounted-shell .ds-row:has(> .ds-row-suffix > .ds-control-flex),
+    #sb-settings-page .ds-row:has(> .ds-row-suffix > textarea) {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #sb-settings-page .ds-row:is(.ds-row-actions, .sb-import-pane) > :is(.ds-row-text, .ds-row-suffix),
+    #sb-settings-page .ds-row:has(> .ds-row-suffix > input[type='number']) > :is(.ds-row-text, .ds-row-suffix),
+    #sb-settings-page .ds-row:has(> .ds-row-suffix > textarea) > :is(.ds-row-text, .ds-row-suffix) {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    #sb-settings-page .sb-console-log-actions,
+    #sb-settings-page .ds-row-actions > .ds-row-suffix {
+        justify-content: flex-start;
+    }
+
+    #sb-settings-page .sb-console-log-output {
+        min-height: 260px;
+    }
+
+    .ds-row-slider,
+    .ds-row:has(> .ds-row-suffix > .ds-control-flex),
+    .sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline):has(> :is(label:not(.checkbox_label), small, span:not(.select2))):has(> :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image']))) {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ds-row-slider > :is(.ds-row-text, .ds-row-suffix),
+    .ds-row:has(> .ds-row-suffix > .ds-control-flex) > :is(.ds-row-text, .ds-row-suffix),
+    .sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline):has(> :is(label:not(.checkbox_label), small, span:not(.select2))):has(> :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image']))) > :is(label:not(.checkbox_label), small, span:not(.select2), select, textarea, input) {
+        flex-basis: auto;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .ds-row-suffix > .ds-control-flex {
+        width: 100%;
+    }
+
+    .sb-settings-mounted-shell .ds-row-suffix > .ds-control-flex.widthNatural,
+    .sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline):has(> :is(label:not(.checkbox_label), small, span:not(.select2))) > :is(select, textarea, input).widthNatural {
+        width: 100% !important;
+    }
 }
 
 /* The MovingUI preset picker stacks its label above its controls, so the whole group wraps to two
@@ -8807,12 +10017,6 @@ body.reduced-motion .sb-shell-main {
    own token; rules below that size a specific `<small>` still win on specificity. */
 .sb-settings-mounted-shell small {
     font-size: var(--sb-type-meta);
-}
-
-@media screen and (min-width: 769px) {
-}
-
-@media screen and (max-width: 900px) {
 }
 
 /* ── Phase 3: mobile settings layout (feat/v1.9.0-ui-overhaul) ─────────── */
@@ -8961,11 +10165,12 @@ body.reduced-motion .sb-shell-main {
 
 .sb-subpage {
     --sb-subpage-shift: 26%;
-    --sb-subpage-duration: 260ms;
+    --sb-subpage-duration: 180ms;
 
     display: grid;
     grid-template-areas: 'page';
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     /* The stack owns the panel's scroll: each page scrolls on its own, so a slide never leaves the
        list scrolled to the position the detail page happened to be at. */
     height: 100%;
@@ -8979,10 +10184,8 @@ body.reduced-motion .sb-shell-main {
     grid-area: page;
     display: flex;
     flex-direction: column;
-    /* Both pages sit in one grid cell, where the default `stretch` would make each as tall as the
-       tallest and turn the pair into a scroll box of their own. `min-content` keeps each page its
-       own height and the full width, so each page's own `overflow-y` is what scrolls. */
-    height: min-content;
+    /* The bounded grid track lets the page itself scroll instead of growing past the panel. */
+    height: 100%;
     max-height: 100%;
     min-width: 0;
     min-height: 0;
@@ -8992,6 +10195,12 @@ body.reduced-motion .sb-shell-main {
     -webkit-overflow-scrolling: touch;
     padding: var(--sb-shell-panel-padding-block) var(--sb-shell-panel-padding-inline) var(--sb-shell-panel-bottom-padding);
     background: var(--sb-layer-view);
+}
+
+.sb-subpage-list {
+    transition:
+        transform var(--sb-subpage-duration) var(--sb-ease-out-cubic),
+        opacity var(--sb-subpage-duration) var(--sb-ease-out-cubic);
 }
 
 /* The trailing gap belongs to the scroll content, so the last row can always clear the bottom. The
@@ -9016,9 +10225,6 @@ body.reduced-motion .sb-shell-main {
     transform: translateX(calc(-1 * var(--sb-subpage-shift)));
     opacity: 0.42;
     pointer-events: none;
-    transition:
-        transform var(--sb-subpage-duration) var(--sb-ease-out-cubic),
-        opacity var(--sb-subpage-duration) var(--sb-ease-out-cubic);
 }
 
 .sb-subpage--open > .sb-subpage-detail {
@@ -9028,16 +10234,15 @@ body.reduced-motion .sb-shell-main {
     transition-delay: 0s;
 }
 
-/* Reduced motion keeps the state change and drops the travel. */
-.sb-subpage-detail--instant,
-.sb-subpage--open > .sb-subpage-list,
-.sb-subpage--open > .sb-subpage-detail {
+/* A caller may skip the detail transition when replacing or destroying a page. */
+.sb-subpage-detail--instant {
     transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .sb-subpage-list,
     .sb-subpage-detail,
-    .sb-subpage--open > .sb-subpage-list {
+    .sb-subpage-back {
         transition: none;
     }
 }
@@ -9075,6 +10280,7 @@ body.reduced-motion .sb-shell-main {
 .sb-subpage-list-body {
     display: flex;
     flex-direction: column;
+    flex: 0 0 auto;
     border-radius: var(--sb-radius-lg, 16px);
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
@@ -9232,9 +10438,14 @@ body.reduced-motion .sb-shell-main {
 }
 
 /* An accordion that had a toggle before now names the page that holds it, so the toggle is gone and
-   only the generic expand behaviour is left behind. */
+   only the generic expand behaviour is left behind. The detail-opened card drawer below loses its bar
+   the same way, and upstream's authored h3/h4 steps aside because the detail bar already names the page. */
+.sb-subpage-detail-content > h3,
+.sb-subpage-detail-content > h4,
 .sb-subpage-detail-content > .inline-drawer-toggle,
-.sb-subpage-detail-content > .inline-drawer-header {
+.sb-subpage-detail-content > .inline-drawer-header,
+.sb-subpage-detail-content [data-sb-detail-opened='true'] > .inline-drawer-toggle,
+.sb-subpage-detail-content [data-sb-detail-opened='true'] > .inline-drawer-header {
     display: none !important;
 }
 
@@ -9247,11 +10458,6 @@ body.reduced-motion .sb-shell-main {
 /* The card's own drawer, opened by the detail pass: the row that opened the page named it, so the
    bar above doubles as its toggle and the frame it drew is stripped. The body's own display comes
    from the pass, which opens it the way a click would. */
-.sb-subpage-detail-content [data-sb-detail-opened='true'] > .inline-drawer-toggle,
-.sb-subpage-detail-content [data-sb-detail-opened='true'] > .inline-drawer-header {
-    display: none !important;
-}
-
 .sb-subpage-detail-content [data-sb-detail-opened='true'] > .inline-drawer-content {
     padding: 0;
     margin: 0;
@@ -9306,13 +10512,6 @@ body.reduced-motion .sb-shell-main {
 .sb-subpage-store .sb-shell-embedded-content,
 .sb-subpage-store .drawer-content {
     display: none;
-}
-
-/* Headings that upstream authored are the pages' titles now, and the detail bar already names the
-   page, so the authored heading steps aside rather than repeating itself. */
-.sb-subpage-detail-content > h3,
-.sb-subpage-detail-content > h4 {
-    display: none !important;
 }
 
 /* Strip the frame an authored block arrives with. Inside a detail page the pill is the only box:
@@ -9438,6 +10637,27 @@ body.reduced-motion .sb-shell-main {
     }
 }
 
+/* SillyBunny: Extensions — always-visible action pill and pinned download section.
+   The manage/install/notify header and the Download Extensions & Assets section are
+   moved out of the subpage store into the list heading so they are never hidden. */
+.sb-ext-actions-pill {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sb-shell-space-sm, 8px);
+    padding: var(--sb-shell-space-sm, 8px);
+    margin-bottom: var(--sb-shell-space-sm, 8px);
+}
+
+.sb-ext-pinned-section .inline-drawer-content {
+    display: block !important;
+}
+
+.sb-ext-pinned-section .inline-drawer-icon {
+    display: none;
+}
+
 /* ==========================================================================================
    Connections panel (feat/v1.9.0-ui-overhaul)
    ------------------------------------------------------------------------------------------
@@ -9491,6 +10711,7 @@ body.reduced-motion .sb-shell-main {
    scroll under it: the two controls that decide *what* is being configured never scroll away from
    the settings they configure. It bleeds to the panel's own edges so nothing shows behind it. */
 .sb-connections-switcher {
+    position: -webkit-sticky;
     position: sticky;
     top: 0;
     z-index: var(--sb-z-sticky, 500);
@@ -9812,15 +11033,6 @@ body.reduced-motion .sb-shell-main {
     overflow-wrap: anywhere;
 }
 
-/* The upstream h4 for "Chat Completion Source" / "API Type" is authored above the now-hidden
-   native select. The combo row in the switcher already carries the "Source" label, so the h4
-   is redundant. The rules above (clip-path) already handle the common case; this is a safety net
-   for any path where the clip-path rule doesn't fire. */
-[data-sb-connections-panel] h4:has(+ #chat_completion_source),
-[data-sb-connections-panel] h4:has(+ #textgen_type) {
-    display: none !important;
-}
-
 /* libadwaita suggested-action: the primary connect button gets accent colour treatment so it reads
    as the main action on the provider card rather than as a neutral tool button. */
 [data-sb-connections-panel] .sb-connections-connect .api_button,
@@ -9835,15 +11047,6 @@ body.reduced-motion .sb-shell-main {
 [data-sb-connections-panel] .sb-connections-connect #horde_api_key_button:hover {
     background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 32%, transparent);
     border-color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 62%, transparent);
-}
-
-/* The drawer's remaining top-level nodes -- the `#main_api` picker row and the two connection
-   forms whose blocks the panel has already relocated. They stay in the document so their ids stay
-   resolvable, and are hidden here rather than moved, because `#main_api` in particular must keep
-   its position in the document: half the app reads it by id and `changeMainAPI` writes `display`
-   onto it. */
-.sb-connections-legacy {
-    display: none !important;
 }
 
 /* ── Provider settings pill ─────────────────────────────────────────────────────────────── */
@@ -9917,10 +11120,10 @@ body.reduced-motion .sb-shell-main {
     flex: 0 0 44px !important;
     inline-size: 44px !important;
     min-inline-size: 44px !important;
-    max-inline-size: 44px !important;
+    max-inline-size: 44px;
     block-size: 44px !important;
     min-block-size: 44px !important;
-    max-block-size: 44px !important;
+    max-block-size: 44px;
     padding: 0 !important;
     align-self: center;
 }
@@ -10218,6 +11421,12 @@ body.reduced-motion .sb-shell-main {
     }
 }
 
+/* The drawer's remaining top-level nodes -- the `#main_api` picker row and the two connection
+   forms whose blocks the panel has already relocated. They stay in the document so their ids stay
+   resolvable, and are hidden here rather than moved, because `#main_api` in particular must keep
+   its position in the document: half the app reads it by id and `changeMainAPI` writes `display`
+   onto it. Closed picker menus share the rule. */
+.sb-connections-legacy,
 .sb-model-id-picker-menu[hidden],
 .sb-inline-select-picker-menu[hidden] {
     display: none !important;

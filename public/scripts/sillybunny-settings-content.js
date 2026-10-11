@@ -185,7 +185,7 @@ const SB_FLAT_SECTION_HEADER_CLASSES = Object.freeze([
  * reveal it would hide the settings it holds.
  *
  * Flattening is idempotent: a flattened drawer has no content wrapper, so it is skipped on any
- * later run. That matters because some drawers are authored at runtime (`#sb-openai-output` builds
+ * later run. That matters because some drawers are authored at runtime (OpenAI groups build
  * its own subsections after load), so this runs again on each tab activation.
  *
  * @param {HTMLElement|null|undefined} root subtree to flatten
@@ -299,14 +299,13 @@ export const SB_SETTINGS_CATEGORY_CLASS = 'sb-settings-category';
  */
 export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
     context: Object.freeze({
-        root: '.sb-af-drawers',
+        root: '#AdvancedFormatting',
         entries: Object.freeze([
-            { section: '#sb-af-context' },
-            { section: '#sb-af-instruct' },
-            { section: '#sb-af-sysprompt' },
-            { id: 'stopping-strings', adopt: 'div:has(> div > #custom_stopping_strings)' },
-            { id: 'reasoning', adopt: 'div:has(> div > .sb-reasoning-toggle-grid)' },
-            { id: 'reply-formatting', adopt: 'div:has(> [name="startReplyWithBlock"])' },
+            { section: '#sb-af-tokenizer' },
+            { section: '#sb-af-stopping' },
+            { section: '#sb-af-cleanup' },
+            { section: '#sb-af-reasoning' },
+            { section: '#sb-af-rendering' },
         ]),
     }),
     appearance: Object.freeze({
@@ -315,6 +314,7 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
             { id: 'theme', adopt: '#UI-presets-block', boxed: false },
             { section: '.sb-settings-flat-section:has(> .sb-settings-flat-header [data-i18n="Theme Colors"])' },
             { section: '#AppearanceLayoutSection' },
+            { section: '#sb-background-settings-section' },
             { section: '#GoogleFont-block' },
             {
                 id: 'chat-display',
@@ -323,7 +323,6 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
                 body: '[name="AvatarAndChatDisplay"]',
             },
             { section: '#ThemeTogglesSection' },
-            { section: '#sb-interface-drawer' },
             { section: '#sb-topbar-label-drawer' },
             { section: '#sb-quick-access-shortcuts-drawer' },
             { section: '#CustomCSS-block' },
@@ -332,6 +331,7 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
     interface: Object.freeze({
         root: `#${SB_USER_SETTINGS_CONTAINER_IDS.interface}`,
         entries: Object.freeze([
+            { section: '#sb-interface-drawer' },
             { section: '#DesktopSection' },
             { section: '#MobileSection' },
             {
@@ -358,14 +358,14 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
                 id: 'sending',
                 title: 'Sending',
                 description: 'Enter key, Send button, and quick reply buttons',
-                rows: ['div:has(> #send_on_enter)', '#continue_on_send', '#quick_continue', '#quick_impersonate'],
+                rows: ['#send_on_enter', '#continue_on_send', '#quick_continue', '#quick_impersonate'],
             },
             {
                 id: 'chat-history',
                 title: 'Chat History',
                 description: 'Loading, scrolling, saving, and deleting messages',
                 rows: [
-                    'div:has(> #chat_truncation)',
+                    '#chat_truncation',
                     '#auto-load-chat-checkbox',
                     '#auto_scroll_chat_to_bottom',
                     '#auto_save_msg_edits',
@@ -392,10 +392,10 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
                 title: 'Swipes and Continue',
                 description: 'Alternative replies and automatic regeneration',
                 rows: [
-                    '.checkbox-container:has(> .checkbox_label > #swipes-checkbox)',
-                    'div:has(> #image_overswipe)',
-                    `.${SB_FLAT_SECTION_CLASS}:has(> .checkbox_label > #auto_swipe)`,
-                    `.${SB_FLAT_SECTION_CLASS}:has(> .flex-container > .checkbox_label > #auto_continue_enabled)`,
+                    '.checkbox-container:has(#swipes-checkbox)',
+                    '#image_overswipe',
+                    '[data-sb-settings-compound="auto-swipe"]',
+                    '[data-sb-settings-compound="auto-continue"]',
                 ],
             },
             {
@@ -405,7 +405,7 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
                 // One parent and this order: `toggle-dependent.css` hides the speed and no-think
                 // rows with `~` combinators off `#smooth_streaming_control`.
                 rows: [
-                    'div:has(> #streaming_fps)',
+                    '#streaming_fps',
                     '#smooth_streaming_control',
                     '#smooth_streaming_no_think_control',
                     '#smooth_streaming_speed_control',
@@ -427,8 +427,8 @@ export const SB_SETTINGS_SECTION_ORDER = Object.freeze({
                 description: 'Example messages, OOC and HTML depth, and macros in the prompt',
                 rows: [
                     '#examples-behavior-block',
-                    'div:has(> #ooc_context_depth)',
-                    'div:has(> #html_context_depth)',
+                    '#ooc_context_depth',
+                    '#html_context_depth',
                     '#disable_group_trimming',
                     '#experimental_macro_engine',
                 ],
@@ -475,11 +475,18 @@ function resolveSettingsRow(root, selector) {
         return null;
     }
 
+    const row = found.closest('.ds-row');
+    if (row instanceof HTMLElement && root.contains(row)) return row;
+
     if (found instanceof HTMLInputElement && found.type === 'checkbox') {
         const label = found.closest('.checkbox_label');
         if (label instanceof HTMLElement && root.contains(label)) {
             return label;
         }
+    }
+
+    if (found.matches('select, input[type="range"], input[type="number"]')) {
+        return found.parentElement;
     }
 
     return found;
@@ -788,6 +795,9 @@ function resolveSectionTarget(scope, selector) {
     if (!found) {
         return null;
     }
+
+    const row = found.closest('.ds-row');
+    if (row instanceof HTMLElement && scope.contains(row)) return row;
 
     if (SB_CONTROL_ROW_SELECTORS.includes(selector)) {
         return found.closest('.checkbox_label') ?? found;

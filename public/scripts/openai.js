@@ -3740,10 +3740,11 @@ function groupOpenAISettingsIntoDrawers() {
         return;
     }
 
+    // SillyBunny: keep preset-bound prompt controls together while preserving the live upstream nodes.
     const groupConfigs = [
         {
             id: 'sb-openai-budget',
-            title: 'Token Budget',
+            title: 'Generation Settings',
             description: 'Context, response limits, swipes, and costs',
             selectors: [
                 '#range_block_openai > .range-block:has(#openai_max_context)',
@@ -3753,6 +3754,7 @@ function groupOpenAISettingsIntoDrawers() {
                 '#range_block_openai > div:has(#openrouter_max_prompt_cost)',
                 '#range_block_openai > div:has(#electronhub_max_prompt_cost)',
                 '#range_block_openai > div:has(#chutes_max_prompt_cost)',
+                '#range_block_openai > .range-block:has(#stream_toggle)',
             ],
         },
         {
@@ -3776,25 +3778,29 @@ function groupOpenAISettingsIntoDrawers() {
             ],
         },
         {
-            id: 'sb-openai-output',
-            title: 'Output',
-            description: 'Streaming, prompt templates, names, and continue behavior',
+            id: 'sb-openai-names',
+            title: 'Character Names & Prompt Formatting',
+            description: '',
             selectors: [
-                '#range_block_openai > .range-block:has(#stream_toggle)',
-                // The settings shell can flatten these drawers before this runs, which swaps
-                // `.inline-drawer` for `.sb-settings-flat-section`; a miss here is deleted by `empty()` below.
-                '#range_block_openai > :is(.inline-drawer, .sb-settings-flat-section):has(#main_prompt_quick_edit_textarea)',
-                '#range_block_openai > :is(.inline-drawer, .sb-settings-flat-section):has(#impersonation_prompt_textarea)',
                 '#openai_settings > div > :is(.inline-drawer, .sb-settings-flat-section):has(#character_names_none)',
                 '#openai_settings > div > :is(.inline-drawer, .sb-settings-flat-section):has(#continue_postfix_none)',
-                '#openai_settings > div > .range-block:has(#continue_prefill)',
                 '#openai_settings > div > .range-block:has(#squash_system_messages)',
                 '#openai_settings > div > .range-block:has(#use_sysprompt)',
             ],
         },
         {
-            id: 'sb-openai-advanced',
-            title: 'Advanced & Reasoning',
+            id: 'sb-openai-prefill',
+            title: 'Reply Prefill',
+            description: '',
+            selectors: [
+                '#openai_settings > div > .range-block:has(#continue_prefill)',
+                '#openai_settings > div > .range-block:has(#openai_kimi_partial_prefill)',
+                '#openai_settings > div > .range-block:has(#claude_assistant_prefill)',
+            ],
+        },
+        {
+            id: 'sb-openai-request',
+            title: 'Request Options',
             description: 'Tools, media, reasoning, and server config',
             selectors: [
                 '#openai_settings > div > .range-block:has(#openai_enable_web_search)',
@@ -3805,10 +3811,18 @@ function groupOpenAISettingsIntoDrawers() {
                 '#openai_settings > div > .range-block:has(#openai_show_thoughts)',
                 '#openai_settings > div > .range-block:has(#openai_auto_append_reasoning_tags)',
                 '#openai_settings > div > .flex-container:has(#openai_reasoning_effort)',
-                '#openai_settings > div > .range-block:has(#openai_kimi_partial_prefill)',
                 '#openai_settings > div > .range-block:has(#openai_reasoning_tag_style)',
                 '#openai_settings > div > .flex-container:has(#openai_verbosity)',
-                '#openai_settings > div > .range-block:has(#claude_assistant_prefill)',
+            ],
+        },
+        // SillyBunny: keep prompt editors and utility prompts in their final Prompting group.
+        {
+            id: 'sb-openai-prompts',
+            title: 'Quick Prompts Edit / Utility Prompts',
+            description: '',
+            selectors: [
+                '#range_block_openai > :is(.inline-drawer, .sb-settings-flat-section):has(#main_prompt_quick_edit_textarea)',
+                '#range_block_openai > :is(.inline-drawer, .sb-settings-flat-section):has(#impersonation_prompt_textarea)',
             ],
         },
         {
@@ -3863,6 +3877,11 @@ function groupOpenAISettingsIntoDrawers() {
  * @returns {Element[]}
  */
 function getOpenAISettingsGroupBlocks(group) {
+    // SillyBunny: Prompting boxes the live blocks without changing their provider visibility contract.
+    const body = group.querySelector(':scope > .sb-prompting-group-body');
+    if (body) {
+        return Array.from(body.children);
+    }
     const content = group.querySelector(':scope > .inline-drawer-content');
     if (content) {
         return Array.from(content.children);
@@ -4304,7 +4323,7 @@ function buildServerChatCompletionConfigDrawer() {
 }
 
 function injectServerChatCompletionConfigCard() {
-    const $advancedDrawerContent = $('#sb-openai-advanced > .inline-drawer-content');
+    const $advancedDrawerContent = $('#sb-openai-request > .inline-drawer-content');
 
     if ($advancedDrawerContent.length === 0 || $('#sb-chat-completion-server-config, #sb-chat-completion-server-config-drawer').length) {
         return;
