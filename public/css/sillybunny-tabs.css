@@ -8097,6 +8097,23 @@ body.reduced-motion .sb-shell-main {
     margin: 0;
 }
 
+/* SillyBunny: counter inputs inside .ds-row-suffix measure 28px without an explicit
+   min-height; the desktop touch-target floor is 32px. Counters may be nested inside
+   .range-block-range-and-counter, so use a descendant selector. Also covers compact
+   textareas (instruct/context prefix fields) and shortcut selects that measure 27-30px. */
+#sb-settings-page .ds-row-suffix input[type='number'] {
+    min-height: 32px;
+}
+
+#sb-settings-page .ds-row-suffix textarea,
+#sb-settings-page .ds-row-suffix select {
+    min-height: 32px;
+}
+
+.sb-shortcut-select {
+    min-height: 32px;
+}
+
 .sb-settings-mounted-shell .flex-container:not(.flexFlowColumn, .checkbox_label, .ds-row-suffix):is(.alignitemscenter, .alignItemsCenter, .alignItemsBaseline) > :is(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='file'], [type='image'])) {
     flex: 1 1 190px;
     min-width: 0;
@@ -8284,6 +8301,35 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     border-radius: 0;
 }
 
+/* Inert Chat Completions rows for Text Completions-only samplers keep their layout but read as unavailable. */
+#sb-settings-page .sb-sampling-panel .sb-sampling-placeholder-card {
+    cursor: not-allowed;
+    background: repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent) 0 6px,
+        transparent 6px 12px
+    );
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-placeholder-card .ds-row-text {
+    opacity: 0.5;
+}
+
+#sb-settings-page .sb-sampling-panel .sb-sampling-unavailable-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+    color: var(--SmartThemeBodyColor);
+    font-size: var(--sb-type-meta);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 #sb-settings-page .sb-sampling-panel [data-sb-sampling-control='#openai_logit_bias_preset'] > .ds-row > .ds-row-suffix {
     flex-direction: column;
     align-items: stretch;
@@ -8328,8 +8374,7 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     margin: 0;
 }
 
-#sb-settings-page .sb-sampling-panel .sb-sampling-transmission,
-#sb-settings-page .sb-sampling-panel .sb-chat-neutralize-row {
+#sb-settings-page .sb-sampling-panel .sb-sampling-transmission {
     margin: 0;
     padding: 8px 12px;
     border-top: 0;
@@ -8345,8 +8390,7 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
         min-height: 44px;
     }
 
-    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-transmission,
-    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-chat-neutralize-row {
+    #sb-settings-page .sb-settings-mounted-shell .sb-sampling-panel .sb-sampling-transmission {
         padding: 4px 16px;
     }
 
@@ -8379,6 +8423,10 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     display: flex;
     flex-direction: column;
     gap: 0;
+    /* Adaptive-P's wrapper also matches the generic flex-container action-row padding. */
+    min-height: 0;
+    padding: 0;
+    border-top: 0;
 }
 
 /* Legacy sampler grids also match migrated rows; the live rows own their layout and insets. */
@@ -8419,6 +8467,7 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     }
 }
 
+#sb-settings-page .sb-editor-panel,
 #sb-settings-page .sb-prompting-panel #ai_response_configuration,
 #sb-settings-page .sb-prompting-panel #advanced-ai-config-block,
 #sb-settings-page .sb-prompting-panel #range_block_openai {
@@ -8427,6 +8476,102 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     gap: var(--sb-shell-section-gap);
     min-width: 0;
     width: 100%;
+}
+
+#sb-settings-page .sb-action-btn.sb-backend-navigation-pill {
+    flex: 0 1 auto;
+    align-self: flex-start;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 8px 18px;
+    border: 0;
+    border-radius: var(--sb-shell-control-radius);
+    background: var(--sb-raised-bg);
+    white-space: normal;
+}
+
+#sb-settings-page .sb-backend-navigation-pill:focus-visible {
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
+}
+
+#sb-settings-page .sb-action-btn.sb-edit-prompts {
+    margin-block: 16px;
+    color: var(--sb-on-solid-accent);
+    background: var(--sb-accent);
+}
+
+#sb-settings-page .sb-editor-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: var(--sb-muted-fg);
+    overflow-wrap: anywhere;
+}
+
+#sb-settings-page .sb-editor-meta [data-sb-editor-read-only] {
+    font-weight: 600;
+    color: var(--SmartThemeBodyColor);
+}
+
+#sb-settings-page .sb-editor-panel #InstructSequencesColumn {
+    padding: 0;
+}
+
+/* Bundled presets: Update stays focusable for its tooltip, but reads and acts as unavailable. */
+.menu_button.sb-preset-update-read-only {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-editor-panel .ds-row:has(> .ds-row-suffix textarea) {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-editor-panel .ds-row:has(> .ds-row-suffix textarea) > :is(.ds-row-text, .ds-row-suffix) {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+#sb-settings-page .sb-settings-mounted-shell .sb-editor-panel .ds-row-suffix > :is(textarea, div:has(textarea)) {
+    width: 100%;
+}
+
+#sb-settings-page .sb-prompting-panel .ds-row-label {
+    font-size: var(--sb-type-control);
+}
+
+#sb-settings-page .sb-editor-panel .ds-row {
+    border-color: var(--sb-shell-border);
+}
+
+#sb-settings-page .sb-editor-panel textarea:not(#completion_prompt_manager textarea) {
+    width: 100%;
+    min-height: 8lh;
+    max-height: 55vh;
+    overflow-y: auto;
+    resize: vertical;
+}
+
+#sb-settings-page .sb-editor-panel #context_story_string,
+#sb-settings-page .sb-editor-panel #sysprompt_content {
+    min-height: 14lh;
+}
+
+#sb-settings-page .sb-editor-panel .disabled {
+    opacity: 0.6;
+}
+
+@media (hover: hover) {
+    #sb-settings-page .sb-action-btn.sb-backend-navigation-pill:hover {
+        background: var(--sb-raised-hover-bg);
+    }
+
+    #sb-settings-page .sb-action-btn.sb-edit-prompts:hover {
+        color: var(--sb-on-solid-accent);
+        background: color-mix(in srgb, var(--sb-accent) 90%, var(--SmartThemeBodyColor));
+    }
 }
 
 #sb-settings-page .sb-prompting-panel :is(.sb-prompting-group, .sb-prompting-group-body) {
@@ -9337,7 +9482,7 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin: 0 0 24px;
+    margin: 0;
     padding: 0;
     border-top: 0;
 }
@@ -10504,14 +10649,14 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
 }
 
 /* The store's own wrapper keeps its content out of the flow while the stack presents it. Compacting
-   it rather than hiding it matters for the sections that measure themselves at build time. */
-.sb-subpage-store > * {
-    display: none;
-}
-
+   it rather than hiding it matters for the sections that measure themselves at build time. The hide
+   is forced because a stored section still carries the shell's own `.sb-managed` reset, whose
+   forced `display: block` would otherwise win and lay the whole legacy menu out under the list:
+   the panel then scrolls into a second, stale copy of itself. */
+.sb-subpage-store > *,
 .sb-subpage-store .sb-shell-embedded-content,
 .sb-subpage-store .drawer-content {
-    display: none;
+    display: none !important;
 }
 
 /* Strip the frame an authored block arrives with. Inside a detail page the pill is the only box:

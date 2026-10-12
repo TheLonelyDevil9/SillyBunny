@@ -97,14 +97,14 @@ async function expectSwitchGeometry(root, compactSampling = false) {
 async function expectPromptingFlow(prompting, api) {
     if (api !== 'openai') {
         await expect(prompting.locator('.sb-prompting-group:visible > h3')).toHaveText([
-            'Presets', 'Generation Settings', 'System Prompt', 'Instruct Template', 'Context Template', 'Character Names', 'Reply Prefill',
+            'Presets', 'Generation Settings', 'System Prompt', 'Instruct Template', 'Context Template', 'Character Names', 'Reply Prefill', 'Reasoning Template',
         ]);
         return;
     }
     await expect(prompting.locator('.sb-prompting-group:visible').locator(':scope > h3, :scope > .sb-settings-flat-header b')).toHaveText([
-        'Presets', 'Generation Settings', 'Prompt Manager', 'Character Names & Prompt Formatting', 'Reply Prefill', 'Request Options', 'Quick Prompts Edit / Utility Prompts',
+        'Presets', 'Generation Settings', 'Character Names & Prompt Formatting', 'Reply Prefill', 'Request Options', 'Reasoning Template',
     ]);
-    await expect(prompting.locator('#completion_prompt_manager')).toBeVisible();
+    await expect(prompting.locator('#completion_prompt_manager')).toHaveCount(0);
     await expect(prompting.locator('.openai-tab-buttons, .sb-subpage')).toHaveCount(0);
 }
 
@@ -178,9 +178,7 @@ async function expectSamplingTaxonomy(sampling, api) {
     await expect(sampling.locator('.sb-sampling-group:visible > h3')).toHaveText([
         'Sampling', 'Penalties & Repetition', 'Advanced Algorithms', 'Token Control', 'Output & Generation',
     ]);
-    const presetGroups = sampling.locator('.sb-sampling-group[data-sb-sampling-group="presets"]');
-    await expect(presetGroups).toHaveCount(4);
-    expect(await presetGroups.evaluateAll(groups => groups.every(group => group.hidden))).toBe(true);
+    await expect(sampling.locator('.sb-sampling-group[data-sb-sampling-group="presets"]')).toHaveCount(0);
 }
 
 async function readPresetDownload(download) {
@@ -246,8 +244,12 @@ for (const theme of ['Libadwaita', 'Libadwaita Light']) {
                 await expect(promptingHeader).toBeVisible();
                 await expect(promptingHeader.locator(':scope > .sb-backend-title-row > [data-sb-prompting-mode]')).toBeVisible();
                 await expect(promptingHeader.locator(':scope > p[data-sb-copy-placeholder]')).toHaveText('lorum ipsum');
-                await expect(promptingHeader.locator('[data-sb-prompting-disclaimer]')).toBeVisible();
-                await expect(promptingHeader.locator('[data-sb-prompting-formatting]')).toHaveText('Formatting');
+                await expect(promptingHeader.locator('.sb-backend-disclaimer, button')).toHaveCount(0);
+                expect(await promptingHeader.evaluate(header => {
+                    const container = header.parentElement.getBoundingClientRect();
+                    const box = header.getBoundingClientRect();
+                    return Math.abs(box.left - container.left) <= 1 && Math.abs(box.right - container.right) <= 1;
+                })).toBe(true);
                 await expectPromptingFlow(prompting, api);
                 await expectPresetActionLabels(prompting, width);
                 await expectPromptingInsets(prompting);
@@ -256,6 +258,12 @@ for (const theme of ['Libadwaita', 'Libadwaita Light']) {
                 await expect(prompting.locator('[name="startReplyWithBlock"]')).toHaveCount(1);
                 await expectNoOverflow(prompting);
                 await expectSwitchGeometry(prompting);
+                const editor = await openPanel(page, 'editor');
+                await expect(editor.locator('[data-sb-editor-mode]')).toHaveText(`Backend: ${label}`);
+                await expect(editor.locator('.sb-prompting-group:visible').locator(':scope > h3, :scope > .sb-settings-flat-header b')).toHaveText(api === 'openai'
+                    ? ['Prompt Manager', 'Utility Prompts'] : ['System Prompt', 'Instruct Template', 'Context Template']);
+                await expect(editor.locator(api === 'openai' ? '#completion_prompt_manager' : '#context_story_string')).toBeVisible();
+                await expectNoOverflow(editor);
                 const sampling = await openPanel(page, 'sampling');
                 await expect(sampling.locator('.sb-sampling-mode-pill:visible')).toHaveText(`Backend: ${label}`);
                 await expect(sampling.locator('.sb-backend-section-header:visible')).toHaveCount(1);
@@ -370,39 +378,41 @@ test('Sampling uses compact full-width rows at desktop and mobile widths', async
         }))).toEqual([]);
 });
 
-test('Prompting opens Formatting from the keyboard for every backend', async ({ page, baseURL }) => {
-    await loadSettings(page, baseURL);
-    for (const api of ['textgenerationwebui', 'kobold', 'koboldhorde', 'novel']) {
-        await selectBackend(page, api, api === 'textgenerationwebui' ? 'ooba' : null);
-        for (const key of ['Enter', 'Space']) {
-            const prompting = await openPanel(page, 'prompting');
-            const formatting = prompting.getByRole('button', { name: 'Formatting', exact: true });
-            await expect(prompting.locator('[data-sb-prompting-disclaimer] > p')).toHaveText('Note: advanced settings can be found in Formatting.');
-            await formatting.focus();
-            await expect(formatting).toBeFocused();
-            await page.keyboard.press(key);
-            await expect(page.locator('[data-sb-panel="context"]')).toHaveAttribute('aria-hidden', 'false');
-        }
-    }
-});
-
 test('Prompting and Formatting rehome live template nodes across repeated backend changes', async ({ page, baseURL }) => {
     await loadSettings(page, baseURL);
     const uniqueSelectors = [
         '#SystemPromptBlock', '#InstructSettingsColumn', '#context_presets', '#always-force-name2-checkbox',
         '#n_textgenerationwebui', '[name="startReplyWithBlock"]',
+        '#completion_prompt_manager', '#sb-openai-prompt-manager', '#InstructSequencesColumn',
+        '#sysprompt_content', '#sysprompt_post_history', '#context_story_string', '#context_story_string_position',
+        '#context_story_string_depth', '#context_story_string_role', '#context_example_separator', '#context_chat_start',
+        '#impersonation_prompt_textarea', '#wi_format_textarea', '#scenario_format_textarea', '#personality_format_textarea',
+        '#group_nudge_prompt_textarea', '#newchat_prompt_textarea', '#newgroupchat_prompt_textarea',
+        '#newexamplechat_prompt_textarea', '#continue_nudge_prompt_textarea', '#send_if_empty_textarea',
+        '#reasoning_select', '#reasoning_prefix', '#reasoning_suffix', '#reasoning_separator',
     ];
-    for (const api of ['openai', 'textgenerationwebui', 'openai', 'textgenerationwebui', 'openai', 'textgenerationwebui']) {
+    await openPanel(page, 'prompting');
+    await page.evaluate(selectors => { window.phase45Nodes = selectors.map(selector => document.querySelector(selector)); }, uniqueSelectors);
+    for (const api of ['openai', 'textgenerationwebui', 'kobold', 'koboldhorde', 'novel', 'openai', 'textgenerationwebui']) {
         await selectBackend(page, api, api === 'openai' ? 'openrouter' : 'mancer');
         const prompting = await openPanel(page, 'prompting');
         await expect(prompting.locator('[name="startReplyWithBlock"]')).toHaveCount(1);
         for (const selector of uniqueSelectors) {
             await expect.poll(() => page.locator(selector).count()).toBe(1);
         }
+        expect(await page.evaluate(selectors => window.phase45Nodes.every((node, index) => node === document.querySelector(selectors[index])), uniqueSelectors)).toBe(true);
+        const editor = await openPanel(page, 'editor');
+        await expect(editor.locator('#completion_prompt_manager, #InstructSequencesColumn, #sysprompt_content, #context_story_string')).toHaveCount(4);
+        await expect(prompting.locator('#reasoning_select, #reasoning_prefix, #reasoning_suffix, #reasoning_separator')).toHaveCount(4);
+        for (const id of ['main_prompt_quick_edit_textarea', 'nsfw_prompt_quick_edit_textarea', 'jailbreak_prompt_quick_edit_textarea']) {
+            await expect(page.locator(`#${id}`)).toHaveCount(1);
+            await expect(page.locator(`#${id}`)).toBeHidden();
+        }
+        await openPanel(page, 'prompting');
         if (api === 'openai') {
             await expect(prompting.locator('#sb-openai-prefill [name="startReplyWithBlock"]')).toHaveCount(1);
             await expect(prompting.locator('#sb-tc-sysprompt')).toBeHidden();
-        } else {
+        } else if (api === 'textgenerationwebui') {
             await expect(prompting.locator('#sb-reply-prefill [name="startReplyWithBlock"]')).toHaveCount(1);
             await expect(prompting.locator('#common-gen-settings-block #n_textgenerationwebui')).toBeVisible();
             const sampling = await openPanel(page, 'sampling');
@@ -417,12 +427,54 @@ test('Prompting and Formatting rehome live template nodes across repeated backen
         'Stopping Strings', 'Text Cleanup', 'Reasoning', 'Rendering',
     ]);
     await expect(formatting.locator('#advanced-formatting-cc-notice')).toBeHidden();
+    await expect(formatting.locator('#reasoning_select, #reasoning_prefix, #reasoning_suffix, #reasoning_separator')).toHaveCount(0);
+    await expect(formatting.locator('#reasoning_auto_parse, #reasoning_auto_expand, #reasoning_show_hidden, #reasoning_add_to_prompts, #reasoning_max_additions')).toHaveCount(5);
 
     await selectBackend(page, 'textgenerationwebui', 'ooba');
     const textFormatting = await openPanel(page, 'context');
     await expect(textFormatting.locator('.sb-formatting-group:visible > h3')).toHaveText([
         'Tokenizer & Padding', 'Stopping Strings', 'Text Cleanup', 'Reasoning', 'Rendering',
     ]);
+});
+
+test('Backend tabs, aliases and Presets/Editor links are stable in every mode', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    for (const api of ['openai', 'textgenerationwebui', 'kobold', 'koboldhorde', 'novel']) {
+        await selectBackend(page, api);
+        const presets = await openPanel(page, 'prompting');
+        await expect(page.locator('#sb-settings-tab-list button')).toHaveText(['Connections', 'Sampling', 'Presets', 'Editor', 'Formatting', 'Agents']);
+        await expect(page.locator('[data-sb-settings-tab="prompting"]')).toHaveAttribute('data-sb-search-aliases', 'Prompting|Presets');
+        await expect(page.locator('[data-sb-settings-tab="editor"]')).toHaveAttribute('data-sb-search-aliases', 'Prompt Manager|Prompts');
+        const edit = presets.getByRole('button', { name: 'Edit prompts', exact: true });
+        expect(await edit.evaluate(button => button.previousElementSibling?.id)).toBe('respective-presets-block');
+        await edit.focus();
+        await page.keyboard.press('Enter');
+        const editor = page.locator('[data-sb-panel="editor"]');
+        await expect(editor).toHaveAttribute('aria-hidden', 'false');
+        await expect(editor.locator('[data-sb-editor-preset]')).not.toHaveText('');
+        await expect(editor.locator('.sb-backend-disclaimer')).toHaveCount(0);
+        await editor.getByRole('button', { name: 'Presets', exact: true }).click();
+        await expect(presets).toHaveAttribute('aria-hidden', 'false');
+    }
+    await page.locator('#sb-settings-search-toggle').click();
+    const search = page.locator('#sb-settings-search-input');
+    for (const [query, tab] of [['Prompting', 'prompting'], ['Prompt Manager', 'editor'], ['Prompts', 'editor']]) {
+        await search.fill(query);
+        await expect(page.locator(`[data-sb-settings-tab="${tab}"]`)).not.toHaveClass(/sb-settings-tab--filtered/);
+    }
+});
+
+test('Legacy Backend shortcuts resolve to current routes', async ({ page, baseURL }) => {
+    await page.addInitScript(() => {
+        localStorage.setItem('sb-shortcut-left', 'left:presets');
+        localStorage.setItem('sb-shortcut-right', 'left:api');
+        localStorage.setItem('sb-shortcut-slot3', 'left:advanced-formatting');
+    });
+    await loadSettings(page, baseURL);
+    for (const [side, tab] of [['left', 'prompting'], ['right', 'connections'], ['slot3', 'context']]) {
+        await page.locator(`#sb-shortcut-${side}`).evaluate(button => button.click());
+        await expect(page.locator(`[data-sb-panel="${tab}"]`)).toHaveAttribute('aria-hidden', 'false');
+    }
 });
 
 test('Sampling keeps live nodes, provider visibility, numeric handlers and transmission policy', async ({ page, baseURL }) => {
@@ -434,7 +486,12 @@ test('Sampling keeps live nodes, provider visibility, numeric handlers and trans
     await selectBackend(page, 'openai', 'openai');
     const sampling = await openPanel(page, 'sampling');
     await expect(sampling.locator('#temp_openai')).toBeVisible();
-    await expect(sampling.locator('[data-sb-sampling-control="#top_k_openai"]')).toBeHidden();
+    // Samplers stay visible for every provider; non-sampler rows keep provider gating.
+    await expect(sampling.locator('[data-sb-sampling-control="#top_k_openai"]')).toBeVisible();
+    await expect(sampling.locator('[data-sb-sampling-control="#openai_logit_bias_preset"]')).toBeVisible();
+    await selectBackend(page, 'openai', 'claude');
+    await expect(sampling.locator('[data-sb-sampling-control="#top_k_openai"]')).toBeVisible();
+    await expect(sampling.locator('[data-sb-sampling-control="#openai_logit_bias_preset"]')).toBeHidden();
     await selectBackend(page, 'openai', 'openrouter');
     await expect(sampling.locator('[data-sb-sampling-control="#top_k_openai"]')).toBeVisible();
     await sampling.locator('#temp_counter_openai').fill('0.73');
@@ -443,6 +500,7 @@ test('Sampling keeps live nodes, provider visibility, numeric handlers and trans
     const temperature = sampling.locator('[data-sb-sampling-control="#temp_openai"]');
     await temperature.getByRole('radio', { name: 'Omit', exact: true }).click();
     await expect(temperature.getByRole('radio', { name: 'Omit', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await expect(sampling.locator('#sb-sampling-openai [data-sb-sampling-control]').first()).toHaveAttribute('data-sb-sampler-id', 'sampler_toolbar');
     await sampling.locator('.sb-neutralize-chat-samplers').click();
     await expect(sampling.locator('#temp_openai')).toHaveValue('1');
     await expect(sampling.locator('#top_p_openai')).toHaveValue('1');
@@ -450,6 +508,89 @@ test('Sampling keeps live nodes, provider visibility, numeric handlers and trans
     await expect(prompting.locator('#settings_preset_openai')).toBeVisible();
     await expect(prompting.locator('#import_oai_preset, #export_oai_preset, #update_oai_preset, #new_oai_preset, #delete_oai_preset')).toHaveCount(5);
     expect(await page.evaluate(() => window.phase3Nodes.every(node => node === document.getElementById(node.id)))).toBe(true);
+});
+
+async function readSamplingRegistryLayout(page) {
+    return page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.sb-sampling-section')].map(section => [
+        section.id.replace('sb-sampling-', ''),
+        [...section.querySelectorAll('[data-sb-sampling-control]')].map(card => ({
+            id: card.dataset.sbSamplerId,
+            group: card.closest('[data-sb-sampling-group]').dataset.sbSamplingGroup,
+            selector: card.dataset.sbSamplingControl,
+            className: card.className,
+        })),
+    ])));
+}
+
+test('Sampling uses one registry order, grouping and styling for every backend', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    await selectBackend(page, 'kobold', null);
+    await openPanel(page, 'sampling');
+    const layout = await readSamplingRegistryLayout(page);
+    const selectors = Object.values(layout).flat().map(card => card.selector);
+    expect(selectors.filter((selector, index) => selectors.indexOf(selector) !== index)).toEqual([]);
+    expect(Object.values(layout).flat().every(card => card.id)).toBe(true);
+    await expect(page.locator('.sb-sampling-group[data-sb-sampling-group="presets"]')).toHaveCount(0);
+
+    const tcOrder = layout.textgenerationwebui.map(card => card.id);
+    for (const backend of ['openai', 'kobold', 'novel']) {
+        const shared = layout[backend].filter(card => tcOrder.includes(card.id));
+        expect(shared.map(card => card.id), `${backend} follows the Text Completions order`)
+            .toEqual(tcOrder.filter(id => shared.some(card => card.id === id)).filter((id, index, ids) => ids.indexOf(id) === index));
+        for (const card of shared) {
+            const tc = layout.textgenerationwebui.find(entry => entry.id === card.id);
+            expect(card.group, `${backend} ${card.id} group`).toBe(tc.group);
+            const shape = className => ['ds-row-expander', 'sb-sampling-large-card'].filter(token => className.split(' ').includes(token));
+            expect(shape(card.className), `${backend} ${card.id} styling`).toEqual(shape(tc.className));
+        }
+    }
+
+    expect(layout.kobold.map(card => card.id)).toEqual([
+        'temperature', 'top_k', 'top_p', 'typical_p', 'min_p', 'top_a', 'tfs',
+        'repetition_penalty', 'rep_pen_range', 'rep_pen_slope',
+        'mirostat', 'seed', 'sampler_order', 'use_default_badwordsids', 'grammar',
+    ]);
+    const kobold = page.locator('#sb-sampling-kobold');
+    for (const id of ['top_k', 'typical_p', 'min_p', 'top_a', 'tfs', 'rep_pen_range', 'rep_pen_slope', 'mirostat', 'seed', 'sampler_order', 'grammar']) {
+        await expect(kobold.locator(`[data-sb-sampler-id="${id}"]`)).toBeVisible();
+    }
+    await expect(kobold.locator('[data-sb-sampler-id="mirostat"] .ds-row-subtitle').first()).not.toHaveText('lorum ipsum');
+    await expect(page.locator('#sb-sampling-kobold .sb-sampling-header-note')).toHaveText('Some backends ignore samplers they do not support.');
+});
+
+test('Text Completions types keep sampler rows visible and swap only backend mechanisms', async ({ page, baseURL }) => {
+    test.setTimeout(120000);
+    await loadSettings(page, baseURL);
+    await selectBackend(page, 'textgenerationwebui', 'ooba');
+    const sampling = await openPanel(page, 'sampling');
+    const card = selector => sampling.locator(`[data-sb-sampling-control="${selector}"]`);
+    const samplerRows = ['#top_k_textgenerationwebui', '#typical_p_textgenerationwebui', '#tfs_textgenerationwebui', '#epsilon_cutoff_textgenerationwebui', '#nsigma_textgenerationwebui', '#rep_pen_decay_textgenerationwebui', '#smoothingBlock', '#xtc_block', '#dryBlock', '#mirostat_block_ooba', '#seed_textgenerationwebui'];
+    const mechanisms = {
+        ooba: { visible: ['#sampler_priority_block_ooba'], hidden: ['#sampler_order_block_kcpp', '#sampler_order_block_lcpp', '#json_schema_block'] },
+        llamacpp: { visible: ['#sampler_order_block_lcpp', '#json_schema_block'], hidden: ['#sampler_priority_block_ooba', '#sampler_order_block_kcpp', '#beamSearchBlock'] },
+        koboldcpp: { visible: ['#sampler_order_block_kcpp'], hidden: ['#sampler_order_block_lcpp', '#sampler_priority_block_ooba', '#json_schema_block'] },
+    };
+    for (const [type, { visible, hidden }] of Object.entries(mechanisms)) {
+        await selectBackend(page, 'textgenerationwebui', type);
+        for (const selector of samplerRows) await expect(card(selector), `${type} ${selector}`).toBeVisible();
+        for (const selector of visible) await expect(card(selector), `${type} ${selector}`).toBeVisible();
+        for (const selector of hidden) await expect(card(selector), `${type} ${selector}`).toBeHidden();
+    }
+
+    await page.evaluate(async () => {
+        const { setApiSamplerVisibilityState } = await import('/scripts/samplerSelect.js');
+        setApiSamplerVisibilityState({ st_manual_priority: true, temp: true }, 'ooba');
+    });
+    await selectBackend(page, 'textgenerationwebui', 'ooba');
+    await expect(card('#temp_textgenerationwebui')).toBeVisible();
+    await expect(card('#top_k_textgenerationwebui')).toBeHidden();
+    await expect(card('#dryBlock')).toBeHidden();
+    await page.evaluate(async () => {
+        const { setApiSamplerVisibilityState } = await import('/scripts/samplerSelect.js');
+        setApiSamplerVisibilityState({}, 'ooba');
+    });
+    await selectBackend(page, 'textgenerationwebui', 'llamacpp');
+    await expect(card('#top_k_textgenerationwebui')).toBeVisible();
 });
 
 test('Native sampler expanders reveal search results and preserve switch and counter interactions', async ({ page, baseURL }) => {
@@ -478,9 +619,6 @@ test('Native sampler expanders reveal search results and preserve switch and cou
     const checked = await toggle.isChecked();
     await page.keyboard.press('Enter');
     await expect(toggle).toBeChecked({ checked: !checked });
-    const prompting = await openPanel(page, 'prompting');
-    await prompting.locator('[data-sb-prompting-formatting]').click();
-    await expect(page.locator('[data-sb-panel="context"]')).toHaveAttribute('aria-hidden', 'false');
 });
 
 test('Agents globals and Connections switches use the shared row semantics', async ({ page, baseURL }) => {
@@ -506,6 +644,53 @@ test('Agents globals and Connections switches use the shared row semantics', asy
     const list = page.locator('dialog[open] .extensions_info');
     await expect(list).toBeVisible();
     await expectSwitchGeometry(list);
+});
+
+test('Chat Completions lists Text Completions-only samplers as inert rows in the shared order', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    const placeholderIds = [
+        'typical_p', 'tfs', 'epsilon_cutoff', 'eta_cutoff', 'nsigma', 'min_keep', 'skew',
+        'rep_pen_range', 'rep_pen_slope', 'rep_pen_decay', 'encoder_rep_pen', 'no_repeat_ngram',
+        'adaptive_p', 'smoothing', 'xtc', 'dry', 'dynatemp', 'mirostat',
+    ];
+    const readCards = section => page.locator(`#sb-sampling-${section}`).evaluate(root => [...root.querySelectorAll('[data-sb-sampling-control], [data-sb-sampling-placeholder]')].map(card => ({
+        id: card.dataset.sbSamplerId,
+        group: card.closest('[data-sb-sampling-group]').dataset.sbSamplingGroup,
+        placeholder: card.hasAttribute('data-sb-sampling-placeholder'),
+        label: (card.querySelector(':scope > summary .ds-row-label') ?? card.querySelector('.ds-row-label'))?.textContent.replace(/\s+/g, ' ').trim(),
+    })));
+
+    for (const source of ['openai', 'custom', 'openrouter']) {
+        await selectBackend(page, 'openai', source);
+        const sampling = await openPanel(page, 'sampling');
+        const cc = sampling.locator('#sb-sampling-openai');
+        for (const id of placeholderIds) {
+            const row = cc.locator(`[data-sb-sampling-placeholder][data-sb-sampler-id="${id}"]`);
+            await expect(row, `${source} ${id}`).toBeVisible();
+            await expect(row.locator('input, select, textarea, button, summary')).toHaveCount(0);
+            await expect(row.locator('.ds-row-subtitle')).toHaveText('Not available in Chat Completions. Custom endpoints can send it with Additional Parameters.');
+            await expect(row.locator('.sb-sampling-unavailable-badge')).toHaveText('Unavailable');
+        }
+        await expect(cc.locator('[data-sb-sampling-placeholder]')).toHaveCount(placeholderIds.length);
+        await expect(cc.locator('[data-sb-sampling-group="algorithms"]')).toBeVisible();
+        // Placeholders never borrow Text Completions controls.
+        await expect(cc.locator('[id$="_textgenerationwebui"], #dryBlock, #xtc_block, #smoothingBlock')).toHaveCount(0);
+        await expect(cc.locator('[data-sb-sampler-id="sampler_priority"], [data-sb-sampler-id="json_schema"], [data-sb-sampler-id="beam_search"]')).toHaveCount(0);
+    }
+
+    const cc = await readCards('openai');
+    const tc = await readCards('textgenerationwebui');
+    const ccIds = cc.map(card => card.id);
+    expect(ccIds.filter((id, index) => ccIds.indexOf(id) !== index)).toEqual([]);
+    expect(ccIds).toEqual(tc.map(card => card.id).filter(id => ccIds.includes(id)).filter((id, index, ids) => ids.indexOf(id) === index));
+    for (const card of cc.filter(entry => entry.placeholder)) {
+        const source = tc.find(entry => entry.id === card.id);
+        expect(card.group, `${card.id} group`).toBe(source.group);
+        expect(card.label, `${card.id} label`).toBe(source.label);
+    }
+    for (const section of ['textgenerationwebui', 'kobold', 'novel']) {
+        await expect(page.locator(`#sb-sampling-${section} [data-sb-sampling-placeholder]`)).toHaveCount(0);
+    }
 });
 
 test('Mobile Sampling follows provider and manual sampler visibility', async ({ page, baseURL }) => {
@@ -587,6 +772,40 @@ test('Extensions detail pages retain live controls and restore their list', asyn
     await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'true');
     await expect(firstRow).toBeVisible();
     expect(await page.evaluate(() => window.phase3ExtensionNodes.every(node => node.isConnected))).toBe(true);
+});
+
+test('Universal search reaches Extensions detail pages after the list is built', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    // Activating the tab moves every extension section into the hidden subpage store.
+    const extensions = await openPanel(page, 'extensions', 'right');
+    await expect.poll(() => extensions.locator('.sb-subpage-row').count()).toBeGreaterThan(0);
+    const jumpTo = async (query, option = /^Summarize Trigger a summary update/) => {
+        await page.evaluate(() => window.SillyBunnyShell.openGlobalSearch());
+        await page.locator('#sb-universal-search input').fill(query);
+        const result = page.getByRole('group', { name: 'Customize · Extensions', exact: true })
+            .getByRole('option', { name: option });
+        await expect(result).toHaveCount(1);
+        await result.click();
+    };
+    await jumpTo('summarize now');
+    await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'false');
+    await expect(extensions.locator('.sb-subpage-detail-content')).toHaveAttribute('id', 'summarize_container');
+    await expect(page.locator('#memory_force_summarize')).toBeInViewport();
+    // The store keeps every other section out of the layout; a stored section that still lays out
+    // puts a second, stale copy of the menu under the list.
+    await expect.poll(() => extensions.locator('.sb-shell-panel-scroller').evaluate(scroller => scroller.scrollHeight - scroller.clientHeight)).toBeLessThan(200);
+    await expect(extensions.locator('.sb-subpage-store #tts_container')).toBeHidden();
+    // The list page's own chrome is presented by the stack, so it is searchable too.
+    await jumpTo('manage extensions', /^Manage extensions/);
+    await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('#extensions_details')).toBeInViewport();
+    await jumpTo('summarize now');
+    // A second jump into the page already on screen must not lose the section when it closes.
+    await jumpTo('summarize now');
+    await expect(extensions.locator('.sb-subpage-detail-content')).toHaveAttribute('id', 'summarize_container');
+    await extensions.locator('.sb-subpage-back').click();
+    await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'true');
+    await expect(extensions.locator('.sb-subpage-store #summarize_container')).toHaveCount(1);
 });
 
 test('Backend edits and quick context actions survive settings serialization and reload', async ({ page, baseURL }) => {

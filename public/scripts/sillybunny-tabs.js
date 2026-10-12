@@ -13,6 +13,7 @@ import { isIOSWebKitPlatform, isLegacyIOSWebKitPlatform } from './mobile-send-bu
 import { initializeMobileBottomBar, syncMobileBottomBar } from './sillybunny-mobile-bottom-bar.js';
 import { initializeMessageActions } from './sillybunny-message-actions.js';
 import { initializeToastMotion } from './sillybunny-toast-motion.js';
+import { createPresetAutosaveToggle, initializePresetAutosave, refreshPresetProtectionUi } from './sillybunny-preset-autosave.js';
 import {
     animateIn,
     animateOut,
@@ -52,6 +53,7 @@ import {
     getTextSamplingParameterTransmissionState,
     setTextSamplingParameterTransmissionState,
     getTextSamplingParameterViewModel,
+    showTGSamplerControls,
 } from './textgen-settings.js';
 import {
     SB_USER_SETTINGS_CONTAINER_IDS,
@@ -259,7 +261,15 @@ function installSettingsSubpage(shellKey, tabId) {
     if (built.observe instanceof HTMLElement) {
         // Extension containers mount over the first seconds after the panel is built, so the list is
         // rebuilt from the DOM rather than captured once.
-        const observer = new MutationObserver(() => stack.rebuild(() => spec(panel)));
+        const observer = new MutationObserver(() => {
+            stack.rebuild(() => spec(panel));
+            // The list just changed, so what the tab's search index holds for it is now short of a
+            // row at best. A search taken before an extension finished mounting must not stick.
+            const tab = getShellState(shellKey)?.tabs.get(tabId);
+            if (tab) {
+                tab.searchIndex = null;
+            }
+        });
         observer.observe(built.observe, { childList: true, subtree: true });
         stack.observeWith(() => observer.disconnect());
     }
@@ -347,6 +357,64 @@ function enhancePresetActionButtons(root) {
             for (const icon of button.querySelectorAll(':scope > i')) icon.setAttribute('aria-hidden', 'true');
         }
         groupPresetActions(actionContainer);
+    }
+}
+
+const SB_PRESET_BLOCK_BY_API = Object.freeze({
+    kobold: 'kobold_api-presets',
+    koboldhorde: 'kobold_api-presets',
+    novel: 'novel_api-presets',
+    textgenerationwebui: 'textgenerationwebui_api-presets',
+    openai: 'openai_api-presets',
+});
+
+/**
+ * Moves the shared preset controls next to the active backend's preset toolbar: Master Import/Export
+ * joins its action buttons (Text Completion backends only, as upstream), and the autosave switch sits
+ * directly below the toolbar row.
+ */
+function placeSharedPresetControls(root, activeApi) {
+    const block = document.getElementById(SB_PRESET_BLOCK_BY_API[activeApi] ?? '');
+    if (!(block instanceof HTMLElement) || !root.contains(block)) return;
+    const isChatCompletion = activeApi === 'openai';
+
+    const masterImport = document.getElementById('af_master_import');
+    const masterExport = document.getElementById('af_master_export');
+    const masterFile = document.getElementById('af_master_import_file');
+    if (masterImport instanceof HTMLElement && masterExport instanceof HTMLElement) {
+        let masterGroup = masterImport.closest(`.${SB_PRESET_ACTION_GROUP_CLASS}--master`);
+        if (!(masterGroup instanceof HTMLElement)) {
+            // The emptied upstream container stays mounted (hidden) so the group always has a home in the
+            // document, even while Chat Completions is active and no Text Completion toolbar is shown.
+            const originalContainer = masterImport.parentElement;
+            masterGroup = createElement('span', { className: `${SB_PRESET_ACTION_GROUP_CLASS} ${SB_PRESET_ACTION_GROUP_CLASS}--master` });
+            for (const button of [masterImport, masterExport]) {
+                button.classList.add('margin0', 'sb-action-btn');
+                const label = button.querySelector(':scope > span');
+                if (label instanceof HTMLElement) {
+                    label.classList.add('sb-action-btn-label');
+                    label.id ||= `${button.id}-label`;
+                    button.setAttribute('aria-labelledby', label.id);
+                }
+                for (const icon of button.querySelectorAll(':scope > i')) icon.setAttribute('aria-hidden', 'true');
+            }
+            masterGroup.append(...[masterFile, masterImport, masterExport].filter(Boolean));
+            originalContainer?.append(masterGroup);
+            if (originalContainer instanceof HTMLElement) originalContainer.hidden = true;
+        }
+        const actions = block.querySelector('.sb-non-chat-preset-actions');
+        if (!isChatCompletion && actions instanceof HTMLElement && masterGroup.parentElement !== actions) {
+            const fileGroup = actions.querySelector(`:scope > .${SB_PRESET_ACTION_GROUP_CLASS}--file`);
+            if (fileGroup) fileGroup.after(masterGroup);
+            else actions.prepend(masterGroup);
+        }
+        masterGroup.hidden = isChatCompletion;
+    }
+
+    const autosaveRow = root.querySelector('[data-sb-preset-autosave]');
+    const anchor = isChatCompletion ? block.querySelector(`.${SB_PRESET_TOOLBAR_ROW_CLASS}`) : block;
+    if (autosaveRow instanceof HTMLElement && anchor instanceof HTMLElement && anchor.nextElementSibling !== autosaveRow) {
+        anchor.after(autosaveRow);
     }
 }
 
@@ -477,6 +545,10 @@ function flattenSettingsPanelDrawers(shellKey, tabId) {
         updatePromptingPanel(panel);
         return;
     }
+    if (shellKey === 'left' && tabId === 'editor') {
+        updateEditorPanel(panel);
+        return;
+    }
     if (panel instanceof HTMLElement) {
         flattenNestedSettingsDrawers(panel, { includeTopLevel: true });
         applySettingsSectionOrder(panel, tabId);
@@ -551,12 +623,13 @@ const SB_LEGACY_NAVIGATION_DATA_ATTRIBUTES = Object.freeze([
 ]);
 
 const SB_SHORTCUT_TARGETS = Object.freeze([
-    { value: 'left:presets', label: 'Presets', icon: 'fa-sliders' },
-    { value: 'left:api', label: 'API', icon: 'fa-plug' },
+    { value: 'left:connections', label: 'Connections', icon: 'fa-plug' },
     { value: 'left:sampling', label: 'Sampling', icon: 'fa-wave-square' },
-    { value: 'left:advanced-formatting', label: 'Formatting', icon: 'fa-text-height' },
-    { value: 'characters:world-info', label: 'World Info', icon: 'fa-book-atlas' },
+    { value: 'left:prompting', label: 'Presets', icon: 'fa-sliders' },
+    { value: 'left:editor', label: 'Editor', icon: 'fa-pen-to-square' },
+    { value: 'left:context', label: 'Formatting', icon: 'fa-text-height' },
     { value: 'left:agents', label: 'Agents', icon: 'fa-robot' },
+    { value: 'characters:world-info', label: 'World Info', icon: 'fa-book-atlas' },
     { value: 'action:search', label: 'Search', icon: 'fa-magnifying-glass' },
     { value: 'right:settings', label: 'Settings', icon: 'fa-screwdriver-wrench' },
     { value: 'right:extensions', label: 'Extensions', icon: 'fa-cubes' },
@@ -670,9 +743,15 @@ function debounceAction(callback, wait = SB_MOBILE_ACTION_DEBOUNCE_MS) {
 
 function getShortcutTarget(side) {
     const storageKey = SB_SHORTCUT_STORAGE_KEYS[side];
-    const stored = migrateLegacyWorldInfoRoute(storageKey ? safeGetItem(storageKey) : null);
+    const stored = migrateShortcutTarget(storageKey ? safeGetItem(storageKey) : null);
     const valid = SB_SHORTCUT_TARGETS.some(t => t.value === stored);
     return valid ? stored : SB_SHORTCUT_DEFAULTS[side] || 'none';
+}
+
+function migrateShortcutTarget(target) {
+    const migrated = migrateLegacyWorldInfoRoute(target);
+    if (typeof migrated !== 'string' || !migrated.startsWith('left:')) return migrated;
+    return `left:${migrateTabId('left', migrated.slice(5))}`;
 }
 
 function getShortcutButtonId(side) {
@@ -999,19 +1078,22 @@ const SB_SHELLS = Object.freeze({
             },
             {
                 id: 'prompting',
-                label: 'Prompting',
+                label: 'Presets',
                 icon: 'fa-sliders',
                 tooltip: 'Change, update, or edit presets and prompts',
-                description: 'Configure Chat Completion presets, prompt templates, and text formatting.',
+                description: 'Manage presets, templates, and generation settings.',
+                descriptionI18n: 'Manage presets, templates, and generation settings.',
                 searchPlaceholder: 'Search presets, instruct mode, markdown, or decorators',
                 searchExamples: ['presets', 'instruct', 'markdown', 'decorators'],
+                searchAliases: ['Prompting', 'Presets'],
             },
             {
-                id: 'agents',
-                label: 'Agents',
-                icon: 'fa-robot',
-                tooltip: 'Interact with accompanying pre, post, and sidecar agents',
-                description: 'Enable, disable, or modify in-chat agents here. Can be configured as pre-gen, sidecar, or post-gen.',
+                id: 'editor',
+                label: 'Editor',
+                icon: 'fa-pen-to-square',
+                description: 'Edit prompt content, order, and placement.',
+                descriptionI18n: 'Edit prompt content, order, and placement.',
+                searchAliases: ['Prompt Manager', 'Prompts'],
             },
             {
                 id: 'context',
@@ -1022,6 +1104,13 @@ const SB_SHELLS = Object.freeze({
                 searchPlaceholder: 'Search formatting, context templates, regex, or text replacements',
                 searchExamples: ['formatting', 'context', 'advanced formatting', 'regex', 'replacement'],
                 searchAliases: ['Context', 'Advanced Formatting'],
+            },
+            {
+                id: 'agents',
+                label: 'Agents',
+                icon: 'fa-robot',
+                tooltip: 'Interact with accompanying pre, post, and sidecar agents',
+                description: 'Enable, disable, or modify in-chat agents here. Can be configured as pre-gen, sidecar, or post-gen.',
             },
         ],
     },
@@ -1163,10 +1252,10 @@ const SB_MOBILE_QUICK_ACTION_ICON_FALLBACK = sbMobileShellLifecycle.railModel.li
 const SB_MOBILE_NAV_CLOSED_ICON = 'fa-compass';
 const SB_MOBILE_VIEWPORT_RESET_FOLLOWUP_MS = 350;
 const SB_MOBILE_DEFAULT_QUICK_ACTIONS = Object.freeze([
-    { type: 'tab', shellKey: 'left', tabId: 'presets', icon: 'fa-sliders', label: 'Presets' },
-    { type: 'tab', shellKey: 'left', tabId: 'api', icon: 'fa-plug', label: 'API' },
+    { type: 'tab', shellKey: 'left', tabId: 'prompting', icon: 'fa-sliders', label: 'Presets' },
+    { type: 'tab', shellKey: 'left', tabId: 'connections', icon: 'fa-plug', label: 'Connections' },
     { type: 'tab', shellKey: 'left', tabId: 'sampling', icon: 'fa-wave-square', label: 'Sampling' },
-    { type: 'tab', shellKey: 'left', tabId: 'advanced-formatting', icon: 'fa-text-height', label: 'Formatting' },
+    { type: 'tab', shellKey: 'left', tabId: 'context', icon: 'fa-text-height', label: 'Formatting' },
     { type: 'tab', shellKey: 'characters', tabId: 'world-info', icon: 'fa-book-atlas', label: 'World Info' },
     { type: 'tab', shellKey: 'left', tabId: 'agents', icon: 'fa-robot', label: 'Agents' },
 ]);
@@ -1188,8 +1277,9 @@ const SB_TOPBAR_CLUSTERS = Object.freeze([
             { value: 'left:connections', shellKey: 'left', tabId: 'connections' },
             { value: 'left:sampling', shellKey: 'left', tabId: 'sampling' },
             { value: 'left:prompting', shellKey: 'left', tabId: 'prompting' },
-            { value: 'left:agents', shellKey: 'left', tabId: 'agents' },
+            { value: 'left:editor', shellKey: 'left', tabId: 'editor' },
             { value: 'left:context', shellKey: 'left', tabId: 'context' },
+            { value: 'left:agents', shellKey: 'left', tabId: 'agents' },
         ]),
     },
     {
@@ -9301,20 +9391,6 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         title: 'Chat Completions',
         usesContextSettings: false,
         description: 'Uses the active Chat Completions provider and its provider-specific sampler support.',
-        controls: [
-            '#seed_openai',
-            '#openai_logit_bias_preset',
-            '#temp_openai',
-            '#claude_disable_temperature',
-            '#top_p_openai',
-            '#claude_disable_top_p',
-            '#repetition_penalty_openai',
-            '#freq_pen_openai',
-            '#pres_pen_openai',
-            '#top_k_openai',
-            '#min_p_openai',
-            '#top_a_openai',
-        ],
     },
     {
         id: 'textgenerationwebui',
@@ -9322,56 +9398,6 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         title: 'Text Completions',
         usesContextSettings: true,
         description: 'Uses the selected Text Completions backend and sampler visibility rules.',
-        controls: [
-            '#seed_textgenerationwebui',
-            '#samplerResetButton',
-            '#sampler_order_block_kcpp',
-            '#sampler_order_block_lcpp',
-            '#sampler_priority_block_ooba',
-            '#sampler_priority_block_aphrodite',
-            '#json_schema_block',
-            '#banned_tokens_block_ooba',
-            '#logit_bias_block_ooba',
-            '#temp_textgenerationwebui',
-            '#top_k_textgenerationwebui',
-            '#top_p_textgenerationwebui',
-            '#typical_p_textgenerationwebui',
-            '#min_p_textgenerationwebui',
-            '#top_a_textgenerationwebui',
-            '#tfs_textgenerationwebui',
-            '#epsilon_cutoff_textgenerationwebui',
-            '#nsigma_textgenerationwebui',
-            '#min_keep_textgenerationwebui',
-            '#eta_cutoff_textgenerationwebui',
-            '#rep_pen_textgenerationwebui',
-            '#rep_pen_range_textgenerationwebui',
-            '#rep_pen_slope_textgenerationwebui',
-            '#rep_pen_decay_textgenerationwebui',
-            '#encoder_rep_pen_textgenerationwebui',
-            '#freq_pen_textgenerationwebui',
-            '#presence_pen_textgenerationwebui',
-            '#no_repeat_ngram_size_textgenerationwebui',
-            '#skew_textgenerationwebui',
-            '#min_length_textgenerationwebui',
-            '#max_tokens_second_textgenerationwebui',
-            '#adaptive_p_block',
-            '#smoothingBlock',
-            '#xtc_block',
-            '#dryBlock',
-            '#dynatemp_block_ooba',
-            '#mirostat_block_ooba',
-            '#beamSearchBlock',
-            '#contrastiveSearchBlock',
-            '#do_sample_textgenerationwebui',
-            '#add_bos_token_textgenerationwebui',
-            '#ignore_eos_token_textgenerationwebui',
-            '#include_reasoning_textgenerationwebui',
-            '#temperature_last_textgenerationwebui',
-            '#speculative_ngram_textgenerationwebui',
-            '#spaces_between_special_tokens_textgenerationwebui',
-            '#cfg_block_ooba',
-            '#grammar_block_ooba',
-        ],
     },
     {
         id: 'kobold',
@@ -9379,7 +9405,6 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         title: 'Kobold/Horde',
         usesContextSettings: true,
         description: 'Kobold Horde reuses Kobold sampler settings; Horde still requires a non-GUI preset.',
-        controls: ['#temp', '#top_p', '#rep_pen'],
     },
     {
         id: 'novel',
@@ -9387,46 +9412,10 @@ const SB_SAMPLING_BACKENDS = Object.freeze([
         title: 'NovelAI',
         usesContextSettings: true,
         description: 'Uses NovelAI preset sampling fields without changing the backend request format.',
-        controls: [
-            '#temp_novel',
-            '#rep_pen_novel',
-            '#rep_pen_size_novel',
-            '#rep_pen_slope_novel',
-            '#rep_pen_freq_novel',
-            '#rep_pen_presence_novel',
-            '#min_p_novel',
-            '#tail_free_sampling_novel',
-            '#top_p_novel',
-            '#top_a_novel',
-            '#top_k_novel',
-            '#mirostat_tau_novel',
-            '#mirostat_lr_novel',
-            '#typical_p_novel',
-            '#math1_temp_novel',
-            '#math1_quad_novel',
-            '#math1_quad_entropy_scale_novel',
-            '#min_length_novel',
-        ],
     },
 ]);
 
-const SB_LARGE_SAMPLING_CONTROLS = Object.freeze(new Set([
-    '#seed_openai',
-    '#openai_logit_bias_preset',
-    '#samplerResetButton',
-    '#n_textgenerationwebui',
-    '#seed_textgenerationwebui',
-    '#banned_tokens_block_ooba',
-    '#logit_bias_block_ooba',
-    '#json_schema_block',
-    '#sampler_order_block_kcpp',
-    '#sampler_order_block_lcpp',
-    '#sampler_priority_block_ooba',
-    '#sampler_priority_block_aphrodite',
-]));
-
 const SB_SAMPLING_GROUPS = Object.freeze([
-    { id: 'presets', title: 'Presets' },
     { id: 'sampling', title: 'Sampling' },
     { id: 'penalties', title: 'Penalties & Repetition' },
     { id: 'algorithms', title: 'Advanced Algorithms' },
@@ -9434,50 +9423,81 @@ const SB_SAMPLING_GROUPS = Object.freeze([
     { id: 'output', title: 'Output & Generation' },
 ]);
 
-// SillyBunny: use Text Completions' existing taxonomy without changing sampler state or requests.
-const SB_SAMPLING_GROUP_SELECTORS = Object.freeze({
-    penalties: new Set([
-        '#repetition_penalty_openai', '#freq_pen_openai', '#pres_pen_openai',
-        '#rep_pen_textgenerationwebui', '#rep_pen_range_textgenerationwebui',
-        '#rep_pen_slope_textgenerationwebui', '#rep_pen_decay_textgenerationwebui',
-        '#encoder_rep_pen_textgenerationwebui', '#freq_pen_textgenerationwebui',
-        '#presence_pen_textgenerationwebui', '#no_repeat_ngram_size_textgenerationwebui',
-        '#rep_pen', '#rep_pen_novel', '#rep_pen_size_novel', '#rep_pen_slope_novel',
-        '#rep_pen_freq_novel', '#rep_pen_presence_novel',
-    ]),
-    algorithms: new Set([
-        '#adaptive_p_block', '#smoothingBlock', '#xtc_block', '#dryBlock',
-        '#dynatemp_block_ooba', '#mirostat_block_ooba', '#beamSearchBlock', '#contrastiveSearchBlock',
-        '#mirostat_tau_novel', '#mirostat_lr_novel', '#math1_temp_novel',
-        '#math1_quad_novel', '#math1_quad_entropy_scale_novel',
-    ]),
-    tokens: new Set([
-        '#seed_openai', '#openai_logit_bias_preset', '#seed_textgenerationwebui',
-        '#min_length_textgenerationwebui', '#max_tokens_second_textgenerationwebui',
-        '#banned_tokens_block_ooba', '#logit_bias_block_ooba', '#min_length_novel',
-    ]),
-    output: new Set([
-        '#sampler_order_block_kcpp', '#sampler_order_block_lcpp', '#sampler_priority_block_ooba',
-        '#sampler_priority_block_aphrodite', '#json_schema_block', '#cfg_block_ooba', '#grammar_block_ooba',
-        '#do_sample_textgenerationwebui', '#add_bos_token_textgenerationwebui', '#ignore_eos_token_textgenerationwebui',
-        '#include_reasoning_textgenerationwebui', '#temperature_last_textgenerationwebui',
-        '#speculative_ngram_textgenerationwebui', '#spaces_between_special_tokens_textgenerationwebui',
-    ]),
-});
+/**
+ * Shared sampler registry. Each entry maps a canonical sampler id to selectors across backends.
+ * Controls are displayed in registry order within their group. Backends with no selector omit the entry.
+ * @type {ReadonlyArray<{id: string, group: string, openai?: string|string[], textgenerationwebui?: string|string[], kobold?: string|string[], novel?: string|string[], expander?: boolean, large?: boolean, gated?: boolean, subtitleSource?: string}>}
+ */
+const SB_SAMPLER_REGISTRY = Object.freeze([
+    // Sampling
+    { id: 'sampler_toolbar', group: 'sampling', openai: '#sb_neutralize_chat_samplers', textgenerationwebui: '#samplerResetButton', large: true, gated: true },
+    { id: 'temperature', group: 'sampling', openai: '#temp_openai', textgenerationwebui: '#temp_textgenerationwebui', kobold: '#temp', novel: '#temp_novel' },
+    { id: 'top_k', group: 'sampling', openai: '#top_k_openai', textgenerationwebui: '#top_k_textgenerationwebui', kobold: '#top_k', novel: '#top_k_novel' },
+    { id: 'top_p', group: 'sampling', openai: '#top_p_openai', textgenerationwebui: '#top_p_textgenerationwebui', kobold: '#top_p', novel: '#top_p_novel' },
+    { id: 'typical_p', group: 'sampling', textgenerationwebui: '#typical_p_textgenerationwebui', kobold: '#typical_p', novel: '#typical_p_novel' },
+    { id: 'min_p', group: 'sampling', openai: '#min_p_openai', textgenerationwebui: '#min_p_textgenerationwebui', kobold: '#min_p', novel: '#min_p_novel' },
+    { id: 'top_a', group: 'sampling', openai: '#top_a_openai', textgenerationwebui: '#top_a_textgenerationwebui', kobold: '#top_a', novel: '#top_a_novel' },
+    { id: 'tfs', group: 'sampling', textgenerationwebui: '#tfs_textgenerationwebui', kobold: '#tfs', novel: '#tail_free_sampling_novel' },
+    { id: 'epsilon_cutoff', group: 'sampling', textgenerationwebui: '#epsilon_cutoff_textgenerationwebui' },
+    { id: 'eta_cutoff', group: 'sampling', textgenerationwebui: '#eta_cutoff_textgenerationwebui' },
+    { id: 'nsigma', group: 'sampling', textgenerationwebui: '#nsigma_textgenerationwebui' },
+    { id: 'min_keep', group: 'sampling', textgenerationwebui: '#min_keep_textgenerationwebui' },
+    { id: 'skew', group: 'sampling', textgenerationwebui: '#skew_textgenerationwebui' },
+    // Penalties
+    { id: 'repetition_penalty', group: 'penalties', openai: '#repetition_penalty_openai', textgenerationwebui: '#rep_pen_textgenerationwebui', kobold: '#rep_pen', novel: '#rep_pen_novel' },
+    { id: 'rep_pen_range', group: 'penalties', textgenerationwebui: '#rep_pen_range_textgenerationwebui', kobold: '#rep_pen_range', novel: '#rep_pen_size_novel' },
+    { id: 'rep_pen_slope', group: 'penalties', textgenerationwebui: '#rep_pen_slope_textgenerationwebui', kobold: '#rep_pen_slope', novel: '#rep_pen_slope_novel' },
+    { id: 'rep_pen_decay', group: 'penalties', textgenerationwebui: '#rep_pen_decay_textgenerationwebui' },
+    { id: 'encoder_rep_pen', group: 'penalties', textgenerationwebui: '#encoder_rep_pen_textgenerationwebui' },
+    { id: 'frequency_penalty', group: 'penalties', openai: '#freq_pen_openai', textgenerationwebui: '#freq_pen_textgenerationwebui', novel: '#rep_pen_freq_novel' },
+    { id: 'presence_penalty', group: 'penalties', openai: '#pres_pen_openai', textgenerationwebui: '#presence_pen_textgenerationwebui', novel: '#rep_pen_presence_novel' },
+    { id: 'no_repeat_ngram', group: 'penalties', textgenerationwebui: '#no_repeat_ngram_size_textgenerationwebui' },
+    // Algorithms
+    { id: 'adaptive_p', group: 'algorithms', textgenerationwebui: '#adaptive_p_block', expander: true },
+    { id: 'smoothing', group: 'algorithms', textgenerationwebui: '#smoothingBlock', expander: true },
+    { id: 'math1_temp', group: 'algorithms', novel: '#math1_temp_novel' },
+    { id: 'math1_quad', group: 'algorithms', novel: '#math1_quad_novel' },
+    { id: 'math1_quad_entropy_scale', group: 'algorithms', novel: '#math1_quad_entropy_scale_novel' },
+    { id: 'xtc', group: 'algorithms', textgenerationwebui: '#xtc_block', expander: true },
+    { id: 'dry', group: 'algorithms', textgenerationwebui: '#dryBlock', expander: true },
+    { id: 'dynatemp', group: 'algorithms', textgenerationwebui: '#dynatemp_block_ooba', expander: true },
+    { id: 'mirostat', group: 'algorithms', textgenerationwebui: '#mirostat_block_ooba', kobold: '[name="miroStatBlock-kobold"]', expander: true, subtitleSource: '[data-sb-sampling-control="#mirostat_block_ooba"] .ds-row-subtitle' },
+    { id: 'mirostat_tau', group: 'algorithms', novel: '#mirostat_tau_novel' },
+    { id: 'mirostat_lr', group: 'algorithms', novel: '#mirostat_lr_novel' },
+    { id: 'beam_search', group: 'algorithms', textgenerationwebui: '#beamSearchBlock', expander: true, gated: true },
+    { id: 'contrastive_search', group: 'algorithms', textgenerationwebui: '#contrastiveSearchBlock', expander: true, gated: true },
+    // Tokens
+    { id: 'seed', group: 'tokens', openai: '#seed_openai', textgenerationwebui: '#seed_textgenerationwebui', kobold: '#seed_kobold', large: true, subtitleSource: '[data-sb-sampling-control="#seed_textgenerationwebui"] .ds-row-subtitle' },
+    { id: 'logit_bias', group: 'tokens', openai: '#openai_logit_bias_preset', textgenerationwebui: '#logit_bias_block_ooba', large: true, gated: true },
+    { id: 'banned_tokens', group: 'tokens', textgenerationwebui: '#banned_tokens_block_ooba', large: true, gated: true },
+    { id: 'min_length', group: 'tokens', textgenerationwebui: '#min_length_textgenerationwebui', novel: '#min_length_novel', gated: true },
+    { id: 'max_tokens_second', group: 'tokens', textgenerationwebui: '#max_tokens_second_textgenerationwebui', gated: true },
+    // Output
+    { id: 'sampler_order', group: 'output', textgenerationwebui: ['#sampler_order_block_kcpp', '#sampler_order_block_lcpp'], kobold: '#kobold_order', large: true, gated: true },
+    { id: 'sampler_priority', group: 'output', textgenerationwebui: ['#sampler_priority_block_ooba', '#sampler_priority_block_aphrodite'], large: true, gated: true },
+    { id: 'json_schema', group: 'output', textgenerationwebui: '#json_schema_block', large: true, gated: true },
+    { id: 'do_sample', group: 'output', textgenerationwebui: '#do_sample_textgenerationwebui', gated: true },
+    { id: 'add_bos_token', group: 'output', textgenerationwebui: '#add_bos_token_textgenerationwebui', gated: true },
+    { id: 'ignore_eos_token', group: 'output', textgenerationwebui: '#ignore_eos_token_textgenerationwebui', gated: true },
+    { id: 'use_default_badwordsids', group: 'output', kobold: '#use_default_badwordsids', gated: true },
+    { id: 'temperature_last', group: 'output', textgenerationwebui: '#temperature_last_textgenerationwebui', gated: true },
+    { id: 'include_reasoning', group: 'output', textgenerationwebui: '#include_reasoning_textgenerationwebui', gated: true },
+    { id: 'speculative_ngram', group: 'output', textgenerationwebui: '#speculative_ngram_textgenerationwebui', gated: true },
+    { id: 'spaces_between_special_tokens', group: 'output', textgenerationwebui: '#spaces_between_special_tokens_textgenerationwebui', gated: true },
+    { id: 'cfg', group: 'output', textgenerationwebui: '#cfg_block_ooba', gated: true },
+    { id: 'grammar', group: 'output', textgenerationwebui: '#grammar_block_ooba', kobold: '#grammar', gated: true, subtitleSource: '[data-sb-sampling-control="#grammar_block_ooba"] .ds-row-subtitle' },
+]);
 
-const SB_MULTI_SAMPLING_CONTROLS = Object.freeze(new Set([
-    '#adaptive_p_block',
-    '#smoothingBlock',
-    '#xtc_block',
-    '#dryBlock',
-    '#dynatemp_block_ooba',
-    '#mirostat_block_ooba',
-    '#beamSearchBlock',
-    '#contrastiveSearchBlock',
-]));
+function getSamplingBackendControls(backendId) {
+    return SB_SAMPLER_REGISTRY.flatMap(entry => [entry[backendId] ?? []].flat());
+}
+
+const SB_SAMPLER_ENTRY_BY_SELECTOR = Object.freeze(new Map(SB_SAMPLER_REGISTRY.flatMap(entry => SB_SAMPLING_BACKENDS
+    .flatMap(backend => [entry[backend.id] ?? []].flat())
+    .map(selector => [selector, entry]))));
 
 function getSamplingGroupId(selector) {
-    return Object.entries(SB_SAMPLING_GROUP_SELECTORS).find(([, selectors]) => selectors.has(selector))?.[0] ?? 'sampling';
+    return SB_SAMPLER_ENTRY_BY_SELECTOR.get(selector)?.group ?? 'sampling';
 }
 
 function getSpecialTokenControlBlock() {
@@ -9681,25 +9701,34 @@ function decorateSamplingControlCard(card, selector) {
             text: 'Set to get deterministic results. Use -1 for a random seed.',
         }));
     }
+}
 
-    if (selector === '#seed_openai') {
-        const row = createElement('small', { className: 'sb-chat-neutralize-row flex-container alignitemscenter' });
-        const button = createElement('button', {
-            className: 'menu_button menu_button_icon sb-neutralize-chat-samplers',
-            text: 'Neutralize Samplers',
-            attrs: { type: 'button' },
-        });
-        const info = createElement('div', {
-            className: 'fa-solid fa-circle-info opacity50p',
-            attrs: {
-                title: 'Set all samplers to their neutral/disabled state.',
-                'data-i18n': '[title]Set all samplers to their neutral/disabled state.',
-            },
-        });
-        button.addEventListener('click', neutralizeChatCompletionSamplers);
-        row.append(button, info);
-        card.appendChild(row);
-    }
+/** Chat Completions counterpart of the Text Completions sampler toolbar (`#samplerResetButton` row). */
+function getChatSamplerToolbarControlBlock() {
+    const existing = document.getElementById('sb_neutralize_chat_samplers');
+    if (existing instanceof HTMLElement) return existing.closest('.sb-sampling-sampler-tools-card');
+
+    const block = createElement('div', { className: 'sb-sampling-sampler-tools-card' });
+    const toolbar = createElement('div', { className: 'flex-container justifyCenter' });
+    const item = createElement('small', { className: 'flex-container alignitemscenter' });
+    const button = createElement('button', {
+        id: 'sb_neutralize_chat_samplers',
+        className: 'menu_button whitespacenowrap sb-neutralize-chat-samplers',
+        text: 'Neutralize Samplers',
+        attrs: { type: 'button', 'data-i18n': 'Neutralize Samplers' },
+    });
+    const info = createElement('div', {
+        className: 'fa-solid fa-circle-info opacity50p',
+        attrs: {
+            title: 'Set all samplers to their neutral/disabled state.',
+            'data-i18n': '[title]Set all samplers to their neutral/disabled state.',
+        },
+    });
+    button.addEventListener('click', neutralizeChatCompletionSamplers);
+    item.append(button, info);
+    toolbar.append(item);
+    block.append(toolbar);
+    return block;
 }
 
 function getSamplingControlBlock(selector) {
@@ -9712,7 +9741,7 @@ function getSamplingControlBlock(selector) {
         return input.closest('.flex-container.justifyCenter') ?? input.parentElement;
     }
 
-    if (SB_MULTI_SAMPLING_CONTROLS.has(selector) || input.matches('#cfg_block_ooba, #grammar_block_ooba, #json_schema_block, #banned_tokens_block_ooba, #logit_bias_block_ooba, [id^="sampler_order_block_"], [id^="sampler_priority_block_"]')) {
+    if (SB_SAMPLER_ENTRY_BY_SELECTOR.get(selector)?.expander || input.matches('#cfg_block_ooba, #grammar_block_ooba, #json_schema_block, #banned_tokens_block_ooba, #logit_bias_block_ooba, [id^="sampler_order_block_"], [id^="sampler_priority_block_"]')) {
         return input;
     }
 
@@ -9725,26 +9754,37 @@ function getSamplingControlBlock(selector) {
         ?? input.parentElement;
 }
 
-function buildSamplingControlCard(selector) {
+function buildSamplingControlCard(selector, root = document) {
     const controlBlock = selector === '#samplerResetButton'
         ? getSamplerToolbarControlBlock()
-        : getSamplingControlBlock(selector);
+        : selector === '#sb_neutralize_chat_samplers'
+            ? getChatSamplerToolbarControlBlock()
+            : getSamplingControlBlock(selector);
     if (!(controlBlock instanceof HTMLElement)) {
         return null;
     }
 
+    const entry = SB_SAMPLER_ENTRY_BY_SELECTOR.get(selector);
     const isTextGenSampler = controlBlock.hasAttribute('data-tg-samplers') || controlBlock.querySelector('[data-tg-samplers]');
-    const isExpander = SB_MULTI_SAMPLING_CONTROLS.has(selector);
+    const isExpander = Boolean(entry?.expander);
     const card = createElement(isExpander ? 'details' : 'div', {
         className: [
             'sb-sampling-control-card',
             isTextGenSampler ? 'sb-sampling-textgen-card' : '',
-            SB_LARGE_SAMPLING_CONTROLS.has(selector) ? 'sb-sampling-large-card' : '',
+            entry?.large ? 'sb-sampling-large-card' : '',
             isExpander ? 'ds-row-expander' : 'sb-sampling-row',
         ].filter(Boolean).join(' '),
     });
     card.dataset.sbSamplingControl = selector;
-    for (const attributeName of ['data-source', 'data-source-mode']) {
+    if (entry) card.dataset.sbSamplerId = entry.id;
+    // Ungated samplers stay visible for every provider; gating code in openai.js and
+    // textgen-settings.js skips elements carrying this marker.
+    if (entry && !entry.gated) {
+        for (const element of [controlBlock, ...controlBlock.querySelectorAll('[data-source], [data-tg-type]')]) {
+            element.setAttribute('data-sb-sampler-ungated', '');
+        }
+    }
+    for (const attributeName of ['data-source', 'data-source-mode', 'data-sb-sampler-ungated']) {
         if (controlBlock.hasAttribute(attributeName)) {
             card.setAttribute(attributeName, controlBlock.getAttribute(attributeName));
         }
@@ -9754,7 +9794,10 @@ function buildSamplingControlCard(selector) {
         const summary = createElement('summary', { className: 'ds-row' });
         const text = createElement('div', { className: 'ds-row-text' });
         const heading = controlBlock.querySelector(':scope > h4');
-        const label = createElement('span', { className: 'ds-row-label', text: heading?.textContent.replace(/\s+/g, ' ').trim() || 'lorum ipsum' });
+        // A header toggle may already be normalized; its subtitle is not part of the sampler name.
+        const headingCopy = heading?.cloneNode(true);
+        headingCopy?.querySelectorAll('.ds-row-subtitle, [data-sb-copy-placeholder]').forEach(node => node.remove());
+        const label = createElement('span', { className: 'ds-row-label', text: headingCopy?.textContent.replace(/\s+/g, ' ').trim() || 'lorum ipsum' });
         if (label.textContent === 'lorum ipsum') label.dataset.sbCopyPlaceholder = 'true';
         const tooltip = heading?.matches('[title], [data-sttt--title]') ? heading : heading?.querySelector('[title], [data-sttt--title]');
         const subtitle = createElement('small', {
@@ -9774,7 +9817,87 @@ function buildSamplingControlCard(selector) {
     }
     decorateSamplingControlCard(card, selector);
     normalizeBackendSettingsRows(card);
+    applySamplingSubtitleSource(card, entry, root);
     return card;
+}
+
+/** Reuses another backend's subtitle (text and i18n key) when this card's native markup has none. */
+function applySamplingSubtitleSource(card, entry, root) {
+    if (!entry?.subtitleSource) return;
+    const placeholder = card.querySelector('.ds-row-subtitle[data-sb-copy-placeholder]');
+    const source = root.querySelector(entry.subtitleSource);
+    if (!(placeholder instanceof HTMLElement) || !(source instanceof HTMLElement) || source.hasAttribute('data-sb-copy-placeholder')) return;
+    const text = source.textContent.trim();
+    if (!text) return;
+    placeholder.textContent = text;
+    delete placeholder.dataset.sbCopyPlaceholder;
+    if (source.dataset.i18n) placeholder.dataset.i18n = source.dataset.i18n;
+}
+
+/**
+ * Text Completions samplers that Chat Completions has no setting for. They are listed in the CC
+ * section as inert rows so both lists read the same; gated mechanisms are left out because TC only
+ * shows them for some backend types.
+ */
+const SB_CC_PLACEHOLDER_SAMPLERS = Object.freeze(SB_SAMPLER_REGISTRY.filter(entry => entry.textgenerationwebui && !entry.openai && !entry.gated));
+const SB_CC_PLACEHOLDER_SUBTITLE = 'Not available in Chat Completions. Custom endpoints can send it with Additional Parameters.';
+
+/** Registry position of a sampling card, so placeholder rows sort beside real controls. */
+function getSamplingCardRank(card) {
+    const entry = SB_SAMPLER_ENTRY_BY_SELECTOR.get(card.dataset.sbSamplingControl)
+        ?? SB_SAMPLER_REGISTRY.find(candidate => candidate.id === card.dataset.sbSamplerId);
+    const index = SB_SAMPLER_REGISTRY.indexOf(entry);
+    if (index < 0) return Number.MAX_SAFE_INTEGER;
+    const selectors = Object.values(entry).flat().filter(value => typeof value === 'string');
+    return index + Math.max(0, selectors.indexOf(card.dataset.sbSamplingControl)) / 100;
+}
+
+/** Builds an inert CC row from the live Text Completions card's label; returns null until that card exists. */
+function buildChatCompletionPlaceholderCard(entry, root) {
+    const source = root.querySelector(`#sb-sampling-textgenerationwebui [data-sb-sampling-control="${entry.textgenerationwebui}"]`);
+    const sourceLabel = source?.querySelector(entry.expander ? ':scope > summary .ds-row-label' : '.ds-row-label');
+    const labelText = sourceLabel?.textContent.replace(/\s+/g, ' ').trim();
+    if (!labelText || sourceLabel.hasAttribute('data-sb-copy-placeholder')) return null;
+
+    const card = createElement('div', {
+        className: 'sb-sampling-control-card sb-sampling-row sb-sampling-placeholder-card',
+        attrs: { 'data-sb-sampling-placeholder': '', 'data-sb-sampler-id': entry.id },
+    });
+    const row = createElement('div', { className: 'ds-row' });
+    const text = createElement('div', { className: 'ds-row-text' });
+    const label = createElement('span', { className: 'ds-row-label', text: labelText });
+    const i18nKey = sourceLabel.getAttribute('data-i18n') ?? sourceLabel.querySelector(':scope > [data-i18n]')?.getAttribute('data-i18n');
+    if (i18nKey && !i18nKey.startsWith('[')) label.dataset.i18n = i18nKey;
+    text.append(label, createElement('small', {
+        className: 'ds-row-subtitle',
+        text: SB_CC_PLACEHOLDER_SUBTITLE,
+        attrs: { 'data-i18n': SB_CC_PLACEHOLDER_SUBTITLE },
+    }));
+    const badge = createElement('span', { className: 'sb-sampling-unavailable-badge' });
+    badge.append(
+        createElement('i', { className: 'fa-solid fa-ban', attrs: { 'aria-hidden': 'true' } }),
+        createElement('span', { text: 'Unavailable', attrs: { 'data-i18n': 'Unavailable' } }),
+    );
+    const suffix = createElement('div', { className: 'ds-row-suffix' });
+    suffix.append(badge);
+    row.append(text, suffix);
+    card.append(row);
+    return card;
+}
+
+function syncChatCompletionPlaceholderCards(root) {
+    const section = root.querySelector('#sb-sampling-openai');
+    if (!(section instanceof HTMLElement)) return false;
+    let built = false;
+    for (const entry of SB_CC_PLACEHOLDER_SAMPLERS) {
+        if (section.querySelector(`[data-sb-sampling-placeholder][data-sb-sampler-id="${entry.id}"]`)) continue;
+        const target = section.querySelector(`[data-sb-sampling-group="${entry.group}"] > .ds-pref-group`);
+        const card = target instanceof HTMLElement ? buildChatCompletionPlaceholderCard(entry, root) : null;
+        if (!card) continue;
+        target.append(card);
+        built = true;
+    }
+    return built;
 }
 
 function drawerHasControls(drawer) {
@@ -9822,7 +9945,6 @@ function updateSamplingCardVisibility(section) {
             const content = card.querySelector(':scope > .ds-row-expander-content') ?? card;
             const hasVisibleContent = Array.from(content.children).some(child => child instanceof HTMLElement
                 && !child.classList.contains('sb-sampling-transmission')
-                && !child.classList.contains('sb-chat-neutralize-row')
                 && getComputedStyle(child).display !== 'none');
             return [card, hasVisibleContent];
         });
@@ -9833,22 +9955,31 @@ function updateSamplingCardVisibility(section) {
     // Track visibility as we write: `card.hidden` writes above have not been flushed yet, so a
     // checkVisibility() here would force the very layout this function is trying to avoid.
     const visibleCards = new Set(cardVisibility.filter(([, visible]) => visible).map(([card]) => card));
-    const activeApi = getCurrentMainApiValue();
     const groups = [];
     for (const group of section.querySelectorAll('[data-sb-sampling-group]')) {
         if (!(group instanceof HTMLElement)) continue;
-        const hasSamplingCard = [...group.querySelectorAll('[data-sb-sampling-control]')].some(card => visibleCards.has(card));
-        const hasPresetRow = [...group.querySelectorAll('.sb-non-chat-preset-row, #openai_api-presets')]
-            .some(row => row instanceof HTMLElement && (row.checkVisibility?.() ?? row.getClientRects().length > 0));
-        const presetBackend = activeApi === 'koboldhorde' ? 'kobold' : activeApi;
-        const hasActivePreset = group.dataset.sbSamplingGroup === 'presets'
-            && ['textgenerationwebui', 'kobold', 'novel'].includes(presetBackend)
-            && group.querySelector(`#${presetBackend}_api-presets`) instanceof HTMLElement;
-        groups.push([group, !(hasSamplingCard || hasPresetRow || hasActivePreset)]);
+        // Placeholder rows have no gated content, so they always keep their group visible.
+        const hasSamplingCard = Boolean(group.querySelector('[data-sb-sampling-placeholder]'))
+            || [...group.querySelectorAll('[data-sb-sampling-control]')].some(card => visibleCards.has(card));
+        groups.push([group, !hasSamplingCard]);
     }
     for (const [group, hidden] of groups) {
         if (group.hidden !== hidden) group.hidden = hidden;
     }
+}
+
+function sortSamplingSectionCards(section) {
+    for (const group of section.querySelectorAll('[data-sb-sampling-group] > .ds-pref-group')) {
+        const cards = [...group.querySelectorAll(':scope > [data-sb-sampling-control], :scope > [data-sb-sampling-placeholder]')];
+        const sorted = [...cards].sort((a, b) => getSamplingCardRank(a) - getSamplingCardRank(b));
+        if (sorted.some((card, index) => card !== cards[index])) group.append(...sorted);
+    }
+}
+
+function resyncUngatedSamplerVisibility(section, backendId) {
+    // Cards built after the backend's own gating pass may still carry its inline display:none.
+    $(section).find('[data-sb-sampler-ungated]').filter('[data-source], [data-tg-type]').show();
+    if (backendId === 'textgenerationwebui') showTGSamplerControls();
 }
 
 function syncSamplingPanelControls(root) {
@@ -9864,7 +9995,10 @@ function syncSamplingPanelControls(root) {
 
         section.querySelector('.sb-sampling-note')?.remove();
 
-        for (const selector of backend.controls) {
+        let builtCards = false;
+        const backendControls = getSamplingBackendControls(backend.id);
+
+        for (const selector of backendControls) {
             const groupId = getSamplingGroupId(selector);
             const target = section.querySelector(`[data-sb-sampling-group="${groupId}"] > .ds-pref-group`);
             if (!(target instanceof HTMLElement)) throw new Error(`Missing Sampling group: ${backend.id}/${groupId}`);
@@ -9880,13 +10014,26 @@ function syncSamplingPanelControls(root) {
 
             existingCard?.remove();
 
-            const card = buildSamplingControlCard(selector);
+            const card = buildSamplingControlCard(selector, root);
             if (card) {
                 target.appendChild(card);
+                builtCards = true;
             }
         }
 
-        if (!section.querySelector('[data-sb-sampling-control]')) {
+        if (backend.id === 'openai' && syncChatCompletionPlaceholderCards(root)) builtCards = true;
+
+        if (builtCards) {
+            sortSamplingSectionCards(section);
+            section.dataset.sbUngatedResyncPending = 'true';
+        }
+        // Base gating and manual sampler hiding query the live document, so wait until the panel is attached.
+        if (section.dataset.sbUngatedResyncPending && section.isConnected) {
+            delete section.dataset.sbUngatedResyncPending;
+            resyncUngatedSamplerVisibility(section, backend.id);
+        }
+
+        if (!section.querySelector('[data-sb-sampling-control]') && !section.querySelector('[data-sb-sampling-placeholder]')) {
             section.appendChild(createElement('p', {
                 className: 'sb-sampling-note',
                 text: 'Sampler controls are not ready yet. Reopen the Backend menu after settings finish loading.',
@@ -9929,13 +10076,12 @@ function updateSamplingPanelVisibility(root) {
     }
 }
 
-function createBackendSectionHeader({ title = '', description, modeAttrs = {}, descriptionAttrs = {}, disclaimer = null }) {
+function createBackendSectionHeader({ title = '', description, modeAttrs = {}, descriptionAttrs = {} }) {
     const header = createElement('div', { className: 'sb-backend-section-header' });
     const titleRow = createElement('div', { className: 'sb-backend-title-row' });
     const mode = createElement('span', { className: 'sb-sampling-mode-pill', text: title, attrs: modeAttrs });
     titleRow.append(mode);
     header.append(titleRow, createElement('p', { text: description, attrs: descriptionAttrs }));
-    if (disclaimer) header.append(disclaimer);
     return header;
 }
 
@@ -9959,6 +10105,11 @@ function buildSamplingPanel() {
             title: `Backend: ${backend.title}`,
             description: `Active backend samplers are shown here. ${backend.description}`,
         });
+        header.append(createElement('p', {
+            className: 'sb-sampling-header-note',
+            text: 'Some backends ignore samplers they do not support.',
+            attrs: { 'data-i18n': 'Some backends ignore samplers they do not support.' },
+        }));
         section.append(header);
         for (const group of SB_SAMPLING_GROUPS) {
             const category = createElement('section', {
@@ -10044,7 +10195,148 @@ function buildInChatAgentsPanel() {
     };
 }
 
+function createBackendPromptGroup(id, title) {
+    const group = createElement('section', { id, className: 'sb-prompting-group' });
+    group.append(
+        createElement('h3', { className: 'ds-pref-group-heading', text: title, attrs: { 'data-i18n': title } }),
+        createElement('div', { className: 'ds-pref-group sb-prompting-group-body' }),
+    );
+    return group;
+}
+
+const SB_EDITOR_UTILITY_PROMPT_IDS = Object.freeze([
+    'impersonation_prompt_textarea', 'wi_format_textarea', 'scenario_format_textarea', 'personality_format_textarea',
+    'group_nudge_prompt_textarea', 'newchat_prompt_textarea', 'newgroupchat_prompt_textarea',
+    'newexamplechat_prompt_textarea', 'continue_nudge_prompt_textarea', 'send_if_empty_textarea',
+]);
+
+function prepareEditorPanel(root) {
+    if (root.dataset.sbEditorPrepared === 'true') return;
+    root.dataset.sbEditorPrepared = 'true';
+    root.dataset.sbPresentation = 'manual';
+    root.classList.add('sb-prompting-panel', 'sb-editor-panel');
+    const description = getShellConfig('left').customTabs.find(tab => tab.id === 'editor').description;
+    const header = createBackendSectionHeader({
+        description,
+        modeAttrs: { 'data-sb-editor-mode': '' },
+        descriptionAttrs: { 'data-i18n': description },
+    });
+    const meta = createElement('div', { className: 'sb-editor-meta' });
+    meta.append(
+        createElement('span', { attrs: { 'data-sb-editor-preset': '', 'aria-live': 'polite' } }),
+        // sillybunny-preset-autosave.js fills in and reveals both states.
+        createElement('span', { text: 'Autosave off', attrs: { 'data-sb-editor-autosave': '', 'data-i18n': 'Autosave off', hidden: '' } }),
+        createElement('span', { text: 'Read-only', attrs: { 'data-sb-editor-read-only': '', 'data-i18n': 'Read-only', hidden: '' } }),
+    );
+    const back = createElement('button', {
+        className: 'menu_button sb-action-btn sb-backend-navigation-pill',
+        text: 'Presets',
+        attrs: { type: 'button', 'data-sb-editor-presets': '', 'data-i18n': 'Presets' },
+    });
+    back.addEventListener('click', () => openShell('left', 'prompting'));
+    header.querySelector('.sb-backend-title-row').append(back);
+    header.querySelector(':scope > p').after(meta);
+    root.append(header);
+    for (const [id, title] of [
+        ['sb-editor-utility', 'Utility Prompts'],
+        ['sb-editor-sysprompt', 'System Prompt'],
+        ['sb-editor-instruct', 'Instruct Template'],
+        ['sb-editor-context', 'Context Template'],
+    ]) root.append(createBackendPromptGroup(id, title));
+}
+
+function buildEditorPanel() {
+    const { panel, scroller } = createShellPanel({ id: 'editor' });
+    const column = createElement('div', { className: 'sb-shell-column' });
+    prepareEditorPanel(column);
+    scroller.append(column);
+    return { panel, scroller, searchRoot: column, onActivate: () => {
+        groupAdvancedFormattingIntoDrawers();
+        updateEditorPanel(panel);
+    } };
+}
+
+function updateEditorPanel(panel = getShellState('left')?.tabs.get('editor')?.panel) {
+    const root = panel?.querySelector('.sb-editor-panel');
+    if (!(root instanceof HTMLElement)) return;
+    const activeApi = getCurrentMainApiValue();
+    const isChatCompletion = activeApi === 'openai';
+    const backend = SB_SAMPLING_BACKENDS.find(entry => entry.apiIds.includes(activeApi));
+    const mode = root.querySelector('[data-sb-editor-mode]');
+    const modeLabel = `Backend: ${backend?.title ?? activeApi}`;
+    if (mode.textContent !== modeLabel) mode.textContent = modeLabel;
+
+    const adoptDocument = (id, groupId, wrapperSelector = null) => {
+        const field = document.getElementById(id);
+        const body = root.querySelector(`#${groupId} > .sb-prompting-group-body`);
+        if (!(field instanceof HTMLElement) || !(body instanceof HTMLElement)) return;
+        const documentNode = field.closest('[data-sb-editor-document]')
+            ?? (wrapperSelector ? field.closest(wrapperSelector) : field.parentElement);
+        if (!(documentNode instanceof HTMLElement)) return;
+        documentNode.dataset.sbEditorDocument = 'true';
+        if (documentNode.parentElement !== body) body.append(documentNode);
+    };
+
+    const manager = document.getElementById('sb-openai-prompt-manager');
+    if (manager instanceof HTMLElement) {
+        if (manager.parentElement !== root || manager.previousElementSibling !== root.firstElementChild) root.firstElementChild.after(manager);
+        manager.style.display = '';
+        if (!manager.classList.contains('sb-prompting-group')) manager.classList.add('sb-prompting-group');
+        // The flatten pass visits descendants, so include the group's outer drawer via its parent.
+        flattenNestedSettingsDrawers(root, { includeTopLevel: true });
+        let body = manager.querySelector(':scope > .sb-prompting-group-body');
+        if (!(body instanceof HTMLElement)) {
+            body = createElement('div', { className: 'ds-pref-group sb-prompting-group-body' });
+            for (const child of [...manager.children]) {
+                if (!child.classList.contains('sb-settings-flat-header')) body.append(child);
+            }
+            manager.append(body);
+        }
+        const block = document.getElementById('completion_prompt_manager')?.closest('.range-block');
+        if (block instanceof HTMLElement && !manager.contains(block)) body.append(block);
+        manager.hidden = !isChatCompletion;
+    }
+    for (const id of SB_EDITOR_UTILITY_PROMPT_IDS) adoptDocument(id, 'sb-editor-utility', '.range-block');
+    for (const id of ['sysprompt_content', 'sysprompt_post_history']) adoptDocument(id, 'sb-editor-sysprompt');
+    const sequences = document.getElementById('InstructSequencesColumn');
+    const instructBody = root.querySelector('#sb-editor-instruct > .sb-prompting-group-body');
+    if (sequences instanceof HTMLElement && sequences.parentElement !== instructBody) instructBody.append(sequences);
+    for (const id of ['context_story_string', 'context_story_string_position', 'context_example_separator']) {
+        adoptDocument(id, 'sb-editor-context', '[data-cc-null]');
+    }
+    for (const id of ['sb-editor-utility', 'sb-editor-sysprompt', 'sb-editor-instruct', 'sb-editor-context']) {
+        const group = root.querySelector(`#${id}`);
+        if (!(group instanceof HTMLElement)) continue;
+        group.hidden = (id === 'sb-editor-utility' ? !isChatCompletion : isChatCompletion)
+            || !group.querySelector('textarea, select, input');
+    }
+    root.querySelector('#sb-editor-sysprompt').classList.toggle('disabled', document.getElementById('SystemPromptBlock')?.classList.contains('disabled') ?? false);
+
+    const selectedName = id => {
+        const select = document.getElementById(id);
+        return select instanceof HTMLSelectElement ? select.selectedOptions[0]?.textContent : null;
+    };
+    const presetNames = isChatCompletion
+        ? [selectedName('settings_preset_openai')]
+        : ['sysprompt_select', 'instruct_presets', 'context_presets'].map(id => {
+            const title = ({ sysprompt_select: 'System Prompt', instruct_presets: 'Instruct Template', context_presets: 'Context Template' })[id];
+            const name = selectedName(id);
+            return name ? `${title}: ${name}` : null;
+        });
+    const names = presetNames.filter(Boolean).join(' · ');
+    const meta = root.querySelector('[data-sb-editor-preset]');
+    if (meta.textContent !== names) meta.textContent = names;
+    refreshPresetProtectionUi();
+    for (const group of root.querySelectorAll('.sb-prompting-group:not(#sb-openai-prompt-manager)')) normalizeBackendSettingsRows(group);
+    for (const wrapper of root.querySelectorAll('[data-sb-editor-document]:not(.ds-row)')) wrapper.classList.add('sb-settings-row-wrapper');
+    groupPromptingRowHelpers(root);
+    const tab = getShellState('left')?.tabs.get('editor');
+    if (tab) tab.searchIndex = null;
+}
+
 function preparePromptingPanel(root) {
+    if (root.dataset.sbPromptingPrepared === 'true') return;
+    root.dataset.sbPromptingPrepared = 'true';
     root.classList.add('sb-prompting-panel');
     root.dataset.sbPresentation = 'manual';
     const completionTabs = /** @type {{openAITabManager?: {refreshTabs: () => void}}|undefined} */ (window['ChatCompletionTabs']);
@@ -10052,20 +10344,10 @@ function preparePromptingPanel(root) {
     const configuration = root.querySelector('#ai_response_configuration');
     if (!(configuration instanceof HTMLElement)) return;
 
-    const disclaimer = createElement('div', { className: 'sb-backend-disclaimer', attrs: { 'data-sb-prompting-disclaimer': '' } });
-    const disclaimerCopy = createElement('p', { text: 'Note: advanced settings can be found in Formatting.' });
-    const context = createElement('button', {
-        className: 'menu_button',
-        text: 'Formatting',
-        attrs: { type: 'button', 'data-sb-prompting-formatting': '' },
-    });
-    context.addEventListener('click', () => openShell('left', 'context'));
-    disclaimer.append(disclaimerCopy, context);
     const header = createBackendSectionHeader({
         description: 'lorum ipsum',
         modeAttrs: { 'data-sb-prompting-mode': '' },
         descriptionAttrs: { 'data-sb-copy-placeholder': 'true' },
-        disclaimer,
     });
     configuration.prepend(header);
     const presetsContainer = configuration.querySelector('#respective-presets-block');
@@ -10086,6 +10368,13 @@ function preparePromptingPanel(root) {
         for (const child of [...block.children].slice(1)) body.append(child);
         block.append(body);
     }
+    const editPrompts = createElement('button', {
+        className: 'menu_button sb-action-btn sb-backend-navigation-pill sb-edit-prompts',
+        text: 'Edit prompts',
+        attrs: { type: 'button', 'data-sb-edit-prompts': '', 'data-i18n': 'Edit prompts' },
+    });
+    editPrompts.addEventListener('click', () => openShell('left', 'editor'));
+    presetsContainer?.after(editPrompts);
     const generation = configuration.querySelector('#pro-settings-block');
     if (generation instanceof HTMLElement) {
         for (const id of ['streaming_textgenerationwebui_block', 'streaming_kobold_block', 'streaming_novel_block']) {
@@ -10097,11 +10386,7 @@ function preparePromptingPanel(root) {
     const createPromptingGroup = (id, title) => {
         const existing = configuration.querySelector(`#${CSS.escape(id)}`);
         if (existing instanceof HTMLElement) return existing;
-        const group = createElement('section', { id, className: 'sb-prompting-group' });
-        group.append(
-            createElement('h3', { className: 'ds-pref-group-heading', text: title }),
-            createElement('div', { className: 'ds-pref-group sb-prompting-group-body' }),
-        );
+        const group = createBackendPromptGroup(id, title);
         configuration.append(group);
         return group;
     };
@@ -10112,6 +10397,7 @@ function preparePromptingPanel(root) {
         ['sb-tc-context', 'Context Template'],
         ['sb-tc-names', 'Character Names'],
         ['sb-reply-prefill', 'Reply Prefill'],
+        ['sb-reasoning-template', 'Reasoning Template'],
     ]) createPromptingGroup(id, title);
 
     // SillyBunny: keep range_block_openai around its groups for provider visibility and preset lookups.
@@ -10131,26 +10417,27 @@ function updatePromptingPanel(panel) {
     const mode = root.querySelector('[data-sb-prompting-mode]');
     const modeLabel = `Backend: ${backend?.title ?? activeApi}`;
     if (mode && mode.textContent !== modeLabel) mode.textContent = modeLabel;
-    const disclaimer = root.querySelector('[data-sb-prompting-disclaimer]');
-    if (disclaimer instanceof HTMLElement) disclaimer.hidden = false;
-    for (const selector of ['[name="bindModelPresetBlock"]', '#AdvancedFormatting > .flex-container.alignItemsBaseline > .flex-container[data-cc-null]']) {
-        const tcPresetControl = root.querySelector(selector) ?? document.querySelector(selector);
-        if (tcPresetControl instanceof HTMLElement) tcPresetControl.hidden = activeApi === 'openai';
-    }
+    const bindModelPresetBlock = root.querySelector('[name="bindModelPresetBlock"]') ?? document.querySelector('[name="bindModelPresetBlock"]');
+    if (bindModelPresetBlock instanceof HTMLElement) bindModelPresetBlock.hidden = activeApi === 'openai';
 
     flattenNestedSettingsDrawers(root, { includeTopLevel: true });
+    updateEditorPanel();
     const range = root.querySelector('#range_block_openai');
-    const managerGroup = root.querySelector('#sb-openai-prompt-manager');
-    const managerBlock = root.querySelector('#completion_prompt_manager')?.closest('.range-block');
-    // The Prompt Manager can mount after OpenAI's grouping pass; adopt its original live wrapper.
-    if (managerGroup instanceof HTMLElement && managerBlock instanceof HTMLElement && !managerGroup.contains(managerBlock)) {
-        (managerGroup.querySelector(':scope > .sb-prompting-group-body') ?? managerGroup).append(managerBlock);
-        managerGroup.style.display = '';
+    // SillyBunny: Quick Prompts remain mounted for upstream integrations; the Prompt Manager is their single editor.
+    const quickPrompts = root.querySelector('#sb-openai-prompts');
+    if (quickPrompts instanceof HTMLElement) quickPrompts.hidden = true;
+    const reasoningBody = root.querySelector('#sb-reasoning-template > .sb-prompting-group-body');
+    const reasoningDetails = document.getElementById('reasoning_select')?.closest('details');
+    if (reasoningBody instanceof HTMLElement && reasoningDetails instanceof HTMLElement) {
+        for (const child of [...reasoningDetails.children]) {
+            if (child.tagName !== 'SUMMARY') reasoningBody.append(child);
+        }
+        reasoningDetails.hidden = true;
     }
     const isChatCompletion = activeApi === 'openai';
     const promptingGroupIds = [
         'sb-openai-budget', 'sb-openai-sampling', 'sb-openai-names', 'sb-openai-prefill',
-        'sb-openai-request', 'sb-openai-prompt-manager', 'sb-openai-prompts',
+        'sb-openai-request',
         'sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names', 'sb-reply-prefill',
     ];
     for (const id of promptingGroupIds) {
@@ -10180,7 +10467,7 @@ function updatePromptingPanel(panel) {
     // mutation. This function runs from the drawer observer, so a per-group append kept re-triggering the
     // observer every frame and re-flattening the whole Prompting panel in a loop.
     if (range instanceof HTMLElement) {
-        const openAIReadingOrder = ['sb-openai-budget', 'sb-openai-prompt-manager', 'sb-openai-names', 'sb-openai-prefill', 'sb-openai-request', 'sb-openai-prompts'];
+        const openAIReadingOrder = ['sb-openai-budget', 'sb-openai-names', 'sb-openai-prefill', 'sb-openai-request'];
         const orderedGroups = openAIReadingOrder
             .map(id => root.querySelector(`#${id}`))
             .filter(group => group instanceof HTMLElement);
@@ -10207,6 +10494,10 @@ function updatePromptingPanel(panel) {
             anchor = group;
         }
     }
+    const reasoning = root.querySelector('#sb-reasoning-template');
+    const configuration = root.querySelector('#ai_response_configuration');
+    if (reasoning instanceof HTMLElement && configuration instanceof HTMLElement && configuration.lastElementChild !== reasoning) configuration.append(reasoning);
+    if (reasoning instanceof HTMLElement) normalizeBackendSettingsRows(reasoning);
 
     const prefill = root.querySelector('[name="startReplyWithBlock"]') ?? document.querySelector('[name="startReplyWithBlock"]');
     const prefillTarget = root.querySelector(isChatCompletion ? '#sb-openai-prefill' : '#sb-reply-prefill');
@@ -10225,6 +10516,10 @@ function updatePromptingPanel(panel) {
         generationBody.append(textgenSwipes);
     }
     const presets = root.querySelector('#respective-presets-block');
+    const presetsBody = presets?.querySelector(':scope > .sb-prompting-group-body');
+    if (presetsBody instanceof HTMLElement && !presetsBody.querySelector('[data-sb-preset-autosave]')) {
+        presetsBody.append(createPresetAutosaveToggle());
+    }
     if (presets instanceof HTMLElement) normalizeBackendSettingsRows(presets);
     const common = root.querySelector('#common-gen-settings-block');
     if (common instanceof HTMLElement) {
@@ -10237,6 +10532,7 @@ function updatePromptingPanel(panel) {
     hideEmptyGroupedSettingsDrawers();
     mergeOpenAIPresetToolbarRow(root);
     enhancePresetActionButtons(root);
+    placeSharedPresetControls(root, activeApi);
     groupPromptingRowHelpers(root);
     // Batch writes and reads: interleaving `hidden` writes with checkVisibility() forces a style and
     // layout flush per group, which is what made opening Prompting drop frames on slower devices.
@@ -10244,7 +10540,7 @@ function updatePromptingPanel(panel) {
     for (const group of root.querySelectorAll('.sb-openai-settings-drawer, .sb-textgen-drawers > .sb-settings-flat-section, .sb-prompting-group')) {
         if (!(group instanceof HTMLElement)) continue;
         if (group.id === 'sb-reply-prefill' && isChatCompletion) continue;
-        const shouldHideByMode = group.id === 'sb-openai-sampling'
+        const shouldHideByMode = ['sb-openai-sampling', 'sb-openai-prompts'].includes(group.id)
             || (group.id.startsWith('sb-openai-') && !isChatCompletion)
             || ((group.id.startsWith('sb-tc-') || group.id === 'sb-reply-prefill') && isChatCompletion);
         // The text-generation sampling sections are source containers for the separate Sampling tab,
@@ -10258,6 +10554,8 @@ function updatePromptingPanel(panel) {
     const emptyGroups = measured.filter(group => ![...group.querySelectorAll('input:not([type="hidden"]), select, textarea, button, .menu_button, [name="startReplyWithBlock"]')]
         .some(control => control instanceof HTMLElement && (control.checkVisibility?.() ?? control.getClientRects().length > 0)));
     for (const group of emptyGroups) group.hidden = true;
+    const tab = getShellState('left')?.tabs.get('prompting');
+    if (tab) tab.searchIndex = null;
 }
 
 function getImporterState() {
@@ -10429,6 +10727,7 @@ function groupAdvancedFormattingIntoDrawers() {
     }
 
     positionAdvancedFormattingHelpLink();
+    updateEditorPanel();
     updatePromptingPanel(prompting);
 }
 
@@ -12144,6 +12443,31 @@ function updateThemePickerUi() {
     }
 }
 
+/**
+ * The sections the subpage stacks around `searchRoot` present as rows, with each row's label.
+ *
+ * A stack keeps its closed sections in the hidden store, moves the open one into its detail page,
+ * and moves the panel's own chrome into its list heading. Once a stack is mounted none of that is
+ * inside the tab's search root, so the headings are returned as extra roots alongside the sections.
+ */
+function getSubpageSearchRoots(searchRoot) {
+    const sections = new Map();
+    const headings = [];
+    for (const stack of sbSubpageStacks.values()) {
+        if (!stack.host.contains(searchRoot) && !searchRoot.contains(stack.host)) {
+            continue;
+        }
+        headings.push(stack.listHeading);
+        for (const row of stack.rows) {
+            const source = row.source?.();
+            if (source instanceof HTMLElement) {
+                sections.set(source, row.label);
+            }
+        }
+    }
+    return { sections, headings };
+}
+
 function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
     const searchRoot = tabState.searchRoot;
     if (!(searchRoot instanceof HTMLElement)) {
@@ -12152,20 +12476,18 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
 
     const entries = [];
     const seen = new Set();
-    // SillyBunny: subpage store children are hidden by CSS; clicking a search result that lands
-    // inside the store bypasses the subpage stack and triggers jQuery slideToggle on the old
-    // inline-drawer, injecting display:block and freezing the page. The row labels rendered
-    // outside the store already cover every section as the correct entry point.
     const excludedSelector = [
         '.sb-search-result',
         '.sb-legacy-search-hidden',
         // Unwritten placeholder copy is not a setting.
         SB_SEARCH_PLACEHOLDER_SELECTOR,
         ...(includeThemeCard ? ['.sb-mobile-quick-actions-group', '.sb-desktop-quick-actions-group'] : ['.sb-theme-card']),
-        `.${SB_SUBPAGE_STORE_CLASS}`,
     ].join(', ');
+    const { sections: subpageSections, headings: subpageHeadings } = getSubpageSearchRoots(searchRoot);
+    const searchRoots = [searchRoot, ...subpageHeadings, ...subpageSections.keys()]
+        .filter((root, index) => index === 0 || !searchRoot.contains(root));
 
-    for (const element of searchRoot.querySelectorAll(SB_SEARCH_TARGET_SELECTOR)) {
+    for (const element of searchRoots.flatMap(root => Array.from(root.querySelectorAll(SB_SEARCH_TARGET_SELECTOR)))) {
         if (!(element instanceof HTMLElement)) {
             continue;
         }
@@ -12174,7 +12496,21 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
             continue;
         }
 
-        const sectionLabel = getSearchSectionLabel(element, tabState.label);
+        // SillyBunny: the subpage store is hidden by CSS, and a match there is only reachable
+        // through the row that moves its section onto the detail page (see revealSearchMatch).
+        // Store content no row presents has no way on screen, so it is left out.
+        let subpageLabel = null;
+        for (const [section, label] of subpageSections) {
+            if (section.contains(element)) {
+                subpageLabel = label;
+                break;
+            }
+        }
+        if (subpageLabel === null && element.closest(`.${SB_SUBPAGE_STORE_CLASS}`)) {
+            continue;
+        }
+
+        const sectionLabel = subpageLabel ?? getSearchSectionLabel(element, tabState.label);
         const searchText = getSearchText(element, sectionLabel);
         const displayText = getSearchDisplayText(element, sectionLabel);
         const dedupeKey = getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element });
@@ -12364,7 +12700,7 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
 }
 
 function isBackendSearchEntryAvailable(entry, tabState) {
-    if (!['sampling', 'prompting'].includes(tabState.id)) return true;
+    if (!['sampling', 'prompting', 'editor'].includes(tabState.id)) return true;
     if (!(entry.element instanceof HTMLElement) || !tabState.searchRoot.contains(entry.element)) return false;
     for (let element = entry.element; element && element !== tabState.searchRoot; element = element.parentElement) {
         if (element.hidden || getComputedStyle(element).display === 'none') return false;
@@ -12783,6 +13119,11 @@ function revealSearchMatch(shellKey, match) {
                 }, slideDelay + 40);
                 return;
             }
+            // The match is in the list page's own chrome, which a detail page covers: put the list
+            // back before scrolling it, or the scroll would move a page nobody can see.
+            if (stack.isOpen()) {
+                stack.close({ instant: true });
+            }
             if (match.element instanceof HTMLElement) {
                 scrollElementIntoManagedView(match.element, {
                     block: 'center',
@@ -13068,6 +13409,20 @@ function buildShell(shellKey) {
                 window.requestAnimationFrame(() => updatePromptingPanel(promptingPanel.panel));
             });
             registerShellTab(shellKey, customTab, promptingPanel, originalContent);
+            continue;
+        }
+
+        if (shellKey === 'left' && customTab.id === 'editor') {
+            // Build eagerly so template adoption never parks text bodies in an unmounted workspace.
+            const editorPanel = buildEditorPanel();
+            registerShellTab(shellKey, customTab, editorPanel, editorPanel.searchRoot);
+            $(document).on('change.sbEditorPanel input.sbEditorPanel', '#settings_preset_openai, #sysprompt_select, #instruct_presets, #context_presets, #sysprompt_enabled', () => {
+                window.requestAnimationFrame(() => updateEditorPanel(editorPanel.panel));
+            });
+            const systemBlock = document.getElementById('SystemPromptBlock');
+            if (systemBlock instanceof HTMLElement) {
+                new MutationObserver(() => updateEditorPanel(editorPanel.panel)).observe(systemBlock, { attributes: true, attributeFilter: ['class'] });
+            }
             continue;
         }
 
@@ -13953,6 +14308,10 @@ function reflattenRuntimeDrawers() {
         const tabId = panel.dataset.sbPanel;
         if (tabId === 'prompting') {
             updatePromptingPanel(panel);
+            continue;
+        }
+        if (tabId === 'editor' && panel.closest('[data-sb-shell-key="left"]')) {
+            updateEditorPanel(panel);
             continue;
         }
         if (SB_COLLAPSIBLE_DRAWER_TAB_IDS.has(tabId) || isSubpagePanel(tabId) || !panel.querySelector('.inline-drawer')) {
@@ -15129,6 +15488,7 @@ function initAll() {
     initializeMobileShellUi();
     initializeMessageActions();
     initializeToastMotion();
+    initializePresetAutosave();
 
     const sillyBunnyShell = /** @type {any} */ (globalThis.SillyBunnyShell || {});
     globalThis.SillyBunnyShell = Object.assign(sillyBunnyShell, {
@@ -15476,7 +15836,7 @@ function toggleSettingsPage(shellKey, tabId = null) {
  * it is written with `innerHTML` when flagged. Everything else goes through `textContent`, and a
  * tab with no description clears the sub-title rather than leaving the previous one behind.
  *
- * @param {{label?: string, description?: string, descriptionIsHtml?: boolean}|null|undefined} tab
+ * @param {{label?: string, description?: string, descriptionIsHtml?: boolean, descriptionI18n?: string}|null|undefined} tab
  */
 function renderSettingsPageHeading(tab) {
     const titleEl = document.getElementById('sb-settings-content-title');
@@ -15488,6 +15848,8 @@ function renderSettingsPageHeading(tab) {
         return;
     }
     const description = tab?.description ?? '';
+    if (tab?.descriptionI18n) subtitleEl.setAttribute('data-i18n', tab.descriptionI18n);
+    else subtitleEl.removeAttribute('data-i18n');
     if (tab?.descriptionIsHtml === true) {
         subtitleEl.innerHTML = description;
     } else {
