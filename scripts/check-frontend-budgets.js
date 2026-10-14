@@ -10,8 +10,10 @@ const indexPath = path.join(repoRoot, 'public', 'index.html');
 const publicRoot = path.join(repoRoot, 'public');
 
 const budgets = Object.freeze({
-    blockingStylesheetCount: 16,
-    blockingStylesheetBytes: 1024 * 1024,
+    // 17 covers the fork's sillybunny-character-creator.css plus PR #870's
+    // sillybunny-color-picker.css; each branch was at the old ceiling of 16 alone.
+    blockingStylesheetCount: 17,
+    blockingStylesheetBytes: 1040 * 1024,
     startupScriptCount: 26,
     startupScriptBytes: 3_600 * 1024,
     extensionLargeAssetBytes: 2_250 * 1024,
