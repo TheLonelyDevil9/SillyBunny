@@ -13,6 +13,7 @@ import { isIOSWebKitPlatform, isLegacyIOSWebKitPlatform } from './mobile-send-bu
 import { initializeMobileBottomBar, syncMobileBottomBar } from './sillybunny-mobile-bottom-bar.js';
 import { initializeMessageActions } from './sillybunny-message-actions.js';
 import { initializeToastMotion } from './sillybunny-toast-motion.js';
+import { initializeColorPickers } from './sillybunny-color-picker.js';
 import { createPresetAutosaveToggle, initializePresetAutosave, refreshPresetProtectionUi } from './sillybunny-preset-autosave.js';
 import {
     animateIn,
@@ -68,6 +69,7 @@ import { normalizeBackendSettingsRows, normalizeSettingsDetail, normalizeSetting
 import { createSubpageStack, SB_SUBPAGE_DURATION, SB_SUBPAGE_STORE_CLASS } from './sillybunny-settings-subpage.js';
 import { SB_SUBPAGE_BUILDERS } from './sillybunny-settings-subpage-descriptors.js';
 import { createConnectionsPanel } from './sillybunny-connections-panel.js';
+import { initializePromptEditor } from './sillybunny-prompt-editor.js';
 
 const sbMobileShellLifecycle = createMobileShellLifecycle();
 const sbPresetApiSyncLifecycle = createPresetApiSyncLifecycle();
@@ -354,7 +356,9 @@ function enhancePresetActionButtons(root) {
                 button.append(labelNode);
                 button.setAttribute('aria-labelledby', labelId);
             }
-            for (const icon of button.querySelectorAll(':scope > i')) icon.setAttribute('aria-hidden', 'true');
+            for (const icon of button.querySelectorAll(':scope > i')) {
+                if (icon.getAttribute('aria-hidden') !== 'true') icon.setAttribute('aria-hidden', 'true');
+            }
         }
         groupPresetActions(actionContainer);
     }
@@ -408,7 +412,7 @@ function placeSharedPresetControls(root, activeApi) {
             if (fileGroup) fileGroup.after(masterGroup);
             else actions.prepend(masterGroup);
         }
-        masterGroup.hidden = isChatCompletion;
+        if (masterGroup.hidden !== isChatCompletion) masterGroup.hidden = isChatCompletion;
     }
 
     const autosaveRow = root.querySelector('[data-sb-preset-autosave]');
@@ -665,6 +669,9 @@ const SB_SHORTCUT_LABELS = Object.freeze({
     slot6: 'Slot 6 (Desktop)',
 });
 const SB_PANEL_STYLESHEETS = Object.freeze({
+    'left:editor': [
+        { href: 'css/sillybunny-prompt-editor.css', id: 'deferred-prompt-editor-css' },
+    ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
     ],
@@ -10249,6 +10256,7 @@ function buildEditorPanel() {
     const { panel, scroller } = createShellPanel({ id: 'editor' });
     const column = createElement('div', { className: 'sb-shell-column' });
     prepareEditorPanel(column);
+    initializePromptEditor(column);
     scroller.append(column);
     return { panel, scroller, searchRoot: column, onActivate: () => {
         groupAdvancedFormattingIntoDrawers();
@@ -10273,14 +10281,14 @@ function updateEditorPanel(panel = getShellState('left')?.tabs.get('editor')?.pa
         const documentNode = field.closest('[data-sb-editor-document]')
             ?? (wrapperSelector ? field.closest(wrapperSelector) : field.parentElement);
         if (!(documentNode instanceof HTMLElement)) return;
-        documentNode.dataset.sbEditorDocument = 'true';
+        if (documentNode.dataset.sbEditorDocument !== 'true') documentNode.dataset.sbEditorDocument = 'true';
         if (documentNode.parentElement !== body) body.append(documentNode);
     };
 
     const manager = document.getElementById('sb-openai-prompt-manager');
     if (manager instanceof HTMLElement) {
         if (manager.parentElement !== root || manager.previousElementSibling !== root.firstElementChild) root.firstElementChild.after(manager);
-        manager.style.display = '';
+        if (manager.style.display) manager.style.display = '';
         if (!manager.classList.contains('sb-prompting-group')) manager.classList.add('sb-prompting-group');
         // The flatten pass visits descendants, so include the group's outer drawer via its parent.
         flattenNestedSettingsDrawers(root, { includeTopLevel: true });
@@ -10294,7 +10302,7 @@ function updateEditorPanel(panel = getShellState('left')?.tabs.get('editor')?.pa
         }
         const block = document.getElementById('completion_prompt_manager')?.closest('.range-block');
         if (block instanceof HTMLElement && !manager.contains(block)) body.append(block);
-        manager.hidden = !isChatCompletion;
+        if (manager.hidden === isChatCompletion) manager.hidden = !isChatCompletion;
     }
     for (const id of SB_EDITOR_UTILITY_PROMPT_IDS) adoptDocument(id, 'sb-editor-utility', '.range-block');
     for (const id of ['sysprompt_content', 'sysprompt_post_history']) adoptDocument(id, 'sb-editor-sysprompt');
@@ -10307,8 +10315,9 @@ function updateEditorPanel(panel = getShellState('left')?.tabs.get('editor')?.pa
     for (const id of ['sb-editor-utility', 'sb-editor-sysprompt', 'sb-editor-instruct', 'sb-editor-context']) {
         const group = root.querySelector(`#${id}`);
         if (!(group instanceof HTMLElement)) continue;
-        group.hidden = (id === 'sb-editor-utility' ? !isChatCompletion : isChatCompletion)
+        const hidden = (id === 'sb-editor-utility' ? !isChatCompletion : isChatCompletion)
             || !group.querySelector('textarea, select, input');
+        if (group.hidden !== hidden) group.hidden = hidden;
     }
     root.querySelector('#sb-editor-sysprompt').classList.toggle('disabled', document.getElementById('SystemPromptBlock')?.classList.contains('disabled') ?? false);
 
@@ -10328,7 +10337,7 @@ function updateEditorPanel(panel = getShellState('left')?.tabs.get('editor')?.pa
     if (meta.textContent !== names) meta.textContent = names;
     refreshPresetProtectionUi();
     for (const group of root.querySelectorAll('.sb-prompting-group:not(#sb-openai-prompt-manager)')) normalizeBackendSettingsRows(group);
-    for (const wrapper of root.querySelectorAll('[data-sb-editor-document]:not(.ds-row)')) wrapper.classList.add('sb-settings-row-wrapper');
+    for (const wrapper of root.querySelectorAll('[data-sb-editor-document]:not(.ds-row):not(.sb-settings-row-wrapper)')) wrapper.classList.add('sb-settings-row-wrapper');
     groupPromptingRowHelpers(root);
     const tab = getShellState('left')?.tabs.get('editor');
     if (tab) tab.searchIndex = null;
@@ -10396,7 +10405,6 @@ function preparePromptingPanel(root) {
         ['sb-tc-instruct', 'Instruct Template'],
         ['sb-tc-context', 'Context Template'],
         ['sb-tc-names', 'Character Names'],
-        ['sb-reply-prefill', 'Reply Prefill'],
         ['sb-reasoning-template', 'Reasoning Template'],
     ]) createPromptingGroup(id, title);
 
@@ -10418,27 +10426,27 @@ function updatePromptingPanel(panel) {
     const modeLabel = `Backend: ${backend?.title ?? activeApi}`;
     if (mode && mode.textContent !== modeLabel) mode.textContent = modeLabel;
     const bindModelPresetBlock = root.querySelector('[name="bindModelPresetBlock"]') ?? document.querySelector('[name="bindModelPresetBlock"]');
-    if (bindModelPresetBlock instanceof HTMLElement) bindModelPresetBlock.hidden = activeApi === 'openai';
+    if (bindModelPresetBlock instanceof HTMLElement && bindModelPresetBlock.hidden !== (activeApi === 'openai')) bindModelPresetBlock.hidden = activeApi === 'openai';
 
     flattenNestedSettingsDrawers(root, { includeTopLevel: true });
     updateEditorPanel();
     const range = root.querySelector('#range_block_openai');
     // SillyBunny: Quick Prompts remain mounted for upstream integrations; the Prompt Manager is their single editor.
     const quickPrompts = root.querySelector('#sb-openai-prompts');
-    if (quickPrompts instanceof HTMLElement) quickPrompts.hidden = true;
+    if (quickPrompts instanceof HTMLElement && !quickPrompts.hidden) quickPrompts.hidden = true;
     const reasoningBody = root.querySelector('#sb-reasoning-template > .sb-prompting-group-body');
     const reasoningDetails = document.getElementById('reasoning_select')?.closest('details');
     if (reasoningBody instanceof HTMLElement && reasoningDetails instanceof HTMLElement) {
         for (const child of [...reasoningDetails.children]) {
             if (child.tagName !== 'SUMMARY') reasoningBody.append(child);
         }
-        reasoningDetails.hidden = true;
+        if (!reasoningDetails.hidden) reasoningDetails.hidden = true;
     }
     const isChatCompletion = activeApi === 'openai';
     const promptingGroupIds = [
         'sb-openai-budget', 'sb-openai-sampling', 'sb-openai-names', 'sb-openai-prefill',
         'sb-openai-request',
-        'sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names', 'sb-reply-prefill',
+        'sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names',
     ];
     for (const id of promptingGroupIds) {
         const group = root.querySelector(`#${id}`);
@@ -10457,9 +10465,10 @@ function updatePromptingPanel(panel) {
             group.append(body);
         }
         normalizeBackendSettingsRows(group);
-        const isTcGroup = id.startsWith('sb-tc-') || id === 'sb-reply-prefill';
+        const isTcGroup = id.startsWith('sb-tc-');
         const isCcGroup = id.startsWith('sb-openai-');
-        group.hidden = id === 'sb-openai-sampling' || (isTcGroup ? isChatCompletion : isCcGroup ? !isChatCompletion : false);
+        const hidden = id === 'sb-openai-sampling' || (isTcGroup ? isChatCompletion : isCcGroup ? !isChatCompletion : false);
+        if (group.hidden !== hidden) group.hidden = hidden;
     }
     // SillyBunny: the Prompt Manager may mount late, so restore the complete Chat Completions order on every update.
     // The check must be "is the tail already in this order", not "is this group last yet": `append` on a
@@ -10481,7 +10490,7 @@ function updatePromptingPanel(panel) {
         }
     }
 
-    const tcOrder = ['sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names', 'sb-reply-prefill'];
+    const tcOrder = ['sb-tc-sysprompt', 'sb-tc-instruct', 'sb-tc-context', 'sb-tc-names'];
     const commonGroup = root.querySelector('#common-gen-settings-block');
     if (commonGroup instanceof HTMLElement) {
         let anchor = commonGroup;
@@ -10498,15 +10507,6 @@ function updatePromptingPanel(panel) {
     const configuration = root.querySelector('#ai_response_configuration');
     if (reasoning instanceof HTMLElement && configuration instanceof HTMLElement && configuration.lastElementChild !== reasoning) configuration.append(reasoning);
     if (reasoning instanceof HTMLElement) normalizeBackendSettingsRows(reasoning);
-
-    const prefill = root.querySelector('[name="startReplyWithBlock"]') ?? document.querySelector('[name="startReplyWithBlock"]');
-    const prefillTarget = root.querySelector(isChatCompletion ? '#sb-openai-prefill' : '#sb-reply-prefill');
-    if (prefill instanceof HTMLElement && prefillTarget instanceof HTMLElement) {
-        const body = prefillTarget.querySelector(':scope > .sb-prompting-group-body') ?? prefillTarget;
-        if (prefill.parentElement !== body) body.append(prefill);
-        prefill.hidden = false;
-        prefillTarget.hidden = false;
-    }
 
     // SillyBunny: the multiple-swipes control is authored as a data-tg-samplers wrapper,
     // not a range-block. Move only that wrapper into the shared Generation Settings group.
@@ -10525,7 +10525,7 @@ function updatePromptingPanel(panel) {
     if (common instanceof HTMLElement) {
         const contextRow = common.querySelector('#max_context_block');
         const quickContext = contextRow?.querySelector('.quick_context_size_container');
-        if (quickContext && contextRow) contextRow.after(quickContext);
+        if (quickContext && contextRow && contextRow.nextElementSibling !== quickContext) contextRow.after(quickContext);
         normalizeBackendSettingsRows(common);
     }
     normalizeBackendSettingsRows(root, { fields: false });
@@ -10539,19 +10539,18 @@ function updatePromptingPanel(panel) {
     const measured = [];
     for (const group of root.querySelectorAll('.sb-openai-settings-drawer, .sb-textgen-drawers > .sb-settings-flat-section, .sb-prompting-group')) {
         if (!(group instanceof HTMLElement)) continue;
-        if (group.id === 'sb-reply-prefill' && isChatCompletion) continue;
         const shouldHideByMode = ['sb-openai-sampling', 'sb-openai-prompts'].includes(group.id)
             || (group.id.startsWith('sb-openai-') && !isChatCompletion)
-            || ((group.id.startsWith('sb-tc-') || group.id === 'sb-reply-prefill') && isChatCompletion);
+            || (group.id.startsWith('sb-tc-') && isChatCompletion);
         // The text-generation sampling sections are source containers for the separate Sampling tab,
         // not Prompting content; only their live controls belong in the sampling cards.
         const isSamplingSourceGroup = group.matches('.sb-textgen-drawers > .sb-settings-flat-section');
-        const hidesWhenEmpty = group.id.startsWith('sb-openai-') || group.id.startsWith('sb-tc-') || group.id === 'sb-reply-prefill';
+        const hidesWhenEmpty = group.id.startsWith('sb-openai-') || group.id.startsWith('sb-tc-');
         const hidden = shouldHideByMode || isSamplingSourceGroup;
         if (group.hidden !== hidden) group.hidden = hidden;
         if (hidesWhenEmpty && !hidden) measured.push(group);
     }
-    const emptyGroups = measured.filter(group => ![...group.querySelectorAll('input:not([type="hidden"]), select, textarea, button, .menu_button, [name="startReplyWithBlock"]')]
+    const emptyGroups = measured.filter(group => ![...group.querySelectorAll('input:not([type="hidden"]), select, textarea, button, .menu_button')]
         .some(control => control instanceof HTMLElement && (control.checkVisibility?.() ?? control.getClientRects().length > 0)));
     for (const group of emptyGroups) group.hidden = true;
     const tab = getShellState('left')?.tabs.get('prompting');
@@ -10625,8 +10624,22 @@ function setServerAdminMessage(element, message, tone = 'neutral') {
 function groupAdvancedFormattingIntoDrawers() {
     const formatting = document.getElementById('AdvancedFormatting');
     if (!(formatting instanceof HTMLElement)) return;
+    const groupOrder = ['sb-af-tokenizer', 'sb-af-stopping', 'sb-af-reply-prefix', 'sb-af-cleanup', 'sb-af-reasoning', 'sb-af-rendering'];
+    const orderGroups = () => {
+        const groups = groupOrder.map(id => formatting.querySelector(`#${id}`)).filter(group => group instanceof HTMLElement);
+        const currentGroups = [...formatting.children].filter(child => child.classList.contains('sb-formatting-group'));
+        if (groups.length === currentGroups.length && groups.every((group, index) => group === currentGroups[index])) return;
+        for (const group of groups) formatting.append(group);
+    };
     if (formatting.dataset.sbGrouped === 'true') {
-        updateFormattingGroupVisibility(formatting);
+        const replyPrefixBody = formatting.querySelector('#sb-af-reply-prefix > .sb-prompting-group-body');
+        const startReplyWith = formatting.querySelector('[name="startReplyWithBlock"]');
+        if (startReplyWith instanceof HTMLElement && replyPrefixBody instanceof HTMLElement && startReplyWith.parentElement !== replyPrefixBody) {
+            startReplyWith.hidden = false;
+            replyPrefixBody.append(startReplyWith);
+        }
+        orderGroups();
+        if (isShellTabOpen('left', 'context')) updateFormattingGroupVisibility(formatting);
         return;
     }
 
@@ -10638,7 +10651,6 @@ function groupAdvancedFormattingIntoDrawers() {
         || !(instructColumn instanceof HTMLElement) || !(systemColumn instanceof HTMLElement)) return;
 
     const startReplyWith = systemColumn.querySelector('[name="startReplyWithBlock"]');
-    if (startReplyWith instanceof HTMLElement) startReplyWith.hidden = true;
 
     const createGroup = (id, title) => {
         const group = createElement('section', { id, className: 'sb-prompting-group sb-formatting-group' });
@@ -10652,6 +10664,7 @@ function groupAdvancedFormattingIntoDrawers() {
     const bodies = new Map([
         ['tokenizer', createGroup('sb-af-tokenizer', 'Tokenizer & Padding')],
         ['stopping', createGroup('sb-af-stopping', 'Stopping Strings')],
+        ['reply-prefix', createGroup('sb-af-reply-prefix', 'Reply Prefix')],
         ['cleanup', createGroup('sb-af-cleanup', 'Text Cleanup')],
         ['reasoning', createGroup('sb-af-reasoning', 'Reasoning')],
         ['rendering', createGroup('sb-af-rendering', 'Rendering')],
@@ -10702,6 +10715,10 @@ function groupAdvancedFormattingIntoDrawers() {
     movePromptingNode(contextColumn.querySelector('#always-force-name2-checkbox')?.closest('label'), 'sb-tc-names');
     moveClosest('[name="tokenizerSettingsBlock"]', bodies.get('tokenizer'));
     moveClosest('div[data-cc-null][data-cc-chat-completion-visible]', bodies.get('stopping'));
+    if (startReplyWith instanceof HTMLElement) {
+        startReplyWith.hidden = false;
+        move(startReplyWith, bodies.get('reply-prefix'));
+    }
     moveClosest('#single_line', bodies.get('cleanup'), 'label');
     moveClosest('#collapse-newlines-checkbox', bodies.get('cleanup'), 'label');
     moveClosest('#trim_spaces', bodies.get('cleanup'), 'label');
@@ -10720,6 +10737,7 @@ function groupAdvancedFormattingIntoDrawers() {
     if (miscHeading instanceof HTMLElement) miscHeading.hidden = true;
     columns.hidden = true;
     formatting.dataset.sbGrouped = 'true';
+    orderGroups();
     updateFormattingGroupVisibility(formatting);
     // Normalize switch semantics for Formatting groups without restructuring.
     for (const body of bodies.values()) {
@@ -14102,7 +14120,8 @@ function setInlineDrawerExpanded(drawer, expand) {
     icon.classList.toggle('fa-circle-chevron-down', !expand);
     icon.classList.toggle('up', expand);
     icon.classList.toggle('fa-circle-chevron-up', expand);
-    content.style.display = expand ? 'block' : 'none';
+    const display = expand ? 'block' : 'none';
+    if (content.style.display !== display) content.style.display = display;
 }
 
 function getLegacySettingsDrawerStorageKey(drawer) {
@@ -14353,7 +14372,12 @@ function ensureInlineDrawerPersistenceObserver() {
         return;
     }
 
-    sbInlineDrawerPersistenceObserver = new MutationObserver(() => queueInlineDrawerPersistenceBind());
+    sbInlineDrawerPersistenceObserver = new MutationObserver(mutations => {
+        // Only newly authored drawers need binding/flattening, not token or autosave text updates.
+        const addedDrawer = mutations.some(mutation => [...mutation.addedNodes].some(node => node instanceof Element
+            && (node.matches('.inline-drawer') || node.querySelector('.inline-drawer'))));
+        if (addedDrawer) queueInlineDrawerPersistenceBind();
+    });
     for (const root of roots) {
         sbInlineDrawerPersistenceObserver.observe(root, { childList: true, subtree: true });
     }
@@ -15386,6 +15410,10 @@ function initAll() {
     sbState.initObserver = null;
     sbState.initialized = true;
 
+    // Sizzle caches compiled selectors, not DOM results. Its default 50-entry cache thrashes across
+    // the shell's 120+ delegated input selectors, recompiling them for every keystroke.
+    if (window.jQuery?.expr) window.jQuery.expr.cacheLength = Math.max(window.jQuery.expr.cacheLength, 512);
+
     restorePersistedTopbarState();
     migrateLegacyNavigationState();
     seedTopbarScaleDefaults();
@@ -15486,6 +15514,7 @@ function initAll() {
     initializeMobileShellUi();
     initializeMessageActions();
     initializeToastMotion();
+    initializeColorPickers();
     initializePresetAutosave();
 
     const sillyBunnyShell = /** @type {any} */ (globalThis.SillyBunnyShell || {});
