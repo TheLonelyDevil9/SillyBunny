@@ -341,6 +341,16 @@ import { compressRequest, setRequestCompressionConfig } from './scripts/request-
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import { bindIOSFastTapSendButton, isIOSWebKitPlatform } from './scripts/mobile-send-button.js';
 import { DELETE_CHOICE, confirmMessageDeletion } from './scripts/sillybunny-delete-confirm.js';
+// SillyBunny: character editor controller (Step 3b, feat/v1.9.0-ui-overhaul)
+import {
+    beginCharacterEditorLoad,
+    loadCharacterEditorGreetings,
+    openCharacterEditorSession,
+    openCharacterEditorCreateSession,
+    markCharacterEditorSaved,
+    getCharacterEditorAlternateGreetings,
+    getCharacterEditorGroupGreetings,
+} from './scripts/sillybunny-character-editor.js';
 import { formatMobileStreamingPreview, getMobileStreamingBottomPinBehavior, getStreamingUpdateInterval, isAndroidStreamingPlatform, shouldReduceStreamingDomWork, shouldUsePlainTextStreamingPreview } from './scripts/mobile-streaming.js';
 import { fetchResumable, registerGenerationCommitPlan } from './scripts/resumable-generation.js';
 import { getMessageIdentity } from './scripts/generation-commit-plan.js';
@@ -923,6 +933,8 @@ export let create_save = {
     world: '',
     talkativeness: talkativeness_default,
     alternate_greetings: [],
+    group_only_greetings: [],
+    nickname: '',
     depth_prompt_prompt: '',
     depth_prompt_depth: depth_prompt_depth_default,
     depth_prompt_role: depth_prompt_role_default,
@@ -10892,6 +10904,10 @@ export function activateSendButtons({ emitGenerationEnded = true } = {}) {
     if (!lockState.shouldShowStopButton) {
         hideStopButton({ emitGenerationEnded });
     }
+    // SillyBunny: restore the disabled offline affordance after generation without waiting for a status change.
+    if (online_status === 'no_connection' && !lockState.shouldShowStopButton && !(selected_group && is_group_generating)) {
+        document.getElementById?.('send_but')?.classList?.remove('displayNone');
+    }
     if (!lockState.shouldHideSwipeButtons) {
         showSwipeButtons();
     }
@@ -10939,11 +10955,6 @@ export function resetChatState() {
  */
 export function setMenuType(value) {
     const rightNavPanel = document.getElementById('right-nav-panel');
-
-    if (rightNavPanel instanceof HTMLElement && value !== 'character_edit' && value !== 'create') {
-        rightNavPanel.classList.remove('sb-character-editor-fullscreen');
-        rightNavPanel.dataset.sbCharacterEditorFullscreen = 'false';
-    }
 
     menu_type = value;
     // Allow custom CSS to see which menu type is active
@@ -14621,25 +14632,11 @@ function getEditableAlternateGreetings() {
     return characters[chid].data.alternate_greetings;
 }
 
-function getSubmittedAlternateGreetings() {
-    const greetings = getEditableAlternateGreetings();
-    if (!Array.isArray(greetings)) {
-        return [];
-    }
-
-    const editor = $('#character_greetings_editor');
-    if (!editor.length) {
-        return greetings;
-    }
-
-    const fields = editor.find('.alternate_greeting_text');
-    if (!fields.length) {
-        return greetings;
-    }
-
-    const currentValues = fields.toArray().map(field => String($(field).val()));
-    greetings.splice(0, greetings.length, ...currentValues);
-    return greetings;
+// SillyBunny: greetings are edited as session drafts in sillybunny-character-editor.js
+// and only reach the entity through a save. Reading the DOM here returned the stale
+// entity list whenever every row had been deleted (no fields to read).
+function getSubmittedAlternateGreetings(targetAvatar) {
+    return getCharacterEditorAlternateGreetings(targetAvatar);
 }
 
 function syncAlternateGreetingsEditor() {
@@ -14887,6 +14884,8 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#add_avatar_button').val('');
     $('#avatar_div').css('display', 'flex');
 
+    // SillyBunny: flush pending draft before overwriting fields (Step 3b)
+    beginCharacterEditorLoad();
     $('#character_name_pole').val(characters[chid].name);
     $('#description_textarea').val(characters[chid].description);
     $('#character_world').val(characters[chid].data?.extensions?.world || '');
@@ -14922,7 +14921,9 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     $('#set_character_world').data('chid', chid);
     setWorldInfoButtonClass(chid);
     checkEmbeddedWorld(chid);
-    syncAlternateGreetingsEditor();
+    // SillyBunny: controller renders greetings and opens edit session (Step 3b)
+    loadCharacterEditorGreetings(chid, 'edit');
+    openCharacterEditorSession(chid);
     focusUiSurface(document.getElementById('right-nav-panel'));
 
     $('#name_div').removeClass('displayNone');
@@ -14980,7 +14981,10 @@ function select_rm_create({ switchMenu = true, resetForm = true } = {}) {
     //create text poles
     $('#rm_button_back').css('display', '');
     $('#character_import_button').css('display', '');
+    // SillyBunny: flush pending draft before overwriting fields (Step 3b)
+    beginCharacterEditorLoad();
     $('#character_name_pole').val(create_save.name);
+    $('#character_nickname_pole').val(create_save.nickname || '');
     $('#description_textarea').val(create_save.description);
     $('#character_world').val(create_save.world);
     $('#creator_notes_textarea').val(create_save.creator_notes);
@@ -15010,7 +15014,9 @@ function select_rm_create({ switchMenu = true, resetForm = true } = {}) {
     setWorldInfoButtonClass(undefined, !!create_save.world);
     updateFavButtonState(false);
     checkEmbeddedWorld();
-    syncAlternateGreetingsEditor();
+    // SillyBunny: controller renders greetings and opens create session (Step 3b)
+    loadCharacterEditorGreetings(null, 'create');
+    openCharacterEditorCreateSession();
     focusUiSurface(document.getElementById('right-nav-panel'));
 
     $('#form_create').attr('actiontype', 'createcharacter');
@@ -15835,9 +15841,12 @@ export async function createOrEditCharacter(e) {
             }
 
             formData.delete('alternate_greetings');
-            for (const value of getSubmittedAlternateGreetings()) {
+            for (const value of getSubmittedAlternateGreetings(null)) {
                 formData.append('alternate_greetings', value);
             }
+            // SillyBunny: group-only greetings (Step 3b)
+            formData.delete('group_only_greetings');
+            formData.set('group_only_greetings', JSON.stringify(getCharacterEditorGroupGreetings(null)));
 
             formData.append('extensions', JSON.stringify(create_save.extensions));
 
@@ -15908,6 +15917,8 @@ export async function createOrEditCharacter(e) {
             await getCharacters();
 
             select_rm_info('char_create', avatarId, oldSelectedChar);
+            // SillyBunny: clear new-character draft after successful create (Step 3b)
+            markCharacterEditorSaved();
 
             crop_data = undefined;
         } catch (error) {
@@ -15922,10 +15933,15 @@ export async function createOrEditCharacter(e) {
                 url += `?crop=${encodeURIComponent(JSON.stringify(crop_data))}`;
             }
 
+            // SillyBunny: submit the drafts only when they belong to the card being saved.
+            const greetingsAvatar = String(formData.get('avatar_url') ?? '');
             formData.delete('alternate_greetings');
-            for (const value of getSubmittedAlternateGreetings()) {
+            for (const value of getSubmittedAlternateGreetings(greetingsAvatar)) {
                 formData.append('alternate_greetings', value);
             }
+            // SillyBunny: group-only greetings (Step 3b)
+            formData.delete('group_only_greetings');
+            formData.set('group_only_greetings', JSON.stringify(getCharacterEditorGroupGreetings(greetingsAvatar)));
 
             const editedAvatar = String(formData.get('avatar_url') ?? '');
             const editedCharacter = characters.find(character => character?.avatar === editedAvatar) ?? characters[this_chid];
@@ -15965,6 +15981,8 @@ export async function createOrEditCharacter(e) {
             );
             $('#create_button').attr('value', 'Save');
             crop_data = undefined;
+            // SillyBunny: recapture baseline after successful edit (Step 3b)
+            markCharacterEditorSaved();
             const editedId = characters.findIndex(character => character.avatar === editedAvatar);
             await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: editedId, character: characters[editedId] } });
 
@@ -17267,10 +17285,9 @@ function initCharacterSearch() {
 
 // MARK: DOM Handlers Start
 jQuery(async function () {
-    setTimeout(function () {
-        $('#groupControlsToggle').trigger('click');
-        $('#groupCurrentMemberListToggle .inline-drawer-icon').trigger('click');
-    }, 200);
+    // SillyBunny: the group editor's sections are always open in the scrolling
+    // sheet, so the upstream "expand the drawers on open" pre-clicks are gone
+    // with the drawer markup (Step 4).
 
     $(document).on('click', '.api_loading', () => {
         cancelStatusCheck('Canceled because connecting was manually canceled');
@@ -17366,6 +17383,10 @@ jQuery(async function () {
     const userInputGenerateMutex = new SimpleMutex(sendTextareaMessage);
     const sendButtonElement = document.getElementById('send_but');
     bindIOSFastTapSendButton(sendButtonElement, async () => {
+        // SillyBunny: the offline Send control stays visible; reject activation before draft or chat mutation.
+        if (online_status === 'no_connection' || online_status === undefined) {
+            return;
+        }
         await userInputGenerateMutex.update();
     }, { isIOS: isIOSFocusSensitiveBrowser });
 
@@ -17696,6 +17717,12 @@ jQuery(async function () {
         }
     });
 
+    $('#character_nickname_pole').on('input', function () {
+        if (menu_type == 'create') {
+            create_save.nickname = String($('#character_nickname_pole').val());
+        }
+    });
+
     const elementsToUpdate = {
         '#description_textarea': function () { create_save.description = String($('#description_textarea').val()); },
         '#creator_notes_textarea': function () { create_save.creator_notes = String($('#creator_notes_textarea').val()); },
@@ -17718,9 +17745,8 @@ jQuery(async function () {
         $(id).on('input', function () {
             if (menu_type == 'create') {
                 elementsToUpdate[id]();
-            } else {
-                saveCharacterDebounced();
             }
+            // SillyBunny: edit mode uses explicit save; controller dirty listener handles state (Step 3b)
         });
     });
 
@@ -17732,9 +17758,7 @@ jQuery(async function () {
 
     $('#favorite_button').on('click', function () {
         updateFavButtonState(!fav_ch_checked);
-        if (menu_type != 'create') {
-            saveCharacterDebounced();
-        }
+        // SillyBunny: explicit-save model; controller marks dirty via requestAnimationFrame (Step 3b)
     });
 
     /* $("#renameCharButton").on('click', renameCharacter); */

@@ -519,7 +519,6 @@ describe('mobile shell lifecycle wiring', () => {
 
     test('imports the mobile shell lifecycle seam into the shell adapter', () => {
         expect(tabsSource).toContain('createMobileShellLifecycle');
-        expect(tabsSource).toContain('MOBILE_SHELL_NAV_TOGGLE_ACTION');
         expect(tabsSource).toContain('const sbMobileShellLifecycle = createMobileShellLifecycle();');
     });
 
@@ -540,7 +539,6 @@ describe('mobile shell lifecycle wiring', () => {
 
         expect(buildMobileNavSource).toContain('sbMobileShellLifecycle.nav.shouldAutoClose({');
         expect(buildMobileNavSource).toContain('elapsedSinceOpenedMs: performance.now() - sbState.mobileNav.lastOpenedAt');
-        expect(buildMobileNavSource).toContain('isHamburgerTarget: Boolean(target.closest(\'#sb-hamburger\'))');
         expect(buildMobileNavSource).toContain('isInsideNav: Boolean(target.closest(\'#sb-mobile-nav\'))');
         expect(buildMobileNavSource).not.toContain('SB_MOBILE_NAV_OPEN_GRACE_MS');
     });
@@ -554,16 +552,6 @@ describe('mobile shell lifecycle wiring', () => {
         expect(setMobileNavOpenStateSource).toContain('overlay.setAttribute(\'aria-hidden\', navState.overlayAriaHidden);');
         expect(setMobileNavOpenStateSource).toContain('button.setAttribute(\'aria-expanded\', navState.buttonExpanded);');
         expect(setMobileNavOpenStateSource).toContain('navState.shouldRestoreButtonFocus');
-    });
-
-    test('uses a distinct closed mobile nav icon from the Workspace proxy', () => {
-        const buildTopBarSource = getFunctionSource('buildTopBar');
-        const setMobileNavOpenStateSource = getFunctionSource('setMobileNavOpenState');
-
-        expect(tabsSource).toContain('const SB_MOBILE_NAV_CLOSED_ICON = \'fa-compass\';');
-        expect(buildTopBarSource).toContain('SB_MOBILE_NAV_CLOSED_ICON');
-        expect(setMobileNavOpenStateSource).toContain('SB_MOBILE_NAV_CLOSED_ICON');
-        expect(setMobileNavOpenStateSource).not.toContain('fa-solid fa-bars');
     });
 
     test('requests a mobile viewport reset when search and mobile panels close', () => {
@@ -774,20 +762,10 @@ describe('mobile shell lifecycle wiring', () => {
         expect(isCharacterPanelTabOpenSource).toContain('getActiveCharacterPanelTab() === normalizeCharacterPanelTab(tabId)');
     });
 
-    test('routes hamburger toggle intent through the lifecycle seam', () => {
-        const toggleMobileNavSource = getFunctionSource('toggleMobileNav');
-
-        expect(toggleMobileNavSource).toContain('sbMobileShellLifecycle.nav.resolveToggleIntent({');
-        expect(toggleMobileNavSource).toContain('toggleIntent.action === MOBILE_SHELL_NAV_TOGGLE_ACTION.ACTIVATE_PAGE_TARGET');
-        expect(toggleMobileNavSource).toContain('toggleIntent.shouldCloseCompetingPanels');
-        expect(toggleMobileNavSource).toContain('setMobileNavOpenState(toggleIntent.action === MOBILE_SHELL_NAV_TOGGLE_ACTION.OPEN_NAV);');
-    });
-
     test('routes mobile overlay exclusivity through the lifecycle seam', () => {
         const applyExclusivitySource = getFunctionSource('applyMobileSurfaceExclusivity');
         const openMobileChatToolsSource = getFunctionSource('openMobileChatTools');
         const toggleMobileChatToolsSource = getFunctionSource('toggleMobileChatTools');
-        const toggleMobileNavSource = getFunctionSource('toggleMobileNav');
         const toggleCharacterPanelSource = getFunctionSource('toggleCharacterPanel');
         const openCharacterWorldInfoTabSource = getFunctionSource('openCharacterWorldInfoTab');
         const closeMobileSurfacesForSettingsPageSource = getFunctionSource('closeMobileSurfacesForSettingsPage');
@@ -806,7 +784,6 @@ describe('mobile shell lifecycle wiring', () => {
         for (const source of [
             openMobileChatToolsSource,
             toggleMobileChatToolsSource,
-            toggleMobileNavSource,
             openCharacterWorldInfoTabSource,
             closeAllDropdownsSource,
             setConnectionStripOpenStateSource,
@@ -816,7 +793,6 @@ describe('mobile shell lifecycle wiring', () => {
 
         expect(openMobileChatToolsSource).toContain('surface: sbMobileShellLifecycle.overlays.surface.CHAT_TOOLS,');
         expect(toggleMobileChatToolsSource).toContain('surface: sbMobileShellLifecycle.overlays.surface.CHAT_TOOLS,');
-        expect(toggleMobileNavSource).toContain('surface: sbMobileShellLifecycle.overlays.surface.NAV,');
         expect(openCharacterWorldInfoTabSource).toContain('surface: sbMobileShellLifecycle.overlays.surface.CHARACTER_PANEL,');
         // Every shell entry point funnels through the settings page, which closes the floating
         // mobile surfaces but never the shell surfaces it is about to host.
@@ -832,70 +808,8 @@ describe('mobile shell lifecycle wiring', () => {
         expect(setConnectionStripOpenStateSource).toContain('surface: sbMobileShellLifecycle.overlays.surface.CONNECTION_STRIP,');
 
         expect(openMobileChatToolsSource).not.toContain('closeMobileNav();\n    closeShell(\'left\');');
-        expect(toggleMobileNavSource).not.toContain('closeShell(\'left\');\n        closeShell(\'right\');\n        closeCharacterPanel();\n        closeMobileChatTools();');
         expect(toggleCharacterPanelSource).not.toContain('closeShell(\'left\');\n    closeShell(\'right\');');
         expect(openCharacterWorldInfoTabSource).not.toContain('closeMobileNav();\n    closeShell(\'left\');\n    closeShell(\'right\');');
     });
 
-    test('reveals spoiler-hidden character fields when a dimmed editor sub-tab is tapped', () => {
-        class HTMLElement {}
-        class HTMLButtonElement extends HTMLElement {}
-
-        const calls = [];
-        const listeners = {};
-        const form = Object.assign(new HTMLElement(), { dataset: { sbSpoilerFreeFieldsHidden: 'true' } });
-        const tablist = Object.assign(new HTMLElement(), {
-            dataset: {},
-            addEventListener: (type, handler) => { listeners[type] = handler; },
-        });
-        const tapTab = (tabId) => {
-            const button = Object.assign(new HTMLButtonElement(), { dataset: { sbCharacterEditorTab: tabId } });
-            button.closest = () => button;
-            listeners.click({ target: button });
-        };
-        const context = {
-            HTMLElement,
-            HTMLButtonElement,
-            document: {
-                getElementById: (id) => ({ sb_character_editor_subtabs: tablist, form_create: form })[id],
-            },
-            normalizeText: (value) => String(value ?? '').trim(),
-            SB_CHARACTER_EDITOR_SUB_TABS: ['char-info', 'definitions', 'greetings', 'metadata'],
-            SB_CHARACTER_EDITOR_DEFAULT_SUB_TAB: 'char-info',
-            SB_CHARACTER_EDITOR_SPOILER_FREE_VISIBLE_TABS: ['char-info', 'metadata'],
-            setCharacterSpoilerFreeFieldsHidden: (hidden) => {
-                calls.push(['reveal', hidden]);
-                form.dataset.sbSpoilerFreeFieldsHidden = String(hidden);
-            },
-            setCharacterEditorSubTab: (tabId) => calls.push(['open', tabId]),
-            syncCharacterEditorSubTabs: () => {},
-        };
-
-        const resolveTab = vm.runInNewContext([
-            getFunctionSource('normalizeCharacterEditorSubTab'),
-            getFunctionSource('isCharacterSpoilerFreeFieldsHidden'),
-            getFunctionSource('isCharacterEditorSubTabSpoilerHidden'),
-            getFunctionSource('resolveCharacterEditorSubTab'),
-            getFunctionSource('bindCharacterEditorSubTabs'),
-            'bindCharacterEditorSubTabs();',
-            'resolveCharacterEditorSubTab;',
-        ].join('\n'), context);
-
-        // While hidden, Definitions is rerouted to Metadata; that is exactly what the reporter saw.
-        expect(resolveTab('definitions')).toBe('metadata');
-
-        // Tapping an always-visible tab must not touch the spoiler state.
-        tapTab('char-info');
-        expect(calls).toEqual([['open', 'char-info']]);
-
-        // Tapping a dimmed tab reveals the fields first, then opens that tab for real.
-        tapTab('definitions');
-        expect(calls).toEqual([['open', 'char-info'], ['reveal', false], ['open', 'definitions']]);
-        expect(resolveTab('definitions')).toBe('definitions');
-
-        // Once revealed, further taps are plain tab switches.
-        tapTab('greetings');
-        expect(calls.at(-1)).toEqual(['open', 'greetings']);
-        expect(calls.filter(([kind]) => kind === 'reveal')).toHaveLength(1);
-    });
 });

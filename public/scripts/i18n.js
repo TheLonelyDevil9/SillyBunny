@@ -1,5 +1,6 @@
 import { registerDebugFunction } from './power-user.js';
 import { updateSecretDisplay } from './secrets.js';
+import { formatSettingsMacroExamples } from './sillybunny-settings-macros.js';
 
 const storageKey = 'language';
 const overrideLanguage = getStoredLanguage();
@@ -42,8 +43,18 @@ function safeRemoveLocalStorageItem(key) {
     }
 }
 
-/** @type {Set<string>|null} Array of translations keys if they should be tracked - if not tracked then null */
-let trackMissingDynamicTranslate = null;
+/**
+ * Array of translations keys if they should be tracked - if not tracked then null.
+ * @type {Set<string>|null}
+ *
+ * Don't change to let/const! It will break module loading. script.js suspends
+ * module evaluation on a top-level await for the window load event
+ * (script.js:451), so this file's body may not have run yet when a DOM-ready
+ * handler calls t`...`; a let/const binding is still in its temporal dead zone
+ * then and throws, aborting the caller. `localeData` above is var for the same
+ * reason.
+ */
+var trackMissingDynamicTranslate = null;
 
 export const getCurrentLocale = () => localeFile;
 
@@ -203,6 +214,8 @@ function translateElement(element) {
             }
         }
     }
+    // SillyBunny: restore code styling after translation writes subtitle text.
+    formatSettingsMacroExamples(element);
 }
 
 /**
