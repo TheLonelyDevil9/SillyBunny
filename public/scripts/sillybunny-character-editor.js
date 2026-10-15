@@ -443,6 +443,8 @@ const RECOVERED_ACTIONS = [
     { id: 'sb_action_global_styles', label: 'Global Styles', glyph: 'palette', transport: '#creators_note_styles_button' },
     { id: 'sb_action_media_overrides', label: 'External Media', glyph: 'link-slash', transport: '#character_open_media_overrides' },
     { id: 'sb_action_stats', label: 'Character Stats', glyph: 'ranking-star', transport: '.rm_stats_button' },
+    // Fork-only: the Creator's Polish button also lives in the hidden titlebar.
+    { id: 'sb_action_creator_polish', label: 'Polish in Creator', glyph: 'pen-ruler', transport: '#sb_character_creator_polish' },
 ];
 
 /**
@@ -471,7 +473,10 @@ function _buildActionSections() {
     }
 
     const recovered = RECOVERED_ACTIONS
-        .filter(action => document.querySelector(action.transport))
+        .filter(action => {
+            const transport = document.querySelector(action.transport);
+            return transport && !(transport instanceof HTMLButtonElement && transport.disabled);
+        })
         .map(action => ({
             label: translate(action.label),
             icon: `fa-solid fa-${action.glyph}`,
