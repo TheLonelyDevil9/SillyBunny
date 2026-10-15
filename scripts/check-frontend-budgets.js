@@ -10,9 +10,9 @@ const indexPath = path.join(repoRoot, 'public', 'index.html');
 const publicRoot = path.join(repoRoot, 'public');
 
 const budgets = Object.freeze({
-    // 17 covers the fork's sillybunny-character-creator.css plus PR #870's
-    // sillybunny-color-picker.css; each branch was at the old ceiling of 16 alone.
-    blockingStylesheetCount: 17,
+    // 18 covers the fork's sillybunny-character-creator.css plus PR #870's
+    // list-editor and character-editor sheets (its color-picker sheet is deferred).
+    blockingStylesheetCount: 18,
     blockingStylesheetBytes: 1040 * 1024,
     startupScriptCount: 26,
     startupScriptBytes: 3_600 * 1024,
