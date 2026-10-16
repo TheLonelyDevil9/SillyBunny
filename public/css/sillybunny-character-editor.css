@@ -1,3 +1,153 @@
+/* Generic List→Editor shell component.
+   Consumers scope their own list and detail content styles.
+   Layout tokens: --sb-list-editor-sidebar-width is set inline by JS. */
+
+.sb-list-editor {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 15%, transparent);
+    border-radius: var(--sb-radius-card);
+    background: var(--sb-layer-window);
+    color: var(--SmartThemeBodyColor);
+    font-family: var(--mainFontFamily);
+}
+
+@media (prefers-contrast: more) {
+    .sb-list-editor {
+        border-color: color-mix(in srgb, var(--SmartThemeBodyColor) 50%, transparent);
+    }
+}
+
+:is(.sb-list-editor, .sb-list-editor *)[hidden] {
+    display: none !important;
+}
+
+/* --- Sidebar --- */
+
+.sb-list-editor__sidebar {
+    container-type: inline-size;
+    container-name: sb-list-editor-sidebar;
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    background: var(--sb-sidebar-bg);
+    overflow: hidden;
+}
+
+.sb-list-editor[data-open='true'][data-collapsed='false'] .sb-list-editor__sidebar {
+    width: var(--sb-list-editor-sidebar-width);
+}
+
+/* libadwaita drops sidebar tint once collapsed into stacked pages. */
+.sb-list-editor[data-collapsed='true'] .sb-list-editor__sidebar {
+    background: var(--sb-layer-window);
+}
+
+/* --- Divider --- */
+
+.sb-list-editor__divider {
+    position: relative;
+    display: none;
+    flex: none;
+    align-self: stretch;
+    width: 1px;
+    cursor: col-resize;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    z-index: 4;
+}
+
+.sb-list-editor__divider::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--sb-shell-border);
+    pointer-events: none;
+}
+
+.sb-list-editor__divider::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: 50%;
+    width: 12px;
+    transform: translateX(-50%);
+}
+
+.sb-list-editor[data-open='true'][data-collapsed='false'] .sb-list-editor__divider {
+    display: block;
+}
+
+/* --- Detail pane --- */
+
+.sb-list-editor__detail {
+    container-type: inline-size;
+    container-name: sb-list-editor-detail;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--sb-layer-view);
+}
+
+/* Travelling class prevents pointer events during slide animation. */
+.sb-list-editor__detail--travelling {
+    pointer-events: none;
+}
+
+/* --- Status (live region) --- */
+
+.sb-list-editor__status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+/* --- Back button (mobile / collapsed only) --- */
+
+.sb-list-editor__back {
+    display: none;
+}
+
+.sb-list-editor[data-collapsed='true'] .sb-list-editor__back {
+    display: inline-flex;
+}
+
+/* --- Collapse state: hide menu row hints when detail is open --- */
+
+.sb-list-editor[data-open='true'][data-collapsed='false'] .sb-list-editor__row-menu {
+    display: none !important;
+}
+
+.sb-list-editor[data-open='true'][data-collapsed='false'] .sb-list-editor__row-subtitle {
+    display: none;
+}
+
+/* --- Drag handle --- */
+
+.sb-list-editor__drag-handle {
+    cursor: grab;
+}
+
+.sb-list-editor__drag-handle[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 /* SillyBunny editor sheet — shared chrome, character sections, group sections
  * =========================================================================
  * One stylesheet for both explicit-save editors (Step 3b/Step 4). The header,
@@ -90,11 +240,6 @@
     background: var(--sb-flat-active-bg);
 }
 
-.sb-editor-icon-button:focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
-}
-
 /* Toggled / selected state, e.g. the favourite star and quick edit.
    DESIGN.md: selection is an accent ink on a flat selected fill, never a glow. */
 .sb-editor-icon-button[aria-pressed='true'] {
@@ -139,12 +284,7 @@
     font-family: var(--mainFontFamily);
     text-align: start;
     cursor: text;
-    transition: background-color var(--sb-transition-fast);
-}
-
-.sb-editor-title-button:focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 @media (hover: hover) {
@@ -191,11 +331,6 @@
     color: var(--sb-shell-text);
 }
 
-.sb-editor-title-input:focus {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
-}
-
 
 .sb-editor-title-pencil {
     flex: 0 0 auto;
@@ -235,6 +370,7 @@
     font-size: var(--sb-type-meta, 13px);
     color: var(--sb-muted-fg);
     white-space: nowrap;
+    transition: color var(--sb-transition-fast), opacity var(--sb-transition-fast);
 }
 
 .sb-editor-tokens.is-over-budget {
@@ -256,8 +392,6 @@
 }
 
 .sb-editor-tokens__warning:focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
     border-radius: var(--sb-radius-control, 9px);
 }
 
@@ -271,16 +405,16 @@
 .sb-editor-header > :is(#sb_character_editor_cancel, #sb_group_editor_cancel),
 .sb-editor-header > :is(#sb_character_editor_save, #sb_group_editor_save) {
     flex: 0 0 auto;
+    min-height: 38px;
+    margin: 0;
+    padding: 0 16px;
+    border-radius: var(--sb-radius-control, 9px);
 }
 
 /* Primary action. --sb-on-accent resolves to literal black, which is unreadable
    on a dark accent; --sb-on-solid-accent is the token designed for accent fills. */
 .sb-editor-header > :is(#sb_character_editor_save, #sb_group_editor_save) {
-    min-height: 38px;
-    margin: 0;
-    padding: 0 16px;
     border: 0;
-    border-radius: var(--sb-radius-control, 9px);
     background: var(--color-primary, var(--sb-accent));
     color: var(--sb-on-solid-accent);
     font-weight: 600;
@@ -293,31 +427,17 @@
     }
 }
 
-.sb-editor-header > :is(#sb_character_editor_save, #sb_group_editor_save):focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
-}
-
 .sb-editor-header > :is(#sb_character_editor_cancel, #sb_group_editor_cancel) {
-    min-height: 38px;
-    margin: 0;
-    padding: 0 16px;
     border: 1px solid var(--sb-shell-border);
-    border-radius: var(--sb-radius-control, 9px);
     background: transparent;
     color: var(--sb-shell-text);
-    transition: background-color var(--sb-transition-fast);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 @media (hover: hover) {
     .sb-editor-header > :is(#sb_character_editor_cancel, #sb_group_editor_cancel):not(:disabled):hover {
         background: var(--sb-flat-hover-bg);
     }
-}
-
-.sb-editor-header > :is(#sb_character_editor_cancel, #sb_group_editor_cancel):focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
 }
 
 .sb-editor-header > :is(#sb_character_editor_save, #sb_character_editor_cancel, #sb_group_editor_save, #sb_group_editor_cancel):disabled {
@@ -374,23 +494,21 @@
     color: var(--sb-shell-text);
     font-size: var(--sb-type-body, 15px);
     box-shadow: none;
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 /* sillybunny-theme.css:1044 supplies its own hover fill for .menu_button, which
    would fight the flat hover below unless it is overridden at the same weight. */
-#right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button):hover {
-    background: var(--sb-flat-hover-bg);
-    border-color: transparent;
-    box-shadow: none;
+@media (hover: hover) {
+    #right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button):hover {
+        background: var(--sb-flat-hover-bg);
+        border-color: transparent;
+        box-shadow: none;
+    }
 }
 
 #right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button):active {
     background: var(--sb-flat-active-bg);
-}
-
-#right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button):focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
 }
 
 /* Favourite is a stateful toggle; upstream signals it with .fav_on. Surface that
@@ -433,12 +551,7 @@
 /* Sections and fields
    ========================================================================= */
 
-.sb-editor-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
+.sb-editor-section,
 .sb-editor-section__body {
     display: flex;
     flex-direction: column;
@@ -547,7 +660,7 @@
     font-size: inherit;
     text-align: start;
     cursor: pointer;
-    transition: background-color var(--sb-transition-fast);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 .ds-pref-group > .ds-row-button:last-child {
@@ -564,6 +677,13 @@
     background: var(--sb-flat-active-bg);
 }
 
+.sb-editor-icon-button:focus-visible,
+.sb-editor-title-button:focus-visible,
+.sb-editor-title-input:focus,
+.sb-editor-header > :is(#sb_character_editor_save, #sb_group_editor_save):focus-visible,
+.sb-editor-header > :is(#sb_character_editor_cancel, #sb_group_editor_cancel):focus-visible,
+#right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button):focus-visible,
+.sb-editor-tokens__warning:focus-visible,
 .ds-row-button:focus-visible {
     outline: none;
     box-shadow: var(--sb-focus-ring-inset);
@@ -645,8 +765,10 @@
     transition: opacity var(--sb-transition-fast, 200ms ease);
 }
 
-.sb-character-essentials__avatar :is(#avatar_div_div, #group_avatar_div):hover {
-    opacity: 0.9;
+@media (hover: hover) {
+    .sb-character-essentials__avatar :is(#avatar_div_div, #group_avatar_div):hover {
+        opacity: 0.9;
+    }
 }
 
 .sb-character-essentials__avatar :is(#avatar_div_div, #group_avatar_div) img {
@@ -810,20 +932,29 @@
 /* Unify action-button chrome across the editor so Tags View, Add, and Maximize
    all follow the flat toolbar style instead of bordered chips. The group
    greetings button is injected by the bundled SB-GroupUtilities extension. */
-#right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button) {
+#right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button),
+#right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button {
     border: 0;
     background: transparent;
-    transition: background-color var(--sb-transition-fast);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 @media (hover: hover) {
-    #right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button):hover {
+    #right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button):hover,
+    #right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button:hover {
         background: var(--sb-flat-hover-bg);
     }
 }
 
-#right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button):active {
+#right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button):active,
+#right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button:active {
     background: var(--sb-flat-active-bg);
+}
+
+#right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button):focus-visible,
+#right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button:focus-visible {
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
 }
 
 #form_create .sb-greetings-editor__add {
@@ -939,8 +1070,8 @@
 }
 
 .sb-greeting-row__btn:focus-visible {
-    outline: 2px solid var(--sb-focus-ring);
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
 }
 
 .sb-greeting-row__btn:disabled {
@@ -987,6 +1118,30 @@
 
 .sb-greetings-expander .sb-greetings-editor {
     border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button),
+    .sb-character-essentials__avatar :is(#avatar_div_div, #group_avatar_div),
+    .ds-row-button,
+    #right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button),
+    #right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button,
+    .sb-greeting-row__btn,
+    .sb-editor-tokens {
+        transition: none;
+    }
+}
+
+body.reduced-motion :is(
+    #right-nav-panel :is(#sb_character_editor_toolbar, #sb_group_editor_toolbar) > :is(.menu_button, .chat_lorebook_button),
+    .sb-character-essentials__avatar :is(#avatar_div_div, #group_avatar_div),
+    .ds-row-button,
+    #right-nav-panel #form_create :is(.sb-greetings-editor__add, #tags_div .tags_view, #sb_character_add_group_greeting, #sb_creator_notes_maximize, #Extension-GroupGreetings-button > .menu_button),
+    #right-nav-panel #rm_group_chats_block .sb-editor-sheet__content .menu_button,
+    .sb-greeting-row__btn,
+    .sb-editor-tokens
+) {
+    transition: none;
 }
 
 /* Quick edit mode — hide all sections except Essentials
@@ -1053,8 +1208,9 @@
    ========================================================================= */
 
 /* The .tags container (tagList) and upstream .tag pills need libadwaita
-   treatment inside the character editor. Scope tightly to avoid changing
-   global tag appearance on other panels. */
+   treatment inside the editors. Scope tightly to avoid changing global tag
+   appearance on other panels. Entity-row chips (.ds-tag-chips) mirror these
+   values in sillybunny-entity-list.css. */
 #right-nav-panel:is([data-menu-type="character_edit"], [data-menu-type="create"], [data-menu-type="group_edit"], [data-menu-type="group_create"]) :is(#tagList, #groupTagList).tags {
     display: flex;
     flex-wrap: wrap;
@@ -1066,6 +1222,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    max-width: 100%;
     padding: 3px 10px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 90%, transparent);
@@ -1075,14 +1232,7 @@
     color: var(--SmartThemeBodyColor);
     line-height: 1.3;
     cursor: default;
-    transition: background-color 120ms ease, border-color 120ms ease;
-}
-
-@media (hover: hover) {
-    #right-nav-panel:is([data-menu-type="character_edit"], [data-menu-type="create"], [data-menu-type="group_edit"], [data-menu-type="group_create"]) :is(#tagList, #groupTagList) .tag:hover {
-        background: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
-        border-color: color-mix(in srgb, var(--sb-shell-border) 100%, transparent);
-    }
+    transition: background-color var(--sb-transition-fast), border-color var(--sb-transition-fast), color var(--sb-transition-fast);
 }
 
 #right-nav-panel:is([data-menu-type="character_edit"], [data-menu-type="create"], [data-menu-type="group_edit"], [data-menu-type="group_create"]) :is(#tagList, #groupTagList) .tag .tag_remove {
@@ -1097,11 +1247,16 @@
     font-size: 10px;
     cursor: pointer;
     line-height: 1;
-    transition: background-color 120ms ease;
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast);
     flex-shrink: 0;
 }
 
 @media (hover: hover) {
+    #right-nav-panel:is([data-menu-type="character_edit"], [data-menu-type="create"], [data-menu-type="group_edit"], [data-menu-type="group_create"]) :is(#tagList, #groupTagList) .tag:hover {
+        background: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+        border-color: var(--sb-shell-border);
+    }
+
     #right-nav-panel:is([data-menu-type="character_edit"], [data-menu-type="create"], [data-menu-type="group_edit"], [data-menu-type="group_create"]) :is(#tagList, #groupTagList) .tag .tag_remove:hover {
         background: color-mix(in srgb, var(--SmartThemeBotMesBlurTintColor, var(--SmartThemeQuoteColor)) 30%, transparent);
     }
@@ -1200,179 +1355,15 @@
     border-radius: inherit;
 }
 
-/* Member rows
-   ========================================================================= */
-
-/* The drag handle is an overlay pinned to the row's leading edge rather than a
-   grid track: the row's column set belongs to the member-list layout, which the
-   bundled SB-GroupUtilities extension also styles at the same specificity, so
-   inserting a track here would shift every cell of whichever rule lost the
-   cascade. An overlay leaves the columns and the row's box alone, sitting in the
-   row's own inset instead. It is revealed on hover or when focused, so the
-   leading edge stays quiet at rest; the up/down buttons remain the keyboard and
-   touch path. */
-#rm_group_members .group_member {
-    position: relative;
-}
-
-#rm_group_members .group_member .sb-group-member-grip {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    margin: 0;
-    padding: 0;
-    color: var(--sb-muted-fg, color-mix(in srgb, var(--SmartThemeBodyColor) 60%, transparent));
-    cursor: grab;
-    touch-action: none;
-    opacity: 0;
-    transition: opacity var(--sb-transition-fast, 120ms ease);
-}
-
-#rm_group_members .group_member:focus-within .sb-group-member-grip {
-    opacity: 0.7;
-}
-
-#rm_group_members .group_member .sb-group-member-grip:active {
-    cursor: grabbing;
-    opacity: 1;
-}
-
-@media (hover: hover) {
-    #rm_group_members .group_member:hover .sb-group-member-grip {
-        opacity: 0.7;
-    }
-
-    #rm_group_members .group_member .sb-group-member-grip:hover,
-    #rm_group_members .group_member .sb-group-member-grip:focus-visible {
-        opacity: 1;
-        color: var(--sb-shell-text);
-    }
-}
-
-/* A row being dragged keeps its handle in view on the floating clone. */
-#rm_group_members .group_member.ui-sortable-helper .sb-group-member-grip {
-    opacity: 1;
-}
-
-/* The grip rides the row itself, so the other member lists never ship one. */
-#rm_group_add_members .group_member .sb-group-member-grip,
-#groupMemberListPopout .group_member .sb-group-member-grip {
-    display: none;
-}
-
-/* The list re-sorts itself while a filter is active, so the handle would drop
-   a row somewhere the user did not choose. */
-#rm_group_members.is-filtered .sb-group-member-grip {
-    display: none;
-}
-
-/* The shell gives every .menu_button/.right_menu_button a 38px physical minimum
-   (sillybunny-theme.css:1209-1212), which is right for a toolbar but inflates
-   these 18px row controls until they spill past their row and cover the next
-   row's buttons. The minimum is dropped for pointers that can hover, where the
-   rows are compact; touch is left to the 44px targets in mobile-styles.css,
-   which this must not outrank. */
-@media (hover: hover) and (pointer: fine) {
-    #rm_group_members .group_member_icon .right_menu_button,
-    #rm_group_add_members .group_member_icon .right_menu_button {
-        width: 18px;
-        min-width: 18px;
-        height: 18px;
-        min-height: 18px;
-        padding: 0;
-        font-size: calc(var(--mainFontSize) * 0.82);
-        line-height: 18px;
-    }
-
-    /* The up/down pair is the one stacked control, so it sizes as a column. */
-    #rm_group_members .group_member_icon .flex-container,
-    #rm_group_add_members .group_member_icon .flex-container {
-        width: 18px;
-        min-width: 18px;
-        height: 36px;
-        flex: 0 0 18px;
-        flex-flow: column nowrap;
-        gap: 0;
-        align-items: center;
-        justify-content: center;
-    }
-}
-
-/* Touch pointers: the grip needs a reachable target and rides the row's full
-   height, since the compact pointer rules above do not apply here. */
-@media (hover: none), (pointer: coarse) {
-    #rm_group_members .group_member .sb-group-member-grip {
-        width: 24px;
-        opacity: 0.5;
-        font-size: var(--sb-type-body, 15px);
-    }
-
-    /* The up/down pair stacks inside one 44px lane. Left at the shell's 44px
-       minimum each, the pair is 88px tall and spills over the rows above and
-       below, so their own arrows answer for them. Half-height steps keep the
-       pair inside the lane; the whole 44px column stays the tap target. */
-    #rm_group_members .group_member_icon .flex-container .right_menu_button,
-    #rm_group_add_members .group_member_icon .flex-container .right_menu_button {
-        height: 22px;
-        min-height: 22px;
-    }
-
-    #rm_group_members .group_member_icon .flex-container,
-    #rm_group_add_members .group_member_icon .flex-container {
-        height: 44px;
-        min-height: 44px;
-    }
-}
-
-/* The jQuery UI sortable clone is a floating chip; give it a surface so it
-   reads as lifted rather than pasted over the row beneath. */
-#rm_group_members .group_member.ui-sortable-helper {
-    background: var(--sb-layer-view);
-    border-radius: var(--sb-radius-card, 12px);
-    box-shadow: var(--sb-shadow-md, 0 6px 18px rgb(0 0 0 / 35%));
-    opacity: 0.95;
-}
-
-#rm_group_members .group_member.ui-sortable-placeholder {
-    visibility: visible !important;
-    border: 1px dashed var(--sb-shell-border);
-    border-radius: var(--sb-radius-card, 12px);
-    background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
-}
-
-/* Member lists and their search rows
-   ========================================================================= */
-
-#rm_group_members,
-#rm_group_add_members {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    border-top: 1px solid var(--sb-shell-border);
-    padding: 6px 0 0;
-}
-
-#rm_group_members:empty,
-#rm_group_add_members:empty {
-    min-height: 44px;
-}
-
-#rm_group_members_header,
-#rm_group_add_members_header {
-    padding: 0 16px;
-}
-
-#rm_group_members_header input,
-#rm_group_add_members_header input {
-    width: 100%;
-}
+/* Member rows and member-list chrome live in the deferred sillybunny-entity-list.css. */
 
 /* The tag filter rows sit between the search row and the list. */
-.sb-editor-section .rm_tag_controls:empty {
+:is(#rm_group_chats_block, #groupMemberListPopout) .rm_tag_controls {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--sb-shell-border);
+}
+
+.sb-editor-section .rm_tag_controls:empty,
+:is(#rm_group_chats_block, #groupMemberListPopout) .rm_tag_controls:not(:has(.tag)) {
     display: none;
 }

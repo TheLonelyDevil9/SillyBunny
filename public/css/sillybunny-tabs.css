@@ -6886,7 +6886,7 @@ body:has(#sb-settings-page:not([hidden])) > .zoomed_avatar[forchar] {
 
 .ds-row-switch {
     cursor: pointer;
-    transition: background-color var(--sb-transition-fast);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 .ds-row-switch > input[type='checkbox'] {
@@ -6957,7 +6957,7 @@ body:has(#sb-settings-page:not([hidden])) > .zoomed_avatar[forchar] {
     border-bottom: 0;
     list-style: none;
     cursor: pointer;
-    transition: background-color var(--sb-transition-fast);
+    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
 .ds-row-expander > summary.ds-row::-webkit-details-marker {
@@ -7577,6 +7577,14 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
 #sb-settings-page .sb-prompting-panel #pro-settings-block > .ds-row {
     flex: 0 0 auto;
     width: 100%;
+}
+
+#sb-reasoning-template .ds-row-suffix:has(> #reasoning_select) {
+    flex-wrap: wrap;
+}
+
+#sb-reasoning-template #reasoning_select {
+    flex: 1 1 190px;
 }
 
 #sb-settings-page .sb-prompting-panel #pro-settings-block .ds-row-suffix > [data-randomization-disabled] {
@@ -8612,7 +8620,7 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     gap: 0;
 }
 
-#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :not(.checkbox_label, .flex-container.alignitemscenter, .flex-container.alignItemsBaseline, .sb-settings-flat-section, .ds-row, .ds-row-expander, .sb-sampling-control-card, .sb-settings-row-wrapper, :has(.ds-row, .ds-row-expander, .ds-pref-group)) {
+#sb-settings-page .sb-settings-mounted-shell .ds-pref-group > :not(.checkbox_label, .flex-container.alignitemscenter, .flex-container.alignItemsBaseline, .sb-settings-flat-section, .ds-row, .ds-row-expander, .ds-entity-list__rows, .ds-entity-list__footer, .sb-sampling-control-card, .sb-settings-row-wrapper, :has(.ds-row, .ds-row-expander, .ds-pref-group)) {
     padding: 10px 16px;
 }
 
