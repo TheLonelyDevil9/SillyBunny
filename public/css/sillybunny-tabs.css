@@ -5388,11 +5388,6 @@ html:not([data-sb-mobile-ui-mode='mobile']) #form_sheld:not(:has(> #group_speake
     display: none !important;
 }
 
-#right-nav-panel #PersonaManagement > .flex-container.wide100p.alignitemscenter.spaceBetween.flexNoGap:first-child > .flex-container.alignItemsBaseline.wide100p > .flex1 {
-    display: none !important;
-}
-
-
 #right-nav-panel[data-menu-type="create"] #avatar_controls .char-button-group-icons #create_button_label {
     flex: 0 0 auto;
     width: auto !important;
@@ -10554,6 +10549,16 @@ body.reduced-motion .ds-row-expander > summary.ds-row::after {
     background: var(--sb-layer-popover, var(--sb-layer-drawer));
     box-shadow: var(--sb-shadow-popover, 0 8px 24px rgb(0 0 0 / 28%));
     -webkit-overflow-scrolling: touch;
+}
+
+/* The picker binds on phones and tablets; desktop Select2 hides the native control. */
+.sb-inline-select-picker-control {
+    cursor: pointer;
+}
+
+/* The picker scrolls options; native-select gestures scroll the surrounding panel. */
+.sb-inline-select-picker-control[multiple] {
+    overflow: hidden;
 }
 
 /* Keep the model, provider, and quantization menus on the same libadwaita-style option vocabulary

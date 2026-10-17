@@ -136,8 +136,9 @@ async function installFixture(page, { dragLocked = false } = {}) {
         }
 
         if (url.pathname === '/api/settings/save') {
-            settingsVersion += 1;
-            store.settingsSaves.push(request.postDataJSON());
+            const payload = request.postDataJSON();
+            settingsVersion = payload._version + 1;
+            store.settingsSaves.push(payload);
             return route.fulfill({ json: { result: 'ok', version: settingsVersion } });
         }
 
@@ -281,7 +282,7 @@ function promptEditorDriver(page) {
             const target = row(identifier);
             await target.locator('.sb-prompt-row-name').click();
             await expect(page.locator(`${FORM}_name`)).toBeVisible();
-            await expect(page.locator('.sb-prompt-travelling')).toHaveCount(0);
+            await expect(page.locator('.sb-list-editor__detail--travelling')).toHaveCount(0);
         },
 
         async isContentEditable() {
@@ -322,7 +323,9 @@ function promptEditorDriver(page) {
         async selectMode(mode) {
             const content = editor.locator(mode === 'preview' ? '.sb-prompt-preview' : '.sb-prompt-textarea');
             if (await content.count()) return;
-            await editor.getByRole('button', { name: mode === 'preview' ? 'Preview prompt' : 'Edit prompt', exact: true }).click();
+            const segment = editor.locator('.sb-prompt-modes label').filter({ hasText: mode === 'preview' ? 'Preview' : 'Edit' });
+            if (await segment.isVisible()) await segment.click();
+            else await editor.getByRole('button', { name: mode === 'preview' ? 'Preview prompt' : 'Edit prompt', exact: true }).click();
         },
 
         async resetToDefault() {
@@ -498,6 +501,35 @@ test.describe('Prompt Manager characterization', () => {
         await ui.close();
         await ui.openEditor('main');
         await expect(page.getByRole('switch', { name: 'Forbid overrides', exact: true })).toBeChecked();
+    });
+
+    test('expanded editor writes back to the draft and survives save and reopen', async ({ page }) => {
+        const { store, ui, baseline } = await setup(page);
+        await ui.openEditor('sbFixtureRelative');
+        const textarea = page.locator(`${FORM}_prompt`);
+        const expand = page.locator('.sb-prompt-footer .editor_maximize');
+        await expect(expand).toHaveAttribute('data-for', 'sb-prompt-form_prompt');
+        await expect(expand.locator('.fa-solid.fa-maximize')).toHaveCount(1);
+        await expand.click();
+        const popup = page.locator('dialog.popup[open]');
+        await expect(popup.locator('.maximized_textarea')).toHaveValue('Relative fixture content');
+        await popup.locator('.maximized_textarea').fill('Expanded prompt content');
+        await popup.locator('.popup-button-ok').click();
+        await expect(textarea).toHaveValue('Expanded prompt content');
+        await expect(expand).toBeFocused();
+        await expect(page.locator('.sb-prompt-dirty')).toBeVisible();
+        expect(promptFor(await readLiveOai(page), 'sbFixtureRelative').content).toBe('Relative fixture content');
+        await ui.selectMode('preview');
+        await expect(expand).toHaveCount(0);
+        await ui.selectMode('edit');
+        await ui.save();
+        await waitForSavedOai(store, oai => promptFor(oai, 'sbFixtureRelative')?.content === 'Expanded prompt content');
+        await ui.close();
+        await ui.openEditor('sbFixtureRelative');
+        await expect(textarea).toHaveValue('Expanded prompt content');
+        await ui.fill({ content: promptFor(baseline, 'sbFixtureRelative').content });
+        await ui.save();
+        await waitForSavedOai(store, oai => promptFor(oai, 'sbFixtureRelative')?.content === 'Relative fixture content');
     });
 
     test('reset to default fills the form and only persists on save', async ({ page }) => {
@@ -716,6 +748,30 @@ test.describe('Prompt Manager characterization', () => {
         expect((await readLiveOai(page)).prompts).toEqual(baseline.prompts);
     });
 
+    test('header Cancel is disabled until dirty and reverts the draft without saving', async ({ page }) => {
+        const { store, ui, baseline } = await setup(page);
+        await ui.openEditor('sbFixtureRelative');
+        const editor = page.locator('.sb-prompt-detail');
+        const cancel = editor.getByRole('button', { name: 'Cancel', exact: true });
+        const save = editor.getByRole('button', { name: 'Save', exact: true });
+        const original = await page.locator(`${FORM}_prompt`).inputValue();
+        await expect(cancel).toBeDisabled();
+        await expect(save).toBeDisabled();
+
+        await ui.fill({ content: 'Unsaved local draft' });
+        const saves = store.settingsSaves.length;
+        await expect(cancel).toBeEnabled();
+        await cancel.click();
+
+        await expect(page.locator(`${FORM}_prompt`)).toHaveValue(original);
+        await expect(editor).toBeVisible();
+        await expect(cancel).toBeDisabled();
+        await expect(save).toBeDisabled();
+        await expect(editor.locator('.sb-prompt-dirty')).toBeHidden();
+        expect(store.settingsSaves.length).toBe(saves);
+        expect((await readLiveOai(page)).prompts).toEqual(baseline.prompts);
+    });
+
     test('Add from available clears search and scrolls only the list scroller', async ({ page }) => {
         await setup(page);
         await page.getByRole('button', { name: 'Search prompts', exact: true }).click();
@@ -767,6 +823,94 @@ test.describe('Prompt Manager characterization', () => {
         await expect(ui.row('main')).not.toHaveClass(/is-selected/);
         await expect(ui.row('main')).toBeFocused();
         await expect(list).toBeVisible();
+    });
+
+    test('shared list-editor shell owns the split, divider resize and focus handoff', async ({ page }) => {
+        const { ui } = await setup(page);
+        const root = page.locator('.sb-prompt-editor');
+        await expect(root).toHaveClass(/\bsb-list-editor\b/);
+        await expect(page.locator('#deferred-editor-shell-css')).toHaveAttribute('data-loaded', 'true');
+        await ui.openEditor('main');
+        await expect(page.locator('.sb-prompt-title')).toBeFocused();
+        const divider = page.getByRole('separator', { name: 'Resize prompt sidebar', exact: true });
+        await expect(divider).toBeVisible();
+        const list = page.locator('.sb-prompt-list');
+        const before = Number(await divider.getAttribute('aria-valuenow'));
+        await divider.focus();
+        await page.keyboard.press('ArrowRight');
+        await expect(divider).toHaveAttribute('aria-valuenow', String(Math.min(420, before + 10)));
+        expect(await page.evaluate(() => Number(localStorage.getItem('sb-pm-list-width')))).toBe(Math.min(420, before + 10));
+        await expect.poll(async () => Math.round((await list.boundingBox()).width)).toBe(Math.min(420, before + 10));
+        await page.locator(`${FORM}_prompt`).focus();
+        await page.keyboard.press('Escape');
+        await expect(root).toHaveAttribute('data-open', 'false');
+        await expect(ui.row('main')).toBeFocused();
+    });
+
+    test('shared list rows and search: arrow navigation, Ctrl+F, type-to-search and result announcements', async ({ page }) => {
+        const { ui } = await setup(page);
+        const order = await ui.visibleOrder();
+        await ui.row(order[0]).focus();
+        await page.keyboard.press('ArrowDown');
+        await expect(ui.row(order[1])).toBeFocused();
+        await page.keyboard.press('ArrowUp');
+        await expect(ui.row(order[0])).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('.sb-prompt-editor')).toHaveAttribute('data-open', 'true');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.sb-prompt-editor')).toHaveAttribute('data-open', 'false');
+
+        const searchButton = page.getByRole('button', { name: 'Search prompts', exact: true });
+        const search = page.getByRole('searchbox', { name: 'Search prompts', exact: true });
+        await ui.row('main').focus();
+        await page.keyboard.press('ControlOrMeta+f');
+        await expect(search).toBeFocused();
+        await expect(searchButton).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('#sb-universal-search')).not.toHaveClass(/\bis-open\b/);
+        await search.fill('Fixture Relative');
+        await expect(ui.row('sbFixtureRelative')).toBeVisible();
+        await expect(ui.row('main')).toHaveCount(0);
+        await expect(page.locator('.sb-prompt-editor > .sb-list-editor__status')).toHaveText(/^1 of \d+ results$/);
+        await search.fill('zz-no-such-prompt');
+        await expect(page.locator('.sb-prompt-editor > .sb-list-editor__status')).toHaveText('No results');
+        await page.keyboard.press('Escape');
+        await expect(search).toBeHidden();
+        await expect(searchButton).toBeFocused();
+        await expect(searchButton).toHaveAttribute('aria-expanded', 'false');
+        await expect(ui.row('main')).toBeVisible();
+
+        await ui.row('main').focus();
+        await page.keyboard.type('Fix');
+        await expect(search).toBeFocused();
+        await expect(search).toHaveValue('Fix');
+        await expect(ui.row('main')).toHaveCount(0);
+    });
+
+    test('clearing a search restores the list scroll position after the unfiltered render', async ({ page }) => {
+        await setup(page);
+        const body = page.locator('.sb-prompt-list-body');
+        const saved = await body.evaluate(node => {
+            node.scrollTo({ top: node.scrollHeight, behavior: 'instant' });
+            return node.scrollTop;
+        });
+        expect(saved).toBeGreaterThan(0);
+        await page.getByRole('button', { name: 'Search prompts', exact: true }).click();
+        const search = page.getByRole('searchbox', { name: 'Search prompts', exact: true });
+        await search.fill('Fixture Relative');
+        await expect.poll(() => body.evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+        await search.fill('');
+        await expect.poll(() => body.evaluate(node => Math.round(node.scrollTop))).toBe(Math.round(saved));
+    });
+
+    test('dirty leave Save persists the draft and closes the editor', async ({ page }) => {
+        const { store, ui } = await setup(page);
+        await ui.openEditor('sbFixtureRelative');
+        await ui.fill({ content: 'Saved through the leave guard' });
+        await page.getByRole('button', { name: 'Back to prompt list', exact: true }).click();
+        await page.locator('dialog.popup[open] .popup-button-ok').click();
+        await waitForSavedOai(store, oai => promptFor(oai, 'sbFixtureRelative')?.content === 'Saved through the leave guard');
+        await expect(page.locator('.sb-prompt-editor')).toHaveAttribute('data-open', 'false');
+        await expect(ui.row('sbFixtureRelative')).toBeFocused();
     });
 
     test('position controls reveal depth, order and six generation triggers', async ({ page }) => {

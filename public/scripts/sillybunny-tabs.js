@@ -675,13 +675,20 @@ const SB_SHORTCUT_LABELS = Object.freeze({
 });
 const SB_PANEL_STYLESHEETS = Object.freeze({
     'left:editor': [
-        { href: 'css/sillybunny-prompt-editor.css', id: 'deferred-prompt-editor-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-prompt-editor.css?v=20261018a', id: 'deferred-prompt-editor-css' },
     ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
+        // SillyBunny: the rebuilt World Info shell stays deferred like the Prompt Editor.
+        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-world-info-editor.css?v=20261018e', id: 'deferred-world-info-editor-css' },
     ],
     'characters:persona': [
-        { href: 'css/personas.css?v=20260609a', id: 'deferred-personas-css' },
+        // SillyBunny: persona editor assets stay deferred like World Info — see docs/ui-migration.md
+        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
+        { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
     ],
     'left:advanced-formatting': [
         { href: 'css/macros.css', id: 'deferred-macros-css' },
@@ -2391,30 +2398,9 @@ function getSearchText(element, sectionLabel = '', includeCategoryDescription = 
     ].join(' '));
 }
 
-function getPersonaSearchAvatarId(element) {
-    if (!(element instanceof HTMLElement)) {
-        return '';
-    }
-
-    const directAvatarId = element.closest('.avatar-container[data-avatar-id], .avatar[data-avatar-id]')?.getAttribute('data-avatar-id');
-    if (directAvatarId) {
-        return directAvatarId;
-    }
-
-    if (!element.matches('.persona_name')) {
-        return '';
-    }
-
-    return document.querySelector('#user_avatar_block .avatar-container.selected[data-avatar-id]')?.getAttribute('data-avatar-id')
-        ?? '';
-}
-
-function getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element = null, avatarId = '' } = {}) {
+function getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { avatarId = '' } = {}) {
     const personaAvatarId = tabState.id === 'persona'
-        ? normalizeText(
-            avatarId
-            || getPersonaSearchAvatarId(element),
-        )
+        ? normalizeText(avatarId)
         : '';
 
     if (personaAvatarId) {
@@ -7585,12 +7571,32 @@ function ensureCharacterWorldInfoPanel() {
     return host;
 }
 
+// SillyBunny: lazy-mount the persona editor only after its deferred styles load — see docs/ui-migration.md
+let personaEditorMountPromise = null;
 function setCharacterPersonaPanelVisible(visible) {
     const host = ensureCharacterPersonaPanel() ?? document.getElementById('sb_character_persona_panel');
+    const content = document.getElementById('PersonaManagement');
 
     if (host instanceof HTMLElement) {
         host.hidden = !visible;
         host.setAttribute('aria-hidden', String(!visible));
+    }
+
+    if (content instanceof HTMLElement) {
+        content.setAttribute('aria-hidden', String(!visible));
+        if (visible && !personaEditorMountPromise) {
+            personaEditorMountPromise = import('./sillybunny-persona-editor.js').then(async module => {
+                await module.loadPersonaEditorStyles(SB_PANEL_STYLESHEETS['characters:persona']);
+                const controller = module.mountPersonaEditor(content);
+                await controller.ready;
+                return controller;
+            });
+            // SillyBunny: observe failures without swallowing the bridge's rejection — see docs/ui-migration.md
+            personaEditorMountPromise.catch(error => {
+                personaEditorMountPromise = null;
+                console.warn('[SillyBunny] Could not mount the persona editor.', error);
+            });
+        }
     }
 }
 
@@ -7603,6 +7609,8 @@ function setCharacterImportPanelVisible(visible) {
     }
 }
 
+// SillyBunny: defer the rebuilt editor and its styles until this tab is first requested.
+let worldInfoEditorMountPromise = null;
 function setCharacterWorldInfoPanelVisible(visible) {
     const host = ensureCharacterWorldInfoPanel() ?? document.getElementById('sb_character_world_info_panel');
     const content = document.getElementById('WorldInfo');
@@ -7614,6 +7622,16 @@ function setCharacterWorldInfoPanelVisible(visible) {
 
     if (content instanceof HTMLElement) {
         content.setAttribute('aria-hidden', String(!visible));
+        if (visible && !worldInfoEditorMountPromise) {
+            worldInfoEditorMountPromise = import('./sillybunny-world-info-editor.js').then(async module => {
+                await Promise.all(SB_PANEL_STYLESHEETS['characters:world-info'].map(stylesheet =>
+                    window.SillyBunnyAssets?.loadStylesheetAsync(stylesheet.href, { id: stylesheet.id })));
+                return module.mountWorldInfoEditor(content);
+            }).catch(error => {
+                worldInfoEditorMountPromise = null;
+                console.warn('[SillyBunny] Could not mount the World Info editor.', error);
+            });
+        }
     }
 }
 
@@ -8342,6 +8360,13 @@ function preloadPanelStylesheets(shellKey, tabId = null) {
 
     if (!stylesheets || !window.SillyBunnyAssets?.loadStylesheetAsync) {
         return;
+    }
+
+    // SillyBunny: persona preloads share mount retry cleanup for failed links — see docs/ui-migration.md
+    if (normalizedKey === 'characters:persona') {
+        return import('./sillybunny-persona-editor.js')
+            .then(module => module.loadPersonaEditorStyles(stylesheets))
+            .catch(error => console.warn('Failed to load panel stylesheet:', normalizedKey, error));
     }
 
     for (const stylesheet of stylesheets) {
@@ -12382,6 +12407,8 @@ function getSubpageSearchRoots(searchRoot) {
 }
 
 function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
+    // Persona results come from data; hidden transports and transient editor fields are not search targets.
+    if (tabState.id === 'persona') return [];
     const searchRoot = tabState.searchRoot;
     if (!(searchRoot instanceof HTMLElement)) {
         return [];
@@ -12437,7 +12464,7 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
         const sectionLabel = subpageLabel ?? getSearchSectionLabel(element, tabState.label);
         const searchText = getSearchText(element, sectionLabel, includeCategoryTitles);
         const displayText = getSearchDisplayText(element, sectionLabel);
-        const dedupeKey = getSearchEntryDedupeKey(tabState, sectionLabel, displayText, { element });
+        const dedupeKey = getSearchEntryDedupeKey(tabState, sectionLabel, displayText);
         // Identical sampler explanations belong to separate live backend sections. Keep both
         // until availability filtering, or the hidden first backend masks the active one's help.
         const indexDedupeKey = [dedupeKey, element.closest('[data-sb-sampling-apis]')?.id].filter(Boolean).join('::');
@@ -12496,16 +12523,10 @@ function getPersonaSearchEntries(tabState) {
             tabId: tabState.id,
             tabLabel: tabState.label,
             dedupeKey: getSearchEntryDedupeKey(tabState, 'Persona', name, { avatarId }),
-            action: () => {
-                // Activate the persona tab and trigger ST's own persona search
-                openCharacterPanelTab('persona');
-                window.setTimeout(() => {
-                    const searchInput = document.getElementById('persona_search_bar');
-                    if (searchInput instanceof HTMLInputElement) {
-                        searchInput.value = name;
-                        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                }, 80);
+            action: async () => {
+                // SillyBunny: open the exact persona without changing the list search — see docs/ui-migration.md
+                const { openPersonaEditor } = await import('./sillybunny-persona-editor.js');
+                await openPersonaEditor({ avatarId });
             },
         });
     }
@@ -12549,8 +12570,7 @@ function getSearchSectionLabel(element, fallback) {
         if (text && text !== fallback) return text;
     }
 
-    const preferred = element.closest('.persona_management_global_settings')
-        ?? element.closest('.bg-header-row-1')
+    const preferred = element.closest('.bg-header-row-1')
         ?? element.closest('.bg-header-row-2')
         ?? element.closest('label, h3, h4, h5, strong');
 
@@ -12621,6 +12641,19 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
                 }
             }
         }
+    }
+
+    // Character pages are outside sbState.shells; persona results still come from their canonical data.
+    for (const entry of getPersonaSearchEntries(getCharacterPanelTabConfig('persona'))) {
+        if (!searchTerms.every(term => entry.searchText.includes(term))) continue;
+        matches.set(`characters::${entry.dedupeKey}`, {
+            ...entry,
+            shellKey: 'characters',
+            shellLabel: 'Characters',
+            headingMatch: false,
+            score: Number(entry.searchText === normalizedQuery) * 100
+                + Number(entry.searchText.startsWith(normalizedQuery)) * 10 - entry.displayText.length / 1000,
+        });
     }
 
     return Array.from(matches.values())
@@ -14782,7 +14815,8 @@ function composePersonaDescriptionFromContext(context, avatarId, activeIds = nul
     for (const appendix of appendices) {
         const description = String(appendix.description ?? '').trim();
         if (activeIdSet.has(appendix.id) && description) {
-            chunks.push(`[${appendix.name}]\n${description}`);
+            // SillyBunny: match persona/Conversation note composition — see docs/ui-migration.md
+            chunks.push(`(${appendix.name})\n${description}`);
         }
     }
 
@@ -14845,11 +14879,7 @@ function quoteSlashCommandArgument(value) {
 
 function getCurrentPersonaSelection(context = getSillyTavernContext()) {
     const personas = context?.powerUserSettings?.personas ?? {};
-    const selectedAvatarId = document.querySelector('#user_avatar_block .avatar-container.selected[data-avatar-id]')?.getAttribute('data-avatar-id')
-        ?? '';
-    const currentAvatarId = String(context?.userAvatar ?? '').trim()
-        || String(selectedAvatarId).trim()
-        || '';
+    const currentAvatarId = String(context?.userAvatar ?? '').trim();
     const currentName = personas[currentAvatarId] || context?.name1 || 'You';
 
     return {
@@ -15154,22 +15184,12 @@ function renderPersonaPickerAppendixControls(picker, context, avatarId) {
     picker.appendChild(section);
 }
 
-function openPersonaAppendicesManager() {
+async function openPersonaAppendicesManager() {
+    const { currentAvatarId } = getCurrentPersonaSelection();
     closePersonaPicker();
-    openCharacterPanelTab('persona');
-
-    window.setTimeout(() => {
-        document.getElementById('persona_workspace_tab_edit')?.click();
-        document.getElementById('persona_editor_tab_prompt')?.click();
-        const appendicesHeading = document.getElementById('persona_appendices_heading');
-        const addButton = document.getElementById('persona_appendix_add');
-        const appendicesBlock = appendicesHeading?.closest('details');
-        if (appendicesBlock instanceof HTMLDetailsElement) {
-            appendicesBlock.open = true;
-        }
-        scrollElementIntoManagedView(appendicesHeading ?? addButton, { block: 'center', behavior: getReducedMotionScrollBehavior() });
-        addButton?.focus({ preventScroll: true });
-    }, 160);
+    // SillyBunny: bridge Manage directly to the active persona's notes — see docs/ui-migration.md
+    const { openPersonaEditor } = await import('./sillybunny-persona-editor.js');
+    await openPersonaEditor({ avatarId: currentAvatarId, section: 'notes' });
 }
 
 function positionPersonaPicker(picker, bubble) {
@@ -15231,19 +15251,13 @@ async function selectPersonaOption(option, picker, avatarId, context) {
             await execSlash(`/persona-set ${quoteSlashCommandArgument(avatarId)}`);
             switched = true;
         } catch (error) {
-            console.warn('[SillyBunny] Persona switch via slash command failed, falling back to DOM selection.', error);
+            console.warn('[SillyBunny] Persona switch via slash command failed, falling back to the persona API.', error);
         }
     }
 
     if (!switched) {
-        // Fallback: try clicking the DOM avatar
-        const avatarBlock = document.getElementById('user_avatar_block');
-        const domAvatar = avatarBlock?.querySelector(`.avatar-container[title="${CSS.escape(avatarId)}"]`);
-        if (domAvatar instanceof HTMLElement) {
-            domAvatar.click();
-        } else {
-            openCharacterPanelTab('persona');
-        }
+        const { usePersona } = await import('./personas.js');
+        await usePersona(avatarId);
     }
 
     updatePersonaBubble();
@@ -15468,6 +15482,11 @@ function initAll() {
         openTab(shellKey, tabId, options = {}) {
             if (shellKey === 'characters') {
                 openCharacterPanelTab(tabId, options);
+                // SillyBunny: persona bridges await mounting and reveal mobile content — see docs/ui-migration.md
+                if (tabId === 'persona') {
+                    if (isMobileViewport()) setSettingsMobileContentView(true);
+                    return personaEditorMountPromise;
+                }
                 return;
             }
 
