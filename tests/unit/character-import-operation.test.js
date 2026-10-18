@@ -122,8 +122,9 @@ describe('result-bearing import operation', () => {
         const start = source.indexOf('await importFromExternalUrl(onlineUrl, { preserveFileName:');
         const replacement = source.slice(start, source.indexOf('await postReplace();', start) + 'await postReplace();'.length);
         const postReplace = jest.fn();
-        const replace = new Function('onlineUrl', 'characters', 'this_chid', 'importFromExternalUrl', 'postReplace', `return (async () => { ${replacement} })();`);
-        await expect(replace('https://example.invalid/card', [{ avatar: 'current.png' }], 0, importFromExternalUrl, postReplace)).rejects.toThrow('Cannot import character while generating');
+        // SillyBunny: the fork's replacement path reads `editorCharacter`, not `characters[this_chid]`.
+        const replace = new Function('onlineUrl', 'characters', 'this_chid', 'editorCharacter', 'importFromExternalUrl', 'postReplace', `return (async () => { ${replacement} })();`);
+        await expect(replace('https://example.invalid/card', [{ avatar: 'current.png' }], 0, { avatar: 'current.png' }, importFromExternalUrl, postReplace)).rejects.toThrow('Cannot import character while generating');
         expect(postReplace).not.toHaveBeenCalled();
         expect(app.fetch).not.toHaveBeenCalled();
     });
