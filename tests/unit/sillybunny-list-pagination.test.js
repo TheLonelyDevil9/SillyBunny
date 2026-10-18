@@ -23,6 +23,19 @@ function makePagination(options = {}) {
 }
 
 describe('createListPagination', () => {
+    test('a transaction expired during its guard cannot mutate the page or notify', async () => {
+        let approve;
+        let current = true;
+        const onChange = jest.fn();
+        const pagination = makePagination({ guard: () => new Promise(resolve => { approve = resolve; }), onChange });
+        pagination.setTotal(10);
+        const paging = pagination.goTo(2, { isCurrent: () => current });
+        current = false;
+        approve(true);
+        await paging;
+        expect(pagination.page).toBe(1);
+        expect(onChange).not.toHaveBeenCalled();
+    });
     test('computes totals, pages, hidden state, and live status', () => {
         const pagination = makePagination();
         expect(pagination.element.hidden).toBe(true);
@@ -258,5 +271,59 @@ describe('createListPagination', () => {
 
         expect(pagination.page).toBe(1);
         expect(onChange).not.toHaveBeenCalled();
+    });
+
+    test('keepSizeVisible retains only the size control for nonempty single-page totals', () => {
+        const pagination = makePagination({ keepSizeVisible: true });
+        for (const total of [1, 2]) {
+            pagination.setTotal(total);
+
+            expect(pagination.element.hidden).toBe(false);
+            expect(pagination.element.querySelector('.sb-list-pagination__prev').hidden).toBe(true);
+            expect(pagination.element.querySelector('.sb-list-pagination__next').hidden).toBe(true);
+            expect(pagination.element.querySelector('.sb-list-pagination__status').hidden).toBe(true);
+            expect(pagination.element.querySelector('select').hidden).toBe(false);
+        }
+    });
+
+    test('keepSizeVisible still hides an empty nav and restores navigation for multiple pages', () => {
+        const pagination = makePagination({ keepSizeVisible: true });
+        expect(pagination.element.hidden).toBe(true);
+        pagination.setTotal(2);
+        expect(pagination.element.hidden).toBe(false);
+        pagination.setTotal(5);
+
+        expect(pagination.element.querySelector('.sb-list-pagination__prev').hidden).toBe(false);
+        expect(pagination.element.querySelector('.sb-list-pagination__next').hidden).toBe(false);
+        expect(pagination.element.querySelector('.sb-list-pagination__status').hidden).toBe(false);
+        pagination.setTotal(0);
+        expect(pagination.element.hidden).toBe(true);
+    });
+
+    test('keepSizeVisible responds to size changes without hiding the size control', async () => {
+        const pagination = makePagination({ keepSizeVisible: true });
+        pagination.setTotal(3);
+        const select = pagination.element.querySelector('select');
+        select.value = '4';
+        select.dispatchEvent(new Event('change'));
+        await Promise.resolve();
+
+        expect(pagination.element.hidden).toBe(false);
+        expect(pagination.element.querySelector('.sb-list-pagination__status').hidden).toBe(true);
+        select.value = '2';
+        select.dispatchEvent(new Event('change'));
+        await Promise.resolve();
+        expect(pagination.element.querySelector('.sb-list-pagination__status').hidden).toBe(false);
+        expect(select.hidden).toBe(false);
+    });
+
+    test('keepSizeVisible false preserves the original hidden nav and unhidden child controls', () => {
+        const pagination = makePagination({ keepSizeVisible: false });
+        pagination.setTotal(1);
+
+        expect(pagination.element.hidden).toBe(true);
+        expect(pagination.element.querySelector('.sb-list-pagination__prev').hidden).toBe(false);
+        expect(pagination.element.querySelector('.sb-list-pagination__next').hidden).toBe(false);
+        expect(pagination.element.querySelector('.sb-list-pagination__status').hidden).toBe(false);
     });
 });

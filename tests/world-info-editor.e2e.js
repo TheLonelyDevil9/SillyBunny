@@ -1,10 +1,38 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
+import { protectMaintainerServer } from './helpers/maintainer-server.js';
 
 const BOOK = `WI_EDITOR_E2E_${Date.now()}`;
 const TARGET_BOOK = `${BOOK}_TARGET`;
 
 test.beforeEach(async ({ page }) => {
+    await protectMaintainerServer(page);
+    const entry = (uid, comment, extra = {}) => ({
+        uid, comment, key: [comment.toLowerCase()], keysecondary: [], content: `${comment} content`,
+        constant: false, vectorized: false, selective: true, order: 100, position: 0, disable: false, displayIndex: uid, ...extra,
+    });
+    const books = new Map([[BOOK, { entries: { 0: entry(0, 'Alpha'), 1: entry(1, 'Beta'), 2: entry(2, 'Gamma', { disable: true }) } }]]);
+    await page.route('**/api/settings/get', async route => {
+        const response = await route.fetch();
+        const payload = await response.json();
+        return route.fulfill({ json: { ...payload, world_names: [...books.keys()] } });
+    });
+    await page.route('**/api/worldinfo/**', route => {
+        const endpoint = new URL(route.request().url()).pathname.split('/').at(-1);
+        const buffer = route.request().postDataBuffer();
+        const payload = buffer ? JSON.parse((route.request().headers()['content-encoding'] === 'gzip' ? gunzipSync(buffer) : buffer).toString()) : {};
+        if (endpoint === 'get') return route.fulfill({ status: books.has(payload.name) ? 200 : 404, json: books.get(payload.name) ?? {} });
+        if (endpoint === 'list') return route.fulfill({ json: [...books].map(([name, data]) => ({ name, ...data })) });
+        if (endpoint === 'edit' && [BOOK, TARGET_BOOK].includes(payload.name)) {
+            books.set(payload.name, structuredClone(payload.data));
+            return route.fulfill({ json: { ok: true, name: payload.name } });
+        }
+        if (endpoint === 'delete' && [BOOK, TARGET_BOOK].includes(payload.name)) {
+            books.delete(payload.name);
+            return route.fulfill({ json: { ok: true } });
+        }
+        return route.abort();
+    });
     // Browser QA must not change the running instance's saved preferences.
     await page.route('**/api/settings/save', route => {
         const request = route.request();
@@ -16,27 +44,15 @@ test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => window.SillyTavern?.getContext?.()?.eventSource?.autoFireLastArgs?.has('app_ready'), null, { timeout: 60000 });
     await page.evaluate(async name => {
-        const { saveWorldInfo, updateWorldInfoList } = await import('./scripts/world-info.js');
-        const entry = (uid, comment, extra = {}) => ({
-            uid, comment, key: [comment.toLowerCase()], keysecondary: [], content: `${comment} content`,
-            constant: false, vectorized: false, selective: true, order: 100, position: 0, disable: false, displayIndex: uid, ...extra,
-        });
-        const data = { entries: { 0: entry(0, 'Alpha'), 1: entry(1, 'Beta'), 2: entry(2, 'Gamma', { disable: true }) } };
-        if (!await saveWorldInfo(name, data, true)) throw new Error('Could not save test lorebook');
-        await updateWorldInfoList();
         for (const key of Object.keys(localStorage)) if (key.startsWith('sb-wi-editor-draft-') && key.includes(encodeURIComponent(name))) localStorage.removeItem(key);
     }, BOOK);
 });
 
 test.afterEach(async ({ page }) => {
     await page.evaluate(async names => {
-        const worldInfo = await import('./scripts/world-info.js');
         for (const name of names) {
-            if (worldInfo.world_names.includes(name)) await worldInfo.deleteWorldInfo(name);
             for (const key of Object.keys(localStorage)) if (key.startsWith('sb-wi-editor-draft-') && key.includes(encodeURIComponent(name))) localStorage.removeItem(key);
         }
-        await worldInfo.updateWorldInfoList();
-        if (names.some(name => worldInfo.world_names.includes(name))) throw new Error('Test lorebook cleanup failed');
     }, [BOOK, TARGET_BOOK]);
 });
 
@@ -236,7 +252,7 @@ test.describe('World Info editor', () => {
         const editor = page.locator('#WorldInfo .sb-wi-editor');
         await expect(editor.locator('.sb-wi-settings-button')).toHaveCount(0);
         await editor.locator('.sb-wi-book-actions').click();
-        await expect(page.locator('.sb-action-menu [aria-disabled="true"]')).toHaveCount(9);
+        await expect(page.locator('.sb-action-menu [aria-disabled="true"]')).toHaveCount(10);
         await page.getByRole('menuitem', { name: 'Global Settings', exact: true }).click();
         const recursive = editor.locator('#world_info_recursive');
         await expect(recursive).toBeVisible();
@@ -300,7 +316,7 @@ test.describe('World Info editor on mobile', () => {
 
     test('opens an entry and returns to the list', async ({ page }) => {
         const editor = await openBook(page);
-        await page.locator('#sb-settings-tab-list .sb-settings-tab[data-sb-settings-tab="world-info"]').click().catch(() => {});
+        await expect(editor).toBeVisible();
         await row(editor, 'Beta').click();
         const back = editor.locator('.sb-wi-entry .sb-wi-detail-back');
         await expect(back).toBeVisible();
@@ -381,6 +397,13 @@ test.describe('World Info selection mode', () => {
         await expect(editor.locator('.sb-wi-list-header')).toBeHidden();
         await expect(editor.locator('.sb-selection-title')).toHaveText('0 lorum ipsum');
         await expect(editor.locator('.sb-selection-action:disabled')).toHaveCount(4);
+        await row(editor, 'Alpha').focus();
+        for (const key of ['x', 'Control+f', 'Meta+f']) {
+            await page.keyboard.press(key);
+            await expect(row(editor, 'Alpha')).toBeFocused();
+            await expect(editor.locator('.sb-wi-search')).toHaveValue('');
+            await expect(editor.locator('.sb-wi-search')).toBeHidden();
+        }
         await row(editor, 'Alpha').click();
         await expect(row(editor, 'Alpha').locator('.sb-selection-check')).toBeChecked();
         await expect(editor.locator('.sb-wi-entry')).toHaveCount(0);
@@ -496,7 +519,11 @@ test.describe('World Info selection mode', () => {
         await editor.locator('.sb-wi-search').evaluate(node => { node.value = 'missing'; node.dispatchEvent(new Event('input', { bubbles: true })); });
         await expect(editor.locator('.sb-wi-list-status')).toHaveText('No results');
         await expect(editor.locator('.sb-selection-title')).toHaveText('3 lorum ipsum');
-        await page.evaluate(async () => (await import('./scripts/world-info.js')).openWorldInfoEditor(''));
+        await page.evaluate(() => {
+            const select = document.getElementById('world_editor_select');
+            select.value = '';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
         await expect(editor).toHaveAttribute('data-selection-mode', 'false');
     });
 });
@@ -506,7 +533,7 @@ test.describe('World Info selection touch entry', () => {
 
     test('long press selects without opening and action targets stay visible and at least 44px', async ({ page }) => {
         const editor = await openBook(page);
-        await page.locator('#sb-settings-tab-list .sb-settings-tab[data-sb-settings-tab="world-info"]').click();
+        await expect(editor).toBeVisible();
         const alpha = row(editor, 'Alpha');
         await expect(alpha).toBeInViewport();
         await alpha.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 100, clientY: 200 });

@@ -15,17 +15,19 @@ import { reconcileRows, rowEntry, bindListKeyboard } from './sillybunny-editor/l
 import { createListSearch } from './sillybunny-editor/list-search.js';
 import { createListPagination } from './sillybunny-editor/list-pagination.js';
 import { createStatusPage } from './sillybunny-editor/status-page.js';
-import { createRow } from './sillybunny-editor/rows.js';
+import { createEntityRow, entityKey } from './sillybunny-editor/entity-row.js';
 import { characterTabGuardSelector, registerEditorNavigation } from './sillybunny-editor/navigation.js';
+import { objectNavigation } from './sillybunny-editor/object-navigation.js';
 import { mountPersonaSettings } from './sillybunny-persona-settings.js';
 import { mountPersonaDetail, personaDraftKey } from './sillybunny-persona-detail.js';
 
 const STYLESHEETS = [
+    { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
     { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
     { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
 ];
 const mountedEditors = new WeakMap();
-const itemKey = item => item.kind === 'persona' ? `persona:${item.avatarId}` : item.kind;
+const itemKey = item => item.kind === 'persona' ? entityKey('persona', item.avatarId) : item.kind;
 
 function element(tag, className = '', text = '') {
     const node = document.createElement(tag);
@@ -61,6 +63,11 @@ function menuItem(label, glyph, action, danger = false, disabled = false) {
     return { label, icon: `fa-solid fa-${glyph}`, danger, disabled, onSelect: () => run(action) };
 }
 
+/**
+ * Loads the deferred Persona styles, removing failed links so a later mount can retry.
+ * @param {{ href: string, id: string }[]} [stylesheets]
+ * @returns {Promise<void>}
+ */
 export async function loadPersonaEditorStyles(stylesheets = [LIST_EDITOR_STYLESHEET, ...STYLESHEETS]) {
     const loader = globalThis.SillyBunnyAssets?.loadStylesheetAsync;
     if (!loader) return;
@@ -90,6 +97,7 @@ export function mountPersonaEditor(container) {
     if (mountedEditors.has(container)) return mountedEditors.get(container);
 
     const rows = new Map();
+    const entityRows = new WeakMap();
     let allIds = [];
     let entries = [];
     let heldOrder = null;
@@ -101,6 +109,10 @@ export function mountPersonaEditor(container) {
     let internalPaging = false;
     let listRevision = 0;
     let avatarRevision = 0;
+    let initialized = false;
+    let preparingReveal = false;
+    let pendingRefresh = null;
+    let refreshPromise = null;
 
     const listHeader = element('header', 'sb-persona-list-header');
     const titles = element('div', 'sb-persona-list-titles');
@@ -129,7 +141,7 @@ export function mountPersonaEditor(container) {
     const listBody = element('div', 'sb-persona-list-body');
     const heading = element('h3', 'sb-persona-list-heading', t`Your Persona`);
     heading.tabIndex = -1;
-    const listBox = element('div', 'sb-persona-list-box ds-pref-group');
+    const listBox = element('div', 'sb-persona-list-box ds-pref-group ds-entity-list');
     listBox.setAttribute('role', 'list');
     const listStatus = element('div', 'sb-persona-list-status');
     listBody.append(heading, listBox, listStatus);
@@ -173,6 +185,7 @@ export function mountPersonaEditor(container) {
         if (shell) {
             shell.root.dataset.dirty = 'false';
             shell.root.dataset.saving = 'false';
+            delete shell.root.dataset.personaAvatarId;
         }
     }
 
@@ -247,7 +260,7 @@ export function mountPersonaEditor(container) {
 
     function badges(avatarId) {
         const state = getPersonaEditorStates(avatarId);
-        const badges = element('span', 'sb-persona-row-badges');
+        const badges = [];
         for (const [shown, glyph, label, accent] of [
             [state.inUse, 'circle-check', t`Current Persona`, true],
             [state.default, 'crown', t`Default Persona`],
@@ -261,33 +274,26 @@ export function mountPersonaEditor(container) {
             badge.setAttribute('aria-label', label);
             badge.title = label;
             if (accent) badge.classList.add('is-in-use');
-            badges.append(badge);
+            badges.push(badge);
         }
         return badges;
     }
 
     function makePersonaRow(avatarId) {
         const { name, descriptor } = getPersonaRecord(avatarId);
-        const avatar = element('img', 'sb-persona-row-avatar');
-        avatar.loading = 'lazy';
-        avatar.decoding = 'async';
-        avatar.alt = '';
-        avatar.src = getThumbnailUrlForViewport('persona', avatarId, isFirefox());
-        const more = button(t`Actions for ${name}`, 'ellipsis-vertical', trigger => openPersonaMenu(trigger, avatarId), 'sb-persona-row-menu');
+        const more = button(t`Actions for ${name}`, 'ellipsis-vertical', trigger => openPersonaMenu(trigger, avatarId), 'sb-persona-row-menu ds-entity-row__button');
         more.setAttribute('aria-haspopup', 'menu');
         more.setAttribute('aria-expanded', 'false');
-        const row = createRow({
-            label: name,
+        const entity = createEntityRow({
+            key: entityKey('persona', avatarId), label: name,
+            avatar: { src: getThumbnailUrlForViewport('persona', avatarId, isFirefox()), alt: '' },
             subtitle: descriptor?.title || descriptor?.description?.split(/\r?\n/, 1)[0] || '',
-            field: `persona:${avatarId}`, prefix: avatar, suffix: [badges(avatarId), more],
-        }).row;
-        row.classList.add('sb-persona-row', 'ds-entity-row');
-        row.dataset.avatarId = avatarId;
-        row.dataset.avatarRevision = String(avatarRevision);
-        row.tabIndex = 0;
-        row.setAttribute('role', 'listitem');
-        row.setAttribute('aria-label', name);
-        return row;
+            badges: badges(avatarId), suffix: [more], activation: 'activate',
+            compatClasses: { row: ['sb-persona-row'], badge: ['sb-persona-row-badges'] },
+            attributes: { 'data-avatar-id': avatarId, 'data-avatar-revision': String(avatarRevision) },
+        });
+        entityRows.set(entity.row, entity);
+        return entity.row;
     }
 
     function updateDisplayEntries() {
@@ -299,6 +305,10 @@ export function mountPersonaEditor(container) {
 
     function renderList() {
         if (!shell || destroyed) return;
+        if (initialized && !preparingReveal && !isOpen()) {
+            pendingRefresh ??= { reason: 'states', avatarId: undefined };
+            return;
+        }
         if (shell.isNavigating || shell.pointerActive) { shell.deferRefresh(); return; }
         // HUMAN: replace — Persona-count subtitle.
         subtitle.textContent = `${allIds.length} ${t`lorum ipsum`}`;
@@ -314,40 +324,49 @@ export function mountPersonaEditor(container) {
             }).element);
         }
         reconcileRows({
-            container: listBox, cache: rows, entries: pagination.slice(entries), key: avatarId => `persona:${avatarId}`,
-            signature: avatarId => {
-                const record = getPersonaRecord(avatarId);
-                return JSON.stringify([record.name, record.descriptor?.title, record.descriptor?.description]);
-            },
+            container: listBox, cache: rows, entries: pagination.slice(entries), key: avatarId => entityKey('persona', avatarId),
+            signature: avatarId => avatarId,
             create: makePersonaRow,
             update: (row, avatarId) => {
-                row.classList.toggle('is-selected', selectedAvatarId() === avatarId);
-                row.querySelector('.sb-persona-row-badges').replaceWith(badges(avatarId));
+                const { name, descriptor } = getPersonaRecord(avatarId);
+                const entity = entityRows.get(row);
+                const changes = {
+                    label: name, badges: badges(avatarId),
+                    subtitle: descriptor?.title || descriptor?.description?.split(/\r?\n/, 1)[0] || '',
+                };
                 if (row.dataset.avatarRevision !== String(avatarRevision)) {
-                    row.querySelector('img').src = getThumbnailUrlForViewport('persona', avatarId, true);
-                    row.dataset.avatarRevision = String(avatarRevision);
+                    changes.avatar = { src: getThumbnailUrlForViewport('persona', avatarId, true), alt: '' };
+                    changes.attributes = { 'data-avatar-revision': String(avatarRevision) };
                 }
+                entity.update(changes);
+                row.classList.toggle('is-selected', selectedAvatarId() === avatarId);
+                const more = entity.slots.suffix.firstElementChild;
+                more.setAttribute('aria-label', t`Actions for ${name}`);
+                more.title = t`Actions for ${name}`;
             },
         });
         searchControl.report(entries.length, allIds.length);
     }
 
-    async function goToPage(page) {
+    async function goToPage(page, isCurrent = () => true) {
         internalPaging = true;
-        try { await pagination.goTo(page); } finally { internalPaging = false; }
+        try { await pagination.goTo(page, { isCurrent }); } finally { internalPaging = false; }
     }
 
-    async function selectPersona(avatarId, section) {
-        if (destroyed || !getPersonaRecord(avatarId)) return false;
-        if (!(await shell.selectItem({ kind: 'persona', avatarId })) || destroyed) return false;
+    async function selectPersona(avatarId, section, isCurrent = () => true) {
+        if (destroyed || !isCurrent() || !getPersonaRecord(avatarId)) return false;
+        if (!(await shell.selectItem({ kind: 'persona', avatarId }, { isCurrent })) || destroyed) return false;
+        if (destroyed || !isCurrent()) return false;
         const index = entries.indexOf(avatarId);
-        if (index >= 0) await goToPage(pagination.pageOf(index));
+        if (index >= 0) await goToPage(pagination.pageOf(index), isCurrent);
+        if (destroyed || !isCurrent()) return false;
         if (section && selectedAvatarId() === avatarId) detailController()?.scrollToSection(section);
         return true;
     }
 
     function renderDetail(detail, item) {
         destroyDetail();
+        if (item.kind === 'persona') shell.root.dataset.personaAvatarId = item.avatarId;
         controllerKind = item.kind;
         if (item.kind === 'settings') {
             activeController = mountPersonaSettings({ host: detail, onClose: () => shell.deselectItem() });
@@ -356,7 +375,9 @@ export function mountPersonaEditor(container) {
         activeController = mountPersonaDetail({
             host: detail, avatarId: item.kind === 'create' ? null : item.avatarId,
             mode: item.kind === 'create' ? 'create' : 'edit',
-            requestClose: () => shell.deselectItem(),
+            requestClose: () => objectNavigation.back({
+                current: { kind: 'persona-editor', id: selectedAvatarId() }, fallback: () => shell.deselectItem(),
+            }),
             onSaved: ({ avatarId, created }) => run(async () => {
                 await refresh(created ? 'list' : 'persona', avatarId);
                 if (created && activeController && shell.selectedItem === item) await selectPersona(avatarId);
@@ -396,7 +417,9 @@ export function mountPersonaEditor(container) {
         }
     };
     shell.root.addEventListener('keydown', onEscape);
-    const isOpen = () => !destroyed && !shell.root.hidden && !shell.root.closest('[hidden], [aria-hidden="true"], [inert]');
+    function isOpen() {
+        return !destroyed && !shell.root.hidden && !shell.root.closest('[hidden], [aria-hidden="true"], [inert]');
+    }
     const unregister = registerEditorNavigation({
         session: {
             isOpen: () => Boolean(detailController()), isDirty: () => detailController()?.isDirty() ?? false,
@@ -408,23 +431,62 @@ export function mountPersonaEditor(container) {
         guardSelector: characterTabGuardSelector('persona'), escape: false,
     });
 
-    async function refresh(reason, avatarId) {
+    async function applyRefresh(reason, avatarId) {
         if (destroyed) return;
         heldOrder ??= [...entries];
         if (reason === 'list') {
             const revision = ++listRevision;
             const avatars = await listPersonaAvatars();
             if (destroyed || revision !== listRevision) return;
+            if (initialized && !preparingReveal && !isOpen()) {
+                void refresh('list', avatarId);
+                return;
+            }
             allIds = avatars;
             avatarRevision++;
             updateDisplayEntries();
-        } else if (reason === 'persona') {
+        } else if (reason === 'persona' || reason === 'avatar') {
+            if (reason === 'avatar') avatarRevision++;
             allIds = allIds.filter(id => getPersonaRecord(id));
             entries = entries.filter(id => getPersonaRecord(id));
             pagination.setTotal(entries.length);
         }
-        activeController?.refresh(reason === 'list' ? 'persona' : reason, avatarId);
+        activeController?.refresh(reason === 'list' ? 'avatar' : reason, avatarId);
         shell.refresh();
+    }
+
+    function refresh(reason, avatarId) {
+        if (destroyed) return Promise.resolve();
+        const priority = { states: 0, persona: 1, avatar: 2, list: 3 };
+        const previous = pendingRefresh;
+        pendingRefresh = {
+            reason: previous && priority[previous.reason] > priority[reason] ? previous.reason : reason,
+            avatarId: previous && previous.avatarId !== avatarId ? undefined : avatarId,
+        };
+        if (!initialized || !isOpen()) return Promise.resolve();
+        refreshPromise ??= Promise.resolve().then(async () => {
+            while (isOpen() && pendingRefresh) {
+                const next = pendingRefresh;
+                pendingRefresh = null;
+                await applyRefresh(next.reason, next.avatarId);
+            }
+        }).finally(() => {
+            refreshPromise = null;
+            if (pendingRefresh && isOpen()) return refresh(pendingRefresh.reason, pendingRefresh.avatarId);
+        });
+        return refreshPromise;
+    }
+
+    async function prepareReveal() {
+        if (destroyed || !pendingRefresh) return;
+        preparingReveal = true;
+        try {
+            while (!destroyed && pendingRefresh) {
+                const next = pendingRefresh;
+                pendingRefresh = null;
+                await applyRefresh(next.reason, next.avatarId);
+            }
+        } finally { preparingReveal = false; }
     }
 
     const subscriptions = [];
@@ -434,10 +496,11 @@ export function mountPersonaEditor(container) {
         subscriptions.push(() => eventSource.removeListener(type, handler));
     };
     const avatarFrom = payload => typeof payload === 'string' ? payload : payload?.avatarId;
-    for (const type of [event_types.PERSONA_UPDATED, event_types.PERSONA_RENAMED]) {
+    // The legacy adapter forwards PERSONA_UPDATED and chat state once; do not subscribe twice.
+    for (const type of [event_types.PERSONA_RENAMED]) {
         subscribe(type, payload => refresh('persona', avatarFrom(payload)));
     }
-    for (const type of [event_types.PERSONA_CHANGED, event_types.CHAT_CHANGED]) subscribe(type, () => refresh('states'));
+    subscribe(event_types.PERSONA_CHANGED, () => refresh('states'));
     subscribe(event_types.PERSONA_CREATED, payload => refresh('list', avatarFrom(payload)));
     subscribe(event_types.PERSONA_DELETED, payload => {
         const avatarId = avatarFrom(payload);
@@ -451,6 +514,8 @@ export function mountPersonaEditor(container) {
     const controller = {
         ready: null,
         selectPersona,
+        prepareReveal,
+        onReveal: () => shell.layout(),
         destroy() {
             if (destroyed) return;
             destroyed = true;
@@ -476,10 +541,11 @@ export function mountPersonaEditor(container) {
         if (destroyed) return;
         await setPersonaEditorAdapter({ isOpen, refresh });
         if (destroyed) return;
-        await Promise.all([refresh('list'), loadPersonaEditorStyles()]);
+        await Promise.all([applyRefresh('list'), loadPersonaEditorStyles()]);
         if (destroyed) return;
         container.classList.add('sb-persona-editor-mounted');
         shell.root.hidden = false;
+        initialized = true;
         shell.scheduleLayout();
         renderList();
     }).catch(error => {
@@ -490,14 +556,33 @@ export function mountPersonaEditor(container) {
     return controller;
 }
 
-export async function openPersonaEditor({ avatarId, section } = {}) {
+/** Routes to Persona, waits for its mounted controller, then selects a stable avatar. */
+export async function openPersonaEditor({ avatarId, section, isCurrent = () => true } = {}) {
+    if (!isCurrent()) return false;
     const route = globalThis.SillyBunnyShell?.openTab;
     if (!route) throw new Error('The Characters shell is not ready.');
-    // openTab delegates to the shell's existing openCharacterPanelTab route.
-    const routedController = await route('characters', 'persona');
-    const container = document.getElementById('PersonaManagement');
-    const controller = routedController ?? mountPersonaEditor(container);
-    await controller.ready;
-    if (!avatarId) return true;
-    return controller.selectPersona(avatarId, section);
+    let expired = false;
+    let timer;
+    const current = () => !expired && isCurrent();
+    const opening = async () => {
+        const routedController = await route('characters', 'persona');
+        if (routedController === false || !current()) return false;
+        const container = document.getElementById('PersonaManagement');
+        const controller = routedController ?? mountPersonaEditor(container);
+        await controller.ready;
+        if (!current()) return false;
+        if (!avatarId) return true;
+        return controller.selectPersona(avatarId, section, current);
+    };
+    try {
+        return await Promise.race([
+            opening(),
+            new Promise(resolve => {
+                timer = setTimeout(() => { expired = true; resolve(false); }, 5000);
+            }),
+        ]);
+    } finally {
+        expired = true;
+        clearTimeout(timer);
+    }
 }

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
+import { protectMaintainerServer, showToasts } from './helpers/maintainer-server.js';
 
 const sessions = new WeakMap();
 
@@ -10,6 +11,7 @@ async function waitForApp(page) {
 }
 
 test.beforeEach(async ({ page }) => {
+    await protectMaintainerServer(page);
     const session = { savedSettings: [], createdAvatars: new Set() };
     sessions.set(page, session);
     await page.route('**/api/settings/save', route => {
@@ -20,14 +22,21 @@ test.beforeEach(async ({ page }) => {
         session.savedSettings.push(payload);
         return route.fulfill({ json: { result: 'ok', version: payload._version + 1 } });
     });
-    await page.route('**/api/avatars/upload', async route => {
+    await page.route('**/api/avatars/get', async route => {
         const response = await route.fetch();
-        if (response.ok()) {
-            const payload = await response.json();
-            if (!payload.path) throw new Error('Avatar upload did not return its cleanup ID');
-            session.createdAvatars.add(payload.path);
-        }
-        await route.fulfill({ response });
+        const avatars = await response.json();
+        return route.fulfill({ json: [...avatars, ...session.createdAvatars] });
+    });
+    await page.route('**/api/avatars/upload', route => {
+        const body = route.request().postDataBuffer().toString('latin1');
+        const path = body.match(/name="overwrite_name"\r\n\r\n([^\r\n]+)/)?.[1];
+        if (!path) throw new Error('Persona upload fixture requires an overwrite_name');
+        session.createdAvatars.add(path);
+        return route.fulfill({ json: { path } });
+    });
+    await page.route('**/api/avatars/delete', route => {
+        session.createdAvatars.delete(route.request().postDataJSON().avatar);
+        return route.fulfill({ json: { result: 'ok' } });
     });
     await page.goto('/');
     await waitForApp(page);
@@ -115,9 +124,11 @@ test.describe('Persona editor', () => {
         expect(await rows.count()).toBeGreaterThan(0);
         for (const row of await rows.all()) {
             await expect(row).toHaveAccessibleName(/\S/);
-            await expect(row.locator('.sb-persona-row-avatar')).toBeVisible();
-            await expect(row.locator('.sb-persona-row-avatar')).toHaveAttribute('loading', 'lazy');
-            await expect(row.locator('.sb-persona-row-avatar')).toHaveAttribute('src', /\S/);
+            await expect(row.locator('.ds-entity-row__avatar img')).toBeVisible();
+            await expect(row.locator('.ds-entity-row__avatar img')).toHaveAttribute('loading', 'lazy');
+            await expect(row.locator('.ds-entity-row__avatar img')).toHaveAttribute('src', /\S/);
+            await expect(row.locator('.ds-entity-row__title')).toHaveText(/\S/);
+            await expect(row.locator('.ds-entity-row__chevron')).toHaveCount(0);
         }
         const active = rows.filter({ has: page.getByRole('img', { name: 'Current Persona', exact: true }) });
         await expect(active).toHaveAccessibleName(persona.name);
@@ -232,6 +243,7 @@ test.describe('Persona editor', () => {
         await page.reload();
         await waitForApp(page);
         const reopened = await openPersona(page, persona.avatarId);
+        await showToasts(page);
         const restore = page.getByRole('button', { name: 'Restore', exact: true });
         await expect(restore).toBeVisible();
         await expect(reopened.getByRole('textbox', { name: 'Persona Description', exact: true })).toHaveValue(persona.descriptor.description || '');
@@ -254,7 +266,7 @@ test.describe('Persona editor', () => {
         await expect.poll(() => savedSettings(page).some(payload => Object.values(payload.power_user.personas).includes(name))).toBe(true);
         const payload = savedSettings(page).findLast(payload => Object.values(payload.power_user.personas).includes(name));
         const id = Object.keys(payload.power_user.personas).find(id => payload.power_user.personas[id] === name);
-        expect(sessions.get(page).createdAvatars.has(id)).toBe(true);
+        await expect.poll(() => sessions.get(page).createdAvatars.has(id)).toBe(true);
         expect(payload.power_user.persona_descriptions[id].description).toBe('Disposable e2e persona');
         await expect(entry.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
         await entry.getByRole('button', { name: 'Back', exact: true }).click();

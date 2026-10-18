@@ -21,7 +21,9 @@
 import { formatCreatorNotes, getCurrentEntityId } from './chats.js';
 import { Popup, POPUP_TYPE, POPUP_RESULT } from './popup.js';
 import { openActionMenu } from './sillybunny-action-menu.js';
-import { setCharacterEditorQuickEdit } from './power-user.js';
+import { power_user, setCharacterEditorQuickEdit } from './power-user.js';
+import { groups } from './group-chats.js';
+import { world_info, world_names } from './world-info.js';
 import { eventSource, event_types } from './events.js';
 import {
     characters,
@@ -38,6 +40,10 @@ import { createEditorSession } from './sillybunny-editor/session.js';
 import { createEditorDraftStore } from './sillybunny-editor/drafts.js';
 import { mountEditorChrome, showDraftRecoveryToast, dismissDraftRecoveryToast } from './sillybunny-editor/chrome.js';
 import { registerEditorNavigation, confirmEditorLeave, discardEditorChanges } from './sillybunny-editor/navigation.js';
+import { objectNavigation } from './sillybunny-editor/object-navigation.js';
+import { createRow } from './sillybunny-editor/rows.js';
+import { reconcileRows } from './sillybunny-editor/list-rows.js';
+import './sillybunny-characters-navigation.js';
 import { mountEditorPreviews } from './sillybunny-editor/preview.js';
 import { animateHeightFrom, animateIn, animateListChange, MOTION_EASE_OUT_QUAD, MOTION_FAST, MOTION_SLOW, prefersReducedMotion } from './sillybunny-motion.js';
 
@@ -59,7 +65,7 @@ const session = createEditorSession({
     persist: () => createOrEditCharacter(),
     drafts,
     onStateChange: _renderChrome,
-    offerDraft: showDraftRecoveryToast,
+    offerDraft: (draft, actions) => showDraftRecoveryToast(draft, actions, `character:${session.context.entityId}`),
 });
 
 const navigation = {
@@ -78,6 +84,8 @@ let editorTitle = '';
 /** @type {MutationObserver|null} */
 let tokenMirrorObserver = null;
 let tokenMirrorScheduled = false;
+const relatedRows = new Map();
+let relatedLinksDirty = true;
 
 // Session-local greeting drafts (A.2.3). Rows edit these, never the entity, so
 // Cancel/Discard can revert and unrelated autosaves cannot persist half-edits.
@@ -108,6 +116,7 @@ export function initCharacterEditor() {
     _bindGreetingAddButtons();
     _bindGreetingExpanders();
     _bindFieldDirtyListeners();
+    _bindRelatedLinks();
     registerEditorNavigation(navigation);
 
     // Recapture baseline whenever the backend saves (avatar change, world link, export)
@@ -178,6 +187,42 @@ export function markCharacterEditorSaved() {
     session.markSaved();
 }
 
+/** Reconciles an acknowledged live favorite change without saving other editor fields. */
+export function syncCharacterEditorFavorite(avatar, fav) {
+    if (session.context?.mode !== 'edit' || session.context.entityId !== avatar) return false;
+    const button = document.getElementById('favorite_button');
+    if (!button) return false;
+    const favorite = Boolean(fav);
+    button.classList.toggle('fav_on', favorite);
+    button.classList.toggle('fav_off', !favorite);
+    _syncFavoritePressed();
+    const backup = drafts.read(avatar);
+    if (backup) drafts.write(avatar, { ...backup.snapshot, _fav: favorite });
+    session.rebase({ ...session.readBaseline(), _fav: favorite });
+    return true;
+}
+
+/** Drops only the deleted entity's session and backup; the caller owns navigation. */
+export function discardCharacterEditorForEntity(avatar) {
+    if (!avatar) return false;
+    drafts.remove(avatar);
+    dismissDraftRecoveryToast(`character:${avatar}`);
+    if (session.context?.mode !== 'edit' || session.context.entityId !== avatar) return false;
+    session.close();
+    _renderRelatedLinks();
+    if (draftOwner === avatar) {
+        draftOwner = null;
+        draftAlt = [];
+        draftGrp = [];
+        draftAltKeys = [];
+        draftGrpKeys = [];
+        _renderAlternateGreetings();
+        _renderGroupGreetings();
+    }
+    previews?.reset();
+    return true;
+}
+
 /**
  * Alternate greetings to submit for a save. Returns the editor draft when it
  * belongs to the character being saved, otherwise that character's stored list,
@@ -239,6 +284,7 @@ function _openSession(context) {
     previews?.reset();
     _syncRoleSegment();
     session.open(context);
+    _renderRelatedLinks();
     _syncTokenReadout();
     _syncFavoritePressed();
     chrome?.scheduleOverflow();
@@ -366,7 +412,10 @@ async function _handleBack(event) {
         event.stopImmediatePropagation();
         return;
     }
-    _closeSafely();
+    await objectNavigation.back({
+        current: { kind: 'character-editor', id: characters[this_chid]?.avatar ?? null },
+        fallback: _closeSafely,
+    });
 }
 
 function _closeSafely() {
@@ -562,6 +611,107 @@ function _dispatchTransportClick(selector) {
     const element = document.querySelector(selector);
     if (!(element instanceof HTMLElement)) return;
     element.click();
+}
+
+function _bindRelatedLinks() {
+    const heading = document.getElementById('sb_character_section_related');
+    // HUMAN: replace — Related section heading.
+    if (heading) heading.textContent = t`lorum ipsum`;
+    for (const type of [
+        event_types.WORLDINFO_SETTINGS_UPDATED, event_types.SETTINGS_UPDATED,
+        event_types.CHARACTER_EDITED, event_types.CHARACTER_PAGE_LOADED,
+        event_types.GROUP_UPDATED, event_types.GROUP_CHAT_CREATED, event_types.GROUP_CHAT_DELETED,
+        event_types.PERSONA_UPDATED, event_types.PERSONA_CREATED, event_types.PERSONA_DELETED, event_types.PERSONA_RENAMED,
+    ]) {
+        eventSource.on(type, _renderRelatedLinks);
+    }
+    document.getElementById('world_button')?.addEventListener('click', event => {
+        if (event.shiftKey || event.altKey || session.context?.mode !== 'edit') return;
+        const character = characters.find(character => character.avatar === session.context.entityId);
+        const book = character?.data?.extensions?.world;
+        if (!book || !world_names.includes(book)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void objectNavigation.navigate({ kind: 'world-info', id: book }, {
+            from: { kind: 'character-editor', id: character.avatar },
+        });
+    }, { capture: true });
+    _renderRelatedLinks();
+    const panel = document.getElementById('right-nav-panel');
+    if (panel) {
+        new MutationObserver(() => {
+            if (relatedLinksDirty && _isEditorVisible()) _renderRelatedLinks();
+        }).observe(panel, { attributes: true, attributeFilter: ['class', 'data-menu-type', 'aria-hidden'] });
+    }
+}
+
+function _relatedEntries(character) {
+    const avatar = character.avatar;
+    const primary = character.data?.extensions?.world;
+    // Upstream charLore uses getCharaFilename's extensionless key; keep full-avatar compatibility too.
+    const filename = avatar.replace(/\.[^/.]+$/, '');
+    const books = new Set([primary, ...(world_info.charLore ?? [])
+        .filter(entry => entry.name === avatar || entry.name === filename)
+        .flatMap(entry => entry.extraBooks ?? [])].filter(Boolean));
+    const entries = [...books].map(book => ({
+        kind: 'world-info', id: book, label: book, glyph: 'book',
+        subtitle: book === primary ? t`Primary Lorebook` : t`Additional Lorebooks`,
+    }));
+    if (!books.size) entries.push({ kind: 'link-lorebook', id: avatar, label: t`Link to World Info`, glyph: 'book' });
+    for (const group of groups.filter(group => group.members?.includes(avatar))) {
+        entries.push({ kind: 'group-editor', id: String(group.id), label: group.name, subtitle: t`Groups`, glyph: 'users' });
+    }
+    for (const [id, descriptor] of Object.entries(power_user.persona_descriptions ?? {})) {
+        if (!Object.hasOwn(power_user.personas ?? {}, id)) continue;
+        if (!descriptor?.connections?.some(connection => connection.type === 'character' && connection.id === avatar)) continue;
+        entries.push({ kind: 'persona-editor', id, label: power_user.personas[id], subtitle: t`Persona`, glyph: 'user' });
+    }
+    return entries;
+}
+
+function _renderRelatedLinks() {
+    if (!_isEditorVisible()) {
+        relatedLinksDirty = true;
+        return;
+    }
+    relatedLinksDirty = false;
+    const section = document.getElementById('sb_character_related');
+    const container = document.getElementById('sb_character_related_rows');
+    if (!section || !container) return;
+    const character = session.isOpen() && session.context?.mode === 'edit'
+        ? characters.find(character => character.avatar === session.context.entityId) : null;
+    section.hidden = !character?.avatar;
+    section.classList.toggle('displayNone', section.hidden);
+    reconcileRows({
+        container, cache: relatedRows, entries: character ? _relatedEntries(character) : [],
+        key: entry => `${entry.kind}:${entry.id}`,
+        signature: entry => `${entry.kind}:${entry.id}`,
+        create: entry => {
+            const glyph = document.createElement('i');
+            glyph.className = `fa-solid fa-${entry.glyph}`;
+            glyph.setAttribute('aria-hidden', 'true');
+            const view = createRow({
+                label: entry.label, subtitle: entry.subtitle, field: 'related', prefix: glyph, activatable: true,
+                onActivate: () => {
+                    if (session.context?.mode !== 'edit') return;
+                    if (entry.kind === 'link-lorebook') return _dispatchTransportAction('set_character_world');
+                    void objectNavigation.navigate({ kind: entry.kind, id: entry.id }, {
+                        from: { kind: 'character-editor', id: session.context.entityId },
+                    });
+                },
+            });
+            view.row.classList.add('ds-row-button');
+            view.row.dataset.relatedKind = entry.kind;
+            view.row.dataset.targetId = entry.id;
+            return view.row;
+        },
+        update: (row, entry) => {
+            const label = row.querySelector('.ds-row-label');
+            if (label.textContent !== entry.label) label.textContent = entry.label;
+            const subtitle = row.querySelector('.ds-row-subtitle');
+            if (subtitle && subtitle.textContent !== entry.subtitle) subtitle.textContent = entry.subtitle;
+        },
+    });
 }
 
 function _bindExportMenu() {

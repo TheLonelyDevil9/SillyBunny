@@ -43,7 +43,7 @@ import { escapeRegex } from './util/escape-regex.js';
 import { flashHighlight, showFontAwesomePicker } from './utils.js';
 import { extension_settings } from './extensions.js';
 import { changePanelApiVisibility, characters, displayVersion, flushCharacterSaveDebounced, getOneCharacter, getThumbnailUrl, parseAvatarSource, refreshCsrfToken, saveSettingsDebounced, select_selected_character, this_chid } from '../script.js';
-import { addLanguagesToDropdown } from './i18n.js';
+import { addLanguagesToDropdown, t } from './i18n.js';
 import { syncUserControls } from './user.js';
 import {
     SAMPLING_PARAMETER_DESCRIPTORS,
@@ -72,10 +72,11 @@ import { normalizeBackendSettingsRows, normalizeSettingsDetail, normalizeSetting
 import { createSubpageStack, SB_SUBPAGE_DURATION, SB_SUBPAGE_STORE_CLASS } from './sillybunny-settings-subpage.js';
 import { SB_SUBPAGE_BUILDERS } from './sillybunny-settings-subpage-descriptors.js';
 import { createConnectionsPanel } from './sillybunny-connections-panel.js';
+import { createStatusPage } from './sillybunny-editor/status-page.js';
 import { initializePromptEditor } from './sillybunny-prompt-editor.js';
 // SillyBunny: character editor controller (Step 3b, feat/v1.9.0-ui-overhaul)
 import { initCharacterEditor } from './sillybunny-character-editor.js';
-
+import { collectEntitySearchEntries, primeWorldInfoSearchCache } from './sillybunny-search-entities.js';
 const sbMobileShellLifecycle = createMobileShellLifecycle();
 const sbPresetApiSyncLifecycle = createPresetApiSyncLifecycle();
 const sbSearchRenderRequests = new WeakMap();
@@ -675,20 +676,36 @@ const SB_SHORTCUT_LABELS = Object.freeze({
 });
 const SB_PANEL_STYLESHEETS = Object.freeze({
     'left:editor': [
-        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-prompt-editor.css?v=20261018a', id: 'deferred-prompt-editor-css' },
     ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
         // SillyBunny: the rebuilt World Info shell stays deferred like the Prompt Editor.
-        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-world-info-editor.css?v=20261018e', id: 'deferred-world-info-editor-css' },
     ],
     'characters:persona': [
         // SillyBunny: persona editor assets stay deferred like World Info — see docs/ui-migration.md
-        { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
         { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
         { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
+    ],
+    'characters:characters': [
+        // SillyBunny: the shared list and its selection UI stay deferred until the mount gate resolves — see docs/ui-migration.md.
+        { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261018c', id: 'deferred-character-list-css' },
+    ],
+    'characters:groups': [
+        // SillyBunny: Characters and Groups use the same deferred selection UI — see docs/ui-migration.md.
+        { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261018c', id: 'deferred-character-list-css' },
+    ],
+    'characters:import': [
+        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
+        { href: 'css/sillybunny-character-import.css?v=20261018a', id: 'deferred-character-import-css' },
     ],
     'left:advanced-formatting': [
         { href: 'css/macros.css', id: 'deferred-macros-css' },
@@ -729,7 +746,6 @@ const SB_MOBILE_ACTION_DEBOUNCE_MS = 140;
 let sbInlineDrawerPersistenceObserver = null;
 let sbInlineDrawerPersistenceQueued = false;
 let sbChatScriptModulePromise = null;
-let sbMainScriptModulePromise = null;
 let sbComposerControlsObserver = null;
 let sbComposerControlsSyncQueued = false;
 let sbStorageFlushTimer = 0;
@@ -1012,6 +1028,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         icon: 'fa-address-book',
         tooltip: 'Open and manage character cards',
         description: 'View or create character cards here for your roleplays and chats!',
+        searchAliases: ['character card', 'character list', 'avatars', 'cards'],
     },
     {
         id: 'groups',
@@ -1019,6 +1036,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         icon: 'fa-users',
         tooltip: 'Open and manage group conversations',
         description: 'View or create group chats here for your roleplays and chats!',
+        searchAliases: ['group chat', 'group chats', 'group members', 'muting'],
     },
     {
         id: 'editor',
@@ -1026,6 +1044,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         icon: 'fa-pen-to-square',
         tooltip: 'Edit character cards and groups',
         description: 'Edit your character cards or group chats in great detail here!',
+        searchAliases: ['character editor', 'group editor', 'edit card', 'first message', 'greetings'],
     },
     {
         id: 'world-info',
@@ -1034,6 +1053,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         tooltip: 'Manage lorebooks and world information',
         description: SB_WORLD_INFO_SUBTITLE_HTML,
         descriptionIsHtml: true,
+        searchAliases: ['lorebook', 'lorebooks', 'world info book', 'world', 'entries'],
     },
     {
         id: 'persona',
@@ -1041,6 +1061,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         icon: 'fa-face-smile',
         tooltip: 'Manage user persona/personality',
         description: 'Edit your own persona here for roleplay and chats!',
+        searchAliases: ['personas', 'persona description', 'impersonate'],
     },
     {
         id: 'import',
@@ -1048,6 +1069,7 @@ const SB_CHARACTER_PANEL_TABS = Object.freeze([
         icon: 'fa-file-import',
         tooltip: 'Add or import new character cards',
         description: 'Directly import character cards here from various sources.',
+        searchAliases: ['import character', 'import card', 'chub', 'png', 'add character'],
     },
 ]);
 const SB_CHARACTER_PANEL_DEFAULT_TAB = 'characters';
@@ -1073,6 +1095,7 @@ const SB_SHELLS = Object.freeze({
             icon: 'fa-plug',
             tooltip: 'Modify the API connection to the model backend',
             description: 'Configure the model backend for all AI character responses. We recommend OpenRouter if you\'re unsure.',
+            searchAliases: ['API Response Configuration', 'AI Response Configuration', 'Response Config', 'Chat Completion', 'Text Completion', 'API key'],
         },
         embeddedTabs: [],
         customTabs: [
@@ -1148,6 +1171,7 @@ const SB_SHELLS = Object.freeze({
             description: 'Customize SillyBunny\'s visual appearance, themes, backgrounds, and UI scale.',
             searchPlaceholder: 'Search themes, backgrounds, blur, or UI scale',
             searchExamples: ['theme', 'background', 'blur', 'scale'],
+            searchAliases: ['colors', 'colours', 'wallpaper', 'fonts', 'UI scale'],
         },
         embeddedTabs: [
             {
@@ -1159,6 +1183,7 @@ const SB_SHELLS = Object.freeze({
                 description: 'Install, manage, and configure SillyTavern extensions here. Backwards compatibility isn\'t guaranteed, but should be applicable.',
                 searchPlaceholder: 'Search themes, Quick Reply, Dialogue Colors, or Image Gen',
                 searchExamples: ['themes', 'Quick Reply', 'Dialogue Colors', 'Image Gen'],
+                searchAliases: ['addons', 'plugins', 'install extension', 'third party'],
             },
         ],
         customTabs: [
@@ -1170,6 +1195,7 @@ const SB_SHELLS = Object.freeze({
                 description: 'Configure interface behavior, power user features, and UI preferences.',
                 searchPlaceholder: 'Search top bar, auto-scroll, power user, or chat features',
                 searchExamples: ['top bar', 'auto-scroll', 'power user'],
+                searchAliases: ['UI', 'behavior', 'stscript'],
             },
             {
                 id: 'messages',
@@ -1179,6 +1205,7 @@ const SB_SHELLS = Object.freeze({
                 description: 'Configure message display, actions, swipes, and interaction preferences.',
                 searchPlaceholder: 'Search message actions, swipes, auto-scroll, or display',
                 searchExamples: ['swipes', 'message actions', 'auto-scroll'],
+                searchAliases: ['chat', 'message display', 'sending', 'character handling'],
             },
             {
                 id: 'data-security',
@@ -1188,6 +1215,7 @@ const SB_SHELLS = Object.freeze({
                 description: 'Manage the SillyBunny backend and server settings here.',
                 searchPlaceholder: 'Search backup, data path, security, or config.yaml',
                 searchExamples: ['backup', 'data path', 'security'],
+                searchAliases: ['backup', 'restore', 'import', 'export', 'server tools', 'data path'],
             },
             {
                 id: 'logs',
@@ -1197,6 +1225,7 @@ const SB_SHELLS = Object.freeze({
                 description: 'View SillyBunny logs for advanced troubleshooting or bug reporting.',
                 searchPlaceholder: 'Search error, warning, npm, bun, or extension logs',
                 searchExamples: ['error', 'warning', 'npm', 'bun'],
+                searchAliases: ['console', 'console logs', 'errors', 'troubleshooting'],
             },
         ],
     },
@@ -1258,7 +1287,16 @@ const SB_UNIVERSAL_SEARCH_PLACEHOLDER = 'Type to search...';
 const SB_UNIVERSAL_SEARCH_IDLE_TITLE = 'Search all settings';
 const SB_UNIVERSAL_SEARCH_IDLE_HINT = 'Jump to any workspace or customization control from one place.';
 const SB_UNIVERSAL_SEARCH_EMPTY_HINT = 'Could not find query. Try a broader term or a different setting name.';
-const SB_UNIVERSAL_SEARCH_RESULT_LIMIT = 10;
+// The panel shows a short list and reveals the rest on request, so the ceiling belongs to the
+// rendered page rather than the match set: `collectGlobalSearchMatches` collects everything and
+// `renderUniversalSearchResults` decides how much of it to paint.
+const SB_UNIVERSAL_SEARCH_RESULT_LIMIT = 24;
+const SB_UNIVERSAL_SEARCH_GROUP_LIMIT = 5;
+const SB_UNIVERSAL_SEARCH_QUICK_ACTION_LIMIT = 10;
+const SB_UNIVERSAL_SEARCH_DEBOUNCE_MS = 140;
+// Entity results read names from data: a few thousand characters and worlds stay cheap, but the
+// index is rebuilt per keystroke, so entry bodies are only scanned for the worlds that matched.
+const SB_UNIVERSAL_ENTITY_SCAN_LIMIT = 4000;
 const SB_MOBILE_QUICK_ACTION_LIMIT = sbMobileShellLifecycle.railModel.limits.quickActionLimit;
 const SB_MOBILE_QUICK_ACTION_ICON_FALLBACK = sbMobileShellLifecycle.railModel.limits.iconFallback;
 const SB_MOBILE_NAV_CLOSED_ICON = 'fa-compass';
@@ -1406,6 +1444,12 @@ const sbState = {
         expanded: false,
         dismissBound: false,
         activeIndex: -1,
+        renderTimer: 0,
+        renderedQuery: '',
+        renderedRows: null,
+        expandedAll: false,
+        entityPrimeStarted: false,
+        skippedWorlds: null,
     },
     characterDrawer: {
         stateObserver: null,
@@ -2418,6 +2462,73 @@ function getUniversalSearchState() {
     return sbState.universalSearch;
 }
 
+// One trailing render per typing pause. `flush` is for keys that act on the list immediately.
+function scheduleUniversalSearchRender({ flush = false } = {}) {
+    const searchState = getUniversalSearchState();
+    const input = searchState.input;
+    if (!(input instanceof HTMLInputElement) || !searchState.expanded) {
+        window.clearTimeout(searchState.renderTimer);
+        searchState.renderTimer = 0;
+        return;
+    }
+
+    window.clearTimeout(searchState.renderTimer);
+    if (flush) {
+        searchState.renderTimer = 0;
+        renderUniversalSearchResults(input.value);
+        return;
+    }
+
+    searchState.renderTimer = window.setTimeout(() => {
+        searchState.renderTimer = 0;
+        renderUniversalSearchResults(input.value);
+    }, SB_UNIVERSAL_SEARCH_DEBOUNCE_MS);
+}
+
+// Loading one book per keystroke would be a request storm, so entry bodies are primed once when
+// the panel opens under a fixed budget, then the list is repainted with whatever arrived.
+function primeUniversalSearchEntityMetadata() {
+    const searchState = getUniversalSearchState();
+    if (searchState.entityPrimeStarted) {
+        return;
+    }
+    searchState.entityPrimeStarted = true;
+    const skippedWorlds = searchState.skippedWorlds ?? new Set();
+    searchState.skippedWorlds = skippedWorlds;
+    const names = getSillyTavernContext()?.getWorldInfoNames?.() ?? [];
+    void primeWorldInfoSearchCache({ names, skippedWorlds }).then(() => {
+        if (getUniversalSearchState().expanded && (getUniversalSearchState().input?.value ?? '').trim()) {
+            scheduleUniversalSearchRender({ flush: true });
+        }
+    }).catch(() => {
+        // A failed priming pass leaves world names searchable; only entry bodies are missing.
+    });
+}
+
+// The panel paints a short list, so a broad query needs a way to ask for the rest. The row carries
+// no id of its own, which keeps it out of the arrow-key list, and it is not a result: Enter on it
+// still opens the highlighted setting.
+function createUniversalSearchShowAllRow(hiddenCount, groupLabel = '') {
+    const row = createElement('button', {
+        className: 'sb-search-show-all',
+        attrs: {
+            type: 'button',
+            'data-sb-search-show-all': 'true',
+        },
+    });    row.appendChild(createElement('strong', {
+        text: groupLabel
+            ? `Show ${hiddenCount} more in ${groupLabel}`
+            : `Show all ${hiddenCount} more results`,
+    }));
+    row.addEventListener('click', () => {
+        const searchState = getUniversalSearchState();
+        searchState.expandedAll = true;
+        // Go through the open-state setter: it is the path that repaints an already-open panel.
+        setUniversalSearchOpenState(true);
+    });
+    return row;
+}
+
 function renderSearchEmptyState(container, title, detail) {
     container.replaceChildren();
 
@@ -2479,12 +2590,18 @@ function setUniversalSearchOpenState(isOpen, { focusInput = false } = {}) {
     }
 
     if (!nextOpenState) {
+        window.clearTimeout(searchState.renderTimer);
+        searchState.renderTimer = 0;
         searchState.results?.classList.remove('is-visible');
         if (wasOpen) {
             requestMobileViewportReset({ restoreScroll: true });
         }
-    } else {
+    } else if (!wasOpen) {
+        // Opening paints the current query once; later keystrokes go through the debounce.
         renderUniversalSearchResults(input?.value ?? '');
+        primeUniversalSearchEntityMetadata();
+    } else if (!searchState.renderTimer && (input?.value ?? '').trim()) {
+        scheduleUniversalSearchRender();
     }
 
     if (focusInput && input instanceof HTMLInputElement) {
@@ -2537,25 +2654,6 @@ function getCharacterPanelTabConfig(tabId) {
 function normalizeCharacterPanelTab(tabId) {
     const normalizedTabId = normalizeText(tabId);
     return getCharacterPanelTabConfig(normalizedTabId) ? normalizedTabId : SB_CHARACTER_PANEL_DEFAULT_TAB;
-}
-
-function getCharacterPanelSearchEntries() {
-    const panel = getCharacterPanel();
-
-    return SB_CHARACTER_PANEL_TABS.map((tab) => {
-        const button = panel?.querySelector(`[data-sb-character-tab="${CSS.escape(tab.id)}"]`);
-        const searchText = normalizeText([tab.label, tab.id, 'characters'].join(' '));
-
-        return {
-            element: button instanceof HTMLElement ? button : null,
-            searchText,
-            displayText: tab.label,
-            sectionLabel: tab.label,
-            tabId: tab.id,
-            tabLabel: tab.label,
-            dedupeKey: `characters::${tab.id}`,
-        };
-    });
 }
 
 function isMobileViewport() {
@@ -3638,14 +3736,6 @@ function getChatScriptModule() {
     }
 
     return sbChatScriptModulePromise;
-}
-
-function getMainScriptModule() {
-    if (!sbMainScriptModulePromise) {
-        sbMainScriptModulePromise = import('../script.js');
-    }
-
-    return sbMainScriptModulePromise;
 }
 
 function getCookieClearDomains(hostname) {
@@ -7321,12 +7411,13 @@ function hasActiveCharacterChat(context = getSillyTavernContext()) {
 }
 
 async function setCharacterListEntityView(view) {
-    try {
-        const module = await getMainScriptModule();
-        module.setCharacterMenuEntityView?.(view);
-    } catch (error) {
-        console.warn('[SillyBunny] Could not set character list entity view.', error);
-    }
+    const [state, script] = await Promise.all([
+        import('./sillybunny-character-list-state.js'),
+        import('../script.js'),
+    ]);
+    // SillyBunny: replace Back's upstream menu state without its extra render — see docs/ui-migration.md.
+    script.setMenuType('characters');
+    await state.switchCharacterListView(view, { render: false });
 }
 
 function syncCharacterListControls(view) {
@@ -7365,61 +7456,15 @@ function syncCharacterListControls(view) {
     }
 }
 
-function ensureCharacterListToolbarLayout() {
-    const fixedTop = document.getElementById('charListFixedTop');
-    const buttonBar = document.getElementById('rm_button_bar');
-    const createButton = document.getElementById('rm_button_create');
-    const createGroupButton = document.getElementById('rm_button_group_chats');
-    const searchButton = document.getElementById('rm_button_search');
-    const pagination = document.getElementById('rm_print_characters_pagination');
+let characterListViewPromise = null;
+let characterListViewRevision = 0;
 
-    if (!(fixedTop instanceof HTMLElement) || !(buttonBar instanceof HTMLElement)) {
-        return;
-    }
-
-    let actionBar = fixedTop.querySelector('.sb-character-create-bar');
-    if (!(actionBar instanceof HTMLElement)) {
-        actionBar = createElement('div', { className: 'sb-character-create-bar' });
-        fixedTop.prepend(actionBar);
-    }
-
-    if (createButton instanceof HTMLElement && createButton.parentElement !== actionBar) {
-        actionBar.prepend(createButton);
-    }
-
-    if (createGroupButton instanceof HTMLElement && createGroupButton.parentElement !== actionBar) {
-        const afterCreate = createButton instanceof HTMLElement && createButton.parentElement === actionBar
-            ? createButton.nextSibling
-            : actionBar.firstChild;
-        actionBar.insertBefore(createGroupButton, afterCreate);
-    }
-
-    if (buttonBar.parentElement !== actionBar) {
-        const actionButton = createGroupButton instanceof HTMLElement && createGroupButton.parentElement === actionBar
-            ? createGroupButton
-            : createButton;
-        const afterAction = actionButton instanceof HTMLElement && actionButton.parentElement === actionBar
-            ? actionButton.nextSibling
-            : actionBar.firstChild;
-        actionBar.insertBefore(buttonBar, afterAction);
-    }
-
-    if (pagination instanceof HTMLElement) {
-        if (isMobileViewport()) {
-            if (pagination.parentElement !== fixedTop.parentElement) {
-                fixedTop.after(pagination);
-            }
-        } else if (pagination.parentElement !== actionBar) {
-            actionBar.insertBefore(pagination, buttonBar.nextSibling);
-        }
-    }
-
-    if (searchButton instanceof HTMLElement && searchButton.parentElement !== buttonBar) {
-        buttonBar.appendChild(searchButton);
-    }
+function showCharacterListView(view = 'characters') {
+    characterListViewPromise = revealCharacterListView(view, ++characterListViewRevision);
+    return characterListViewPromise;
 }
 
-async function showCharacterListView(view = 'characters') {
+async function revealCharacterListView(view, revision) {
     setCharacterEditorEmptyState(false);
     setCharacterPersonaPanelVisible(false);
     setCharacterImportPanelVisible(false);
@@ -7431,22 +7476,32 @@ async function showCharacterListView(view = 'characters') {
     setCharacterPanelMenuType(panel, normalizedView);
 
     syncCharacterListControls(normalizedView);
+    const listController = await mountCharacterListController();
+    if (revision !== characterListViewRevision) return false;
     await setCharacterListEntityView(normalizedView);
+    if (revision !== characterListViewRevision) return false;
 
-    const backButton = document.getElementById('rm_button_back');
-
-    if (backButton instanceof HTMLElement) {
-        backButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        setCharacterPanelMenuType(panel, normalizedView);
-        syncCharacterListControls(normalizedView);
-        syncCharacterShellTabs(normalizedView);
-        return true;
+    // SillyBunny: list navigation has one render and no synthetic upstream Back refresh — see docs/ui-migration.md.
+    for (const id of ['result_info', 'rm_PinAndTabs', 'rm_ch_create_block', 'rm_group_chats_block']) {
+        const element = document.getElementById(id);
+        if (!(element instanceof HTMLElement)) continue;
+        element.classList.remove('sb-active-right-menu');
+        element.style.display = 'none';
+        element.style.visibility = 'hidden';
+        element.style.pointerEvents = 'none';
     }
-
-    resetCharacterPanelView();
+    const list = document.getElementById('rm_characters_block');
+    if (list instanceof HTMLElement) {
+        list.classList.add('sb-active-right-menu');
+        list.style.display = 'flex';
+        list.style.opacity = '1';
+        list.style.visibility = 'visible';
+        list.style.pointerEvents = 'auto';
+    }
     setCharacterPanelMenuType(panel, normalizedView);
     syncCharacterListControls(normalizedView);
     syncCharacterShellTabs(normalizedView);
+    await listController.revealActiveEntity(() => revision === characterListViewRevision);
     return true;
 }
 
@@ -7567,72 +7622,145 @@ function ensureCharacterWorldInfoPanel() {
     }
 
     drawer.querySelector('#WI_panel_pin_div')?.classList.add('sb-shell-hidden-control');
-    preloadPanelStylesheets('characters', 'world-info');
     return host;
 }
 
 // SillyBunny: lazy-mount the persona editor only after its deferred styles load — see docs/ui-migration.md
 let personaEditorMountPromise = null;
-function setCharacterPersonaPanelVisible(visible) {
-    const host = ensureCharacterPersonaPanel() ?? document.getElementById('sb_character_persona_panel');
-    const content = document.getElementById('PersonaManagement');
+let characterListMountPromise = null;
+let characterPanelRevealPromise = null;
+const deferredCharacterPanels = new WeakMap();
 
-    if (host instanceof HTMLElement) {
-        host.hidden = !visible;
-        host.setAttribute('aria-hidden', String(!visible));
+function hideDeferredCharacterPanel(host, content = host, { preserveLayout = false } = {}) {
+    if (!(host instanceof HTMLElement)) return;
+    const state = deferredCharacterPanels.get(host);
+    if (state) {
+        state.requested = false;
+        state.revision++;
+        state.status.element.hidden = true;
     }
-
-    if (content instanceof HTMLElement) {
-        content.setAttribute('aria-hidden', String(!visible));
-        if (visible && !personaEditorMountPromise) {
-            personaEditorMountPromise = import('./sillybunny-persona-editor.js').then(async module => {
-                await module.loadPersonaEditorStyles(SB_PANEL_STYLESHEETS['characters:persona']);
-                const controller = module.mountPersonaEditor(content);
-                await controller.ready;
-                return controller;
-            });
-            // SillyBunny: observe failures without swallowing the bridge's rejection — see docs/ui-migration.md
-            personaEditorMountPromise.catch(error => {
-                personaEditorMountPromise = null;
-                console.warn('[SillyBunny] Could not mount the persona editor.', error);
-            });
-        }
-    }
+    if (!preserveLayout) host.hidden = true;
+    host.setAttribute('aria-hidden', 'true');
+    content?.setAttribute('aria-hidden', 'true');
 }
 
+function revealDeferredCharacterPanel(host, content, mount) {
+    if (!(host instanceof HTMLElement)) return Promise.resolve(false);
+    let state = deferredCharacterPanels.get(host);
+    if (!state) {
+        const status = createStatusPage({ icon: 'hourglass', title: t`Loading...` });
+        // Use already-loaded empty-page chrome so deferred editor CSS cannot restyle loading mid-flight.
+        status.element.className = 'sb-character-editor-empty sb-character-panel-loading';
+        status.element.querySelector('i')?.remove();
+        status.element.querySelector('h3')?.removeAttribute('class');
+        status.element.hidden = true;
+        host.after(status.element);
+        state = { status, revision: 0, requested: false, reveal: null };
+        deferredCharacterPanels.set(host, state);
+    }
+    if (state.requested) return state.reveal;
+    hideDeferredCharacterPanel(host, content);
+    state.requested = true;
+    const revision = ++state.revision;
+    state.status.update({ icon: 'hourglass', title: t`Loading...` });
+    state.status.element.hidden = false;
+    const isCurrent = () => state.requested && state.revision === revision;
+    state.reveal = (async () => {
+        const controller = await mount();
+        await controller?.ready;
+        if (!controller || !isCurrent()) return false;
+        await controller.prepareReveal?.();
+        if (!isCurrent()) return false;
+        state.status.element.hidden = true;
+        host.hidden = false;
+        host.setAttribute('aria-hidden', 'false');
+        content?.setAttribute('aria-hidden', 'false');
+        controller.onReveal?.();
+        return controller;
+    })().catch(error => {
+        if (isCurrent()) {
+            state.requested = false;
+            state.status.update({ icon: 'triangle-exclamation', title: t`Error` });
+        }
+        throw error;
+    });
+    state.reveal.catch(error => console.warn('[SillyBunny] Could not reveal the character panel.', error));
+    return state.reveal;
+}
+
+async function mountCharacterListController() {
+    characterListMountPromise ??= import('./sillybunny-character-list.js')
+        .then(module => module.mountCharacterList(undefined, { render: false, getNavigationGeneration: getCharacterListNavigationGeneration }))
+        .catch(error => {
+            characterListMountPromise = null;
+            console.warn('[SillyBunny] Could not mount the character list.', error);
+            throw error;
+        });
+    return characterListMountPromise;
+}
+
+function getCharacterListNavigationGeneration() {
+    // SillyBunny: authoritative page and character-tab revisions exclude close-animation cleanup — see docs/ui-migration.md.
+    return `${sbSettingsState.closeGen}:${characterListViewRevision}`;
+}
+function setCharacterPersonaPanelVisible(visible) {
+    const host = visible ? ensureCharacterPersonaPanel() : document.getElementById('sb_character_persona_panel');
+    const content = document.getElementById('PersonaManagement');
+    if (!visible) return hideDeferredCharacterPanel(host, content);
+    characterPanelRevealPromise = revealDeferredCharacterPanel(host, content, () => {
+        personaEditorMountPromise ??= import('./sillybunny-persona-editor.js').then(async module => {
+            await module.loadPersonaEditorStyles(SB_PANEL_STYLESHEETS['characters:persona']);
+            const controller = module.mountPersonaEditor(content);
+            await controller.ready;
+            return controller;
+        }).catch(error => {
+            personaEditorMountPromise = null;
+            throw error;
+        });
+        return personaEditorMountPromise;
+    });
+    return characterPanelRevealPromise;
+}
+
+let characterImportMountPromise = null;
 function setCharacterImportPanelVisible(visible) {
     const host = document.getElementById('sb_character_import_panel');
-
-    if (host instanceof HTMLElement) {
-        host.hidden = !visible;
-        host.setAttribute('aria-hidden', String(!visible));
-    }
+    if (!visible) return hideDeferredCharacterPanel(host);
+    characterPanelRevealPromise = revealDeferredCharacterPanel(host, host, () => {
+        characterImportMountPromise ??= import('./sillybunny-character-import.js').then(async module => {
+            await module.loadCharacterImportStyles(SB_PANEL_STYLESHEETS['characters:import']);
+            const controller = module.mountCharacterImport(host);
+            await controller.ready;
+            return controller;
+        }).catch(error => {
+            characterImportMountPromise = null;
+            throw error;
+        });
+        return characterImportMountPromise;
+    });
+    return characterPanelRevealPromise;
 }
 
 // SillyBunny: defer the rebuilt editor and its styles until this tab is first requested.
 let worldInfoEditorMountPromise = null;
-function setCharacterWorldInfoPanelVisible(visible) {
-    const host = ensureCharacterWorldInfoPanel() ?? document.getElementById('sb_character_world_info_panel');
+function setCharacterWorldInfoPanelVisible(visible, { preserveLayout = false } = {}) {
+    const host = visible ? ensureCharacterWorldInfoPanel() : document.getElementById('sb_character_world_info_panel');
     const content = document.getElementById('WorldInfo');
-
-    if (host instanceof HTMLElement) {
-        host.hidden = !visible;
-        host.setAttribute('aria-hidden', String(!visible));
-    }
-
-    if (content instanceof HTMLElement) {
-        content.setAttribute('aria-hidden', String(!visible));
-        if (visible && !worldInfoEditorMountPromise) {
-            worldInfoEditorMountPromise = import('./sillybunny-world-info-editor.js').then(async module => {
-                await Promise.all(SB_PANEL_STYLESHEETS['characters:world-info'].map(stylesheet =>
-                    window.SillyBunnyAssets?.loadStylesheetAsync(stylesheet.href, { id: stylesheet.id })));
-                return module.mountWorldInfoEditor(content);
-            }).catch(error => {
-                worldInfoEditorMountPromise = null;
-                console.warn('[SillyBunny] Could not mount the World Info editor.', error);
-            });
-        }
-    }
+    if (!visible) return hideDeferredCharacterPanel(host, content, { preserveLayout });
+    characterPanelRevealPromise = revealDeferredCharacterPanel(host, content, () => {
+        worldInfoEditorMountPromise ??= import('./sillybunny-world-info-editor.js').then(async module => {
+            await Promise.all(SB_PANEL_STYLESHEETS['characters:world-info'].map(stylesheet =>
+                window.SillyBunnyAssets?.loadStylesheetAsync(stylesheet.href, { id: stylesheet.id })));
+            const controller = module.mountWorldInfoEditor(content);
+            await controller.ready;
+            return controller;
+        }).catch(error => {
+            worldInfoEditorMountPromise = null;
+            throw error;
+        });
+        return worldInfoEditorMountPromise;
+    });
+    return characterPanelRevealPromise;
 }
 
 function setCharacterPanelMenuType(panel, menuType) {
@@ -8012,6 +8140,8 @@ function syncCharacterShellTabs(activeTab = null) {
                         ? 'groups'
                         : ['character_edit', 'group_edit', 'create', 'group_create', 'editor_empty'].includes(menuType) ? 'editor' : 'characters');
 
+    if (normalizedTab !== 'characters' && normalizedTab !== 'groups') characterListViewRevision++;
+
     sbState.characterDrawer.lastTab = normalizedTab;
 
     if (menuType === 'characters' || menuType === 'groups') {
@@ -8111,53 +8241,6 @@ async function showActiveCharacterEditor() {
     setCharacterWorldInfoPanelVisible(false);
     syncCharacterShellTabs('editor');
     return true;
-}
-
-function resetCharacterPanelView() {
-    const panel = getCharacterPanel();
-    const listButton = document.getElementById('rm_button_characters');
-    const selectedTitle = document.querySelector('#rm_button_selected_ch h2');
-
-    if (selectedTitle instanceof HTMLElement) {
-        selectedTitle.textContent = '';
-    }
-
-    setCharacterEditorEmptyState(false);
-    setCharacterPersonaPanelVisible(false);
-    setCharacterImportPanelVisible(false);
-    setCharacterWorldInfoPanelVisible(false);
-
-    if (listButton instanceof HTMLElement) {
-        listButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        setCharacterPanelMenuType(panel, 'characters');
-        syncCharacterListControls('characters');
-        syncCharacterShellTabs('characters');
-        return;
-    }
-
-    setCharacterPanelMenuType(panel, 'characters');
-
-    const infoPanel = document.getElementById('result_info');
-    const characterEditor = document.getElementById('rm_ch_create_block');
-    const characterList = document.getElementById('rm_characters_block');
-
-    if (infoPanel instanceof HTMLElement) {
-        infoPanel.style.display = 'none';
-    }
-
-    if (characterEditor instanceof HTMLElement) {
-        characterEditor.style.display = 'none';
-        characterEditor.style.visibility = 'hidden';
-        characterEditor.style.pointerEvents = 'none';
-    }
-
-    if (characterList instanceof HTMLElement) {
-        characterList.style.display = 'flex';
-        characterList.style.visibility = 'visible';
-        characterList.style.pointerEvents = 'auto';
-    }
-
-    syncCharacterShellTabs('characters');
 }
 
 function syncCharacterDrawerStateFromDom({ force = false } = {}) {
@@ -8369,6 +8452,12 @@ function preloadPanelStylesheets(shellKey, tabId = null) {
             .catch(error => console.warn('Failed to load panel stylesheet:', normalizedKey, error));
     }
 
+    if (normalizedKey === 'characters:characters' || normalizedKey === 'characters:groups') {
+        return import('./sillybunny-character-list.js')
+            .then(module => module.loadCharacterListStyles(stylesheets))
+            .catch(error => console.warn('Failed to load panel stylesheet:', normalizedKey, error));
+    }
+
     for (const stylesheet of stylesheets) {
         window.SillyBunnyAssets.loadStylesheetAsync(stylesheet.href, { id: stylesheet.id }).catch(error => {
             console.warn('Failed to load panel stylesheet:', stylesheet.href, error);
@@ -8462,9 +8551,17 @@ async function returnToLandingPage() {
 }
 
 function syncProxyButtonState(proxyButton, sourceIcon) {
-    if (!(proxyButton instanceof HTMLElement) || !(sourceIcon instanceof HTMLElement)) {
+    if (!(proxyButton instanceof HTMLElement)) {
         return;
     }
+
+    // SillyBunny: the page synchronously owns this button; keep drawer state for legacy consumers — see docs/ui-migration.md
+    if (proxyButton.id === 'sb-character-toggle' && getCharacterPanel()?.classList.contains('sb-settings-mounted-shell')) {
+        proxyButton.classList.remove('is-open', 'is-pinned', 'is-current');
+        proxyButton.setAttribute('aria-expanded', String(proxyButton.classList.contains('sb-settings-active')));
+        return;
+    }
+    if (!(sourceIcon instanceof HTMLElement)) return;
 
     const isOpen = sourceIcon.classList.contains('openIcon');
     const isPinned = sourceIcon.classList.contains('drawerPinnedOpen');
@@ -8585,8 +8682,26 @@ function buildUniversalSearchRow() {
         setUniversalSearchOpenState(true);
     });
 
+    // Typing is debounced: a render walks every tab's index, so firing one per keystroke spends a
+    // panel build on a query the user is still typing. Enter and the open panel flush it early.
     searchInput.addEventListener('input', () => {
         setUniversalSearchOpenState(true);
+        scheduleUniversalSearchRender();
+    });
+
+    // Delegated so a row replaced by a re-render cannot swallow the click; an unknown index means the
+    // row no longer belongs to the visible list and is ignored.
+    searchResults.addEventListener('click', event => {
+        const button = event.target instanceof Element ? event.target.closest('[data-sb-search-row]') : null;
+        if (!(button instanceof HTMLElement)) {
+            return;
+        }
+        const match = getUniversalSearchState().renderedRows?.[Number(button.dataset.sbSearchRow)];
+        if (!match) {
+            return;
+        }
+        clearUniversalSearch({ blur: true });
+        revealSearchMatch(match.shellKey, match);
     });
 
     searchInput.addEventListener('keydown', event => {
@@ -8605,8 +8720,7 @@ function buildUniversalSearchRow() {
         }
 
         if (event.key === 'Enter') {
-            const firstMatch = resultButtons[sbState.universalSearch.activeIndex] ?? resultButtons[0];
-            if (firstMatch instanceof HTMLButtonElement) {
+            const firstMatch = resultButtons[sbState.universalSearch.activeIndex] ?? resultButtons[0];            if (firstMatch instanceof HTMLButtonElement) {
                 event.preventDefault();
                 firstMatch.click();
             }
@@ -12406,6 +12520,36 @@ function getSubpageSearchRoots(searchRoot) {
     return { sections, headings };
 }
 
+/**
+ * One entry for the page itself, carrying its name, aliases and description.
+ *
+ * A tab's description never appears as a DOM label, and its aliases exist only for the sidebar, so
+ * without this a page is unfindable by the words that describe it ("Prompt Manager", "API Response
+ * Configuration"). The entry anchors to the page's heading when one is rendered, so activating it
+ * opens the page rather than a control inside it.
+ */
+function createPageSearchEntry(tabState) {
+    const heading = tabState.panel?.querySelector(`.${SB_FLAT_SECTION_HEADER_CLASS}, h3, h4, .standoutHeader`);
+    const searchText = normalizeText([
+        tabState.label,
+        tabState.id,
+        ...(tabState.searchAliases ?? []),
+    ].join(' '));
+    if (searchText.length < 3) {
+        return null;
+    }
+    return {
+        element: heading instanceof HTMLElement ? heading : null,
+        searchText,
+        displayText: tabState.label,
+        sectionLabel: tabState.label,
+        tabId: tabState.id,
+        tabLabel: tabState.label,
+        headingMatch: true,
+        dedupeKey: `${tabState.id}::page`,
+    };
+}
+
 function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
     // Persona results come from data; hidden transports and transient editor fields are not search targets.
     if (tabState.id === 'persona') return [];
@@ -12416,6 +12560,10 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
 
     const entries = [];
     const seen = new Set();
+    const pageEntry = createPageSearchEntry(tabState);
+    if (pageEntry) {
+        entries.push(pageEntry);
+    }
     const excludedSelector = [
         '.sb-search-result',
         '.sb-legacy-search-hidden',
@@ -12487,6 +12635,35 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
     }
 
     return entries;
+}
+
+/**
+ * Returns the Characters pages as search destinations, so "Prompt Manager" or "lorebook" finds the
+ * page that holds them rather than only a control whose label happens to contain the word.
+ */
+function getCharacterPanelSearchEntries() {
+    const panel = getCharacterPanel();
+
+    return SB_CHARACTER_PANEL_TABS.map((tab) => {
+        const button = panel?.querySelector(`[data-sb-character-tab="${CSS.escape(tab.id)}"]`);
+        const searchText = normalizeText([
+            tab.label,
+            tab.id,
+            'characters',
+            ...(tab.searchAliases ?? []),
+        ].join(' '));
+
+        return {
+            element: button instanceof HTMLElement ? button : null,
+            searchText,
+            displayText: tab.label,
+            sectionLabel: tab.label,
+            tabId: tab.id,
+            tabLabel: tab.label,
+            headingMatch: true,
+            dedupeKey: `characters::${tab.id}`,
+        };
+    });
 }
 
 /**
@@ -12578,7 +12755,34 @@ function getSearchSectionLabel(element, fallback) {
     return text || fallback;
 }
 
-function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_LIMIT } = {}) {
+// Ranking is coarse on purpose: an exact query name beats a prefix, a prefix beats a word-start,
+// and a section heading beats a leaf control. Length is only a tiebreak, so a long descriptive row
+// cannot outrank the setting it describes.
+function getSearchMatchScore(entry, normalizedQuery, headingMatch) {
+    const searchText = entry.searchText;
+    const exactMatch = searchText === normalizedQuery;
+    const startsWithQuery = searchText.startsWith(normalizedQuery);
+    const wordMatch = !exactMatch && !startsWithQuery
+        && new RegExp(`(^|\\s)${escapeRegex(normalizedQuery)}`).test(searchText);
+    return Number(exactMatch) * 100
+        + Number(startsWithQuery) * 20
+        + Number(wordMatch) * 8
+        + Number(headingMatch) * 5
+        - Math.min(entry.displayText.length, 400) / 1000;
+}
+
+function getSearchMatchKey(shellKey, entry) {
+    return [
+        shellKey,
+        entry.dedupeKey || [
+            entry.tabId,
+            normalizeText(entry.sectionLabel),
+            normalizeText(entry.displayText),
+        ].filter(Boolean).join('::'),
+    ].filter(Boolean).join('::');
+}
+
+function collectGlobalSearchMatches(query, { limit = Infinity, includeEntities = true } = {}) {
     const normalizedQuery = normalizeText(query);
 
     if (!normalizedQuery) {
@@ -12587,6 +12791,7 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
 
     const searchTerms = normalizedQuery.split(' ').filter(Boolean);
     const matches = new Map();
+    const availableByEntry = new WeakMap();
 
     for (const [shellKey, shellState] of Object.entries(sbState.shells)) {
         const shellLabel = getShellConfig(shellKey)?.title || shellKey;
@@ -12596,39 +12801,29 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
                 tabState.searchIndex = createSearchIndex(tabState);
             }
 
-            const extraEntries = tabState.id === 'persona'
-                ? getPersonaSearchEntries(tabState)
-                : tabState.id === 'characters'
-                    ? getCharacterPanelSearchEntries()
-                    : [];
+            const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : [];
 
             for (const entry of [...tabState.searchIndex, ...extraEntries]) {
-                if (!isSearchEntryAvailable(entry, tabState)) continue;
+                // Match first: the visibility check walks ancestors with `getComputedStyle`, and the
+                // memo only covers repeated rows, so this filter is what keeps a keystroke cheap.
                 if (!searchTerms.every(term => entry.searchText.includes(term))) {
                     continue;
                 }
+                if (!isSearchEntryAvailable(entry, tabState, availableByEntry)) continue;
 
-                const startsWithQuery = entry.searchText.startsWith(normalizedQuery);
-                const exactMatch = entry.searchText === normalizedQuery;
+                // Whether the hit names a section rather than a control. The universal search panel
+                // uses this for ranking; the sidebar needs it to tell a page-level hit from a control.
+                const headingMatch = entry.headingMatch === true || (entry.element instanceof HTMLElement
+                    && (entry.element.matches(SB_SIDEBAR_SECTION_MATCH_SELECTOR)
+                        || (tabState.id !== 'editor' && entry.element.matches('.sb-settings-category-title'))));
                 const match = {
                     ...entry,
                     shellKey,
                     shellLabel,
-                    // Whether the hit sits on a section-name element. The universal search panel
-                    // ignores this; the sidebar needs it to tell a page-level hit from a control.
-                    headingMatch: entry.element instanceof HTMLElement
-                        && (entry.element.matches(SB_SIDEBAR_SECTION_MATCH_SELECTOR)
-                            || (tabState.id !== 'editor' && entry.element.matches('.sb-settings-category-title'))),
-                    score: Number(exactMatch) * 100 + Number(startsWithQuery) * 10 - entry.displayText.length / 1000,
+                    headingMatch,
+                    score: getSearchMatchScore(entry, normalizedQuery, headingMatch),
                 };
-                const matchKey = [
-                    shellKey,
-                    entry.dedupeKey || [
-                        entry.tabId,
-                        normalizeText(entry.sectionLabel),
-                        normalizeText(entry.displayText),
-                    ].filter(Boolean).join('::'),
-                ].filter(Boolean).join('::');
+                const matchKey = getSearchMatchKey(shellKey, entry);
                 const existingMatch = matches.get(matchKey);
                 const shouldReplaceMatch = !existingMatch
                     || match.score > existingMatch.score
@@ -12643,25 +12838,52 @@ function collectGlobalSearchMatches(query, { limit = SB_UNIVERSAL_SEARCH_RESULT_
         }
     }
 
-    // Character pages are outside sbState.shells; persona results still come from their canonical data.
-    for (const entry of getPersonaSearchEntries(getCharacterPanelTabConfig('persona'))) {
-        if (!searchTerms.every(term => entry.searchText.includes(term))) continue;
-        matches.set(`characters::${entry.dedupeKey}`, {
-            ...entry,
-            shellKey: 'characters',
-            shellLabel: 'Characters',
-            headingMatch: false,
-            score: Number(entry.searchText === normalizedQuery) * 100
-                + Number(entry.searchText.startsWith(normalizedQuery)) * 10 - entry.displayText.length / 1000,
-        });
+    // Characters, groups, World Info books and personas live outside sbState.shells; their entries
+    // come from app data rather than the tab DOM.
+    if (includeEntities) {
+        const searchState = getUniversalSearchState();
+        const personas = getPersonaSearchEntries(getCharacterPanelTabConfig('persona'));
+        const entities = [
+            ...getCharacterPanelSearchEntries(),
+            ...personas,
+            ...collectEntitySearchEntries(normalizedQuery, {
+                limit: SB_UNIVERSAL_ENTITY_SCAN_LIMIT,
+                skippedWorlds: searchState.skippedWorlds,
+            }),
+        ];
+        for (const entry of entities) {
+            if (!searchTerms.every(term => entry.searchText.includes(term))) continue;
+            const headingMatch = entry.headingMatch !== false;
+            matches.set(getSearchMatchKey('characters', entry), {
+                ...entry,
+                shellKey: 'characters',
+                shellLabel: 'Characters',
+                headingMatch,
+                score: getSearchMatchScore(entry, normalizedQuery, headingMatch),
+            });
+        }
     }
 
+    // A stable tiebreak keeps the panel from reshuffling equal scores between keystrokes.
     return Array.from(matches.values())
-        .sort((left, right) => right.score - left.score)
+        .sort((left, right) => right.score - left.score
+            || left.displayText.localeCompare(right.displayText))
         .slice(0, limit);
 }
 
-function isSearchEntryAvailable(entry, tabState) {
+// Intersection-observer-free visibility check is expensive (`getComputedStyle` per ancestor), and a
+// single pass asks about the same rows repeatedly. The memo is per pass: visibility can legitimately
+// change between renders, so it must never outlive one.
+function isSearchEntryAvailable(entry, tabState, availableByEntry = null) {
+    if (availableByEntry?.has(entry)) {
+        return availableByEntry.get(entry);
+    }
+    const available = computeSearchEntryAvailability(entry, tabState);
+    availableByEntry?.set(entry, available);
+    return available;
+}
+
+function computeSearchEntryAvailability(entry, tabState) {
     // Keep both device variants indexed so resizing can reveal the newly available controls.
     const unavailableDevice = isMobileViewport() ? '.sb-desktop-setting' : '.sb-mobile-setting';
     if (entry.element instanceof HTMLElement && entry.element.closest(unavailableDevice)) return false;
@@ -12684,11 +12906,7 @@ function getTabSearchEntries(tabState, { includeThemeCard = false } = {}) {
 
     return [
         ...(searchIndex || tabState.searchIndex),
-        ...(tabState.id === 'persona'
-            ? getPersonaSearchEntries(tabState)
-            : tabState.id === 'characters'
-                ? getCharacterPanelSearchEntries()
-                : []),
+        ...(tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : []),
     ].filter(entry => isSearchEntryAvailable(entry, tabState));
 }
 
@@ -12732,7 +12950,7 @@ function getMobileQuickActionSearchMatches(query) {
 
     return Array.from(matches.values())
         .sort((left, right) => right.score - left.score)
-        .slice(0, SB_UNIVERSAL_SEARCH_RESULT_LIMIT);
+        .slice(0, SB_UNIVERSAL_SEARCH_QUICK_ACTION_LIMIT);
 }
 
 function findMobileQuickActionMatch(action) {
@@ -12821,6 +13039,12 @@ async function renderUniversalSearchResults(query) {
 
     const trimmedQuery = String(query ?? '').trim();
 
+    // A new query starts from the short list: "show all" belongs to the query it was asked for.
+    if (trimmedQuery !== searchState.renderedQuery) {
+        searchState.renderedQuery = trimmedQuery;
+        searchState.expandedAll = false;
+    }
+
     if (!trimmedQuery) {
         renderSearchEmptyState(results, SB_UNIVERSAL_SEARCH_IDLE_TITLE, SB_UNIVERSAL_SEARCH_IDLE_HINT);
         results.classList.add('is-visible');
@@ -12829,15 +13053,34 @@ async function renderUniversalSearchResults(query) {
 
     await prepareShellSearch();
     if (sbSearchRenderRequests.get(results) !== request || !searchState.expanded) return;
-    const matches = collectGlobalSearchMatches(trimmedQuery);
+    const matches = collectGlobalSearchMatches(trimmedQuery, {
+        limit: searchState.expandedAll ? Infinity : SB_UNIVERSAL_SEARCH_RESULT_LIMIT,
+    });
+
+    // Rows are deduped on what the panel actually shows, so two controls that read identically in
+    // one section collapse to one destination instead of filling the list twice.
     const groupedMatches = new Map();
     for (const match of matches) {
         const groupLabel = `${match.shellLabel} · ${match.tabLabel}`;
         if (!groupedMatches.has(groupLabel)) {
-            groupedMatches.set(groupLabel, []);
+            groupedMatches.set(groupLabel, new Map());
         }
-        groupedMatches.get(groupLabel).push(match);
+        const groupMatches = groupedMatches.get(groupLabel);
+        const rowKey = [match.dedupeKey, match.sectionLabel, match.displayText]
+            .map(value => normalizeText(value))
+            .join('::');
+        const existing = groupMatches.get(rowKey);
+        if (!existing || match.score > existing.score) {
+            groupMatches.set(rowKey, match);
+        }
     }
+
+    const totalMatches = matches.length;
+    const perGroupLimit = searchState.expandedAll ? Infinity : SB_UNIVERSAL_SEARCH_GROUP_LIMIT;
+    // Rows are addressed by position, not by the element: a debounced re-render can replace a row
+    // between the pointerdown and the click, and a handler bound to the dead node would do nothing.
+    const rows = [];
+    searchState.renderedRows = rows;
 
     for (const [groupLabel, groupMatches] of groupedMatches.entries()) {
         const group = createElement('div', {
@@ -12849,22 +13092,35 @@ async function renderUniversalSearchResults(query) {
         });
         group.appendChild(createElement('div', { className: 'sb-search-result-group-label', text: groupLabel }));
 
-        for (const match of groupMatches) {
+        let shown = 0;
+        // Two cards can legitimately share a name, so identical rows are counted rather than hidden:
+        // three "Bunny Guide" results would otherwise read as three destinations when they are one.
+        const shownCounts = new Map();
+        for (const match of groupMatches.values()) {
+            if (shown >= perGroupLimit) break;
+            shown += 1;
+            const sectionDisplay = match.sectionLabel === match.tabLabel
+                ? match.displayText || match.tabLabel
+                : match.sectionLabel;
+            const duplicateKey = `${sectionDisplay}::${match.displayText}`;
+            shownCounts.set(duplicateKey, (shownCounts.get(duplicateKey) ?? 0) + 1);
+            const duplicateIndex = shownCounts.get(duplicateKey);
+
+            const rowIndex = rows.length;
+            rows.push(match);
             const button = createElement('button', {
                 className: 'sb-search-result',
                 attrs: {
                     type: 'button',
                     role: 'option',
-                    id: `sb-search-result-${results.querySelectorAll('.sb-search-result').length}`,
+                    id: `sb-search-result-${rowIndex}`,
+                    'data-sb-search-row': String(rowIndex),
                     'aria-selected': 'false',
                 },
             });
             const detailText = normalizeText(match.displayText) === normalizeText(match.sectionLabel)
                 ? `Jump straight to this item in ${match.tabLabel}.`
                 : match.displayText;
-            const sectionDisplay = match.sectionLabel === match.tabLabel
-                ? match.displayText || match.tabLabel
-                : match.sectionLabel;
 
             button.appendChild(createElement('strong', { text: sectionDisplay }));
 
@@ -12876,12 +13132,17 @@ async function renderUniversalSearchResults(query) {
                 text: typeof match.action === 'function' ? 'Quick action' : 'Jump to setting',
             }));
 
-            button.addEventListener('click', () => {
-                clearUniversalSearch({ blur: true });
-                revealSearchMatch(match.shellKey, match);
-            });
+            if (duplicateIndex > 1) {
+                button.classList.add('is-duplicate');
+                button.setAttribute('data-sb-search-duplicate', String(duplicateIndex));
+            }
 
             group.appendChild(button);
+        }
+
+        const hiddenInGroup = groupMatches.size - shown;
+        if (hiddenInGroup > 0) {
+            group.appendChild(createUniversalSearchShowAllRow(hiddenInGroup, groupLabel));
         }
 
         results.appendChild(group);
@@ -12893,6 +13154,8 @@ async function renderUniversalSearchResults(query) {
             `No matches for "${trimmedQuery}" yet.`,
             SB_UNIVERSAL_SEARCH_EMPTY_HINT,
         );
+    } else if (!searchState.expandedAll && totalMatches > rows.length) {
+        results.appendChild(createUniversalSearchShowAllRow(totalMatches - rows.length));
     }
 
     const wasVisible = results.classList.contains('is-visible');
@@ -13955,7 +14218,6 @@ function closeMobileNav() {
 
 function injectCharacterDrawerControls() {
     getCharacterPanel()?.classList.add('sb-character-drawer-root');
-    ensureCharacterListToolbarLayout();
     bindCharacterDrawerEscapeHandler();
     bindCreatorNotesFullscreen();
 
@@ -14013,22 +14275,6 @@ function injectCharacterDrawerControls() {
     if (importTab instanceof HTMLButtonElement && importTab.dataset.sbBound !== 'true') {
         importTab.dataset.sbBound = 'true';
         importTab.addEventListener('click', () => openCharacterImportTab());
-    }
-
-    const importFileAction = document.getElementById('sb_character_import_file_action');
-    if (importFileAction instanceof HTMLButtonElement && importFileAction.dataset.sbBound !== 'true') {
-        importFileAction.dataset.sbBound = 'true';
-        importFileAction.addEventListener('click', () => {
-            document.getElementById('character_import_button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-    }
-
-    const importUrlAction = document.getElementById('sb_character_import_url_action');
-    if (importUrlAction instanceof HTMLButtonElement && importUrlAction.dataset.sbBound !== 'true') {
-        importUrlAction.dataset.sbBound = 'true';
-        importUrlAction.addEventListener('click', () => {
-            document.getElementById('external_import_button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
     }
 
     if (document.documentElement.dataset.sbCharacterImportPreserveBound !== 'true') {
@@ -15482,10 +15728,14 @@ function initAll() {
         openTab(shellKey, tabId, options = {}) {
             if (shellKey === 'characters') {
                 openCharacterPanelTab(tabId, options);
-                // SillyBunny: persona bridges await mounting and reveal mobile content — see docs/ui-migration.md
-                if (tabId === 'persona') {
+                // SillyBunny: persona bridges await mounting and reveal mobile content - see docs/ui-migration.md
+                if (['persona', 'world-info', 'import'].includes(tabId)) {
                     if (isMobileViewport()) setSettingsMobileContentView(true);
-                    return personaEditorMountPromise;
+                    return characterPanelRevealPromise;
+                }
+                if (tabId === 'characters' || tabId === 'groups') {
+                    if (isMobileViewport()) setSettingsMobileContentView(true);
+                    return characterListViewPromise;
                 }
                 return;
             }
@@ -15604,6 +15854,7 @@ function getSettingsPage() {
 }
 
 function clearSettingsAnimationState() {
+    getSettingsPage()?.classList.remove('sb-settings-page--opening');
     if (sbSettingsState.pageAnimation) {
         sbSettingsState.pageAnimation.onfinish = null;
         sbSettingsState.pageAnimation.cancel();
@@ -15617,28 +15868,25 @@ function clearSettingsAnimationState() {
 }
 
 function animateSettingsPage(page, direction, onFinish) {
-    if (typeof page.animate !== 'function') {
+    if (prefersReducedMotion() || typeof page.animate !== 'function') {
         onFinish();
         return;
     }
 
-    const reducedMotion = prefersReducedMotion();
     const isOpening = direction === 'in';
     const animation = page.animate(
-        reducedMotion
-            ? [{ opacity: isOpening ? 0 : 1 }, { opacity: isOpening ? 1 : 0 }]
-            : [
-                {
-                    opacity: isOpening ? 0 : 1,
-                    transform: isOpening ? 'scale(0.96)' : 'scale(1)',
-                },
-                {
-                    opacity: isOpening ? 1 : 0,
-                    transform: isOpening ? 'scale(1)' : 'scale(0.97)',
-                },
-            ],
+        [
+            {
+                opacity: isOpening ? 0 : 1,
+                transform: isOpening ? 'scale(0.96)' : 'scale(1)',
+            },
+            {
+                opacity: isOpening ? 1 : 0,
+                transform: isOpening ? 'scale(1)' : 'scale(0.97)',
+            },
+        ],
         {
-            duration: reducedMotion ? (isOpening ? 200 : 150) : (isOpening ? 250 : 200),
+            duration: isOpening ? 250 : 200,
             easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
             fill: 'forwards',
         },
@@ -15727,6 +15975,7 @@ function openSettingsPage(shellKey, tabId = null) {
     sbSettingsState.activeShell = shellKey;
     sbSettingsState.closeGen++;
     clearSettingsAnimationState();
+    if (!wasOpen) page.classList.add('sb-settings-page--opening');
 
     if (previousShell && previousShell !== shellKey) {
         deactivateSettingsPageRoot(previousShell);
@@ -15760,7 +16009,7 @@ function openSettingsPage(shellKey, tabId = null) {
     }
 
     page.hidden = false;
-    animateSettingsPage(page, 'in', () => {});
+    animateSettingsPage(page, 'in', () => page.classList.remove('sb-settings-page--opening'));
 
     if (isMobileViewport()) {
         document.querySelector('.sb-settings-tab')?.focus({ preventScroll: true });
@@ -16031,6 +16280,11 @@ function deactivateSettingsPageRoot(shellKey) {
     if (shellKey !== 'characters') {
         const shellState = getShellState(shellKey);
         shellState?.tabs.get(shellState.activeTabId)?.onDeactivate?.();
+    } else {
+        setCharacterPersonaPanelVisible(false);
+        setCharacterImportPanelVisible(false);
+        // SillyBunny: upstream WI probes require layout in the closed page; aria-hidden still suspends adapter work — see docs/ui-migration.md
+        setCharacterWorldInfoPanelVisible(false, { preserveLayout: true });
     }
 
     setRootClassState(root, {
@@ -16102,6 +16356,12 @@ function syncSettingsPageActiveButton() {
             (cluster.key === 'characters' && sbSettingsState.activeShell === 'characters')
         );
         leadButton.classList.toggle('sb-settings-active', isActive);
+        if (cluster.key === 'characters') {
+            leadButton.classList.remove('is-open', 'is-pinned', 'is-current');
+            leadButton.setAttribute('aria-expanded', String(isActive));
+            if (isActive) leadButton.setAttribute('aria-current', 'page');
+            else leadButton.removeAttribute('aria-current');
+        }
     }
 }
 

@@ -3,7 +3,7 @@
 /* eslint-disable playwright/no-standalone-expect, playwright/prefer-web-first-assertions -- Jest/jsdom tests assert DOM synchronously. */
 import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { readFileSync } from 'node:fs';
-import { createContext, SourceTextModule } from 'node:vm';
+import { createContext, runInNewContext, SourceTextModule } from 'node:vm';
 
 let adapter;
 let records;
@@ -75,6 +75,8 @@ const isPickerOpen = jest.fn(() => false);
 await jest.unstable_mockModule('../../public/scripts/sillybunny-editor/picker.js', () => ({ isPickerOpen }));
 const unregister = jest.fn();
 const registerNavigation = jest.fn(() => unregister);
+const back = jest.fn(({ fallback }) => fallback());
+await jest.unstable_mockModule('../../public/scripts/sillybunny-editor/object-navigation.js', () => ({ objectNavigation: { back } }));
 await jest.unstable_mockModule('../../public/scripts/sillybunny-editor/navigation.js', () => ({
     registerEditorNavigation: registerNavigation, characterTabGuardSelector: tab => `guard-${tab}`,
 }));
@@ -94,20 +96,35 @@ await jest.unstable_mockModule('../../public/scripts/sillybunny-persona-detail.j
     mountPersonaDetail: mountDetail, personaDraftKey: draftKey,
 }), { virtual: true });
 
-const { mountPersonaEditor, openPersonaEditor, preservePersonaOrder } = await import('../../public/scripts/sillybunny-persona-editor.js');
+const { mountPersonaEditor, openPersonaEditor, preservePersonaOrder, loadPersonaEditorStyles } = await import('../../public/scripts/sillybunny-persona-editor.js');
 const { mountPersonaSettings } = await import('../../public/scripts/sillybunny-persona-settings.js');
 const { eventSource, event_types } = await import('../../public/scripts/events.js');
+const { createStatusPage } = await import('../../public/scripts/sillybunny-editor/status-page.js');
 const { loadStylesheetAsync } = await import('../../public/scripts/dynamic-styles.js');
+const performanceLoaderSource = readFileSync(new URL('../../public/scripts/performance-loader.js', import.meta.url), 'utf8');
 const tabsSource = readFileSync(new URL('../../public/scripts/sillybunny-tabs.js', import.meta.url), 'utf8');
+const personasSource = readFileSync(new URL('../../public/scripts/personas.js', import.meta.url), 'utf8');
 const personaMountSource = tabsSource.split('let personaEditorMountPromise = null;')[1].split('function setCharacterImportPanelVisible')[0];
 const preloadSource = tabsSource.slice(tabsSource.indexOf('function preloadPanelStylesheets('), tabsSource.indexOf('function isLandingPageVisible('));
 const personaStylesheets = [
-    { href: 'css/sillybunny-editor-shell.css?v=20261018a', id: 'deferred-editor-shell-css' },
+    { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+    { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
     { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
     { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
 ];
 let container;
 let mounted;
+
+function subscribeLegacyPersonaChatStates() {
+    // Exercise the real legacy registration and its adapter boundary, not a stand-in handler.
+    const update = personasSource.match(/^function updatePersonaUIStates\([\s\S]*?^}/m)?.[0];
+    const registration = personasSource.match(/^\s*eventSource.on\(event_types.CHAT_CHANGED, updatePersonaUIStates\);/m)?.[0];
+    if (!update || !registration) throw new Error('Persona chat-state subscription is missing.');
+    const handler = runInNewContext(`${update}\n${registration}\nupdatePersonaUIStates;`, {
+        eventSource, event_types, get personaEditorAdapter() { return adapter; },
+    });
+    return () => eventSource.removeListener(event_types.CHAT_CHANGED, handler);
+}
 
 async function personaTabMount(stylesheets = personaStylesheets) {
     // Execute the real lazy-mount/preload seam without bootstrapping the unrelated application shell.
@@ -118,14 +135,32 @@ async function personaTabMount(stylesheets = personaStylesheets) {
         ${personaMountSource}
         ${preloadSource}
         export { setCharacterPersonaPanelVisible, preloadPanelStylesheets };
-        export const mountPromise = () => personaEditorMountPromise;
+        export const mountPromise = () => personaEditorMountPromise && characterPanelRevealPromise;
     `, {
-        context: createContext({ document, window, HTMLElement, console }),
+        context: createContext({ document, window, HTMLElement, console, createStatusPage, t: strings => strings.join('') }),
         importModuleDynamically: () => import('../../public/scripts/sillybunny-persona-editor.js'),
     });
     await module.link(() => { throw new Error('Unexpected static import in persona mount.'); });
     await module.evaluate();
     return module.namespace;
+}
+
+async function activateDeferredStylesheet({ href }) {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.setAttribute('as', 'style');
+    link.href = href;
+    link.setAttribute('data-sb-deferred-style', '');
+    link.dataset.sbMedia = 'all';
+    document.head.append(link);
+    const loaderWindow = { requestIdleCallback: jest.fn() };
+    const module = new SourceTextModule(performanceLoaderSource, {
+        context: createContext({ document, window: loaderWindow }),
+    });
+    await module.link(() => { throw new Error('Unexpected static import in performance loader.'); });
+    await module.evaluate();
+    loaderWindow.SillyBunnyLoadStylesheet();
+    return { link, activate: loaderWindow.SillyBunnyLoadStylesheet };
 }
 
 function personas(count = 3) {
@@ -225,20 +260,21 @@ describe('Persona editor shell', () => {
         expect(() => mountPersonaEditor(document.createElement('div'))).toThrow('#PersonaManagement');
     });
 
-    test('the editor waits for shared, list and detail stylesheets before reveal', async () => {
+    test('the editor waits for shared shell, entity row, list and detail stylesheets before reveal', async () => {
         personas();
         const resolvers = [];
         globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(() => new Promise(resolve => resolvers.push(resolve)));
         mounted = mountPersonaEditor(container);
         await settle();
-        expect(resolvers).toHaveLength(3);
+        expect(resolvers).toHaveLength(4);
         expect(container.classList.contains('sb-persona-editor-mounted')).toBe(false);
         expect(adapter.isOpen()).toBe(false);
         resolvers[0]();
         resolvers[1]();
+        resolvers[2]();
         await settle();
         expect(container.querySelector('.sb-persona-editor').hidden).toBe(true);
-        resolvers[2]();
+        resolvers[3]();
         await mounted.ready;
         expect(adapter.isOpen()).toBe(true);
     });
@@ -322,6 +358,118 @@ describe('Persona editor shell', () => {
         expect(container.querySelector('.sb-persona-editor').hidden).toBe(false);
     });
 
+    test.each(['preload', 'stylesheet'])('adopts the existing entity-row %s and waits for it without making another link', async rel => {
+        personas();
+        const stylesheet = personaStylesheets.find(({ id }) => id === 'deferred-entity-list-css');
+        const existing = document.createElement('link');
+        existing.rel = rel;
+        existing.setAttribute('as', 'style');
+        existing.href = stylesheet.href;
+        existing.setAttribute('data-sb-deferred-style', '');
+        existing.dataset.sbMedia = 'all';
+        document.head.append(existing);
+        for (const { id, href } of personaStylesheets.filter(({ id }) => id !== stylesheet.id)) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.id = id;
+            link.href = href;
+            document.head.append(link);
+        }
+        globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(loadStylesheetAsync);
+        mounted = mountPersonaEditor(container);
+        await settle();
+
+        expect(document.getElementById(stylesheet.id)).toBe(existing);
+        expect(existing.rel).toBe('stylesheet');
+        expect(existing.dataset.sbStyleActivated ?? 'false').toBe(rel === 'preload' ? 'true' : 'false');
+        expect(document.querySelectorAll(`link[href="${stylesheet.href}"]`)).toHaveLength(1);
+        for (const { id } of personaStylesheets.filter(({ id }) => id !== stylesheet.id)) {
+            document.getElementById(id).dispatchEvent(new Event('load'));
+        }
+        await settle();
+        expect(container.querySelector('.sb-persona-editor').hidden).toBe(true);
+        existing.dispatchEvent(new Event('load'));
+        await mounted.ready;
+        expect(container.querySelector('.sb-persona-editor').hidden).toBe(false);
+        expect(existing.media === '' || existing.media === 'all').toBe(true);
+    });
+
+    test('a failed adopted preload is removed and a fresh stylesheet can load on retry', async () => {
+        const stylesheet = { href: 'css/sillybunny-entity-list.css?v=20261016a&retry-test=adopted', id: 'deferred-entity-list-css' };
+        const existing = document.createElement('link');
+        existing.rel = 'preload';
+        existing.setAttribute('as', 'style');
+        existing.href = stylesheet.href;
+        existing.setAttribute('data-sb-deferred-style', '');
+        document.head.append(existing);
+        globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(loadStylesheetAsync);
+        const loading = loadPersonaEditorStyles([stylesheet]);
+        const failure = new Event('error');
+        existing.dispatchEvent(failure);
+        await expect(loading).rejects.toBe(failure);
+        expect(existing.isConnected).toBe(false);
+
+        const retrying = loadPersonaEditorStyles([stylesheet]);
+        const retry = document.getElementById(stylesheet.id);
+        expect(retry).not.toBe(existing);
+        expect(retry.rel).toBe('stylesheet');
+        retry.dispatchEvent(new Event('load'));
+        await retrying;
+        await loadPersonaEditorStyles([stylesheet]);
+        expect(document.querySelectorAll(`link[href="${stylesheet.href}"]`)).toHaveLength(1);
+    });
+
+    test('a deferred stylesheet that failed before Persona subscribed is replaced and loaded', async () => {
+        const stylesheet = { href: 'css/sillybunny-entity-list.css?v=20261016a&retry-test=failed-before-subscribe', id: 'deferred-entity-list-css' };
+        const { link, activate } = await activateDeferredStylesheet(stylesheet);
+        expect(link.dataset.sbStyleState).toBe('loading');
+        link.dispatchEvent(new Event('error'));
+        expect(link.dataset.sbStyleState).toBe('error');
+        activate();
+        expect(link.dataset.sbStyleState).toBe('error');
+        globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(loadStylesheetAsync);
+        const loading = loadPersonaEditorStyles([stylesheet]);
+        const replacement = document.getElementById(stylesheet.id);
+        expect(replacement).not.toBe(link);
+        expect(link.isConnected).toBe(false);
+        expect(replacement.dataset.sbStyleState).toBe('loading');
+        expect(document.querySelectorAll(`link[href="${stylesheet.href}"]`)).toHaveLength(1);
+        replacement.dispatchEvent(new Event('load'));
+        await loading;
+        expect(replacement.dataset.sbStyleState).toBe('loaded');
+        expect(replacement.media).toBe('all');
+    });
+
+    test('a failed-before-subscribe stylesheet gets only one replacement and a second failure rejects', async () => {
+        const stylesheet = { href: 'css/sillybunny-entity-list.css?v=20261016a&retry-test=failed-twice', id: 'deferred-entity-list-css' };
+        const { link } = await activateDeferredStylesheet(stylesheet);
+        link.dispatchEvent(new Event('error'));
+        globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(loadStylesheetAsync);
+        const loading = loadPersonaEditorStyles([stylesheet]);
+        const replacement = document.getElementById(stylesheet.id);
+        const failure = new Event('error');
+        replacement.dispatchEvent(failure);
+        await expect(loading).rejects.toBe(failure);
+        expect(replacement.dataset.sbStyleState).toBe('error');
+        expect(replacement.isConnected).toBe(false);
+        expect(document.querySelectorAll(`link[href="${stylesheet.href}"]`)).toHaveLength(0);
+        expect(globalThis.SillyBunnyAssets.loadStylesheetAsync).toHaveBeenCalledTimes(1);
+    });
+
+    test('a deferred stylesheet loaded before Persona subscribed resolves without another load event', async () => {
+        const stylesheet = { href: 'css/sillybunny-entity-list.css?v=20261016a&retry-test=loaded-before-subscribe', id: 'deferred-entity-list-css' };
+        const { link, activate } = await activateDeferredStylesheet(stylesheet);
+        link.dispatchEvent(new Event('load'));
+        expect(link.dataset.sbStyleState).toBe('loaded');
+        activate();
+        expect(link.dataset.sbStyleState).toBe('loaded');
+        globalThis.SillyBunnyAssets.loadStylesheetAsync.mockImplementation(loadStylesheetAsync);
+        await loadPersonaEditorStyles([stylesheet]);
+        expect(document.getElementById(stylesheet.id)).toBe(link);
+        expect(link.dataset.loaded).toBe('true');
+        expect(document.querySelectorAll(`link[href="${stylesheet.href}"]`)).toHaveLength(1);
+    });
+
     test('the tab mount rejects readiness failures, warns and clears its cached promise for retry', async () => {
         personas();
         const failure = new Error('Persona readiness failed');
@@ -332,7 +480,7 @@ describe('Persona editor shell', () => {
         const failedMount = tab.mountPromise();
         await expect(failedMount).rejects.toBe(failure);
         expect(tab.mountPromise()).toBeNull();
-        expect(warning).toHaveBeenCalledWith('[SillyBunny] Could not mount the persona editor.', failure);
+        expect(warning).toHaveBeenCalledWith('[SillyBunny] Could not reveal the character panel.', failure);
         expect(adapter).toBeNull();
         tab.setCharacterPersonaPanelVisible(false);
         tab.setCharacterPersonaPanelVisible(true);
@@ -411,15 +559,21 @@ describe('Persona editor shell', () => {
         const row = container.querySelector('.sb-persona-row');
         expect(container.querySelector('.sb-persona-list-heading').textContent).toBe('Your Persona');
         expect(row.parentNode.matches('.ds-pref-group[role="list"]')).toBe(true);
+        expect(row.matches('.ds-entity-row.ds-entity-row--activatable')).toBe(true);
+        expect(row.dataset.sbListKey).toBe(`persona:${avatarIds[0]}`);
         expect(row.getAttribute('role')).toBe('listitem');
         expect(row.tabIndex).toBe(0);
         const avatar = row.querySelector('img');
-        expect(avatar.loading).toBe('lazy');
-        expect(avatar.decoding).toBe('async');
+        expect(avatar.getAttribute('loading')).toBe('lazy');
+        expect(avatar.getAttribute('decoding')).toBe('async');
         expect(avatar.alt).toBe('');
         expect(thumbnail).toHaveBeenCalledWith('persona', avatarIds[0], false);
-        expect(row.querySelector('.ds-row-subtitle').textContent).toBe('A title');
-        expect(container.querySelectorAll('.ds-row-subtitle')[1].textContent).toBe('First line');
+        expect(row.querySelector('.ds-entity-row__title').textContent).toBe(records[avatarIds[0]].name);
+        expect(row.querySelector('.ds-entity-row__subtitle').textContent).toBe('A title');
+        expect(container.querySelectorAll('.ds-entity-row__subtitle')[1].textContent).toBe('First line');
+        expect(row.querySelector('.ds-entity-row__chevron')).toBeNull();
+        expect(row.querySelector('.sb-persona-row-badges').parentElement).toBe(row);
+        expect(row.querySelector('.ds-entity-row__suffix').children).toHaveLength(1);
         expect([...row.querySelectorAll('.sb-persona-row-badges i')].map(badge => [badge.getAttribute('aria-label'), badge.title])).toEqual([
             ['Current Persona', 'Current Persona'], ['Default Persona', 'Default Persona'],
             ['Persona is locked to the current chat', 'Persona is locked to the current chat'],
@@ -435,6 +589,26 @@ describe('Persona editor shell', () => {
         expect(mountDetail).toHaveBeenLastCalledWith(expect.objectContaining({ avatarId: avatarIds[1], mode: 'edit' }));
         expect(container.querySelector('.sb-persona-row.is-selected').dataset.sbListKey).toBe('persona:avatar-1.png');
         expect(document.activeElement).toBe(detail.focusTarget());
+    });
+
+    test.each(['Enter', ' '])('shared rows retain arrow navigation and %s activation without using the persona', async key => {
+        await mount();
+        const rows = [...container.querySelectorAll('.sb-persona-row')];
+        rows[0].focus();
+        rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(rows[1]);
+        rows[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(rows[2]);
+        rows[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(rows[0]);
+        const more = rows[0].querySelector('.sb-persona-row-menu');
+        more.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        await settle();
+        expect(mountDetail).not.toHaveBeenCalled();
+        rows[0].dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        await settle();
+        expect(mountDetail).toHaveBeenLastCalledWith(expect.objectContaining({ avatarId: avatarIds[0] }));
+        expect(usePersona).not.toHaveBeenCalled();
     });
 
     test('row menus expose Use, Duplicate and destructive Delete without opening the detail', async () => {
@@ -516,14 +690,79 @@ describe('Persona editor shell', () => {
 
     test('persona refresh updates a row and forwards changes without remounting the dirty detail', async () => {
         await mount();
+        const row = container.querySelector('.sb-persona-row');
+        const avatar = row.querySelector('img');
+        const menu = row.querySelector('.sb-persona-row-menu');
         const detail = await open();
         dirty = true;
         records[avatarIds[0]].name = 'Updated name';
+        records[avatarIds[0]].descriptor.title = 'Updated title';
         await adapter.refresh('persona', avatarIds[0]);
-        expect(container.querySelector('.sb-persona-row .ds-row-label').textContent).toBe('Updated name');
+        expect(container.querySelector('.sb-persona-row')).toBe(row);
+        expect(row.querySelector('img')).toBe(avatar);
+        expect(row.querySelector('.sb-persona-row-menu')).toBe(menu);
+        expect(menu.getAttribute('aria-label')).toBe('Actions for Updated name');
+        expect(menu.title).toBe('Actions for Updated name');
+        expect(row.querySelector('.ds-entity-row__title').textContent).toBe('Updated name');
+        expect(row.querySelector('.ds-entity-row__subtitle').textContent).toBe('Updated title');
+        expect(row.getAttribute('aria-label')).toBe('Updated name');
+        expect(row.classList.contains('is-selected')).toBe(true);
         expect(detail.refresh).toHaveBeenLastCalledWith('persona', avatarIds[0]);
         expect(detail.destroy).not.toHaveBeenCalled();
         expect(mountDetail).toHaveBeenCalledTimes(1);
+    });
+
+    test('hidden updates do no row/detail work and coalesce into the next prepared reveal', async () => {
+        await mount();
+        const detail = await open();
+        const panel = document.getElementById('sb_character_persona_panel');
+        panel.hidden = true;
+        const before = container.innerHTML;
+        records[avatarIds[0]].name = 'Changed while hidden';
+        detail.refresh.mockClear();
+        listAvatars.mockClear();
+        await Promise.all([adapter.refresh('persona', avatarIds[0]), adapter.refresh('states'), adapter.refresh('states')]);
+        expect(container.innerHTML).toBe(before);
+        expect(detail.refresh).not.toHaveBeenCalled();
+        expect(listAvatars).not.toHaveBeenCalled();
+        await mounted.prepareReveal();
+        expect(container.querySelector('.ds-entity-row__title').textContent).toBe('Changed while hidden');
+        expect(detail.refresh).toHaveBeenCalledTimes(1);
+        await mounted.prepareReveal();
+        expect(detail.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('visible duplicate adapter notifications share one refresh', async () => {
+        await mount();
+        const detail = await open();
+        detail.refresh.mockClear();
+        await Promise.all([adapter.refresh('persona', avatarIds[0]), adapter.refresh('persona', avatarIds[0]), adapter.refresh('states')]);
+        expect(detail.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('an avatar notification cannot mask a simultaneous record deletion', async () => {
+        await mount();
+        const id = avatarIds[0];
+        delete records[id];
+        await Promise.all([adapter.refresh('avatar', id), adapter.refresh('persona', id)]);
+        expect(rowIds()).not.toContain(id);
+    });
+
+    test('notifications arriving during hidden preparation are applied before reveal', async () => {
+        await mount();
+        const detail = await open();
+        document.getElementById('sb_character_persona_panel').hidden = true;
+        let finish;
+        listAvatars.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+        await adapter.refresh('list');
+        const preparing = mounted.prepareReveal();
+        await adapter.refresh('persona', avatarIds[0]);
+        finish([...avatarIds]);
+        await preparing;
+        const calls = detail.refresh.mock.calls.length;
+        await mounted.prepareReveal();
+        expect(detail.refresh).toHaveBeenCalledTimes(calls);
+        expect(detail.refresh).toHaveBeenLastCalledWith('persona', avatarIds[0]);
     });
 
     test('a list refresh reloads overwritten avatar images without replacing their rows', async () => {
@@ -656,7 +895,9 @@ describe('Persona editor shell', () => {
         const detail = await open();
         await eventSource.emit(event_types.PERSONA_RENAMED, { avatarId: avatarIds[0] });
         expect(detail.refresh).toHaveBeenLastCalledWith('persona', avatarIds[0]);
-        await eventSource.emit(event_types.CHAT_CHANGED, 'chat');
+        const unsubscribe = subscribeLegacyPersonaChatStates();
+        try { await eventSource.emit(event_types.CHAT_CHANGED, 'chat'); } finally { unsubscribe(); }
+        expect(detail.refresh).toHaveBeenCalledTimes(2);
         expect(detail.refresh).toHaveBeenLastCalledWith('states', undefined);
         await eventSource.emit(event_types.PERSONA_CREATED, { avatarId: 'created.png' });
         expect(listAvatars).toHaveBeenCalledTimes(2);
@@ -667,6 +908,35 @@ describe('Persona editor shell', () => {
         expect(rowIds()).not.toContain(avatarIds[0]);
         expect(detail.refresh).toHaveBeenLastCalledWith('persona', avatarIds[0]);
         expect(detail.destroy).not.toHaveBeenCalled();
+    });
+
+    test('real CHAT_CHANGED forwarding refreshes once when visible and defers/coalesces hidden events until reveal', async () => {
+        await mount();
+        const detail = await open();
+        const unsubscribe = subscribeLegacyPersonaChatStates();
+        try {
+            detail.refresh.mockClear();
+            await eventSource.emit(event_types.CHAT_CHANGED, 'visible-chat');
+            await settle();
+            expect(detail.refresh).toHaveBeenCalledTimes(1);
+            expect(detail.refresh).toHaveBeenLastCalledWith('states', undefined);
+            const panel = document.getElementById('sb_character_persona_panel');
+            panel.hidden = true;
+            const before = container.innerHTML;
+            detail.refresh.mockClear();
+            await eventSource.emit(event_types.CHAT_CHANGED, 'hidden-chat-1');
+            await eventSource.emit(event_types.CHAT_CHANGED, 'hidden-chat-2');
+            await settle();
+            expect(detail.refresh).not.toHaveBeenCalled();
+            expect(container.innerHTML).toBe(before);
+            await mounted.prepareReveal();
+            panel.hidden = false;
+            mounted.onReveal();
+            expect(detail.refresh).toHaveBeenCalledTimes(1);
+            expect(detail.refresh).toHaveBeenLastCalledWith('states', undefined);
+            await mounted.prepareReveal();
+            expect(detail.refresh).toHaveBeenCalledTimes(1);
+        } finally { unsubscribe(); }
     });
 
     test('duplicate opens its returned ID; delete closes the removed selection without a second guard', async () => {
@@ -701,7 +971,60 @@ describe('Persona editor shell', () => {
         dirty = true;
         expect(await openPersonaEditor({ avatarId: 'avatar-12.png' })).toBe(false);
         expect(mountDetail).toHaveBeenCalledTimes(1);
+        expect(details[0].discard).not.toHaveBeenCalled();
         expect(container.querySelector('.sb-list-pagination__status').textContent).toBe('Page 1 of 3');
+    });
+
+    test('Persona Back uses origin navigation with a normal list-close fallback', async () => {
+        await mount();
+        await open();
+        const { requestClose } = mountDetail.mock.calls.at(-1)[0];
+        await requestClose();
+        expect(back).toHaveBeenCalledWith({ current: { kind: 'persona-editor', id: avatarIds[0] }, fallback: expect.any(Function) });
+        expect(container.querySelector('.sb-persona-editor').dataset.open).toBe('false');
+    });
+
+    test('superseded Persona routes never select an avatar after a delayed shell mount', async () => {
+        await mount();
+        let resolveRoute;
+        let current = true;
+        globalThis.SillyBunnyShell.openTab.mockImplementationOnce(() => new Promise(resolve => { resolveRoute = resolve; }));
+        const opening = openPersonaEditor({ avatarId: avatarIds[1], isCurrent: () => current });
+        current = false;
+        resolveRoute(mounted);
+        expect(await opening).toBe(false);
+        expect(mountDetail).not.toHaveBeenCalled();
+    });
+
+    test.each(['route', 'ready'])('a stalled Persona %s times out and its late completion cannot select an avatar', async phase => {
+        await mount();
+        let finish;
+        const pending = new Promise(resolve => { finish = resolve; });
+        if (phase === 'route') globalThis.SillyBunnyShell.openTab.mockReturnValueOnce(pending);
+        else mounted.ready = pending;
+        const opening = openPersonaEditor({ avatarId: avatarIds[1] });
+        await jest.advanceTimersByTimeAsync(5000);
+        expect(await opening).toBe(false);
+        finish(phase === 'route' ? mounted : undefined);
+        await settle();
+        expect(mountDetail).not.toHaveBeenCalled();
+    });
+
+    test('a selection superseded during its dirty guard never replaces detail or changes page', async () => {
+        await mount(15);
+        await open();
+        dirty = true;
+        let approve;
+        let current = true;
+        popupShow.mockImplementationOnce(() => new Promise(resolve => { approve = resolve; }));
+        const selecting = mounted.selectPersona('avatar-12.png', 'notes', () => current);
+        await settle();
+        current = false;
+        approve(2);
+        expect(await selecting).toBe(false);
+        expect(mountDetail).toHaveBeenCalledTimes(1);
+        expect(container.querySelector('.sb-list-pagination__status').textContent).toBe('Page 1 of 3');
+        expect(details[0].scrollToSection).not.toHaveBeenCalled();
     });
 
     test('openPersonaEditor awaits the route mount and its deferred stylesheet gate', async () => {

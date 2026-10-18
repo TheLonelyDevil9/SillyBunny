@@ -11,8 +11,9 @@ import { t } from '../i18n.js';
  * @param {(size: number) => void} [options.writePageSize]
  * @param {(state: { page: number, pageSize: number, offset: number }) => void} [options.onChange]
  * @param {(() => boolean|Promise<boolean>)|null} [options.guard=null]
+ * @param {boolean} [options.keepSizeVisible=false] Keeps the size control visible for a nonempty single page.
  * @returns {{ element: HTMLElement, setTotal: (total: number) => void,
- *   goTo: (page: number) => Promise<void>, next: () => Promise<void>, prev: () => Promise<void>,
+ *   goTo: (page: number, options?: { isCurrent?: () => boolean }) => Promise<void>, next: () => Promise<void>, prev: () => Promise<void>,
  *   pageOf: (index: number) => number, showIndex: (index: number) => Promise<void>,
  *   slice: <T>(array: T[]) => T[], readonly page: number, readonly pageSize: number,
  *   readonly pages: number, readonly offset: number, destroy: () => void }}
@@ -24,6 +25,7 @@ export function createListPagination({
     writePageSize,
     onChange,
     guard = null,
+    keepSizeVisible = false,
 }) {
     if (!pageSizes.length || pageSizes.some(size => !Number.isInteger(size) || size <= 0)) {
         throw new RangeError('pageSizes must contain positive integers.');
@@ -73,7 +75,12 @@ export function createListPagination({
     const clampPage = value => Math.min(pageCount(), Math.max(1, Math.trunc(value)));
 
     function render() {
-        element.hidden = total <= pageSize;
+        element.hidden = keepSizeVisible ? total === 0 : total <= pageSize;
+        if (keepSizeVisible) {
+            previous.hidden = total <= pageSize;
+            following.hidden = total <= pageSize;
+            status.hidden = total <= pageSize;
+        }
         previous.disabled = page === 1;
         following.disabled = page === pageCount();
         const pages = pageCount();
@@ -82,8 +89,8 @@ export function createListPagination({
         select.value = String(pageSize);
     }
 
-    async function change(requestedPage, requestedSize) {
-        if (destroyed) return;
+    async function change(requestedPage, requestedSize, isCurrent = () => true) {
+        if (destroyed || !isCurrent()) return;
         if (!Number.isFinite(requestedPage)) throw new RangeError('page must be finite.');
         const request = ++revision;
         if (guard && await guard() === false) {
@@ -91,7 +98,7 @@ export function createListPagination({
             return;
         }
         // Ignore older approvals if another navigation or destruction overtook this request.
-        if (destroyed || request !== revision) return;
+        if (destroyed || request !== revision || !isCurrent()) return;
         if (requestedSize !== pageSize) writePageSize?.(requestedSize);
         pageSize = requestedSize;
         page = clampPage(requestedPage);
@@ -106,7 +113,7 @@ export function createListPagination({
         render();
     }
 
-    const goTo = value => change(value, pageSize);
+    const goTo = (value, { isCurrent = () => true } = {}) => change(value, pageSize, isCurrent);
     const next = () => goTo(page + 1);
     const prev = () => goTo(page - 1);
     const pageOf = index => {
