@@ -15854,7 +15854,10 @@ function getSettingsPage() {
 }
 
 function clearSettingsAnimationState() {
-    getSettingsPage()?.classList.remove('sb-settings-page--opening');
+    const page = getSettingsPage();
+    if (page?.classList.contains('sb-settings-page--opening')) {
+        page.classList.remove('sb-settings-page--opening');
+    }
     if (sbSettingsState.pageAnimation) {
         sbSettingsState.pageAnimation.onfinish = null;
         sbSettingsState.pageAnimation.cancel();
@@ -16027,6 +16030,8 @@ function closeSettingsPage() {
     sbSettingsState.open = false;
     sbSettingsState.mobileContentView = false;
     const closingShell = sbSettingsState.activeShell;
+    const restoreFocus = page.contains(document.activeElement);
+    const openerId = SB_TOPBAR_CLUSTERS.find(cluster => cluster.pages.some(item => item.shellKey === closingShell))?.leadId;
     sbSettingsState.activeTabId = null;
     delete document.documentElement.dataset.sbSettingsOpen;
 
@@ -16046,6 +16051,9 @@ function closeSettingsPage() {
         sbSettingsState.activeShell = null;
         syncChatbarVisibilityState();
         requestMobileViewportReset();
+        if (restoreFocus && (document.activeElement === document.body || page.contains(document.activeElement))) {
+            document.getElementById(openerId)?.focus({ preventScroll: true });
+        }
     };
 
     animateSettingsPage(page, 'out', finishClose);

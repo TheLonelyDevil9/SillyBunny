@@ -18,10 +18,8 @@
 //   beginGroupEditorLoad()              — suspend the session before fields are written
 //   openGroupEditorSession(groupId)     — open an edit session (call after fields load)
 //   openGroupEditorCreateSession()      — open a create session
-//   markGroupEditorSaved(newGroupId?)   — recapture the baseline after a save
 //   isGroupEditorOwner(groupId)         — true when this session owns the group
 //   notifyGroupEditorChanged(options)   — report an edit instead of calling editGroup()
-//   getGroupEditorTitle()               — current header title
 
 import { t } from './i18n.js';
 import { getCurrentUserHandle } from './user.js';
@@ -32,6 +30,34 @@ import { registerEditorNavigation, confirmEditorLeave, discardEditorChanges } fr
 import { objectNavigation } from './sillybunny-editor/object-navigation.js';
 import { MOTION_FAST, prefersReducedMotion } from './sillybunny-motion.js';
 import { attachTagFilterMenu } from './sillybunny-editor/tag-filter-menu.js';
+import { LIST_EDITOR_STYLESHEET } from './sillybunny-editor/list-shell.js';
+import { loadStylesheetAsync } from './dynamic-styles.js';
+
+const GROUP_EDITOR_STYLESHEETS = [
+    LIST_EDITOR_STYLESHEET,
+    { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
+    { href: 'css/rm-groups.css', id: 'deferred-rm-groups-css' },
+];
+const groupEditorReveals = new WeakMap();
+
+/** Keeps native group controls inert until all deferred member-list styles are ready. */
+export async function prepareGroupEditorReveal(root, isCurrent) {
+    if (!root) return false;
+    const request = {};
+    groupEditorReveals.set(root, request);
+    root.style.visibility = 'hidden';
+    root.inert = true;
+    root.setAttribute('aria-busy', 'true');
+    try {
+        await Promise.all(GROUP_EDITOR_STYLESHEETS.map(({ href, id }) => loadStylesheetAsync(href, { id })));
+        if (groupEditorReveals.get(root) !== request || !isCurrent()) return false;
+        root.style.removeProperty('visibility');
+        root.inert = false;
+        return true;
+    } finally {
+        if (groupEditorReveals.get(root) === request) root.removeAttribute('aria-busy');
+    }
+}
 
 const DRAFT_KEY_PREFIX = 'sb-group-editor-draft-';
 const NEW_GROUP_DRAFT_KEY = 'new-group';
@@ -54,7 +80,7 @@ const session = createEditorSession({
 const navigation = {
     session,
     isActive: _isEditorVisible,
-    close: _closeSafely,
+    close: _navigateBack,
     afterDiscard: _syncDomFromDraft,
 };
 
@@ -205,20 +231,6 @@ export function openGroupEditorCreateSession() {
     _openSession({ mode: 'create', entityId: NEW_GROUP_DRAFT_KEY });
 }
 
-/**
- * Recapture the baseline after a successful save. Pass the new group ID when
- * transitioning from create to edit.
- * @param {string} [newGroupId]
- */
-export function markGroupEditorSaved(newGroupId) {
-    if (newGroupId && session.context?.mode === 'create') {
-        editorTitle = callbacks?.getGroupName(newGroupId) ?? editorTitle;
-        session.markSaved({ entityId: newGroupId, mode: 'edit' });
-    } else {
-        session.markSaved();
-    }
-}
-
 export function captureGroupEditorSave() {
     return session.captureSaveReceipt();
 }
@@ -258,20 +270,16 @@ export function notifyGroupEditorChanged(options) {
     session.changed(options);
 }
 
-/** @returns {string} the title currently shown in the header. */
-export function getGroupEditorTitle() {
-    return editorTitle;
-}
-
 // ============================================================
 // Session plumbing
 // ============================================================
 
 /** @param {{ mode: 'create'|'edit', entityId: string }} context */
 function _openSession(context) {
+    const previous = session.context;
     session.open(context);
     chrome?.scheduleOverflow();
-    chrome?.reset();
+    chrome?.reset({ scrollToTop: previous?.mode !== context.mode || previous?.entityId !== context.entityId });
 }
 
 function _refreshChrome() {
@@ -369,7 +377,11 @@ async function _handleBack(event) {
         event.stopImmediatePropagation();
         return;
     }
-    await objectNavigation.back({
+    await _navigateBack();
+}
+
+function _navigateBack() {
+    return objectNavigation.back({
         current: { kind: 'group-editor', id: session.context?.mode === 'create' ? 'create' : session.context?.entityId },
         fallback: _closeSafely,
     });

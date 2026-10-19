@@ -2142,7 +2142,7 @@ body:not(.movingUI) .drawer-content.maximized {
     border-radius: var(--sb-radius-lg, 22px);
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 82%, transparent);
     background: color-mix(in srgb, var(--sb-shell-surface) 78%, transparent);
-    color: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 72%, var(--SmartThemeBodyColor));
+    color: var(--sb-muted-fg);
     font-size: calc(var(--mainFontSize) * 1.7);
 }
 
@@ -4178,7 +4178,7 @@ html:not([data-sb-mobile-ui-mode='mobile']) #form_sheld:not(:has(> #group_speake
 
 .sb-bottom-chat-search-field:focus-within {
     border-color: transparent;
-    box-shadow: var(--sb-entry-focus-ring);
+    box-shadow: var(--sb-focus-ring-inset);
 }
 
 .sb-bottom-chat-search-status {

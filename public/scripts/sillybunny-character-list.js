@@ -386,8 +386,10 @@ function updateRow(row, entry, dependencies, visible) {
     const tags = dependencies.tags.getTagsList?.(tagKey) ?? entry.data?.tags ?? [];
     const presentation = Object.fromEntries(Object.entries(entry.data ?? {}).filter(([key]) => key !== 'active' && key !== 'isActive'));
     const tagPresentation = tags.map(tag => typeof tag === 'string' ? tag : Object.fromEntries(Object.entries(tag).filter(([key]) => key !== 'filter_state')));
+    const actionLabels = entry.kind === 'character' || entry.kind === 'group'
+        ? [t`Edit`, t`Actions for ${entry.label}`] : null;
     const signature = JSON.stringify([
-        entry.kind, entry.label ?? entry.item.name, presentation, tagPresentation,
+        entry.kind, entry.label ?? entry.item.name, presentation, tagPresentation, actionLabels,
         entry.item?.folder_type, entry.folderClasses, entry.subtitle?.map(part => part.textContent),
         entry.kind === 'tag' ? entry.avatar?.outerHTML : null,
         entry.kind === 'group' ? [...(entry.avatar?.querySelectorAll('img') ?? [])].map(image => image.getAttribute('src')) : null,
@@ -397,15 +399,19 @@ function updateRow(row, entry, dependencies, visible) {
         const indicator = row.querySelector('.sb-character-list__active-dot');
         factory.update(rowOptions(entry));
         if (indicator) factory.slots.title.prepend(indicator);
+        if (actionLabels) {
+            if (factory.slots.avatar) factory.slots.avatar.title = textValue(entry.data.avatarTitle);
+            factory.slots.title.title = textValue(entry.data.nameTitle);
+            const edit = factory.slots.suffix.firstElementChild;
+            edit.title = actionLabels[0];
+            edit.setAttribute('aria-label', edit.title);
+            const more = factory.slots.suffix.lastElementChild;
+            more.title = actionLabels[1];
+            more.setAttribute('aria-label', more.title);
+        }
         rowPresentations.set(row, signature);
     }
     if (entry.kind === 'character' || entry.kind === 'group') {
-        const { data } = entry;
-        if (factory.slots.avatar) factory.slots.avatar.title = textValue(data.avatarTitle);
-        factory.slots.title.title = textValue(data.nameTitle);
-        const more = factory.slots.suffix.lastElementChild;
-        more.title = t`Actions for ${entry.label}`;
-        more.setAttribute('aria-label', more.title);
         if (visible) setActiveState(row, entry.active);
         row.classList.toggle('is_fav', entry.favorite);
         const favoriteInput = row.querySelector('.ch_fav');
@@ -1290,11 +1296,6 @@ export async function mountCharacterList(container = document.getElementById('rm
 /** Returns the mounted controller for a host, if present. @param {HTMLElement} container @returns {object|null} */
 export function getMountedCharacterList(container = document.getElementById('rm_characters_block')) {
     return container instanceof HTMLElement ? mountedLists.get(container) ?? null : null;
-}
-
-/** Returns the active list destination state. @returns {object|null} */
-export function captureCharacterListState() {
-    return getMountedCharacterList()?.captureState() ?? null;
 }
 
 /** Restores state captured from a list destination. @param {object|null} state @param {() => boolean} [isCurrent] @returns {Promise<void>} */

@@ -23,6 +23,7 @@ await jest.unstable_mockModule('../../public/scripts/sillybunny-motion.js', () =
 const { mountWorldInfoEntry, worldInfoDraftKey } = await import('../../public/scripts/sillybunny-world-info-entry.js');
 const model = await import('../../public/scripts/sillybunny-world-info-model.js');
 const { eventSource, event_types } = await import('../../public/scripts/events.js');
+const { createEntryRow } = await import('../../public/scripts/sillybunny-editor/rows.js');
 const mounted = [];
 let recoveryActions;
 
@@ -146,6 +147,19 @@ afterEach(() => {
 });
 
 describe('World Info schema form', () => {
+    test('destroy releases row reservations owned by the entry detail', () => {
+        const { host, controller } = mount();
+        const marker = createEntryRow({ label: 'Marker', field: 'marker' });
+        const nextId = `sb-row-${Number(marker.control.id.split('-').at(-1)) + 1}`;
+        const reserved = createEntryRow({ label: 'Reserved', field: 'reserved', id: nextId });
+        host.querySelector('.sb-wi-entry').append(reserved.row);
+        controller.destroy();
+        const next = createEntryRow({ label: 'Next', field: 'next' });
+        expect(next.control.id).toBe(nextId);
+        marker.destroy();
+        next.destroy();
+    });
+
     test('renders every visible schema field, translates runtime keys and leaves expanders collapsed', () => {
         const { host, controller, data } = mount();
         const headerFields = model.FIELDS.filter(field => field.header);
@@ -385,6 +399,19 @@ describe('explicit save and drafts', () => {
         expect(storedDraft()).toBeNull();
         expect(harness.onSaved).toHaveBeenCalledWith(expect.objectContaining({ name: 'My book' }));
         expect(harness.onStateChange).toHaveBeenCalledWith({ dirty: true, saving: true });
+    });
+
+    test('a failed list toggle rebases to rolled-back data before an unrelated detail save', async () => {
+        const { controller, host, data, deps } = mount();
+        edit(host, 'content', 'Unrelated detail edit');
+        deps.saveWorldInfo.mockRejectedValueOnce(new Error('Offline'));
+        expect((await model.setEnabled(deps, 'My book', data, 0, false)).ok).toBe(false);
+        controller.rebaseKey('disable');
+        controller.sync({ name: 'My book', data });
+        expect(controller.isDirty()).toBe(true);
+        expect(await controller.save()).toBe(true);
+        expect(data.entries[0]).toMatchObject({ content: 'Unrelated detail edit', disable: false });
+        expect(controller.isDirty()).toBe(false);
     });
 
     test.each([null, new Error('failure')])('failed persistence (%s) keeps dirty and reports an error', async failure => {
