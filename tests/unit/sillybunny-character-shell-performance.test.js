@@ -60,7 +60,7 @@ describe('Characters tab shell', () => {
         const frames = [];
         const context = {
             document, $: dollar, characters: [{ name: 'Name', avatar: 'avatar.png', data: { character_version: 'v2' } }],
-            selected_group: null, selected_button: '', create_save: { character_version: 'v2' }, default_avatar: '/default.png',
+            selected_group: null, this_chid: 0, selected_button: '', create_save: { character_version: 'v2' }, default_avatar: '/default.png',
             setMenuType: jest.fn(), selectRightMenuWithAnimation: jest.fn(), HTMLElement,
             window: { requestAnimationFrame: callback => frames.push(callback) },
             beginCharacterEditorLoad: jest.fn(), formatCreatorNotes: () => '',
