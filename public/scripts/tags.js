@@ -395,11 +395,13 @@ let expanded_tags_cache = [];
  * @param {Boolean} [param1.filterHidden] Optional switch with which filtering out hidden items (from closed folders) can be disabled.
  * @returns The filtered list of entities
  */
-function filterByTagState(entities, { globalDisplayFilters = false, subForEntity = undefined, filterHidden = true } = {}) {
+function filterByTagState(entities, { globalDisplayFilters = false, subForEntity = undefined, filterHidden = true, mainList = false } = {}) {
     const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
 
     entities = entities.filter(entity => {
         if (entity.type === 'tag') {
+            // SillyBunny: folder sections replace tag-folder entities in the shared main list.
+            if (mainList && isBogusFolder(entity.item)) return false;
             // Remove folders that are already filtered on
             if (filterData.selected.includes(entity.id) || filterData.excluded.includes(entity.id)) {
                 return false;
@@ -415,7 +417,8 @@ function filterByTagState(entities, { globalDisplayFilters = false, subForEntity
 
         entities = entities.filter(entity => {
             // Hide entities that are in a closed folder, unless that one is opened
-            if (filterHidden && entity.type !== 'tag' && closedFolders.some(f => entitiesFilter.isElementTagged(entity, f.id) && !filterData.selected.includes(f.id))) {
+            // SillyBunny: the shared main list renders its own folders and never hides closed-tag members.
+            if (filterHidden && !mainList && entity.type !== 'tag' && closedFolders.some(f => entitiesFilter.isElementTagged(entity, f.id) && !filterData.selected.includes(f.id))) {
                 return false;
             }
 
@@ -654,7 +657,8 @@ function renameTagKey(oldKey, newKey) {
 }
 
 function createTagMapFromList(listElement, key) {
-    const tagIds = [...($(listElement).find('.tag').map((_, el) => $(el).attr('id')))];
+    // SillyBunny: animated editor chips are pending removal, including on a cloned group form list.
+    const tagIds = [...($(listElement).find('.tag:not([data-sb-removing])').map((_, el) => $(el).attr('id')))];
     tag_map[key] = tagIds;
     saveSettingsDebounced();
 }
@@ -873,6 +877,7 @@ export function removeTagFromEntity(tag, entityId, { tagListSelector = null, tag
         // SillyBunny: only the two editor chip lists animate removals; legacy
         // consumers keep their synchronous removal behavior.
         const shouldAnimate = Boolean(element.closest('#tagList, #groupTagList'));
+        if (shouldAnimate) element.dataset.sbRemoving = 'true';
         fadeOutAndRemove(element, { enabled: shouldAnimate });
     };
 
@@ -1786,7 +1791,7 @@ function onGroupCreateClick() {
 export function applyTagsOnCharacterSelect(chid = null) {
     // If we are in create window, we cannot simply redraw, as there are no real persisted tags. Grab them, and pass them in
     if (menu_type === 'create') {
-        const currentTagIds = $('#tagList').find('.tag').map((_, el) => $(el).attr('id')).get();
+        const currentTagIds = $('#tagList').find('.tag:not([data-sb-removing])').map((_, el) => $(el).attr('id')).get();
         const currentTags = tags.filter(x => currentTagIds.includes(x.id));
         printTagList($('#tagList'), { forEntityOrKey: undefined, tags: currentTags, tagOptions: { removable: true } });
         return;
@@ -1802,7 +1807,7 @@ export function applyTagsOnGroupSelect(groupId = null) {
     printTagFilters(tag_filter_type.group_members_list);
     // If we are in create window, we explicitly have to tell the system to print for the new group, not the one selected in the background
     if (menu_type === 'group_create') {
-        const currentTagIds = $('#groupTagList').find('.tag').map((_, el) => $(el).attr('id')).get();
+        const currentTagIds = $('#groupTagList').find('.tag:not([data-sb-removing])').map((_, el) => $(el).attr('id')).get();
         const currentTags = tags.filter(x => currentTagIds.includes(x.id));
         printTagList($('#groupTagList'), { forEntityOrKey: undefined, tags: currentTags, tagOptions: { removable: true } });
         return;

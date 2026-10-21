@@ -110,6 +110,10 @@ function createOption(item, selected, id, onClick, { multiple = false, state = n
     option.setAttribute('role', 'option');
     option.setAttribute('aria-selected', String(selected));
     option.tabIndex = -1;
+    if (item.disabled) {
+        option.setAttribute('aria-disabled', 'true');
+        option.classList.add('is-disabled');
+    }
     if (multiple) {
         option.classList.toggle('is-muted', Boolean(item.muted));
         // Keep pointer activation from moving the combobox's virtual focus onto a replaced option.
@@ -197,16 +201,49 @@ function buildPickerContent(state, body) {
     }
 }
 
+/** Groups items by their `group` label in first-appearance order; ungrouped items form their own bucket. */
+function groupBuckets(items) {
+    const buckets = new Map();
+    for (const item of items) {
+        const key = item.group || null;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(item);
+    }
+    return [...buckets];
+}
+
+function createGroup(label, options) {
+    const wrapper = document.createElement('li');
+    wrapper.className = 'sb-picker__group-item';
+    wrapper.setAttribute('role', 'presentation');
+    const heading = document.createElement('div');
+    heading.className = 'sb-picker__group-heading';
+    heading.setAttribute('role', 'presentation');
+    heading.id = createId('sb-picker-group');
+    heading.textContent = label;
+    const group = document.createElement('ul');
+    group.className = 'sb-picker__group';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-labelledby', heading.id);
+    group.append(...options);
+    wrapper.append(heading, group);
+    return wrapper;
+}
+
 function renderOptions(state) {
     clearTimeout(state.searchTimer);
     state.searchTimer = 0;
     const listScrollTop = state.list.scrollTop;
     const surfaceScrollTop = state.surface?.scrollTop ?? 0;
     const query = state.input.value.toLocaleLowerCase();
-    state.filtered = state.items.filter(item => {
-        const haystack = `${item.label} ${item.subtitle ?? ''}`.toLocaleLowerCase();
+    const matches = state.items.filter(item => {
+        const haystack = `${item.label} ${item.subtitle ?? ''} ${item.group ?? ''}`.toLocaleLowerCase();
         return !query || haystack.includes(query);
     });
+    const grouped = state.items.some(item => item.group);
+    const buckets = grouped ? groupBuckets(matches) : [[null, matches]];
+    // Keyboard order follows the grouped visual order.
+    state.filtered = buckets.flatMap(([, items]) => items);
     state.activeIndex = state.filtered.length
         ? Math.max(0, Math.min(state.activeIndex, state.filtered.length - 1))
         : -1;
@@ -222,16 +259,22 @@ function renderOptions(state) {
         return;
     }
 
-    state.filtered.forEach((item, index) => {
-        const itemState = state.multiple ? state.getItemState?.(item.value) : null;
-        const selected = state.multiple ? itemState === 'selected' : Object.is(item.value, state.selected);
-        const option = createOption(item, selected, createId('sb-picker-option'), () => {
-            selectPickerItem(state, item.value);
-        }, { multiple: state.multiple, state: itemState });
-        option.classList.toggle('is-active', index === state.activeIndex);
-        state.list.append(option);
-    });
-    const active = state.list.children[state.activeIndex];
+    let index = 0;
+    for (const [label, items] of buckets) {
+        const options = items.map(item => {
+            const itemState = state.multiple ? state.getItemState?.(item.value) : null;
+            const selected = state.multiple ? itemState === 'selected' : Object.is(item.value, state.selected);
+            const option = createOption(item, selected, createId('sb-picker-option'), () => {
+                selectPickerItem(state, item.value);
+            }, { multiple: state.multiple, state: itemState });
+            option.classList.toggle('is-active', index === state.activeIndex);
+            index += 1;
+            return option;
+        });
+        if (label === null) state.list.append(...options);
+        else state.list.append(createGroup(label, options));
+    }
+    const active = state.list.querySelectorAll('.sb-picker__option')[state.activeIndex];
     if (active) {
         state.input.setAttribute('aria-activedescendant', active.id);
     }
@@ -243,6 +286,9 @@ function renderOptions(state) {
 
 function selectPickerItem(state, value) {
     if (activePicker !== state) {
+        return;
+    }
+    if (state.items.find(item => Object.is(item.value, value))?.disabled) {
         return;
     }
     try {
@@ -323,12 +369,25 @@ function handlePickerInput(event) {
     state.searchTimer = setTimeout(() => applyPickerSearch(state), 300);
 }
 
+/** A press on the owner itself, not on another control inside it (a row's menu button still dismisses). */
+function isOwnerBackground(state, target) {
+    if (!state.owner.contains(target)) return false;
+    const control = target instanceof Element ? target : target.parentElement;
+    const inner = control?.closest('button, a, input, select, textarea, [role="button"], [tabindex]');
+    return !inner || !state.owner.contains(inner) || inner === state.owner;
+}
+
 function handleOutsidePointerDown(event) {
     const state = activePicker;
     if (!state || state.kind !== 'popover') {
         return;
     }
     const target = event.target instanceof Node ? event.target : null;
+    if (target && isOwnerBackground(state, target)) {
+        // Keep focus inside until the owner's click toggles us; a focusable ancestor otherwise closes us first.
+        event.preventDefault();
+        return;
+    }
     if (target && (state.surface.contains(target) || state.trigger.contains(target))) {
         return;
     }
@@ -346,7 +405,19 @@ function handleResize() {
         const available = bounds?.width > 0
             ? Math.min(bounds.right, window.innerWidth) - Math.max(bounds.left, 0) - 16
             : window.innerWidth - 16;
-        const width = Math.max(0, Math.min(560, Math.max(320, state.trigger.getBoundingClientRect().width), available));
+        // Measured once with every option rendered, so filtering never resizes the popover.
+        if (state.contentWidth === undefined) {
+            state.surface.style.inlineSize = 'max-content';
+            state.surface.style.maxInlineSize = 'none';
+            // max-content leaves out the list's scrollbar, which would then push the widest label onto a second line.
+            const list = state.surface.querySelector('.sb-picker__list');
+            const scrollbar = list ? Math.max(0, list.offsetWidth - list.clientWidth) : 0;
+            // scrollWidth leaves out the borders, which border-box sizing counts; the box width includes them.
+            const box = state.surface.getBoundingClientRect().width || 0;
+            state.contentWidth = Math.ceil(Math.max(box, state.surface.scrollWidth || 0) + scrollbar);
+        }
+        const wanted = Math.max(320, state.trigger.getBoundingClientRect().width, state.contentWidth);
+        const width = Math.max(0, Math.min(560, wanted, available));
         state.surface.style.inlineSize = `${width}px`;
         state.surface.style.maxInlineSize = `${width}px`;
         state.origin = positionPopover(state.surface, state.trigger, null, state.bounds, 'start');
@@ -380,7 +451,8 @@ function finishClose() {
  * @param {object} options
  * @param {HTMLElement} options.trigger
  * @param {string} options.title
- * @param {{ value: unknown, label: string, subtitle?: string, icon?: string|Element, muted?: boolean }[]} options.items
+ * @param {{ value: unknown, label: string, subtitle?: string, group?: string, disabled?: boolean, icon?: string|Element, muted?: boolean }[]} options.items
+ *     Items with a `group` render under that heading, groups in first-appearance order; search also matches it.
  * @param {unknown} [options.selected=null]
  * @param {boolean} [options.multiple=false] Toggle values without closing or changing search focus.
  * @param {(value: unknown) => 'selected'|'excluded'|null} [options.getItemState=null]
@@ -390,7 +462,10 @@ function finishClose() {
  * @param {string} [options.emptyText]
  * @param {Element|null} [options.bounds=null]
  * @param {boolean} [options.matchTriggerWidth=false] Desktop: match the trigger up to 560px and align inline-start.
+ * @param {boolean} [options.renderAsPopover=false] Keep a nested picker in the current modal on mobile.
  * @param {() => void|null} [options.onClose=null]
+ * @param {HTMLElement|null} [options.owner=null] Element around the trigger (such as its row) whose presses
+ *     do not dismiss the popover, so the owner can toggle it closed itself.
  * @returns {{ close: () => void, refresh: (items?: object[]) => void, readonly isOpen: boolean }}
  */
 export function openPicker({
@@ -406,7 +481,9 @@ export function openPicker({
     emptyText = t`No results`,
     bounds = null,
     matchTriggerWidth = false,
+    renderAsPopover = false,
     onClose = null,
+    owner = null,
 }) {
     if (!(trigger instanceof HTMLElement) || !Array.isArray(items) || !Array.isArray(footer) || typeof onSelect !== 'function') {
         throw new TypeError('openPicker requires a trigger, items, footer actions, and an onSelect callback');
@@ -419,6 +496,7 @@ export function openPicker({
 
     const state = {
         trigger,
+        owner: owner instanceof HTMLElement ? owner : trigger,
         title,
         items: [...items],
         selected,
@@ -438,7 +516,7 @@ export function openPicker({
         activeIndex: 0,
         searchTimer: 0,
         surface: null,
-        kind: isMobileLayout() ? 'sheet' : 'popover',
+        kind: renderAsPopover || !isMobileLayout() ? 'popover' : 'sheet',
     };
     setTriggerExpanded(trigger, true);
 

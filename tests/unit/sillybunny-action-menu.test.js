@@ -11,10 +11,12 @@ await jest.unstable_mockModule('../../public/scripts/sillybunny-sheet.js', () =>
     blockUpstreamDrawerClose: jest.fn(), createSheetController: jest.fn(),
 }));
 const { openActionMenu, closeActionMenu, isActionMenuOpen, positionPopover } = await import('../../public/scripts/sillybunny-action-menu.js');
+let mobileMatches = false;
 
 beforeEach(() => {
     document.body.replaceChildren();
-    window.matchMedia = () => ({ matches: false, addEventListener: jest.fn() });
+    mobileMatches = false;
+    window.matchMedia = () => ({ get matches() { return mobileMatches; }, addEventListener: jest.fn() });
     jest.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callback(); return 1; });
 });
 afterEach(() => {
@@ -29,6 +31,42 @@ function trigger() {
 }
 
 describe('action menu optional sections', () => {
+    test('can keep a nested action menu as a popover on mobile', () => {
+        mobileMatches = true;
+        openActionMenu({
+            trigger: trigger(),
+            forcePopover: true,
+            sections: [{ items: [{ label: 'Delete', onSelect() {} }] }],
+        });
+
+        expect(document.querySelector('.sb-action-popover')).not.toBeNull();
+        expect(document.querySelector('.sb-action-sheet')).toBeNull();
+    });
+
+    test('radio and checkbox items render state indicators instead of caller icons', () => {
+        openActionMenu({
+            trigger: trigger(),
+            sections: [{ items: [
+                { label: 'Selected sort', icon: 'fa-solid fa-check', kind: 'radio', checked: true, onSelect() {} },
+                { label: 'Other sort', icon: 'fa-solid fa-check', kind: 'radio', checked: false, onSelect() {} },
+                { label: 'Favorite', icon: 'fa-solid fa-star', kind: 'check', checked: true, onSelect() {} },
+                { label: 'Not favorite', icon: 'fa-solid fa-star', kind: 'check', checked: false, onSelect() {} },
+            ] }],
+        });
+
+        const menu = document.querySelector('[role="menu"]');
+        const radioItems = [...menu.querySelectorAll('[role="menuitemradio"]')];
+        const checkboxItems = [...menu.querySelectorAll('[role="menuitemcheckbox"]')];
+        expect(radioItems.map(item => item.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+        expect(checkboxItems.map(item => item.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+        expect(radioItems.map(item => item.querySelector('.sb-action-menu-indicator').dataset.kind)).toEqual(['radio', 'radio']);
+        expect(radioItems[0].querySelector('.sb-action-menu-indicator-dot')).not.toBeNull();
+        expect(radioItems[1].querySelector('.sb-action-menu-indicator-dot')).toBeNull();
+        expect(checkboxItems[0].querySelector('.sb-action-menu-indicator-check')).not.toBeNull();
+        expect(checkboxItems[1].querySelector('.sb-action-menu-indicator-check')).toBeNull();
+        expect(menu.querySelectorAll('.sb-action-menu-item > .fa-check, .sb-action-menu-item > .fa-star')).toHaveLength(0);
+    });
+
     test('titles label groups without becoming keyboard stops and radio items expose checked state', () => {
         openActionMenu({
             trigger: trigger(), title: 'Entries', keyboard: true,

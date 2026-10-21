@@ -127,9 +127,6 @@ function getOverlayStateSnapshot(page) {
                 && overlay.getAttribute('aria-hidden') === 'false');
         };
 
-        // The connection strip is a desktop-chatbar surface; on mobile the
-        // exclusion cascades close it via setConnectionStripOpenState(false),
-        // which has no observable mobile DOM, so it is not snapshotted here.
         return {
             navOpen: isOverlayOpen('sb-mobile-nav', 'sb-nav-open'),
             chatToolsOpen: isOverlayOpen('sb-mobile-chat-tools', 'sb-chat-tools-open'),
@@ -466,6 +463,8 @@ test.describe('mobile shell smoke at iPhone 390x844', () => {
 
         await visitSection('Backend', 'left', ['connections', 'sampling', 'prompting', 'editor', 'context', 'agents']);
         await showSettingsTab(page, 'agents');
+        await page.getByRole('button', { name: 'Agents Menu', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
         const textareaFullscreenToggle = page.locator('#left-nav-panel .ica--textarea-fullscreen-toggle').first();
         await expect(textareaFullscreenToggle).toBeVisible();
         await textareaFullscreenToggle.click();

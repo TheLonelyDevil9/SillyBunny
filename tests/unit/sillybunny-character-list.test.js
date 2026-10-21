@@ -25,6 +25,9 @@ const deleteGroupById = jest.fn();
 const navigate = jest.fn();
 const selectCharacterById = jest.fn();
 const openGroupById = jest.fn();
+const setActiveCharacter = jest.fn();
+const setActiveGroup = jest.fn();
+const saveSettingsDebounced = jest.fn();
 const play = jest.fn();
 const destroyTagMenu = jest.fn();
 const attachTagFilterMenu = jest.fn(() => ({ refresh: jest.fn(), destroy: destroyTagMenu }));
@@ -45,6 +48,9 @@ const setListPageSize = jest.fn((view, size) => { sizes[view] = size; return sta
 const sorts = { characters: { field: 'name', order: 'asc' }, groups: { field: 'name', order: 'desc' } };
 const setListSort = jest.fn();
 const template = html => { const element = document.createElement('div'); element.innerHTML = html; return element; };
+const originalDollar = Object.getOwnPropertyDescriptor(globalThis, '$');
+const folderSave = jest.fn();
+let generatedFolderId = 0;
 
 await jest.unstable_mockModule('../../public/scripts/i18n.js', () => ({
     t: (strings, ...values) => translationPrefix + strings.reduce((out, string, index) => out + string + (values[index] ?? ''), ''),
@@ -76,13 +82,14 @@ await jest.unstable_mockModule('../../public/script.js', () => ({
     getEmptyBlock: async () => template('<p>No characters found</p>'),
     toggleCharacterFavoriteById, duplicateCharacter, deleteCharacterById,
     characterGroupOverlay, characters: characterLibrary, selectCharacterById,
+    setActiveCharacter, setActiveGroup, saveSettingsDebounced,
     this_chid: 0,
 }));
 await jest.unstable_mockModule('../../public/scripts/group-chats.js', () => ({
     toggleGroupFavoriteById, deleteGroupById, groups: groupLibrary, openGroupById,
     getGroupAvatarElement: () => template('<img src="/group.png">'),
     groupEditorTargetExists: jest.fn(), canPeekGroupMember: jest.fn(), openGroupMemberDefinition: jest.fn(),
-    openGroupEditor: jest.fn(), captureGroupEditorListState: jest.fn(), restoreGroupEditorListState: jest.fn(),
+    openGroupEditor: jest.fn(), captureGroupEditorListState: jest.fn(), restoreGroupEditorListState: jest.fn(), selected_group: null,
 }));
 await jest.unstable_mockModule('../../public/scripts/tags.js', () => ({
     getTagBlock: item => template(`<span class="ch_name">${item.name}</span><span class="bogus_folder_counter">3 characters</span>`),
@@ -97,6 +104,8 @@ await jest.unstable_mockModule('../../public/scripts/sillybunny-character-list-s
 }));
 
 const { mountCharacterList, getMountedCharacterList, prepareCharacterListRestore } = await import('../../public/scripts/sillybunny-character-list.js');
+const folderStore = await import('../../public/scripts/sillybunny-folders.js');
+const createFolderState = () => folderStore.normalizeFoldersData(null, () => `folder-${++generatedFolderId}`);
 const { eventSource, event_types } = await import('../../public/scripts/events.js');
 await import('../../public/scripts/sillybunny-characters-navigation.js');
 const characters = count => Array.from({ length: count }, (_, id) => ({ type: 'character', id, item: { name: `Name ${id}`, avatar: `${id}.png` } }));
@@ -137,6 +146,10 @@ beforeEach(() => {
     pages.characters = pages.groups = 1;
     sizes.characters = sizes.groups = 10;
     Object.assign(power_user, { charListGrid: false, show_tag_filters: true, bogus_folders: false });
+    generatedFolderId = 0;
+    folderSave.mockReset();
+    power_user.sb_folders = createFolderState();
+    folderStore.configureFolderStore({ powerUser: power_user, saveSettingsDebounced: folderSave, idFactory: () => `folder-${++generatedFolderId}` });
     model = { view: 'characters', entities: characters(3), sourceCount: 3, hasAnyFilter: false, folderOpen: false, fullRefresh: false, pageLoaded };
     document.body.innerHTML = `<div id="rm_characters_block"><div id="charListFixedTop"><div id="rm_button_bar"><div id="rm_buttons_container"></div></div>
         <form id="form_character_search_form"><input id="character_search_bar"></form>
@@ -170,7 +183,10 @@ afterEach(() => {
     delete globalThis.SillyBunnyAssets;
     delete globalThis.SillyBunnyShell;
     delete globalThis.SillyBunnyCharacterListController;
+    delete globalThis.SillyBunnyFolderManager;
     delete globalThis.toastr;
+    if (originalDollar) Object.defineProperty(globalThis, '$', originalDollar);
+    else delete globalThis.$;
 });
 
 describe('shared Characters/Groups list', () => {
@@ -239,7 +255,36 @@ describe('shared Characters/Groups list', () => {
         expect(await mountCharacterList()).toBe(mounted);
     });
 
-    test('renders groups, folders, Back, hidden counts and badges', async () => {
+    test('mount destroys an initialized legacy pagination instance', async () => {
+        const paginationDestroy = jest.fn();
+        const paginationElement = document.getElementById('rm_print_characters_pagination');
+        const jquery = jest.fn(() => ({
+            data: key => key === 'pagination' ? { initialized: true } : undefined,
+            pagination: paginationDestroy,
+        }));
+        jquery.fn = { pagination: jest.fn() };
+        globalThis.$ = jquery;
+
+        await mount();
+
+        expect(jquery.mock.calls.some(([target]) => target === paginationElement || target === '#rm_print_characters_pagination')).toBe(true);
+        expect(paginationDestroy).toHaveBeenCalledWith('destroy');
+    });
+
+    test('render removes unkeyed legacy rows before reconciling SillyBunny rows', async () => {
+        await mount();
+        const legacyRow = document.createElement('div');
+        legacyRow.className = 'entity_block';
+        legacyRow.dataset.chid = '99';
+        document.getElementById('rm_print_characters_block').append(legacyRow);
+
+        await mounted.render(model);
+
+        expect(legacyRow.isConnected).toBe(false);
+        expect(rows()).toHaveLength(3);
+    });
+
+    test('renders groups without legacy tag-folder or Back rows and keeps entity hidden counts', async () => {
         model = { ...model, view: 'groups', sourceCount: 5, hasAnyFilter: true, folderOpen: true, entities: [
             { type: 'group', id: 'group-id', item: { id: 'group-id', name: 'Group', fav: true } },
             { type: 'tag', id: 'tag-id', item: { name: 'Folder', folder_type: 'OPEN' } },
@@ -250,9 +295,18 @@ describe('shared Characters/Groups list', () => {
         expect(group.getAttribute('grid')).toBe('group-id');
         expect(group.querySelector('.avatar img')).not.toBeNull();
         expect(group.querySelector('.group_select_counter').textContent).toBe('2 characters');
-        expect(document.querySelector('[tagid="tag-id"]').classList.contains('bogus_folder_select')).toBe(true);
-        expect(document.querySelector('[tagid="back"]')).not.toBeNull();
+        expect(document.querySelector('.bogus_folder_select')).toBeNull();
+        expect(document.querySelector('[tagid="back"]')).toBeNull();
         expect(rows().at(-1).textContent).toContain('4 hidden');
+    });
+
+    test('keeps empty folders visible when the library has no entities', async () => {
+        const folder = folderStore.createFolder('characters', 'Empty folder');
+        model = { ...model, entities: [], sourceCount: 0 };
+        await mount();
+        const header = document.querySelector(`[data-sb-list-key="folder:characters:${folder.id}"]`);
+        expect(header).not.toBeNull();
+        expect(header.textContent).toContain('0 characters');
     });
 
     test('keeps empty subtitle hooks hidden and reveals them when character data arrives', async () => {
@@ -314,6 +368,7 @@ describe('shared Characters/Groups list', () => {
                 await settle();
             }
             expect(selectCharacterById).toHaveBeenCalledTimes(2);
+            expect(saveSettingsDebounced).toHaveBeenCalledTimes(2);
             expect(activation).not.toHaveBeenCalled();
             const edit = row.querySelector('button');
             edit.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -420,6 +475,46 @@ describe('shared Characters/Groups list', () => {
         expect(mounted.captureState()).toEqual({ query: 'Name', page: 2, scrollTop: 65, focusKey: 'character:10.png' });
     });
 
+    test('reveals a character by key without writing a search query', async () => {
+        model.entities = characters(26);
+        model.sourceCount = 26;
+        await mount();
+
+        expect(await mounted.revealByKey('character:24.png')).toBe(true);
+
+        expect(pages.characters).toBe(3);
+        expect(document.activeElement).toBe(document.querySelector('[data-sb-list-key="character:24.png"]'));
+        expect(setFilterData).not.toHaveBeenCalled();
+    });
+
+    test('clears filters for a by-key reveal only when the target is filtered out', async () => {
+        model = { ...model, hasAnyFilter: true, sourceCount: 26, entities: characters(3) };
+        const clearFilters = document.querySelector('.clearAllFilters');
+        const clear = jest.fn(() => {
+            model = { ...model, hasAnyFilter: false, entities: characters(26), sourceCount: 26 };
+        });
+        clearFilters.addEventListener('click', clear);
+        await mount();
+
+        expect(await mounted.revealByKey('character:24.png')).toBe(true);
+
+        expect(clear).toHaveBeenCalledTimes(1);
+        expect(pages.characters).toBe(3);
+        expect(setFilterData).not.toHaveBeenCalled();
+    });
+
+    test('keeps active filters when a by-key reveal target is already in the filtered results', async () => {
+        model = { ...model, hasAnyFilter: true, sourceCount: 3, entities: characters(3) };
+        const clear = jest.fn();
+        document.querySelector('.clearAllFilters').addEventListener('click', clear);
+        await mount();
+
+        expect(await mounted.revealByKey('character:2.png')).toBe(true);
+
+        expect(clear).not.toHaveBeenCalled();
+        expect(setFilterData).not.toHaveBeenCalled();
+    });
+
     test('search shortcuts reach the upstream input engine and restored queries stay in sync', async () => {
         const input = document.getElementById('character_search_bar');
         const upstream = jest.fn();
@@ -469,6 +564,12 @@ describe('shared Characters/Groups list', () => {
         button('new').click();
         expect(create).toHaveBeenCalledTimes(1);
         button('sort').click();
+        const sortItems = menu.sections.find(section => section.title === 'Sort').items;
+        const checkedSortItems = sortItems.filter(item => item.checked);
+        expect(checkedSortItems).toHaveLength(1);
+        expect(checkedSortItems[0].label).toBe('Name (A-Z)');
+        expect(checkedSortItems[0].kind).toBe('radio');
+        expect(checkedSortItems[0].icon).not.toContain('fa-check');
         expect(action('Name (A-Z)').checked).toBe(true);
         expect(action('Grid').checked).toBe(false);
         action('Grid').onSelect();
@@ -499,9 +600,15 @@ describe('shared Characters/Groups list', () => {
         measure(270);
         expect(button('search').hidden).toBe(true);
         expect(button('new').hidden).toBe(false);
+        const openFolderManager = jest.fn();
+        globalThis.SillyBunnyFolderManager = { open: openFolderManager };
         button('more').click();
         expect(action('Show Tag List')).toBeUndefined();
-        expect(action('Tags as Folders').checked).toBe(false);
+        expect(action('Tags as Folders')).toBeUndefined();
+        expect(action('Manage Folders')).toBeDefined();
+        action('Manage Folders').onSelect();
+        await settle();
+        expect(openFolderManager).toHaveBeenCalledWith('characters');
         expect(action('Sort')).toBeDefined();
         expect(action('Search')).toBeDefined();
         measure(375);
@@ -808,9 +915,11 @@ describe('chat activation and current entity', () => {
         expect(mounted.section.hidden).toBe(true);
         expect(play).not.toHaveBeenCalled();
         expect(globalThis.SillyBunnyShell.closeCharacters).toHaveBeenCalledTimes(1);
+        expect(saveSettingsDebounced).not.toHaveBeenCalled();
         resize();
         finish(true);
         await settle();
+        expect(saveSettingsDebounced).toHaveBeenCalledTimes(1);
         expect(globalThis.SillyBunnyShell.closeCharacters).toHaveBeenCalledTimes(1);
         expect(row.classList.contains('is-activating-entity')).toBe(false);
     });
@@ -832,6 +941,35 @@ describe('chat activation and current entity', () => {
         expect(globalThis.SillyBunnyShell.closeCharacters).not.toHaveBeenCalled();
         expect(play).not.toHaveBeenCalled();
         expect(rows()[0].hasAttribute('aria-current')).toBe(false);
+        expect(setActiveCharacter).not.toHaveBeenCalled();
+        expect(setActiveGroup).not.toHaveBeenCalled();
+        expect(saveSettingsDebounced).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['characters', ['0.png'], [null]],
+        ['groups', [null], ['g']],
+    ])('%s rows record the opened chat as the Auto-load Last Chat entity', async (view, character, group) => {
+        model.view = view;
+        if (view === 'groups') model.entities = [{ type: 'group', id: 'g', item: groupLibrary[0] }];
+        await mount();
+        rows()[0].click();
+        await settle();
+        // Index 0 has to reach upstream as its avatar; a numeric 0 would clear the entity instead.
+        expect(setActiveCharacter.mock.calls).toEqual([character]);
+        expect(setActiveGroup.mock.calls).toEqual([group]);
+        expect(saveSettingsDebounced).toHaveBeenCalledTimes(1);
+    });
+
+    test('records the clicked row even when the library reloads while its chat opens', async () => {
+        await mount();
+        selectCharacterById.mockImplementationOnce(async () => {
+            characterLibrary.unshift({ name: 'Imported', avatar: 'imported.png' });
+            return true;
+        });
+        rows()[1].click();
+        await settle();
+        expect(setActiveCharacter.mock.calls).toEqual([['1.png']]);
     });
 
     test('entering selection while chat loading cancels deferred dismissal', async () => {
@@ -845,6 +983,8 @@ describe('chat activation and current entity', () => {
         await settle();
         expect(globalThis.SillyBunnyShell.closeCharacters).not.toHaveBeenCalled();
         expect(play).not.toHaveBeenCalled();
+        // The chat still opened, so it remains the entity to auto-load.
+        expect(saveSettingsDebounced).toHaveBeenCalledTimes(1);
     });
 
     test('the user pin keeps a successful chat activation open', async () => {
@@ -901,21 +1041,46 @@ describe('chat activation and current entity', () => {
         expect(globalThis.SillyBunnyShell.closeCharacters).not.toHaveBeenCalled();
     });
 
-    test('folder and Back activation still reaches the upstream drilldown without selecting a chat', async () => {
-        model.folderOpen = true;
-        model.entities.push({ type: 'tag', id: 'folder', item: { name: 'Folder' } });
+    test('folder headers expand and collapse through click and keyboard without activating chats', async () => {
+        const folder = folderStore.createFolder('characters', 'Folder', { expanded: false });
+        folderStore.setFolder('characters', ['0.png'], folder.id);
         await mount();
-        const drilldown = jest.fn();
-        document.addEventListener('click', drilldown);
-        try {
-            document.querySelector('[tagid="folder"]').click();
-            document.querySelector('[tagid="back"]').click();
-            expect(drilldown).toHaveBeenCalledTimes(2);
-            expect(selectCharacterById).not.toHaveBeenCalled();
-            expect(globalThis.SillyBunnyShell.closeCharacters).not.toHaveBeenCalled();
-        } finally {
-            document.removeEventListener('click', drilldown);
-        }
+        const header = document.querySelector(`[data-sb-list-key="folder:characters:${folder.id}"]`);
+        expect(header.getAttribute('aria-expanded')).toBe('false');
+        expect(document.getElementById('CharID0')).toBeNull();
+        header.click();
+        await settle();
+        expect(folderStore.getFolders('characters')[0].expanded).toBe(true);
+        expect(header.getAttribute('aria-expanded')).toBe('true');
+        expect(document.getElementById('CharID0')).not.toBeNull();
+        header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await settle();
+        expect(folderStore.getFolders('characters')[0].expanded).toBe(false);
+        expect(selectCharacterById).not.toHaveBeenCalled();
+        expect(globalThis.SillyBunnyShell.closeCharacters).not.toHaveBeenCalled();
+    });
+
+    test('folder sections mark their start, members and end apart from unfiled rows', async () => {
+        const open = folderStore.createFolder('characters', 'Open', { expanded: true });
+        const closed = folderStore.createFolder('characters', 'Closed', { expanded: false });
+        folderStore.setFolder('characters', ['0.png', '1.png'], open.id);
+        await mount();
+        const classes = element => ['is-folder-section-start', 'is-folder-member', 'is-folder-section-end']
+            .filter(name => element.classList.contains(name));
+        const openHeader = document.querySelector(`[data-sb-list-key="folder:characters:${open.id}"]`);
+        const closedHeader = document.querySelector(`[data-sb-list-key="folder:characters:${closed.id}"]`);
+        expect(classes(openHeader)).toEqual(['is-folder-section-start']);
+        expect(classes(document.getElementById('CharID0'))).toEqual(['is-folder-member']);
+        expect(classes(document.getElementById('CharID1'))).toEqual(['is-folder-member', 'is-folder-section-end']);
+        expect(classes(closedHeader)).toEqual(['is-folder-section-start', 'is-folder-section-end']);
+        const unfiled = [...document.querySelectorAll('#rm_print_characters_block > .character_select')]
+            .filter(row => !['CharID0', 'CharID1'].includes(row.id));
+        expect(unfiled.length).toBeGreaterThan(0);
+        for (const row of unfiled) expect(classes(row)).toEqual([]);
+
+        openHeader.click();
+        await settle();
+        expect(classes(openHeader)).toEqual(['is-folder-section-start', 'is-folder-section-end']);
     });
 
     test('first reveal scrolls to the current row without focus theft or repeated scrolling', async () => {
@@ -955,9 +1120,9 @@ describe('chat activation and current entity', () => {
 });
 
 describe('Characters/Groups shared selection mode', () => {
-    test('row capture toggles without starting a chat; controls and folders are inert', async () => {
-        model.entities.push({ type: 'tag', id: 'folder', item: { name: 'Folder' } });
-        model.folderOpen = true;
+    test('row capture toggles without starting a chat; folder headers are inert', async () => {
+        const folder = folderStore.createFolder('characters', 'Folder', { expanded: true });
+        folderStore.setFolder('characters', ['0.png'], folder.id);
         model.entities[0].item.active = true;
         await mount();
         await enterSelection();
@@ -966,8 +1131,7 @@ describe('Characters/Groups shared selection mode', () => {
         row.addEventListener('click', activation);
         expect(row.querySelector('.ds-entity-row__suffix').inert).toBe(true);
         expect(row.classList.contains('is-selected')).toBe(false);
-        expect(document.querySelector('[tagid="folder"]').inert).toBe(true);
-        expect(document.querySelector('[tagid="back"]').inert).toBe(true);
+        expect(document.querySelector(`[data-sb-list-key="folder:characters:${folder.id}"]`).inert).toBe(true);
         row.focus();
         row.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
         expect(document.activeElement).toBe(document.getElementById('CharID2'));
@@ -1110,7 +1274,7 @@ describe('Characters/Groups shared selection mode', () => {
         await mount();
         await enterSelection();
         document.querySelector('.sb-selection-select-all').click();
-        expect([...document.querySelectorAll('.sb-selection-action')].map(button => button.dataset.actionId)).toEqual(['tag', 'delete']);
+        expect([...document.querySelectorAll('.sb-selection-action')].map(button => button.dataset.actionId)).toEqual(['tag', 'folder', 'delete']);
         document.querySelector(`.sb-selection-action[data-action-id="${actionId}"]`).click();
         await settle();
         expect(runBulkAction).toHaveBeenCalledWith(actionId, ['g', 'group-id', '0123']);
@@ -1170,7 +1334,7 @@ describe('Characters/Groups shared selection mode', () => {
         await mounted.render(model);
         expect(mounted.section.dataset.selectionMode).toBe('false');
         await enterSelection();
-        expect([...document.querySelectorAll('.sb-selection-action')].map(button => button.dataset.actionId)).toEqual(['tag', 'delete']);
+        expect([...document.querySelectorAll('.sb-selection-action')].map(button => button.dataset.actionId)).toEqual(['tag', 'folder', 'delete']);
     });
 
     test('empty and folder-only lists cannot enter selection', async () => {

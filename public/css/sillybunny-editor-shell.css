@@ -29,6 +29,34 @@
     display: none !important;
 }
 
+.sb-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    color: var(--SmartThemeBodyColor);
+    background: var(--sb-layer-headerbar);
+}
+
+.sb-banner[hidden] {
+    display: none !important;
+}
+
+.sb-banner > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.sb-banner > button {
+    flex: none;
+    width: auto;
+    min-width: max-content;
+    white-space: nowrap;
+}
+
 /* --- Sidebar --- */
 
 .sb-list-editor__sidebar {
@@ -729,7 +757,12 @@ body.reduced-motion :is(.sb-chip-entry, .sb-chip__remove, .sb-list-pagination__p
     gap: 2px;
 }
 
-.sb-picker__label,
+/* Labels wrap rather than truncate: the popover already grows to fit them, so this only applies
+   past its width cap or in the narrow mobile sheet, where a cut-off option name hides the choice. */
+.sb-picker__label {
+    overflow-wrap: anywhere;
+}
+
 .sb-picker__subtitle {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -753,6 +786,34 @@ body.reduced-motion :is(.sb-chip-entry, .sb-chip__remove, .sb-list-pagination__p
 .sb-picker__empty {
     padding: 12px;
     color: var(--sb-input-placeholder);
+}
+
+.sb-picker__option.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.sb-picker__group {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sb-picker__group-item + .sb-picker__group-item,
+.sb-picker__option + .sb-picker__group-item,
+.sb-picker__group-item + .sb-picker__option {
+    margin-block-start: 6px;
+}
+
+/* Dimmed heading; capitalisation comes from the label (DESIGN.md Capitalisation Rule). */
+.sb-picker__group-heading {
+    padding: 6px 12px 4px;
+    color: var(--sb-muted-fg);
+    font-size: var(--sb-type-meta);
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sb-picker__separator {
@@ -797,6 +858,29 @@ body.reduced-motion :is(.sb-chip-entry, .sb-chip__remove, .sb-list-pagination__p
     display: flex;
     align-items: center;
     gap: 8px;
+    font-size: var(--mainFontSize);
+}
+
+/* Reuse the editors' full-label header actions, including disabled and suggested-action states. */
+.sb-selection-header .sb-editor-action {
+    font-size: inherit;
+    font-weight: 400;
+}
+
+.sb-selection-header .sb-editor-action--primary {
+    font-weight: 600;
+}
+
+@media (forced-colors: active) {
+    .sb-selection-header .sb-editor-action {
+        border: 1px solid ButtonText;
+    }
+
+    .sb-selection-header .sb-editor-action.sb-editor-action:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+        box-shadow: none;
+    }
 }
 
 .sb-selection-title {
@@ -904,7 +988,8 @@ body.reduced-motion :is(.sb-chip-entry, .sb-chip__remove, .sb-list-pagination__p
     transform: none;
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (any-pointer: coarse) {
+    .sb-selection-header .sb-editor-action,
     [data-selection-mode='true'] button.menu_button:is(.sb-selection-cancel, .sb-selection-select-all, .sb-selection-action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']),
     [data-selection-mode='true'] button.menu_button.sb-selection-action:disabled {
         min-block-size: 44px;

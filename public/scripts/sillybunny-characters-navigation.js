@@ -6,9 +6,11 @@ import {
     openGroupEditor,
     captureGroupEditorListState,
     restoreGroupEditorListState,
+    selected_group,
 } from './group-chats.js';
 import { t } from './i18n.js';
 import { objectNavigation } from './sillybunny-editor/object-navigation.js';
+import { rememberOpenedEntity } from './sillybunny-auto-load.js';
 import {
     world_names, openWorldInfoEditor, getWorldInfoEditorState,
     captureWorldInfoEditorListState, restoreWorldInfoEditorListState,
@@ -17,6 +19,13 @@ import { power_user } from './power-user.js';
 
 const EDITOR_READY_TIMEOUT = 5000;
 const EDITOR_READY_INTERVAL = 50;
+let createOrigin = 'characters';
+let createNavigationRevision = 0;
+
+export function recordCharacterCreateOrigin(view = 'characters') {
+    createOrigin = view === 'groups' ? 'groups' : 'characters';
+    createNavigationRevision++;
+}
 
 function characterEditorScroller() {
     return document.querySelector('#form_create .sb-editor-sheet__content');
@@ -65,6 +74,8 @@ objectNavigation.register('character-editor', {
         const opened = peek
             ? await openGroupMemberDefinition(target.id, { isCurrent })
             : await selectCharacterById(index, { switchMenu: true });
+        // Only a forward open switches chats: Back stays on the selected character and a peek keeps the group chat.
+        if (opened && !peek && !restore) rememberOpenedEntity('character', target.id);
         if (!isCurrent() || !opened) return false;
         const ready = await waitForCharacterEditor(target.id, isCurrent);
         if (!isCurrent() || !ready) return false;
@@ -80,7 +91,11 @@ objectNavigation.register('group-editor', {
     exists: id => groupEditorTargetExists(id),
     async open(target, { restore = null, isCurrent }) {
         if (!isCurrent()) return false;
-        const opened = await openGroupEditor(target.id, { switchChat: target.via === 'group-list', isCurrent });
+        const switchChat = target.via === 'group-list';
+        const opened = await openGroupEditor(target.id, { switchChat, isCurrent });
+        // Without switchChat the editor opens over whichever chat is already open. With it, the chat can
+        // switch even when the editor never shows or a newer navigation supersedes this one.
+        if (switchChat && selected_group === target.id) rememberOpenedEntity('group', target.id);
         if (!isCurrent() || !opened) return false;
         if (restore) await restoreGroupEditorListState(restore);
         return isCurrent();
@@ -134,8 +149,11 @@ function listDestination(view, kind) {
             try {
                 const opened = await shell.openTab('characters', view);
                 if (opened === false || !isCurrent()) return false;
-                await list.mountCharacterList();
+                const controller = await list.mountCharacterList();
                 if (!isCurrent()) return false;
+                if (target.revealKey) {
+                    return controller.revealByKey(target.revealKey, { highlight: true, isCurrent });
+                }
                 if (target.focusAvatar) return revealCharacterListRow(list, target.focusAvatar, isCurrent);
                 return isCurrent();
             } finally {
@@ -149,6 +167,21 @@ function listDestination(view, kind) {
 
 objectNavigation.register('character-list', listDestination('characters', 'character-list'));
 objectNavigation.register('group-list', listDestination('groups', 'group-list'));
+
+export async function returnToCreatedEntity(type, key) {
+    if (typeof key !== 'string' || !key) return false;
+    const view = type === 'group_create' ? 'groups' : type === 'char_create' ? createOrigin : 'characters';
+    const kind = view === 'groups' ? 'group-list' : 'character-list';
+    const revision = ++createNavigationRevision;
+    createOrigin = 'characters';
+    objectNavigation.clear();
+    return listDestination(view, kind).open({ revealKey: key }, { isCurrent: () => revision === createNavigationRevision });
+}
+
+globalThis.SillyBunnyCharactersNavigation = {
+    recordCreateOrigin: recordCharacterCreateOrigin,
+    returnToCreatedEntity,
+};
 
 objectNavigation.register('world-info', {
     exists: name => world_names.includes(name),

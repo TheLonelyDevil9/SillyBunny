@@ -8,16 +8,19 @@ import { reconcileRows, bindListKeyboard, rowEntry } from './sillybunny-editor/l
 import { createListSearch } from './sillybunny-editor/list-search.js';
 import { createStatusPage } from './sillybunny-editor/status-page.js';
 import { createSelectionMode } from './sillybunny-editor/selection-mode.js';
+import { createFolderRow, folderCountLabel } from './sillybunny-editor/folder-row.js';
 import { attachTagFilterMenu } from './sillybunny-editor/tag-filter-menu.js';
 import { closePicker, isPickerOpen } from './sillybunny-editor/picker.js';
 import { objectNavigation } from './sillybunny-editor/object-navigation.js';
 import { eventSource, event_types } from './events.js';
-import { animateListChange, stopMotion } from './sillybunny-motion.js';
+import { animateListChange, prefersReducedMotion, stopMotion } from './sillybunny-motion.js';
+import { getFolders, getFolderId, setFolder, setFolderExpanded, subscribe as subscribeFolders } from './sillybunny-folders.js';
+import { rememberOpenedEntity } from './sillybunny-auto-load.js';
 
 const CHARACTER_LIST_STYLESHEETS = Object.freeze([
     { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
     { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
-    { href: 'css/sillybunny-character-list.css?v=20261018d', id: 'deferred-character-list-css' },
+    { href: 'css/sillybunny-character-list.css?v=20261020b', id: 'deferred-character-list-css' },
 ]);
 const PAGE_SIZES = Object.freeze([10, 25, 50, 100, 250, 500, 1000]);
 const mountedLists = new WeakMap();
@@ -187,28 +190,6 @@ function rowTags(row, key, data, tags) {
     limitTagChips(tagSlot, { allNames });
 }
 
-function createFolderAvatar(item) {
-    const folderIcon = item?.folder_type === 'BACK'
-        ? icon('right-from-bracket')
-        : icon(item?.folder_type === 'OPEN' ? 'folder-open' : item?.folder_type === 'CLOSED' ? 'eye-slash' : 'folder');
-    if (item?.folder_type === 'BACK') folderIcon.classList.add('fa-flip-horizontal');
-    folderIcon.classList.add('bogus_folder_icon');
-    return folderIcon;
-}
-
-function createBackEntry(script) {
-    const template = script.getBackBlock?.();
-    const legacy = template?.[0] ?? template;
-    return {
-        kind: 'back',
-        key: entityKey('tag', 'back'),
-        item: {
-            name: legacy?.querySelector?.('.ch_name')?.textContent?.trim() || t`Go back`,
-            avatar: legacy?.querySelector?.('.bogus_folder_icon')?.cloneNode(true) ?? createFolderAvatar({ folder_type: 'BACK' }),
-        },
-    };
-}
-
 async function createHiddenEntry(count, script) {
     const template = await script.getHiddenBlock?.(count);
     const legacy = template?.[0] ?? template;
@@ -219,26 +200,7 @@ async function createHiddenEntry(count, script) {
     };
 }
 
-function createFolderEntry(entity, tags) {
-    const item = entity.item ?? {};
-    const template = tags.getTagBlock?.(item, entity.entities ?? [], entity.hidden ?? 0, entity.isUseless ?? false);
-    const legacy = template?.[0] ?? template;
-    return {
-        kind: 'tag',
-        key: entityKey('tag', entity.id),
-        entity,
-        item,
-        label: legacy?.querySelector?.('.ch_name')?.textContent?.trim() || textValue(item.name),
-        avatar: legacy?.querySelector?.('.bogus_folder_icon')?.cloneNode(true) ?? createFolderAvatar(item),
-        folderClasses: legacy ? [...legacy.classList].filter(className => !['bogus_folder_select', 'entity_block'].includes(className)) : [],
-        subtitle: [legacy?.querySelector?.('.bogus_folder_counter'), legacy?.querySelector?.('.bogus_folder_hidden_counter')]
-            .filter(Boolean)
-            .map(element => element.cloneNode(true)),
-    };
-}
-
 function normalizeEntry(entity, view, dataModules) {
-    if (entity.type === 'tag') return createFolderEntry(entity, dataModules.tags);
     const item = entity.item ?? entity;
     if (entity.type === 'group' || view === 'groups') {
         const data = dataModules.script.getGroupRowData?.(item) ?? item;
@@ -280,17 +242,6 @@ function normalizeEntry(entity, view, dataModules) {
 }
 
 function rowOptions(entry) {
-    if (entry.kind === 'back') {
-        return {
-            key: entry.key,
-            label: entry.item.name,
-            title: entry.item.name,
-            avatar: entry.item.avatar ?? createFolderAvatar({ folder_type: 'BACK' }),
-            activation: 'navigate',
-            compatClasses: { row: ['bogus_folder_select', 'bogus_folder_select_back', 'entity_block'], avatar: ['avatar'], title: ['ch_name'] },
-            attributes: { tagid: 'back', id: 'BogusFolderBack' },
-        };
-    }
     if (entry.kind === 'hidden') {
         return {
             key: entry.key,
@@ -300,26 +251,6 @@ function rowOptions(entry) {
             attributes: { 'aria-hidden': 'true' },
         };
     }
-    if (entry.kind === 'tag') {
-        const item = entry.item;
-        const folderClass = item.folder_type ? String(item.folder_type).toLowerCase() : '';
-        return {
-            key: entry.key,
-            label: entry.label,
-            title: entry.label,
-            subtitle: entry.subtitle,
-            avatar: entry.avatar ?? createFolderAvatar(item),
-            activation: 'navigate',
-            compatClasses: {
-                row: ['bogus_folder_select', 'entity_block', folderClass, ...(entry.folderClasses ?? [])].filter(Boolean),
-                avatar: ['avatar'],
-                title: ['ch_name'],
-                subtitle: ['character_name_block_sub_line'],
-            },
-            attributes: { tagid: textValue(entry.entity.id), id: `BogusFolder${entry.entity.id}` },
-        };
-    }
-
     const { data, item } = entry;
     const badges = [];
     if (entry.favorite) {
@@ -363,6 +294,11 @@ function rowOptions(entry) {
 }
 
 function createRowEntry(entry, actionHandlers) {
+    if (entry.kind === 'folder') {
+        const factory = createFolderRow(entry);
+        rowFactories.set(factory.row, factory);
+        return factory.row;
+    }
     const factory = createEntityRow(rowOptions(entry));
     const { row } = factory;
     rowFactories.set(row, factory);
@@ -382,6 +318,11 @@ function createRowEntry(entry, actionHandlers) {
 
 function updateRow(row, entry, dependencies, visible) {
     const factory = rowFactories.get(row);
+    if (entry.kind === 'folder') {
+        factory.update(entry);
+        rowPresentations.set(row, JSON.stringify([entry.folder, entry.countLabel, entry.expanded, entry.temporaryExpansion, entry.inert]));
+        return;
+    }
     const tagKey = entry.kind === 'group' ? entry.data?.id ?? entry.item.id : entry.data?.avatar ?? entry.item.avatar;
     const tags = dependencies.tags.getTagsList?.(tagKey) ?? entry.data?.tags ?? [];
     const presentation = Object.fromEntries(Object.entries(entry.data ?? {}).filter(([key]) => key !== 'active' && key !== 'isActive'));
@@ -390,8 +331,6 @@ function updateRow(row, entry, dependencies, visible) {
         ? [t`Edit`, t`Actions for ${entry.label}`] : null;
     const signature = JSON.stringify([
         entry.kind, entry.label ?? entry.item.name, presentation, tagPresentation, actionLabels,
-        entry.item?.folder_type, entry.folderClasses, entry.subtitle?.map(part => part.textContent),
-        entry.kind === 'tag' ? entry.avatar?.outerHTML : null,
         entry.kind === 'group' ? [...(entry.avatar?.querySelectorAll('img') ?? [])].map(image => image.getAttribute('src')) : null,
     ]);
     const changed = rowPresentations.get(row) !== signature;
@@ -426,6 +365,12 @@ function getHiddenCount(model) {
     return Math.max(0, Number(model.sourceCount) - renderedEntities);
 }
 
+function modelEntityKey(entity) {
+    if (entity.type === 'group') return entityKey('group', entity.item?.id ?? entity.id);
+    if (entity.type === 'character') return entityKey('character', (entity.item ?? entity).avatar);
+    return null;
+}
+
 function makeMenuItem(label, glyph, onSelect, options = {}) {
     return { label, icon: `fa-solid fa-${glyph}`, onSelect: () => run(onSelect), ...options };
 }
@@ -434,8 +379,101 @@ function clickTransport(selector) {
     document.querySelector(selector)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+function destroyLegacyPagination(container) {
+    const jquery = globalThis.$;
+    const element = container.querySelector('#rm_print_characters_pagination');
+    if (typeof jquery !== 'function' || typeof jquery.fn?.pagination !== 'function' || !element) return;
+    const pagination = jquery(element);
+    if (!pagination.data?.('pagination')?.initialized) return;
+    pagination.pagination('destroy');
+}
+
 function modelCount(model) {
-    return model.entities.filter(entity => entity.type !== 'tag').length;
+    return model.entities.filter(entity => entity.type === 'character' || entity.type === 'group').length;
+}
+
+function entityFolderKey(entity, view) {
+    const item = entity.item ?? entity;
+    return view === 'groups' ? String(item.id ?? entity.id ?? '') : String(item.avatar ?? '');
+}
+
+function countLabel(count, view) {
+    return folderCountLabel(count, view);
+}
+
+function buildVisibleRows(model, view, query) {
+    const folders = getFolders(view);
+    const folderIds = new Set(folders.map(folder => folder.id));
+    const membersByFolder = new Map(folders.map(folder => [folder.id, []]));
+    const unfiled = [];
+    const entities = model.entities.filter(entity => entity.type === 'character' || entity.type === 'group');
+    for (const entity of entities) {
+        const folderId = getFolderId(view, entityFolderKey(entity, view));
+        const members = folderIds.has(folderId) ? membersByFolder.get(folderId) : null;
+        if (members) members.push(entity);
+        else unfiled.push(entity);
+    }
+
+    const filtered = Boolean(String(query ?? '').trim()) || Boolean(model.hasAnyFilter);
+    const rows = [];
+    const headers = new Map();
+    for (const folder of folders) {
+        const members = membersByFolder.get(folder.id);
+        if (filtered && !members.length) continue;
+        const header = {
+            kind: 'folder',
+            key: `folder:${view}:${folder.id}`,
+            folder: { ...folder, scope: view },
+            scope: view,
+            count: members.length,
+            countLabel: countLabel(members.length, view),
+            expanded: filtered || folder.expanded,
+            temporaryExpansion: filtered,
+        };
+        headers.set(folder.id, header);
+        rows.push(header);
+        if (!header.expanded) continue;
+        for (const entity of members) rows.push({
+            kind: 'entity',
+            key: modelEntityKey(entity),
+            entity,
+            folderId: folder.id,
+        });
+    }
+    for (const entity of unfiled) rows.push({ kind: 'entity', key: modelEntityKey(entity), entity, folderId: null });
+    return { rows, headers };
+}
+
+/**
+ * Marks the rows of each folder section on the current page so CSS can frame a
+ * folder header and its members as one group, apart from unfiled rows.
+ * @param {HTMLElement} container Rows container in display order.
+ */
+function decorateFolderSections(container) {
+    const rows = [...container.children];
+    const sectionOf = row => {
+        const entry = rowEntry(row);
+        if (entry?.kind === 'folder') return entry.folder?.id ?? null;
+        return entry?.folderId ?? null;
+    };
+    rows.forEach((row, index) => {
+        const section = sectionOf(row);
+        const isHeader = rowEntry(row)?.kind === 'folder';
+        const nextSection = index + 1 < rows.length ? sectionOf(rows[index + 1]) : null;
+        const nextIsHeader = rowEntry(rows[index + 1])?.kind === 'folder';
+        const previousSection = index > 0 ? sectionOf(rows[index - 1]) : null;
+        row.classList.toggle('is-folder-member', Boolean(section) && !isHeader);
+        row.classList.toggle('is-folder-section-start', Boolean(section) && (isHeader || previousSection !== section));
+        row.classList.toggle('is-folder-section-end', Boolean(section) && (nextSection !== section || nextIsHeader));
+    });
+}
+
+function pageVisibleRows(rows, headers, pagination) {
+    const pageRows = pagination.slice(rows);
+    const first = pageRows[0];
+    if (first?.kind !== 'entity' || !first.folderId) return pageRows;
+    const header = headers.get(first.folderId);
+    return header ? [header, ...pageRows] : pageRows;
 }
 
 async function loadStylesheets(stylesheets) {
@@ -503,6 +541,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         lastQuery: '',
         pageSync: 0,
         selectableKeys: [],
+        visibleRows: [],
     };
     let header;
     let search;
@@ -517,6 +556,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
     let suppressedStateRenders = 0;
     let handlingSearchInput = false;
     let unbindKeyboard;
+    let unsubscribeFolders;
     let destroyed = false;
     let selection;
     let selectionActive = false;
@@ -527,6 +567,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
     let visibilityObserver;
     let preserveRestoredScroll = false;
     let revealActiveOnRender = false;
+    let latestModel = null;
     const headerWidths = new Map();
     let headerWidth = 0;
     let firstRenderComplete = false;
@@ -558,10 +599,11 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         for (const row of rowsContainer.querySelectorAll('.ds-entity-row')) {
             if (listVisible) row.classList.toggle('is-selected', !active && Boolean(rowEntry(row)?.active));
             for (const control of row.querySelectorAll('.ds-entity-row__suffix')) control.inert = active;
-            if (row.matches('.bogus_folder_select')) {
+            if (row.matches('.sb-folder-row')) {
                 row.inert = active;
                 if (active) row.setAttribute('aria-disabled', 'true');
                 else row.removeAttribute('aria-disabled');
+                row.tabIndex = active ? -1 : 0;
             }
         }
     }
@@ -635,6 +677,50 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         preserveRestoredScroll = false;
     }
 
+    async function revealByKey(key, { highlight = false, isCurrent = () => true } = {}) {
+        if (typeof key !== 'string' || !key || destroyed || !isCurrent()) return false;
+        const view = key.startsWith('group:') ? 'groups' : key.startsWith('character:') ? 'characters' : null;
+        if (!view || view !== state.view) return false;
+
+        const findEntity = () => latestModel?.entities.find(entity => modelEntityKey(entity) === key);
+        let entity = findEntity();
+        if (!entity && latestModel?.hasAnyFilter) {
+            document.querySelector('#rm_characters_block .clearAllFilters')?.click();
+            await dataModules.script.printCharacters(false);
+            if (destroyed || !isCurrent()) return false;
+            entity = findEntity();
+        }
+        if (!entity) return false;
+        const folderId = getFolderId(view, entityFolderKey(entity, view));
+        if (folderId && getFolders(view).find(folder => folder.id === folderId)?.expanded !== true) {
+            setFolderExpanded(view, folderId, true);
+            await dataModules.script.printCharacters(false);
+            if (destroyed || !isCurrent()) return false;
+        }
+        const index = state.visibleRows.findIndex(entry => entry.kind === 'entity' && entry.key === key);
+        if (index < 0) return false;
+
+        const pageSize = Number(dataModules.state.getListPageSize?.(view)) || pagination.pageSize;
+        await dataModules.state.setListPage?.(view, Math.floor(index / pageSize) + 1);
+        if (destroyed || !isCurrent()) return false;
+
+        let row = [...rowsContainer.children].find(element => element.dataset.sbListKey === key);
+        if (!row) {
+            await dataModules.script.printCharacters(false);
+            if (destroyed || !isCurrent()) return false;
+            row = [...rowsContainer.children].find(element => element.dataset.sbListKey === key);
+        }
+        if (!(row instanceof HTMLElement)) return false;
+
+        row.scrollIntoView?.({ block: 'nearest' });
+        row.focus({ preventScroll: true });
+        if (highlight && !prefersReducedMotion() && typeof globalThis.$ === 'function') {
+            const { flashHighlight } = await import('./utils.js');
+            if (!destroyed && isCurrent()) flashHighlight(globalThis.$(row), 2000);
+        }
+        return true;
+    }
+
     async function activateChat(row, entry) {
         if (pendingActivation || destroyed || selection.isActive) return;
         const activation = {
@@ -667,13 +753,17 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             }
         };
         try {
+            // Key the record to the clicked row, not a library index: the library can reload while the chat loads.
+            const key = String(entry.kind === 'group' ? (entry.data.id ?? entry.item.id) : (entry.data.avatar ?? entry.item.avatar));
             const selected = entry.kind === 'group'
-                ? await dataModules.groups.openGroupById(String(entry.data.id ?? entry.item.id), { switchMenu: false, onAccepted })
+                ? await dataModules.groups.openGroupById(key, { switchMenu: false, onAccepted })
                 : await dataModules.script.selectCharacterById(Number(entry.data.chid ?? entry.entity.id), { switchMenu: false, onAccepted });
             if (!selected) {
                 await reopen();
                 return;
             }
+            // Row activation stops the click before RossAscends-mods.js can record the Auto-load Last Chat entity.
+            rememberOpenedEntity(entry.kind, key);
             if (pendingActivation !== activation || destroyed || selection.isActive || state.view !== activation.view) return;
             syncActiveRows();
         } catch (error) {
@@ -712,15 +802,46 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         }
     }
 
+    function bulkMoveToFolder(trigger, selectedKeys) {
+        const folderKeysBySelectionKey = state.view === 'groups'
+            ? new Map(dataModules.groups.groups.map(group => [entityKey('group', group.id), String(group.id)]))
+            : new Map(dataModules.script.characters.flatMap(character => character?.avatar
+                ? [[entityKey('character', character.avatar), String(character.avatar)]]
+                : []));
+        const keys = selectedKeys.map(key => folderKeysBySelectionKey.get(key)).filter(key => key !== undefined);
+        if (!keys.length) return;
+        const folders = getFolders(state.view);
+        const currentFolder = key => {
+            const folderId = getFolderId(state.view, key);
+            return folderId && folders.some(folder => folder.id === folderId) ? folderId : null;
+        };
+        const items = [
+            makeMenuItem(t`No folder`, 'folder', () => {
+                setFolder(state.view, keys, null);
+                selection.exit();
+            }, { kind: 'radio', checked: keys.every(key => currentFolder(key) === null) }),
+            ...folders.map(folder => makeMenuItem(folder.name, 'folder', () => {
+                setFolder(state.view, keys, folder.id);
+                selection.exit();
+            }, { kind: 'radio', checked: keys.every(key => currentFolder(key) === folder.id) })),
+        ];
+        menu(trigger, t`Move to Folder`, [{ items }]);
+    }
+
     function createSelection() {
         const action = (id, label, glyph, danger = false) => ({
             id, label, icon: `fa-solid fa-${glyph}`, danger, onActivate: () => run(() => bulkAction(id)),
         });
+        const folderAction = {
+            id: 'folder', label: t`Move to Folder`, icon: 'fa-solid fa-folder',
+            onActivate: selectedKeys => bulkMoveToFolder(selectionBar.querySelector('[data-action-id="folder"]'), selectedKeys),
+        };
         const actions = state.view === 'groups'
-            ? [action('tag', t`Tag`, 'tags'), action('delete', t`Delete`, 'trash', true)]
+            ? [action('tag', t`Tag`, 'tags'), folderAction, action('delete', t`Delete`, 'trash', true)]
             : [
                 action('favorite', t`Favorite`, 'star'),
                 action('tag', t`Tag`, 'tags'),
+                folderAction,
                 action('duplicate', t`Duplicate`, 'copy'),
                 action('persona', t`Convert to Persona`, 'user'),
                 action('delete', t`Delete`, 'trash', true),
@@ -782,15 +903,17 @@ function createCharacterListController(container, dependencies, restoreDOM) {
 
     function openSortMenu(trigger) {
         const current = dataModules.state.getListSort?.(state.view) ?? {};
-        const sortItems = currentSortOptions().map(option => makeMenuItem(option.label || option.i18nKey || t`Sort`, 'check', () => dataModules.state.setListSort?.(state.view, option), {
+        const sortItems = currentSortOptions().map(option => makeMenuItem(option.label || option.i18nKey || t`Sort`, 'arrow-down-wide-short', () => dataModules.state.setListSort?.(state.view, option), {
+            kind: 'radio',
             checked: option.field === current.field && option.order === current.order && (option.rule ?? null) === (current.rule ?? null),
         }));
         const viewItems = [
             ['list', t`List`],
             ['grid', t`Grid`],
-        ].map(([value, label]) => makeMenuItem(label, power_user.charListGrid === (value === 'grid') ? 'check' : 'circle', () => {
+        ].map(([value, label]) => makeMenuItem(label, 'list', () => {
             if (Boolean(power_user.charListGrid) !== (value === 'grid')) clickTransport('#charListGridToggle');
         }, {
+            kind: 'radio',
             checked: power_user.charListGrid === (value === 'grid'),
         }));
         menu(trigger, t`Sort`, [{ title: t`Sort`, items: sortItems }, { title: t`View`, items: viewItems }]);
@@ -804,9 +927,10 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         sections.push({ items: [makeMenuItem(t`Select`, 'check-double', () => selection.enter(null, trigger), { disabled: bulkBusy || !state.selectableKeys.length })] });
         sections.push({ items: [
             makeMenuItem(t`Manage tags`, 'tags', () => filter('.manageTags')?.click()),
-            makeMenuItem(t`Tags as Folders`, 'folder', () => clickTransport('#bogus_folders'), { checked: Boolean(power_user.bogus_folders) }),
             makeMenuItem(t`Clear all filters`, 'filter-circle-xmark', () => filter('.clearAllFilters')?.click()),
         ] });
+        sections.push({ items: [makeMenuItem(t`Manage Folders`, 'folder', () => globalThis.SillyBunnyFolderManager?.open?.(state.view)
+            ?? import('./sillybunny-folder-manager.js').then(module => module.openFolderManager(state.view)))] });
         sections.push({ items: [makeMenuItem(t`Import`, 'file-import', () => globalThis.SillyBunnyShell?.openTab?.('characters', 'import'))] });
         menu(trigger, state.view === 'groups' ? t`Groups` : t`Characters`, sections);
     }
@@ -847,24 +971,26 @@ function createCharacterListController(container, dependencies, restoreDOM) {
 
     function openRowMenu(trigger, entry) {
         const favorite = entry.favorite;
-        const items = entry.kind === 'group'
-            ? [
-                makeMenuItem(t`Favorites`, 'star', () => groupAction(entry, 'favorite'), { checked: favorite }),
-                makeMenuItem(t`Delete`, 'trash', () => groupAction(entry, 'delete'), { danger: true }),
-            ]
+        const favoriteItem = makeMenuItem(t`Favorites`, 'star', () => entry.kind === 'group'
+            ? groupAction(entry, 'favorite')
+            : characterAction(entry, 'favorite'), { kind: 'check', checked: favorite });
+        const actionItems = entry.kind === 'group'
+            ? [makeMenuItem(t`Delete`, 'trash', () => groupAction(entry, 'delete'), { danger: true })]
             : [
-                makeMenuItem(t`Favorites`, 'star', () => characterAction(entry, 'favorite'), { checked: favorite }),
                 makeMenuItem(t`Duplicate`, 'copy', () => characterAction(entry, 'duplicate')),
                 makeMenuItem(t`Convert to Persona`, 'user', () => characterAction(entry, 'persona')),
                 makeMenuItem(t`Delete`, 'trash', () => characterAction(entry, 'delete'), { danger: true }),
             ];
-        menu(trigger, t`Actions for ${entry.label}`, [{ items }]);
+        menu(trigger, t`Actions for ${entry.label}`, [{ items: [favoriteItem] }, { items: actionItems }]);
     }
 
     function createHeader() {
         const actions = [
             { id: 'search', label: t`Search`, icon: 'magnifying-glass', onActivate: () => search.toggle(), overflowPriority: 2 },
-            { id: 'new', label: t`New`, icon: 'plus', onActivate: () => clickTransport(state.view === 'groups' ? '#rm_button_group_chats' : '#rm_button_create') },
+            { id: 'new', label: t`New`, icon: 'plus', onActivate: () => {
+                globalThis.SillyBunnyCharactersNavigation?.recordCreateOrigin?.(state.view);
+                clickTransport(state.view === 'groups' ? '#rm_button_group_chats' : '#rm_button_create');
+            } },
             { id: 'sort', label: t`Sort`, icon: 'arrow-down-wide-short', menu: true, onActivate: openSortMenu, overflowPriority: 1 },
             { id: 'more', label: t`More...`, icon: 'ellipsis-vertical', menu: true, onActivate: openListMenu },
         ];
@@ -879,16 +1005,20 @@ function createCharacterListController(container, dependencies, restoreDOM) {
 
     async function renderStatus(model, revision) {
         let content = null;
-        if (!model.sourceCount) {
+        const hasVisibleFolder = state.visibleRows.some(entry => entry.kind === 'folder');
+        if (!model.sourceCount && !hasVisibleFolder) {
             const template = await dataModules.script.getEmptyBlock?.();
             const legacy = template?.[0] ?? template;
             const empty = createStatusPage({
                 icon: 'address-card',
                 title: legacy?.textContent?.trim() || t`No results`,
-                actions: [{ label: t`New`, primary: true, onActivate: () => clickTransport(state.view === 'groups' ? '#rm_button_group_chats' : '#rm_button_create') }],
+                actions: [{ label: t`New`, primary: true, onActivate: () => {
+                    globalThis.SillyBunnyCharactersNavigation?.recordCreateOrigin?.(state.view);
+                    clickTransport(state.view === 'groups' ? '#rm_button_group_chats' : '#rm_button_create');
+                } }],
             });
             content = empty.element;
-        } else if (!model.entities.length) {
+        } else if (!model.entities.length && !hasVisibleFolder) {
             const empty = createStatusPage({ icon: 'magnifying-glass', title: t`No results`, actions: [{ label: t`Clear all filters`, onActivate: () => document.querySelector('#rm_characters_block .clearAllFilters')?.click() }] });
             content = empty.element;
         }
@@ -898,6 +1028,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
     async function render(model) {
         if (destroyed) return;
         if (!model || !Array.isArray(model.entities)) throw new TypeError('Character list model requires entities.');
+        latestModel = model;
         const revision = ++renderRevision;
         const view = model.view === 'groups' ? 'groups' : 'characters';
         const viewChanged = state.view !== model.view;
@@ -925,19 +1056,21 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         }
         section.dataset.view = state.view;
         header?.setTitle(state.view === 'groups' ? t`Groups` : t`Characters`);
-        const noun = state.view === 'groups' ? t`groups` : t`characters`;
-        header?.setSubtitle(`${model.sourceCount} ${noun}`);
+        header?.setSubtitle(countLabel(model.sourceCount, state.view));
         setOverflow();
+        const { rows: visibleRows, headers } = buildVisibleRows(model, view, search.query);
+        state.visibleRows = visibleRows;
         const pageSize = Number(dataModules.state.getListPageSize?.(state.view)) || pagination.pageSize;
         let page = Number(dataModules.state.getListPage?.(state.view)) || 1;
         if (revealActiveOnRender && !selection.isActive) {
-            const index = model.entities.findIndex(entity => {
-                if (entity.type === 'tag') return false;
+            const activeEntity = model.entities.find(entity => {
+                if (entity.type !== 'character' && entity.type !== 'group') return false;
                 const data = entity.type === 'group'
                     ? dataModules.script.getGroupRowData(entity.item)
                     : dataModules.script.getCharacterRowData(entity.item, entity.id);
                 return Boolean(data.active ?? data.isActive);
             });
+            const index = activeEntity ? visibleRows.findIndex(entry => entry.kind === 'entity' && entry.key === modelEntityKey(activeEntity)) : -1;
             if (index >= 0) page = Math.floor(index / pageSize) + 1;
         }
         if (paginationView !== state.view || pagination.pageSize !== pageSize) {
@@ -947,7 +1080,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             footer.replaceChildren(pagination.element);
         }
         const currentPagination = pagination;
-        currentPagination.setTotal(model.entities.length);
+        currentPagination.setTotal(visibleRows.length);
         const clampedPage = Math.min(currentPagination.pages, page);
         state.pageSync++;
         try {
@@ -958,21 +1091,29 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             state.pageSync--;
         }
         if (revision !== renderRevision) return;
-        const pageEntries = currentPagination.slice(model.entities).map(entity => normalizeEntry(entity, view, dataModules));
-        if (model.folderOpen) pageEntries.unshift(createBackEntry(dataModules.script));
+        const pageRows = pageVisibleRows(visibleRows, headers, currentPagination);
+        const pageEntries = pageRows.map(entry => entry.kind === 'folder'
+            ? { ...entry, inert: selection.isActive }
+            : { ...normalizeEntry(entry.entity, view, dataModules), folderId: entry.folderId });
         const hidden = getHiddenCount(model);
         if (model.hasAnyFilter && hidden > 0) pageEntries.push(await createHiddenEntry(hidden, dataModules.script));
         if (revision !== renderRevision) return;
         const scrollTop = box.scrollTop;
-        const updateRows = () => reconcileRows({
-            container: rowsContainer,
-            cache: state.rows,
-            entries: pageEntries,
-            key: entry => entry.key,
-            signature: entry => entry.kind,
-            create: entry => createRowEntry(entry, { edit: openEditor, menu: openRowMenu }),
-            update: (row, entry) => updateRow(row, entry, dataModules, listVisible),
-        });
+        const updateRows = () => {
+            reconcileRows({
+                container: rowsContainer,
+                cache: state.rows,
+                entries: pageEntries,
+                key: entry => entry.key,
+                signature: entry => entry.kind,
+                create: entry => createRowEntry(entry, { edit: openEditor, menu: openRowMenu }),
+                update: (row, entry) => updateRow(row, entry, dataModules, listVisible),
+            });
+            decorateFolderSections(rowsContainer);
+        };
+        for (const child of [...rowsContainer.children]) {
+            if (!child.hasAttribute('data-sb-list-key')) child.remove();
+        }
         if (listVisible && !viewChanged && !revealActiveOnRender && state.rows.size > 0 && pageEntries.length <= 50 && Date.now() >= typingUntil && state.lastQuery === search.query) animateListChange(rowsContainer, updateRows, { key: entityRowMotionKey });
         else updateRows();
         decorateSelection();
@@ -1127,6 +1268,12 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             onOpen: (row, event) => {
                 if (selection.isActive) return true;
                 const entry = rowEntry(row);
+                if (entry?.kind === 'folder') {
+                    if (entry.temporaryExpansion) return true;
+                    setFolderExpanded(entry.scope, entry.folder.id, !entry.expanded);
+                    row.focus({ preventScroll: true });
+                    return true;
+                }
                 if (entry?.kind === 'character' || entry?.kind === 'group') {
                     // Keep the upstream selection guards, but own completion instead of its mobile-only delegated close.
                     event.preventDefault();
@@ -1176,6 +1323,9 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         }
         const activeEvents = [event_types.CHAT_CHANGED, event_types.CHAT_LOADED, event_types.GROUP_UPDATED].filter(Boolean);
         activeEvents.forEach(event => eventSource.on(event, syncActiveRows));
+        unsubscribeFolders = subscribeFolders(({ scope }) => {
+            if (!scope || scope === state.view) run(refresh);
+        });
         if (extensionSlot) {
             observeExtensionItems();
             extensionObserver = new MutationObserver(observeExtensionItems);
@@ -1192,6 +1342,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             captureState,
             restoreState,
             revealActiveEntity,
+            revealByKey,
             destroy() {
                 if (destroyed) return;
                 destroyed = true;
@@ -1203,6 +1354,7 @@ function createCharacterListController(container, dependencies, restoreDOM) {
                 extensionObserver?.disconnect();
                 visibilityObserver.disconnect();
                 activeEvents.forEach(event => eventSource.removeListener(event, syncActiveRows));
+                unsubscribeFolders?.();
                 tagMenu.destroy();
                 search.destroy();
                 selection.exit();
@@ -1236,6 +1388,7 @@ export async function mountCharacterList(container = document.getElementById('rm
     if (mountingLists.has(container)) return mountingLists.get(container);
     const promise = (async () => {
         await loadCharacterListStyles();
+        destroyLegacyPagination(container);
         const originalChildren = [...container.children].map(element => ({ element, style: element.getAttribute('style') }));
         const engineSelectors = ['#character_search_bar', '#charListFixedTop > .rm_tag_controls', '#rm_print_characters_block', '#rm_print_characters_pagination', '#rm_buttons_container'];
         const engines = engineSelectors.map(selector => container.querySelector(selector)).filter(Boolean).map(element => {

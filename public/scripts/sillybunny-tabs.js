@@ -19,7 +19,6 @@ import {
     animateIn,
     animateOut,
     MOTION_FAST,
-    MOTION_SLOW,
     prefersReducedMotion,
     SPRING_SHEET,
     stopMotion,
@@ -74,6 +73,8 @@ import { SB_SUBPAGE_BUILDERS } from './sillybunny-settings-subpage-descriptors.j
 import { createConnectionsPanel } from './sillybunny-connections-panel.js';
 import { createStatusPage } from './sillybunny-editor/status-page.js';
 import { initializePromptEditor } from './sillybunny-prompt-editor.js';
+// SillyBunny: the Agents shell mounts independently of extension initialization.
+import { mountAgentsPanel, getAgentsPanelSearchEntries } from './extensions/in-chat-agents/ui/agent-list.js';
 // SillyBunny: character editor controller (Step 3b, feat/v1.9.0-ui-overhaul)
 import { initCharacterEditor } from './sillybunny-character-editor.js';
 import { collectEntitySearchEntries, primeWorldInfoSearchCache } from './sillybunny-search-entities.js';
@@ -119,12 +120,12 @@ function initializeSettingsPanel() {
  * Tabs whose collapsible drawers are left alone.
  *
  * Extensions is the one the 6F decision names: each of its 17 drawers is a self-contained,
- * independently-authored block rather than a stray accordion. Agents is the same case for the same
- * reason -- its panel is built by the bundled in-chat-agents extension, which drives its own
- * drawer's toggle programmatically (`in-chat-agents/index.js` reaches for the toggle and dispatches
- * a click), so flattening it would take away a control the extension owns.
+ * independently-authored block rather than a stray accordion.
+ * Connections preserves upstream drawer content because its descendants carry provider visibility
+ * gates; its scoped form pass supplies expander-row presentation without flattening that ancestry.
  */
-const SB_COLLAPSIBLE_DRAWER_TAB_IDS = Object.freeze(new Set(['extensions', 'agents']));
+// SillyBunny: Agents now owns shared preference pages, not an extension drawer.
+const SB_COLLAPSIBLE_DRAWER_TAB_IDS = Object.freeze(new Set(['extensions', 'connections']));
 
 /**
  * Extensions owns independently authored sections, so it retains the sliding detail stack.
@@ -538,7 +539,7 @@ function openAllInlineDrawers(root = null) {
  * and Advanced Formatting and the Appearance theme card are assembled after the split -- so both
  * passes are repeated on activation. Both are idempotent, so re-running them costs queries and no
  * DOM churn.
- * Extensions and Agents are skipped for the same reason as in `flattenRightShellSettingsDrawers`, and
+ * Extensions and Connections are skipped for the same reason as in `flattenRightShellSettingsDrawers`, and
  * the stacked panels are skipped here for the reason given on `SB_SUBPAGE_TAB_IDS`.
  *
  * @param {string} shellKey
@@ -1145,7 +1146,7 @@ const SB_SHELLS = Object.freeze({
                 label: 'Agents',
                 icon: 'fa-robot',
                 tooltip: 'Interact with accompanying pre, post, and sidecar agents',
-                description: 'Enable, disable, or modify in-chat agents here. Can be configured as pre-gen, sidecar, or post-gen.',
+                description: 'Configure your in-chat agents here. They can be configured for pre-gen, post-gen, or as a side companion.',
             },
         ],
     },
@@ -1469,7 +1470,6 @@ const sbState = {
     desktopQuickActions: [],
     mobileQuickActions: [],
     chatbar: {
-        desktop: null,
         sidebar: null,
         mobileTools: null,
         visible: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.chatbarVisible), true),
@@ -1485,7 +1485,6 @@ const sbState = {
         sourceSelectObserver: null,
         sourceObservedElement: null,
         sourceChangeHandler: null,
-        connectionStripOpen: false,
         sidebarOpen: false,
         mobileToolsOpen: false,
         mobileToolsReturnFocus: null,
@@ -2075,10 +2074,6 @@ function setTopbarScale(mode, value, { persist = true } = {}) {
 
     if (persist) {
         safeSetItem(storageKey, String(nextScale));
-    }
-
-    if (getChatDesktopRefs()) {
-        scheduleChatbarRefresh(0);
     }
 
     updateThemePickerUi();
@@ -4146,7 +4141,6 @@ function returnToChatSurface() {
     closeCharacterPanel();
     closeMobileNav();
     closeMobileChatTools();
-    setConnectionStripOpenState(false);
     queueLandingPageStateSync();
 }
 
@@ -4725,10 +4719,6 @@ function setChatbarVisible(shouldShow, { persist = true } = {}) {
 
     document.body.classList.toggle('sb-chatbar-hidden', !nextVisible);
 
-    if (!nextVisible) {
-        setConnectionStripOpenState(false);
-    }
-
     if (persist) {
         safeSetItem(SB_STORAGE_KEYS.chatbarVisible, String(nextVisible));
     }
@@ -4869,10 +4859,6 @@ function bindTopbarDragEvents() {
     window.addEventListener('touchmove', updateTopbarDrag, { passive: false });
     window.addEventListener('touchend', endTopbarDrag);
     window.addEventListener('touchcancel', endTopbarDrag);
-}
-
-function getChatDesktopRefs() {
-    return getChatbarState().desktop;
 }
 
 function getChatMobileRefs() {
@@ -5585,7 +5571,7 @@ function setButtonPressed(button, pressed) {
 function setSearchStatusText(statusText) {
     const normalizedText = String(statusText ?? '').trim();
 
-    for (const refs of [getChatDesktopRefs(), getChatMobileRefs(), getBottomChatBarState()]) {
+    for (const refs of [getChatMobileRefs(), getBottomChatBarState()]) {
         const status = refs?.searchStatus;
         if (!(status instanceof HTMLElement)) {
             continue;
@@ -5807,7 +5793,6 @@ function setChatSidebarOpenState(shouldOpen) {
     getChatbarState().sidebarOpen = isOpen;
     refs.root.style.display = isOpen ? 'flex' : 'none';
     refs.root.classList.toggle('sb-chat-sidebar-visible', isOpen);
-    setButtonPressed(getChatDesktopRefs()?.toggleSidebarButton, isOpen);
 
     if (isOpen) {
         scheduleChatbarRefresh(0);
@@ -5820,7 +5805,6 @@ function toggleChatSidebar() {
         return;
     }
 
-    setConnectionStripOpenState(false);
     setChatSidebarOpenState(!isChatSidebarOpen());
 }
 
@@ -6080,7 +6064,6 @@ function applyMobileSurfaceExclusivity(decision) {
         [surface.RIGHT_SHELL]: () => closeShell('right'),
         [surface.CHARACTER_PANEL]: () => closeCharacterPanel(),
         [surface.CHAT_TOOLS]: () => closeMobileChatTools(),
-        [surface.CONNECTION_STRIP]: () => setConnectionStripOpenState(false),
     };
 
     for (const closeSurfaceKey of decision.closeSurfaces) {
@@ -6125,52 +6108,6 @@ function syncConnectionProfileSelection(value) {
     sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function isConnectionStripOpen() {
-    return Boolean(getChatbarState().connectionStripOpen);
-}
-
-function setConnectionStripOpenState(shouldOpen) {
-    const desktopRefs = getChatDesktopRefs();
-    const nextState = Boolean(shouldOpen);
-
-    if (!desktopRefs?.connectionStrip) {
-        return;
-    }
-
-    if (nextState) {
-        applyMobileSurfaceExclusivity(sbMobileShellLifecycle.overlays.resolveExclusiveOpen({
-            surface: sbMobileShellLifecycle.overlays.surface.CONNECTION_STRIP,
-            isMobileViewport: isMobileViewport(),
-        }));
-    }
-
-    const wasOpen = getChatbarState().connectionStripOpen;
-    getChatbarState().connectionStripOpen = nextState;
-    desktopRefs.connectionStrip.classList.toggle('is-open', nextState);
-    if (nextState) {
-        desktopRefs.connectionStrip.hidden = false;
-    }
-    setButtonPressed(desktopRefs.toggleConnectionButton, nextState);
-
-    if (wasOpen === nextState) {
-        return;
-    }
-
-    if (nextState) {
-        animateIn(desktopRefs.connectionStrip, [
-            { opacity: 0, transform: 'translateY(-6px)' },
-            { opacity: 1, transform: 'none' },
-        ], { duration: MOTION_SLOW });
-    } else {
-        animateOut(desktopRefs.connectionStrip, [
-            { opacity: 1, transform: 'none' },
-            { opacity: 0, transform: 'translateY(-6px)' },
-        ], () => {
-            desktopRefs.connectionStrip.hidden = true;
-        }, { enabled: !isMobileViewport(), duration: MOTION_SLOW });
-    }
-}
-
 function getCurrentMainApiValue() {
     const mainApiSelect = document.getElementById('main_api');
     const context = getSillyTavernContext();
@@ -6179,17 +6116,6 @@ function getCurrentMainApiValue() {
         selectValue: mainApiSelect instanceof HTMLSelectElement ? mainApiSelect.value : '',
         contextMainApi: context?.mainApi,
     });
-}
-
-function resolveActiveApiConnectButton() {
-    const selector = sbPresetApiSyncLifecycle.api.resolveConnectButtonSelector(getCurrentMainApiValue());
-
-    if (!selector) {
-        return null;
-    }
-
-    const button = document.querySelector(selector);
-    return button instanceof HTMLElement ? button : null;
 }
 
 function getSearchTerms(query = getChatbarState().searchQuery) {
@@ -6536,7 +6462,7 @@ function setChatSearchQuery(value, { source = null } = {}) {
     chatbarState.searchQuery = nextValue;
     chatbarState.searchApplyToken += 1;
 
-    for (const input of [getChatDesktopRefs()?.searchInput, getChatMobileRefs()?.searchInput, getBottomChatBarState()?.searchInput]) {
+    for (const input of [getChatMobileRefs()?.searchInput, getBottomChatBarState()?.searchInput]) {
         if (!(input instanceof HTMLInputElement) || input === source) {
             continue;
         }
@@ -6872,10 +6798,9 @@ function bindConnectionProfileSourceObserver() {
 async function refreshChatbarState() {
     const chatbarState = getChatbarState();
     const refreshToken = ++chatbarState.refreshToken;
-    const desktopRefs = getChatDesktopRefs();
     const mobileRefs = getChatMobileRefs();
 
-    if (!desktopRefs && !mobileRefs) {
+    if (!mobileRefs) {
         return;
     }
 
@@ -6893,19 +6818,7 @@ async function refreshChatbarState() {
         files.unshift({ fileName: chatContext.chatId, tokenEstimate: 0 });
     }
 
-    populateChatSelector(desktopRefs?.chatSelect, files, chatContext, chatContext.canBrowseChats ? 'No saved chats yet' : 'No chat selected');
     populateChatSelector(mobileRefs?.chatSelect, files, chatContext, chatContext.canBrowseChats ? 'No saved chats yet' : 'No chat selected');
-
-    if (desktopRefs) {
-        setButtonDisabled(desktopRefs.managerButton, !chatContext.canBrowseChats);
-        setButtonDisabled(desktopRefs.toggleSidebarButton, !chatContext.canBrowseChats);
-        setButtonDisabled(desktopRefs.newButton, !chatContext.canStartNewChat);
-        setButtonDisabled(desktopRefs.renameButton, !chatContext.hasChat);
-        setButtonDisabled(desktopRefs.deleteButton, !chatContext.hasChat);
-        setButtonDisabled(desktopRefs.closeButton, !chatContext.hasChat);
-        setButtonDisabled(desktopRefs.chatSelect, !chatContext.canBrowseChats);
-        setButtonDisabled(desktopRefs.searchInput, !chatContext.hasChat);
-    }
 
     if (mobileRefs) {
         setButtonDisabled(mobileRefs.managerButton, !chatContext.canBrowseChats);
@@ -6921,30 +6834,9 @@ async function refreshChatbarState() {
     const hasConnectionProfiles = connectionProfilesSource instanceof HTMLSelectElement;
     const connectionMirrorState = sbPresetApiSyncLifecycle.connectionProfiles.resolveMirrorState({
         hasConnectionProfiles,
-        isConnectionStripOpen: isConnectionStripOpen(),
-        hasActiveConnectButton: hasConnectionProfiles && Boolean(resolveActiveApiConnectButton()),
     });
 
-    if (desktopRefs) {
-        desktopRefs.toggleConnectionButton.hidden = !connectionMirrorState.shouldShowToggle;
-        if (!connectionMirrorState.shouldShowDesktopStrip && isConnectionStripOpen()) {
-            setConnectionStripOpenState(false);
-        } else {
-            desktopRefs.connectionStrip.hidden = !connectionMirrorState.shouldShowDesktopStrip;
-        }
-    }
-
-    if (connectionMirrorState.shouldCloseDesktopStrip) {
-        setConnectionStripOpenState(false);
-    }
-
     if (connectionMirrorState.shouldClearMirrors) {
-        if (desktopRefs) {
-            desktopRefs.connectionSelect.replaceChildren();
-            desktopRefs.connectionStatus.textContent = '';
-            setButtonDisabled(desktopRefs.connectionConnectButton, connectionMirrorState.shouldDisableConnectButton);
-        }
-
         if (mobileRefs?.connectionSection instanceof HTMLElement) {
             mobileRefs.connectionSection.hidden = !connectionMirrorState.shouldShowMobileSection;
             mobileRefs.connectionSelect.replaceChildren();
@@ -6952,13 +6844,6 @@ async function refreshChatbarState() {
         }
     } else {
         const optionsMarkup = connectionProfilesSource.innerHTML;
-        if (desktopRefs) {
-            desktopRefs.connectionSelect.innerHTML = optionsMarkup;
-            desktopRefs.connectionSelect.value = connectionProfilesSource.value;
-            desktopRefs.connectionStatus.textContent = connectionStatusText;
-            setButtonDisabled(desktopRefs.connectionConnectButton, connectionMirrorState.shouldDisableConnectButton);
-        }
-
         if (mobileRefs?.connectionSection instanceof HTMLElement) {
             mobileRefs.connectionSection.hidden = !connectionMirrorState.shouldShowMobileSection;
             mobileRefs.connectionSelect.innerHTML = optionsMarkup;
@@ -6974,11 +6859,6 @@ async function refreshChatbarState() {
         compact: true,
         onSelect: chatId => openChatById(chatId, { closeMobileTools: true }),
     });
-
-    if (desktopRefs) {
-        setButtonPressed(desktopRefs.toggleSidebarButton, isChatSidebarOpen());
-        setButtonPressed(desktopRefs.toggleConnectionButton, isConnectionStripOpen());
-    }
 
     if (!chatContext.canBrowseChats) {
         setChatSidebarOpenState(false);
@@ -8527,7 +8407,6 @@ async function returnToLandingPage() {
     closeCharacterPanel();
     closeMobileNav();
     closeMobileChatTools();
-    setConnectionStripOpenState(false);
 
     if (isLandingPageVisible()) {
         queueLandingPageStateSync();
@@ -10173,23 +10052,8 @@ function buildInChatAgentsPanel() {
         id: 'agents',
     });
 
-    const column = createElement('div', { className: 'sb-shell-column' });
-    const callout = createElement('div', { className: 'sb-shell-callout' });
-    callout.innerHTML = `
-        <strong>In-Chat Agents</strong>
-        <p>Lightweight helpers that run alongside your conversation. Configure them per-chat for modular functionality.</p>
-    `;
-
-    const inChatAgentsContainer = createElement('div', { id: 'in_chat_agents_container' });
-    const normalizeGlobalSettings = () => normalizeBackendSettingsRows(column.querySelector('[data-sb-agent-global-settings]'));
-    const settingsObserver = new MutationObserver(() => {
-        if (!column.querySelector('[data-sb-agent-global-settings]')) return;
-        settingsObserver.disconnect();
-        normalizeGlobalSettings();
-    });
-    settingsObserver.observe(inChatAgentsContainer, { childList: true });
-
-    column.append(callout, inChatAgentsContainer);
+    const column = createElement('div', { className: 'sb-shell-column ica-agents-column' });
+    const controller = mountAgentsPanel(column);
     scroller.appendChild(column);
 
     return {
@@ -10197,7 +10061,7 @@ function buildInChatAgentsPanel() {
         panel,
         button: null,
         searchRoot: column,
-        onActivate: normalizeGlobalSettings,
+        onActivate: () => { controller.prepareReveal(); controller.onReveal(); },
     };
 }
 
@@ -11630,7 +11494,10 @@ async function renderMobileQuickActionResults(query, resultsElement, mode = 'mob
         button.disabled = isAdded || isFull;
         button.addEventListener('click', () => addQuickActionFromMatch(mode, match));
 
-        copy.append(title, detail);
+        copy.append(title);
+        // SillyBunny: synthetic settings destinations carry help independently of mounted controls.
+        if (match.description) copy.append(createElement('small', { className: 'sb-mobile-quick-action-help', text: match.description }));
+        copy.append(detail);
         row.append(copy, button);
         resultsElement.appendChild(row);
     }
@@ -12801,9 +12668,10 @@ function collectGlobalSearchMatches(query, { limit = Infinity, includeEntities =
                 tabState.searchIndex = createSearchIndex(tabState);
             }
 
-            const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : [];
+            const extraEntries = tabState.id === 'persona' ? getPersonaSearchEntries(tabState)
+                : tabState.id === 'agents' ? getAgentsPanelSearchEntries(tabState) : [];
 
-            for (const entry of [...tabState.searchIndex, ...extraEntries]) {
+            for (const entry of [...(tabState.id === 'agents' ? [] : tabState.searchIndex), ...extraEntries]) {
                 // Match first: the visibility check walks ancestors with `getComputedStyle`, and the
                 // memo only covers repeated rows, so this filter is what keeps a keystroke cheap.
                 if (!searchTerms.every(term => entry.searchText.includes(term))) {
@@ -12905,8 +12773,9 @@ function getTabSearchEntries(tabState, { includeThemeCard = false } = {}) {
     }
 
     return [
-        ...(searchIndex || tabState.searchIndex),
+        ...(tabState.id === 'agents' ? [] : (searchIndex || tabState.searchIndex)),
         ...(tabState.id === 'persona' ? getPersonaSearchEntries(tabState) : []),
+        ...(tabState.id === 'agents' ? getAgentsPanelSearchEntries(tabState) : []),
     ].filter(entry => isSearchEntryAvailable(entry, tabState));
 }
 
@@ -13122,14 +12991,14 @@ async function renderUniversalSearchResults(query) {
                 ? `Jump straight to this item in ${match.tabLabel}.`
                 : match.displayText;
 
-            button.appendChild(createElement('strong', { text: sectionDisplay }));
+            button.appendChild(createElement('strong', { text: match.description !== undefined ? match.displayText : sectionDisplay }));
 
-            if (sectionDisplay !== match.displayText) {
-                button.appendChild(createElement('span', { text: detailText }));
+            if (match.description !== undefined || sectionDisplay !== match.displayText) {
+                button.appendChild(createElement('span', { text: match.description ?? detailText }));
             }
 
             button.appendChild(createElement('small', {
-                text: typeof match.action === 'function' ? 'Quick action' : 'Jump to setting',
+                text: match.locationLabel ? `${groupLabel} · ${match.sectionLabel}` : typeof match.action === 'function' ? 'Quick action' : 'Jump to setting',
             }));
 
             if (duplicateIndex > 1) {
@@ -14294,6 +14163,7 @@ function injectCharacterDrawerControls() {
     if (emptyCreateButton instanceof HTMLButtonElement && emptyCreateButton.dataset.sbBound !== 'true') {
         emptyCreateButton.dataset.sbBound = 'true';
         emptyCreateButton.addEventListener('click', () => {
+            globalThis.SillyBunnyCharactersNavigation?.recordCreateOrigin?.('characters');
             setCharacterEditorEmptyState(false);
             setCharacterPersonaPanelVisible(false);
             setCharacterImportPanelVisible(false);
@@ -14754,7 +14624,7 @@ function reinitSelect2AfterShell() {
 }
 
 function injectModelFilterInput($select) {
-    if (!$select.length || $select.prev('.sb-model-filter').length) {
+    if (!$select.length || $select[0].closest('.ds-select-row') || $select.prev('.sb-model-filter').length) {
         return;
     }
 

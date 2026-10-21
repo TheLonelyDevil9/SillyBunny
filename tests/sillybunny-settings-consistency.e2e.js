@@ -242,6 +242,19 @@ async function expectSwitchSemantics(panel) {
 async function expectSwitchGeometry(panel, compactSampling = false) {
     const failures = await panel.locator('input[type="checkbox"]:visible').evaluateAll((inputs, { compact, allowlist }) => inputs.flatMap(input => {
         if (allowlist.some(selector => input.closest(selector))) return [];
+        const agentTarget = input.closest('.ica-agent-switch-target');
+        if (agentTarget) {
+            const target = agentTarget.getBoundingClientRect();
+            const row = input.closest('.ica-agent-row, .sb-list-header').getBoundingClientRect();
+            const control = input.getBoundingClientRect();
+            const coarse = matchMedia('(pointer: coarse), (any-pointer: coarse)').matches;
+            const metrics = {
+                rowHeight: row.height >= 44,
+                targetSize: !coarse || (target.width >= 44 && target.height >= 44),
+                centered: Math.abs(control.top + control.height / 2 - row.top - row.height / 2) <= 1,
+            };
+            return Object.entries(metrics).filter(([, pass]) => !pass).map(([metric]) => `${input.getAttribute('aria-label')}: ${metric}`);
+        }
         const row = input.closest('.ds-row-switch, .ds-row, .sb-prompt-row');
         const name = input.id || input.name || input.getAttribute('aria-label') || 'unnamed switch';
         if (!row) return [`${name}: missing settings row`];
@@ -804,7 +817,9 @@ test.describe('Customize consistency', () => {
         expect(colorRows).toEqual([5, 5]);
         await expect(appearance.locator('#AppearanceLayoutSection .ds-row-slider')).toHaveCount(7);
         await expect(appearance.locator('#sb-background-settings-controls #background-blur-block, #sb-background-settings-controls #background-opacity-block')).toHaveCount(2);
-        await expect(appearance.locator('#ThemeTogglesSection .ds-row-switch')).toHaveCount(22);
+        // 21 since Tags as Folders was retired for full folder support; #bogus_folders stays as a hidden transport.
+        await expect(appearance.locator('#ThemeTogglesSection .ds-row-switch')).toHaveCount(21);
+        await expect(appearance.locator('#bogus_folders')).toBeHidden();
     });
 });
 
