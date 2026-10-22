@@ -22,9 +22,11 @@ import {
     getThumbnailUrl,
     isGenerating,
     main_api,
+    messageEdit,
     name2,
     reloadCurrentChat,
     saveChatConditional,
+    setEditedMessageId,
     swipe,
     this_chid,
     updateMessageBlock,
@@ -36,7 +38,7 @@ import { GENERATION_COMMIT_PLAN_VERSION, getMessageIdentity, hashCommitText } fr
 import { t } from './i18n.js';
 import { getCurrentReasoningEffort } from './openai.js';
 import { parseAutoReasoningFromString, parseReasoningInSwipes } from './reasoning.js';
-import { getActiveGenerationIds, pageId } from './resumable-generation.js';
+import { getActiveGenerationIds, onActiveGenerationsChange, onServerOwnedReplyMissing, pageId } from './resumable-generation.js';
 
 const EVENTS_URL = '/api/resumable-generations/events';
 const ACKNOWLEDGE_URL = '/api/resumable-generations/acknowledge';
@@ -54,6 +56,12 @@ let chatEvents = null;
 let idleTimer = null;
 /** Chat the watcher is following; a chat switch makes older events stale. */
 let watchedChatKey = '';
+/** @type {{ chat: { avatar?: string, group?: string }, file: string }|null} Open chat, once its server-written replies are finished */
+let watchedTarget = null;
+/** Ids of committed replies the scheduled reload is for. */
+const pendingReloadIds = new Set();
+/** Ids of committed replies this page already reloaded the chat for. */
+const reloadedIds = new Set();
 /** @type {JQuery<HTMLElement>|null} */
 let runningToast = null;
 /** Ids of server-written replies already present in the loaded chat. */
@@ -317,23 +325,86 @@ function showLostToast(item) {
 /**
  * Reloads the chat for a reply the server wrote, once no live generation would be cut off by it.
  * @param {string} chatKey Chat the reply belongs to
+ * @param {string[]} [ids] Committed replies the reload is for
  */
-function reloadWhenIdle(chatKey) {
+function reloadWhenIdle(chatKey, ids = []) {
     clearTimeout(idleTimer ?? undefined);
     idleTimer = null;
     if (chatKey !== watchedChatKey) {
         return;
     }
+    for (const id of ids) {
+        pendingReloadIds.add(id);
+    }
     if (isGenerating()) {
         idleTimer = setTimeout(() => reloadWhenIdle(chatKey), IDLE_CHECK_INTERVAL_MS);
         return;
     }
+    for (const id of pendingReloadIds) {
+        reloadedIds.add(id);
+    }
+    pendingReloadIds.clear();
+    const edit = captureOpenEdit();
     // The reload fires CHAT_CHANGED, which finalizes the reply and reconnects the event stream.
-    reloadCurrentChat().catch(error => console.warn('Could not load a server-written reply:', error));
+    reloadCurrentChat()
+        .then(() => restoreOpenEdit(edit))
+        .catch(error => console.warn('Could not load a server-written reply:', error));
 }
 
 /**
- * Acts on the server's list of generations for the open chat that this page does not own.
+ * @returns {{ mesId: number, identity: string|null, text: string }|null} The message edit open on
+ * this page, with its unsaved text
+ */
+function captureOpenEdit() {
+    const textarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('curEditTextarea'));
+    const mesId = Number(textarea?.closest?.('.mes')?.getAttribute('mesid'));
+    if (typeof textarea?.value !== 'string' || !Number.isInteger(mesId) || !chat[mesId]) {
+        return null;
+    }
+    return { mesId, identity: getMessageIdentity(chat[mesId]), text: textarea.value };
+}
+
+/**
+ * Reopens a message edit that a reload closed, with its unsaved text. The edit stays closed when the
+ * server's reply changed that message, because the edit was made to the text the reply replaced.
+ * @param {ReturnType<typeof captureOpenEdit>} edit Edit open before the reload
+ */
+async function restoreOpenEdit(edit) {
+    if (!edit || document.getElementById('curEditTextarea')) {
+        return;
+    }
+    // The reload removed the editor, but not the id of the message it was editing.
+    setEditedMessageId(undefined);
+    if (getMessageIdentity(chat[edit.mesId]) !== edit.identity) {
+        console.warn('A server-written reply changed the message being edited, so its edit was closed.');
+        return;
+    }
+    await messageEdit(edit.mesId);
+    const textarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('curEditTextarea'));
+    if (typeof textarea?.value !== 'string') {
+        return;
+    }
+    textarea.value = edit.text;
+    // messageEdit() sized the box for the saved text where CSS cannot size it to its content.
+    if (!globalThis.CSS?.supports?.('field-sizing', 'content')) {
+        textarea.style.height = '0px';
+        textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+}
+
+/**
+ * The server kept its copy of a reply this page generated, so the page shows that copy instead of
+ * saving its own over a newer chat file.
+ */
+export function reloadServerCommittedReply() {
+    const chatKey = watchedChatKey;
+    clearTimeout(idleTimer ?? undefined);
+    // Deferred, so the generation that found the commit ends before the reload replaces its chat.
+    idleTimer = setTimeout(() => reloadWhenIdle(chatKey), 0);
+}
+
+/**
+ * Acts on the server's list of generations for the open chat that this page is not reading.
  * @param {string} chatKey Chat the list is for
  * @param {any[]} pending Generations
  */
@@ -341,11 +412,15 @@ function onPendingGenerations(chatKey, pending) {
     if (chatKey !== watchedChatKey || !Array.isArray(pending)) {
         return;
     }
-    const own = new Set(getActiveGenerationIds());
-    const foreign = pending.filter(item => !own.has(item.id) && item.page !== pageId);
+    const active = new Set(getActiveGenerationIds());
+    // This page's finished replies still count: the server can keep one this page then did not save.
+    const settled = pending.filter(item => !active.has(item.id));
+    const foreign = settled.filter(item => item.page !== pageId);
     const running = foreign.filter(item => ['running', 'waiting', 'committing'].includes(item.state));
-    const committed = foreign.filter(item => item.state === 'committed');
-    const outcomes = foreign.filter(item => (item.state === 'failed' || item.state === 'lost') && !shownIds.has(item.id));
+    const committed = settled.filter(item => item.state === 'committed');
+    const outcomes = settled.filter(item => (item.state === 'lost' || (item.state === 'failed' && item.page !== pageId)) && !shownIds.has(item.id));
+    // A failed commit of this page's own reply means this page claimed it late and saved it itself.
+    acknowledge(pending.filter(item => item.state === 'failed' && item.page === pageId).map(item => item.id));
 
     for (const item of outcomes) {
         shownIds.add(item.id);
@@ -365,7 +440,24 @@ function onPendingGenerations(chatKey, pending) {
     } else {
         clearRunningToast();
     }
-    if (committed.some(item => !loadedCommitIds.has(item.id))) {
+    const unseen = committed.filter(item => !loadedCommitIds.has(item.id));
+    // Another page already finished these and removed their marks, so a reload cannot find them.
+    // Without this, every reload reconnects, hears of them again, and reloads again.
+    acknowledge(unseen.filter(item => reloadedIds.has(item.id)).map(item => item.id));
+    const toReload = unseen.filter(item => !reloadedIds.has(item.id)).map(item => item.id);
+    if (toReload.length) {
+        reloadWhenIdle(chatKey, toReload);
+    }
+}
+
+/**
+ * @param {import('./generation-commit-plan.js').GenerationCommitPlan} plan Reply the server no longer has
+ */
+function onReplyMissing(plan) {
+    const chatKey = getTargetKey({ chat: plan.chat, file: plan.file });
+    if (chatKey === watchedChatKey) {
+        // The server may have written the reply into the chat while this page was frozen; a save
+        // from this page would then fail the integrity check.
         reloadWhenIdle(chatKey);
     }
 }
@@ -373,6 +465,29 @@ function onPendingGenerations(chatKey, pending) {
 function closeChatEvents() {
     chatEvents?.close();
     chatEvents = null;
+}
+
+/**
+ * Browsers allow about 6 connections per server over HTTP/1.1, shared by all its tabs, so a hidden
+ * tab lets go of its event stream. It keeps it while reading a reply of its own: the server must see
+ * that page following the chat, or another page has the reply written before this one claims it.
+ * @returns {boolean}
+ */
+function shouldFollowChatEvents() {
+    return document.visibilityState !== 'hidden' || getActiveGenerationIds().length > 0;
+}
+
+/**
+ * Opens or closes the event stream for the open chat to match shouldFollowChatEvents().
+ */
+function syncChatEvents() {
+    if (!watchedTarget || !shouldFollowChatEvents()) {
+        closeChatEvents();
+        return;
+    }
+    if (!chatEvents) {
+        openChatEvents(watchedTarget, watchedChatKey);
+    }
 }
 
 /**
@@ -392,9 +507,11 @@ function openChatEvents(target, chatKey) {
 }
 
 async function onChatChanged() {
+    watchedTarget = null;
     closeChatEvents();
     clearTimeout(idleTimer ?? undefined);
     idleTimer = null;
+    pendingReloadIds.clear();
     clearRunningToast();
     loadedCommitIds.clear();
     const target = getOpenChatTarget();
@@ -408,7 +525,8 @@ async function onChatChanged() {
     if (chatKey !== watchedChatKey) {
         return;
     }
-    openChatEvents(target, chatKey);
+    watchedTarget = target;
+    syncChatEvents();
     if (round.length && selected_group && !isGenerating()) {
         toastr.info(t`Continuing the group round that was interrupted.`);
         resumeGroupRound(round).catch(error => console.warn('Could not continue the group round:', error));
@@ -419,4 +537,7 @@ export function initServerGenerations() {
     eventSource.on(event_types.CHAT_CHANGED, () => {
         onChatChanged().catch(error => console.warn('Could not check server-side generations:', error));
     });
+    document.addEventListener('visibilitychange', syncChatEvents);
+    onActiveGenerationsChange(syncChatEvents);
+    onServerOwnedReplyMissing(onReplyMissing);
 }

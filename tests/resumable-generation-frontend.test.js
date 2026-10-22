@@ -4,9 +4,13 @@ import { readFileSync } from 'node:fs';
 
 const {
     fetchResumable,
+    onActiveGenerationsChange,
+    onServerOwnedReplyMissing,
+    reattachActiveGenerations,
     reconnectStaleGenerations,
     registerGenerationCommitPlan,
     releaseActiveGenerations,
+    settleGenerationCommit,
 } = await import('../public/scripts/resumable-generation.js');
 const { decodeCommitPlan } = await import('../public/scripts/generation-commit-plan.js');
 const customRequestSource = readFileSync(new URL('../public/scripts/custom-request.js', import.meta.url), 'utf8');
@@ -328,5 +332,153 @@ describe('server-owned chat generations', () => {
         const response = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal });
         await expect(response.text()).resolves.toBe('data: a\n\ndata: [DONE]\n\n');
         expect(order).toEqual(['/generate', CLAIM_URL, CLAIM_URL]);
+    });
+
+    test('a stream reader that stops at [DONE] still waits for the claim, and learns the server kept its copy', async () => {
+        const controller = new AbortController();
+        registerGenerationCommitPlan(controller.signal, PLAN);
+        fetchMock.mockImplementation(async (url, init) => {
+            if (url === '/generate') {
+                // The upstream body has not ended yet when the reader sees [DONE].
+                return new Response(bodyFrom(['data: a\n\n', 'data: [DONE]\n\n'], { hang: true, signal: init.signal }), { status: 200 });
+            }
+            return new Response(JSON.stringify({ state: 'committed' }), { status: 200 });
+        });
+
+        const response = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal });
+        const reader = response.body.getReader();
+        await reader.read();
+        await reader.read();
+        expect(callsTo(CLAIM_URL)).toHaveLength(0);
+
+        await expect(settleGenerationCommit(controller.signal)).resolves.toBe('committed');
+        expect(callsTo(CLAIM_URL)).toHaveLength(1);
+        // Answered once: the next look has nothing left to settle.
+        await expect(settleGenerationCommit(controller.signal)).resolves.toBeNull();
+        controller.abort();
+    });
+
+    test('settling a reply whose body already ended reuses its claim', async () => {
+        const controller = new AbortController();
+        registerGenerationCommitPlan(controller.signal, PLAN);
+        fetchMock.mockImplementation(async (url) => {
+            if (url === '/generate') {
+                return new Response(bodyFrom(['data: a\n\n', 'data: [DONE]\n\n']), { status: 200 });
+            }
+            return new Response(null, { status: 404 });
+        });
+
+        await (await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal })).text();
+        await expect(settleGenerationCommit(controller.signal)).resolves.toBe('missing');
+        expect(callsTo(CLAIM_URL)).toHaveLength(1);
+    });
+
+    test('a stopped reply is not claimed', async () => {
+        hangingGeneration();
+        const controller = new AbortController();
+        registerGenerationCommitPlan(controller.signal, PLAN);
+        const reply = (await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal })).text();
+        reply.catch(() => undefined);
+        controller.abort();
+
+        await expect(settleGenerationCommit(controller.signal)).resolves.toBeNull();
+        expect(callsTo(CLAIM_URL)).toHaveLength(0);
+        expect(callsTo(CANCEL_URL)).toHaveLength(1);
+    });
+
+    test('a reader that gives up on the body stops the generation on the server', async () => {
+        hangingGeneration();
+        const controller = new AbortController();
+        registerGenerationCommitPlan(controller.signal, PLAN);
+        const response = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal });
+        const reader = response.body.getReader();
+        await reader.read();
+        await reader.cancel();
+
+        const generationId = callsTo('/generate')[0][1].headers['X-Generation-Id'];
+        expect(callsTo(CANCEL_URL).map(([, init]) => JSON.parse(init.body).id)).toEqual([generationId]);
+        expect(callsTo(CLAIM_URL)).toHaveLength(0);
+    });
+
+    test('a page shown again from the back/forward cache cancels its reply for real when stopped', async () => {
+        hangingGeneration();
+        const controller = new AbortController();
+        registerGenerationCommitPlan(controller.signal, PLAN);
+        const reply = (await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal })).text();
+        reply.catch(() => undefined);
+        const generationId = callsTo('/generate')[0][1].headers['X-Generation-Id'];
+
+        releaseActiveGenerations();
+        reattachActiveGenerations();
+        controller.abort();
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(callsTo(DETACH_URL).map(([, init]) => JSON.parse(init.body).id)).toEqual([generationId]);
+        expect(callsTo(CANCEL_URL).map(([, init]) => JSON.parse(init.body).id)).toEqual([generationId]);
+    });
+
+    test('tells listeners when the page starts and stops reading a generation', async () => {
+        const changes = jest.fn();
+        const unsubscribe = onActiveGenerationsChange(changes);
+        try {
+            fetchMock.mockImplementation(async () => new Response(bodyFrom(['data: a\n\n']), { status: 200 }));
+            const response = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}' });
+            expect(changes).toHaveBeenCalledTimes(1);
+            await response.text();
+            expect(changes).toHaveBeenCalledTimes(2);
+        } finally {
+            unsubscribe();
+        }
+    });
+
+    test('tells listeners when the server no longer has a chat reply whose stream broke', async () => {
+        const missing = jest.fn();
+        const unsubscribe = onServerOwnedReplyMissing(missing);
+        try {
+            const failure = new TypeError('Load failed');
+            fetchMock.mockImplementation(async (url) => {
+                if (url === RESUME_URL) {
+                    return new Response(null, { status: 404 });
+                }
+                return new Response(bodyFrom(['data: a\n\n', 'data: b\n\n'], { errorAfter: 1, error: failure }), { status: 200 });
+            });
+
+            const controller = new AbortController();
+            registerGenerationCommitPlan(controller.signal, PLAN);
+            const chatReply = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}', signal: controller.signal });
+            await expect(chatReply.text()).rejects.toBe(failure);
+            expect(missing).toHaveBeenCalledTimes(1);
+            expect(missing.mock.calls[0][0]).toMatchObject({ file: PLAN.file });
+
+            // A reply without a commit plan was never the server's to write.
+            const otherReply = await fetchResumable('/generate', { method: 'POST', headers: {}, body: '{}' });
+            await expect(otherReply.text()).rejects.toBe(failure);
+            expect(missing).toHaveBeenCalledTimes(1);
+        } finally {
+            unsubscribe();
+        }
+    });
+});
+
+describe('page unload wiring', () => {
+    const resumableSource = readFileSync(new URL('../public/scripts/resumable-generation.js', import.meta.url), 'utf8');
+    const scriptSource = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+
+    /**
+     * @param {string} event Window event
+     * @returns {string} Source of the chat UI's jQuery handler for it
+     */
+    function windowHandler(event) {
+        const start = scriptSource.indexOf(`$(window).on('${event}', `);
+        expect(start).toBeGreaterThan(-1);
+        return scriptSource.slice(start, scriptSource.indexOf('\n    });', start));
+    }
+
+    test('hands chat replies to the server on pagehide only, which a leave-site prompt cannot cancel', () => {
+        expect(resumableSource).not.toContain('addEventListener(\'beforeunload\'');
+        expect(resumableSource).toContain('window.addEventListener(\'pagehide\', releaseActiveGenerations);');
+        expect(windowHandler('beforeunload')).not.toContain('onStopStreaming');
+        expect(windowHandler('pagehide')).toContain('streamingProcessor.onStopStreaming();');
+        expect(windowHandler('pagehide')).toContain('!event.originalEvent?.persisted');
     });
 });
