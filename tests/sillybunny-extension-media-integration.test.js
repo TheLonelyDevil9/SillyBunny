@@ -169,6 +169,7 @@ describe('Conversation extension media integration', () => {
             prompt_prefix: 'photo of {{char}}', negative_prompt: 'blur',
             character_prompts: { conversation: 'blue eyes', roleplay: 'wrong character' },
             character_negative_prompts: { conversation: 'hat' },
+            novel_precise_reference: { enabled: false, references: [] },
         } };
         const secretState = { novel: true };
         const save = jest.fn(async () => 'conversation-selfie.png');
@@ -221,6 +222,7 @@ describe('Conversation extension media integration', () => {
             steps: 23, scale: 6, width: 832, height: 1216, seed: 42,
             prompt: 'photo of Conversation, blue eyes, selfie at a desk',
             negative_prompt: 'watermark, blur, hat',
+            precise_reference: [],
         }) }]);
         expect(save).toHaveBeenCalledWith('image-data', 'Conversation', 'Conversation_timestamp', 'png');
         expect(sendMessage).not.toHaveBeenCalled();
