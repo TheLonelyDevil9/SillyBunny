@@ -11,6 +11,8 @@ import { accountStorage } from './util/AccountStorage.js';
 import { SimpleMutex } from './util/SimpleMutex.js';
 import { loadStylesheetAsync, prefetchAsset } from './dynamic-styles.js';
 import { createExtensionScriptLoadError, formatExtensionLoadError } from './extension-load-errors.js';
+// SillyBunny: shared rows adopt extension inputs without replacing installation or branch handlers.
+import { installExtensionOptions, switchBranchOptions } from './sillybunny-editor/adapters/misc-dialogs.js';
 import {
     EXTENSION_BOOT_ACTIVATION_ACTION,
     normalizeExtensionBootId,
@@ -1491,6 +1493,9 @@ async function showExtensionsDetails() {
     const abortController = new AbortController();
     let popupPromise;
     try {
+        // SillyBunny: load manager presentation only when its Window is requested.
+        const { adaptExtensionsManager, loadExtensionsManagerStyles } = await import('./sillybunny-editor/adapters/extensions-manager-dialog.js');
+        await loadExtensionsManagerStyles();
         // If we are updating an extension, the "old" popup is still active. We should close that.
         let initialScrollTop = 0;
         const oldPopup = Popup.util.popups.find(popup => popup.content.querySelector('.extensions_info'));
@@ -1512,6 +1517,8 @@ async function showExtensionsDetails() {
             <i class="fa-solid fa-spinner fa-spin"></i>
             <span>` + t`Loading third-party extensions... Please wait...` + `</span>
         </div>`);
+        // SillyBunny: keep the loading state inside the installed-extension group.
+        htmlLoading.addClass('extensions_loading');
 
         htmlExternal.append(htmlLoading);
 
@@ -1541,18 +1548,17 @@ async function showExtensionsDetails() {
             .append(htmlExternal)
             .append(getModuleInformation());
 
+        // SillyBunny: mark the existing title for the shared Window header adapter.
         const popupHeader = $('<header class="sb-popup-dialog-header"></header>')
-            .append($('<h2></h2>').text(t`Extensions`));
+            .append($('<h2 class="sb-dialog__title"></h2>').text(t`Extensions`));
 
+        let extensionsPresentation;
         {
             const updateAction = async (force) => {
                 requiresReload = true;
                 await autoUpdateExtensions(force);
                 await popup.complete(POPUP_RESULT.AFFIRMATIVE);
             };
-
-            const toolbar = document.createElement('div');
-            toolbar.classList.add('extensions_toolbar');
 
             const updateAllButton = document.createElement('button');
             updateAllButton.classList.add('menu_button', 'menu_button_icon');
@@ -1612,9 +1618,7 @@ async function showExtensionsDetails() {
                 restoreBulkToggledExtensionsButton.classList.add('displayNone');
             });
 
-            const flexExpander = document.createElement('div');
-            flexExpander.classList.add('expander');
-
+            // SillyBunny: preserve sort/update behavior while moving controls to the shared frame header.
             const sortOrderButton = document.createElement('button');
             sortOrderButton.classList.add('menu_button', 'menu_button_icon');
             sortOrderButton.textContent = sortByName ? t`Sort: Display Name` : t`Sort: Loading Order`;
@@ -1624,10 +1628,17 @@ async function showExtensionsDetails() {
                 await showExtensionsDetails();
             });
 
-            toolbar.append(updateAllButton, updateEnabledOnlyButton, flexExpander, sortOrderButton);
             htmlExternal.find('.third_party_toolbar').append(restoreBulkToggledExtensionsButton, toggleAllExtensionsButton);
-            html.prepend(toolbar);
             html.prepend(popupHeader);
+            // SillyBunny: move extension controls into shared Window chrome without replacing their handlers.
+            extensionsPresentation = adaptExtensionsManager(html, {
+                updateAllButton,
+                updateEnabledOnlyButton,
+                sortOrderButton,
+                sortByName,
+                toggleAllExtensionsButton,
+                restoreBulkToggledExtensionsButton,
+            });
         }
 
         let waitingForSave = false;
@@ -1636,6 +1647,10 @@ async function showExtensionsDetails() {
             okButton: t`Close`,
             customButtons: [],
             allowVerticalScrolling: true,
+            // SillyBunny: the Extensions manager needs a full-height scrolling surface.
+            tier: 'window',
+            size: 'fill',
+            ...extensionsPresentation,
             onClosing: async () => {
                 if (waitingForSave) {
                     return false;
@@ -1670,7 +1685,6 @@ async function showExtensionsDetails() {
                 return true;
             },
         });
-        popup.dlg.classList.add('sb-popup-fullscreen');
         popup.dlg.setAttribute('aria-label', t`Extensions`);
         popupPromise = popup.show();
         popup.content.scrollTop = initialScrollTop;
@@ -1937,6 +1951,8 @@ async function onBranchClick() {
     }
 
     const popup = new Popup(selectElement, POPUP_TYPE.CONFIRM, '', {
+        // SillyBunny: mirror the native branch select in a searchable dialog row.
+        ...switchBranchOptions(selectElement),
         okButton: t`Switch`,
         cancelButton: t`Cancel`,
     });
@@ -2714,7 +2730,8 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
  */
 export async function openThirdPartyExtensionMenu(suggestUrl = '') {
     const isCurrentUserAdmin = isAdmin();
-    const html = await renderTemplateAsync('installExtension', { isCurrentUserAdmin });
+    // SillyBunny: retain every template node in one adapter-owned content root.
+    const html = $('<div>').append(await renderTemplateAsync('installExtension', { isCurrentUserAdmin }));
     const okButton = isCurrentUserAdmin ? t`Install just for me` : t`Install`;
 
     let global = false;
@@ -2736,7 +2753,8 @@ export async function openThirdPartyExtensionMenu(suggestUrl = '') {
 
     const customButtons = isCurrentUserAdmin ? [installForAllButton] : [];
     const customInputs = [branchNameInput];
-    const popup = new Popup(html, POPUP_TYPE.INPUT, suggestUrl ?? '', { okButton, customButtons, customInputs });
+    // SillyBunny: move Popup-owned URL/branch controls into rows, preserving inputResults.
+    const popup = new Popup(html, POPUP_TYPE.INPUT, suggestUrl ?? '', { okButton, customButtons, customInputs, ...installExtensionOptions(html[0]) });
     const input = await popup.show();
 
     if (!input) {

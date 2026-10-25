@@ -1,4 +1,4 @@
-import { play, stopMotion, animateOut, MOTION_SLOW } from '../sillybunny-motion.js';
+import { play, stopMotion, animateOut, MOTION_SLOW, prefersReducedMotion } from '../sillybunny-motion.js';
 import { t } from '../i18n.js';
 
 /**
@@ -19,7 +19,8 @@ import { t } from '../i18n.js';
  * @param {number} [options.debounce=0]      Milliseconds; 0 filters synchronously on every input.
  * @param {string} [options.heightProperty]  Custom property holding the revealed field height.
  * @param {boolean} [options.shortcuts=true] Enables Ctrl/Cmd+F and type-to-search inside `scope`.
- * @param {string} [options.typeToSearchSelector] Focus targets that accept type-to-search. Defaults to list rows.
+ * @param {boolean} [options.escapeClearsFirst=false] Keeps an open search visible for one Escape after clearing its query.
+ * @param {string} [options.typeToSearchSelector='[data-sb-list-key]'] Focus target filter for type-to-search.
  * @returns {{ toggle: (show?: boolean) => void, open: () => void, close: () => void, clear: () => void,
  *   setQuery: (value: string, options?: { notify?: boolean }) => void, report: (shown: number, total: number) => void,
  *   readonly query: string, readonly isOpen: boolean, destroy: () => void }}
@@ -35,6 +36,7 @@ export function createListSearch({
     debounce = 0,
     heightProperty = '',
     shortcuts = true,
+    escapeClearsFirst = false,
     typeToSearchSelector = '[data-sb-list-key]',
 }) {
     let query = input.value ?? '';
@@ -47,6 +49,9 @@ export function createListSearch({
         trigger.setAttribute('aria-controls', field.id || (field.id = `${input.id}-field`));
         trigger.setAttribute('aria-expanded', String(!field.hidden));
     }
+    field.setAttribute('aria-hidden', String(Boolean(field.hidden)));
+    field.inert = Boolean(field.hidden);
+    field.dataset.state = field.hidden ? 'closed' : 'open';
 
     function emit(next) {
         if (next === query) return;
@@ -75,8 +80,18 @@ export function createListSearch({
         if (!field.hidden) { input.focus({ preventScroll: true }); return; }
         stopMotion(field);
         field.hidden = false;
+        field.inert = false;
+        field.setAttribute('aria-hidden', 'false');
+        field.dataset.state = 'opening';
         syncTrigger();
-        play(field, [{ height: '0px', marginBlock: '0px', opacity: 0 }, { height: revealedHeight(), marginBlock: '8px', opacity: 1 }], { duration: MOTION_SLOW });
+        if (prefersReducedMotion()) {
+            field.dataset.state = 'open';
+        } else {
+            play(field, [{ height: '0px', marginBlock: '0px', opacity: 0 }, { height: revealedHeight(), marginBlock: '0px', opacity: 1 }], {
+                duration: MOTION_SLOW,
+                onEnd: () => field.dataset.state = 'open',
+            });
+        }
         input.focus({ preventScroll: true });
     }
 
@@ -84,10 +99,16 @@ export function createListSearch({
         if (field.hidden) return;
         stopMotion(field);
         const height = revealedHeight();
-        animateOut(field, [{ height, marginBlock: '8px', opacity: 1 }, { height: '0px', marginBlock: '0px', opacity: 0 }], () => {
+        field.inert = true;
+        field.setAttribute('aria-hidden', 'true');
+        field.dataset.state = 'closing';
+        const finish = () => {
             field.hidden = true;
+            field.dataset.state = 'closed';
             syncTrigger();
-        }, { duration: MOTION_SLOW });
+        };
+        if (prefersReducedMotion()) finish();
+        else animateOut(field, [{ height, marginBlock: '0px', opacity: 1 }, { height: '0px', marginBlock: '0px', opacity: 0 }], finish, { duration: MOTION_SLOW });
         clearTimeout(timer);
         input.value = '';
         emit('');
@@ -133,6 +154,10 @@ export function createListSearch({
         if (event.key !== 'Escape' || event.isComposing) return;
         event.preventDefault();
         event.stopPropagation();
+        if (escapeClearsFirst && input.value) {
+            clear();
+            return;
+        }
         close();
     };
 
@@ -158,7 +183,9 @@ export function createListSearch({
             return;
         }
         if (mod || event.altKey || event.key?.length !== 1 || event.key === ' ') return;
-        if (!(event.target instanceof Element) || !event.target.matches(typeToSearchSelector)) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || target.matches('input, textarea, select, [contenteditable], button, a[href]')) return;
+        if (typeToSearchSelector && !target.matches(typeToSearchSelector) && target.closest(typeToSearchSelector) === null) return;
         event.preventDefault();
         open();
         input.value += event.key;

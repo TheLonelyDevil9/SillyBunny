@@ -1,15 +1,18 @@
 /*
  * Labelled message menu shared by Roleplay and Conversation message actions.
  * Desktop: a popover anchored to its trigger (or a pointer position).
- * Mobile (<=768px): a bottom sheet built on sillybunny-sheet.js.
+ * Under the overlay sheet breakpoint (AdwDialog: max-width 450px or max-height 360px): a bottom sheet built on sillybunny-sheet.js.
  * Callers pass sections of rows; each row's onSelect runs after the menu has closed.
  */
 
 import { translate } from './i18n.js';
 import { MOTION_EASE_OUT_CUBIC, MOTION_FAST, MOTION_POPOVER_CLOSE, animateIn, animateOut, stopMotion } from './sillybunny-motion.js';
 import { blockUpstreamDrawerClose, createSheetController } from './sillybunny-sheet.js';
+import { hostOverlayLayer } from './sillybunny-editor/overlay-host.js';
+import { OVERLAY_SHEET_QUERY } from './sillybunny-editor/breakpoints.js';
 
-export const MOBILE_QUERY = '(max-width: 768px)';
+/** @deprecated Use OVERLAY_SHEET_QUERY or LAYOUT_MOBILE_QUERY from sillybunny-editor/breakpoints.js. */
+export const MOBILE_QUERY = OVERLAY_SHEET_QUERY;
 const POPOVER_GAP = 6;
 const POPOVER_MARGIN = 8;
 const POPOVER_MIN_HEIGHT = 120;
@@ -46,7 +49,7 @@ let open = null;
 let initialized = false;
 
 function isMobileLayout() {
-    mobileQuery ??= window.matchMedia(MOBILE_QUERY);
+    mobileQuery ??= window.matchMedia(OVERLAY_SHEET_QUERY);
     return mobileQuery.matches;
 }
 
@@ -155,7 +158,11 @@ function buildMenu(sections, label) {
             const text = document.createElement('span');
             text.className = 'sb-action-menu-label';
             text.textContent = item.label;
-            button.append(kind ? createStateIndicator(kind, checked) : createIcon(item.icon), text);
+            const leading = kind ? createStateIndicator(kind, checked)
+                : item.icon ? createIcon(item.icon) : document.createElement('span');
+            if (!kind && !item.icon) leading.classList.add('sb-action-menu-leading');
+            leading.setAttribute('aria-hidden', 'true');
+            button.append(leading, text);
             if (item.detail) {
                 const detail = document.createElement('span');
                 detail.className = 'sb-action-menu-detail';
@@ -183,7 +190,7 @@ function activate(event, onSelect) {
 }
 
 function getItems() {
-    return open ? Array.from(/** @type {NodeListOf<HTMLElement>} */ (open.menu.querySelectorAll(ITEM_SELECTOR))) : [];
+    return open?.menu ? Array.from(/** @type {NodeListOf<HTMLElement>} */ (open.menu.querySelectorAll(ITEM_SELECTOR))) : [];
 }
 
 function handleMenuKeydown(event) {
@@ -280,7 +287,7 @@ function ensureSheet() {
     const controller = createSheetController({
         sheet: element,
         backdrop,
-        getInitialFocus: () => (open?.keyboard ? getItems()[0] : null) ?? title,
+        getInitialFocus: () => open?.initialFocus?.() ?? (open?.keyboard ? getItems()[0] : null) ?? title,
         getReturnFocus: () => (open?.trigger?.isConnected ? open.trigger : null),
         canAnimateClose: () => isMobileLayout(),
         onClose: () => finishClose(),
@@ -395,6 +402,7 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
         frame.subtitle.textContent = subtitle;
         frame.subtitle.hidden = !subtitle;
         frame.body.replaceChildren(menu);
+        hostOverlayLayer(frame.backdrop, frame.element);
         open = { kind: 'sheet', trigger, menu, keyboard, onClose };
         setTriggerExpanded(trigger, true);
         frame.controller.open();
@@ -408,7 +416,7 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
     popover.addEventListener('keydown', handlePopoverKeydown);
     popover.addEventListener('focusout', handlePopoverFocusOut);
     blockUpstreamDrawerClose(popover);
-    document.body.append(popover);
+    hostOverlayLayer(popover);
     const origin = positionPopover(popover, trigger, point, bounds);
     open = { kind: 'popover', trigger, menu, popover, keyboard, onClose, point, bounds };
     setTriggerExpanded(trigger, true);
@@ -423,6 +431,62 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
             (keyboard ? getItems()[0] : popover)?.focus({ preventScroll: true });
         }
     });
+}
+
+export function openPopover({ trigger, content, title = '', titleLabel = null, titleInput = null, bounds = null, initialFocus = null, onClose = null }) {
+    if (!(trigger instanceof HTMLElement) || !(content instanceof HTMLElement)) {
+        throw new TypeError('openPopover requires a trigger and content element');
+    }
+    initialize();
+    if (open?.trigger === trigger) {
+        closeActionMenu({ restoreFocus: true });
+        return { close: () => closeActionMenu({ restoreFocus: true }), get isOpen() { return isActionMenuOpen(trigger); } };
+    }
+    closeActionMenu({ animate: false, restoreFocus: false });
+    if (isMobileLayout()) {
+        const frame = ensureSheet();
+        if (titleLabel && titleInput) {
+            titleLabel.hidden = true;
+            titleInput.setAttribute('aria-labelledby', SHEET_TITLE_ID);
+        }
+        frame.title.textContent = title;
+        frame.title.hidden = !title;
+        frame.subtitle.hidden = true;
+        frame.body.replaceChildren(content);
+        hostOverlayLayer(frame.backdrop, frame.element);
+        open = { kind: 'sheet', trigger, keyboard: false, initialFocus, onClose };
+        setTriggerExpanded(trigger, true);
+        frame.controller.open();
+        return { close: () => closeActionMenu({ restoreFocus: true }), get isOpen() { return open?.trigger === trigger; } };
+    }
+
+    const popover = document.createElement('div');
+    popover.className = 'sb-action-popover sb-custom-popover';
+    popover.tabIndex = -1;
+    popover.setAttribute('role', 'dialog');
+    if (title) popover.setAttribute('aria-label', title);
+    if (titleLabel && titleInput) {
+        titleLabel.hidden = false;
+        titleLabel.id ||= 'sb-custom-popover-title';
+        titleInput.setAttribute('aria-labelledby', titleLabel.id);
+    }
+    popover.append(content);
+    popover.addEventListener('keydown', handlePopoverKeydown);
+    popover.addEventListener('focusout', handlePopoverFocusOut);
+    blockUpstreamDrawerClose(popover);
+    hostOverlayLayer(popover);
+    const origin = positionPopover(popover, trigger, null, bounds);
+    open = { kind: 'popover', trigger, popover, keyboard: false, custom: true, initialFocus, onClose, bounds };
+    setTriggerExpanded(trigger, true);
+    animateIn(popover, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], {
+        duration: MOTION_FAST,
+        easing: MOTION_EASE_OUT_CUBIC,
+        styles: { 'transform-origin': origin },
+    });
+    requestAnimationFrame(() => {
+        if (open?.popover === popover) (initialFocus?.() ?? popover)?.focus({ preventScroll: true });
+    });
+    return { close: () => closeActionMenu({ restoreFocus: true }), get isOpen() { return open?.trigger === trigger; } };
 }
 
 export function closeActionMenu({ animate = true, restoreFocus = false } = {}) {
@@ -467,6 +531,19 @@ function handlePopoverKeydown(event) {
         return;
     }
     if (event.key === 'Tab') {
+        if (open?.custom) {
+            const focusable = [...open.popover.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+                .filter(node => !node.hidden && node.getAttribute('aria-hidden') !== 'true');
+            if (!focusable.length) return;
+            const currentIndex = focusable.indexOf(document.activeElement);
+            const nextIndex = event.shiftKey
+                ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+                : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+            event.preventDefault();
+            event.stopPropagation();
+            focusable[nextIndex].focus({ preventScroll: true });
+            return;
+        }
         // Menus close when focus moves on, as GTK popover menus do.
         closeActionMenu({ restoreFocus: true });
         event.preventDefault();
@@ -518,7 +595,7 @@ function initialize() {
         return;
     }
     initialized = true;
-    mobileQuery ??= window.matchMedia(MOBILE_QUERY);
+    mobileQuery ??= window.matchMedia(OVERLAY_SHEET_QUERY);
     mobileQuery.addEventListener('change', handleLayoutChange);
     window.addEventListener('pointerdown', handlePointerDownCapture, true);
     window.addEventListener('wheel', handleScrollIntent, { capture: true, passive: true });

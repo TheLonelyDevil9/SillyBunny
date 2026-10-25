@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { agentFixture, toolFixture } from '../fixtures/in-chat-agents-editor.js';
+import { assertIsolatedServer } from './maintainer-server.js';
 
 const READS = new Set([
     '/api/settings/get',
@@ -171,7 +172,7 @@ export async function seedEditorAgents(page) {
 }
 
 export async function openEditorAgents(page, baseURL, width, { seed = true } = {}) {
-    if (new URL(baseURL).port !== '4455') throw new Error('Agent editor QA requires the isolated 4455 instance');
+    assertIsolatedServer(baseURL, 'Agent editor');
     const origin = new URL(baseURL).origin;
     const writes = [];
     const errors = [];

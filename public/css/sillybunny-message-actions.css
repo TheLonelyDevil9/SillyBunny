@@ -236,7 +236,7 @@
 /* ---------- Message menu (popover and sheet share the rows) ---------- */
 
 .sb-action-menu {
-    --sb-action-row: 34px;
+    --sb-action-row: 32px;
     display: flex;
     flex-direction: column;
     margin: 0;
@@ -262,11 +262,11 @@
 .sb-action-menu-item {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     inline-size: 100%;
     min-block-size: var(--sb-action-row);
     margin: 0;
-    padding: 6px 12px;
+    padding: 0 12px;
     box-sizing: border-box;
     border: 0;
     border-radius: var(--sb-radius-control, 9px);
@@ -284,10 +284,13 @@
     transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
+.sb-action-menu-leading,
 .sb-action-menu-item > :is(i, svg, img):first-child {
     flex: none;
-    inline-size: 1.25em;
-    max-block-size: 1.25em;
+    inline-size: 14px;
+    block-size: 14px;
+    display: grid;
+    place-items: center;
     text-align: center;
     opacity: 0.7;
 }
@@ -296,8 +299,8 @@
     position: relative;
     display: grid;
     flex: none;
-    inline-size: 1.25em;
-    block-size: 1.25em;
+    inline-size: 14px;
+    block-size: 14px;
     place-items: center;
     line-height: 1;
 }
@@ -406,11 +409,16 @@
 }
 
 .sb-action-menu-section-title {
+    display: block;
     margin: 0;
-    padding: 8px 12px 4px;
+    padding: 4px 32px;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
     color: var(--sb-muted-fg);
     font-size: calc(var(--mainFontSize) * 0.75);
     font-weight: 700;
+    box-shadow: none;
 }
 
 .sb-action-menu-reactions {
@@ -468,6 +476,7 @@ body.reduced-motion :is(.sb-action-menu-item, .sb-action-menu-reaction) {
     top: 0;
     left: 0;
     z-index: var(--sb-z-context-menu);
+    text-shadow: none;
     min-inline-size: 200px;
     max-inline-size: min(300px, calc(100vw - 16px));
     padding: 6px;
@@ -483,6 +492,37 @@ body.reduced-motion :is(.sb-action-menu-item, .sb-action-menu-reaction) {
 
 .sb-action-popover:focus {
     outline: none;
+}
+
+.sb-manager-name-popover {
+    display: grid;
+    grid-template:
+        "label label" auto
+        "input create" auto
+        "error error" auto / minmax(0, 1fr) auto;
+    gap: 6px;
+    min-inline-size: min(320px, calc(100vw - 48px));
+    padding: 4px;
+}
+
+.sb-action-popover:has(.sb-manager-name-popover) { max-inline-size: min(380px, calc(100vw - 16px)); }
+
+.sb-manager-name-popover__label { grid-area: label; }
+.sb-manager-name-popover__input { grid-area: input; width: 100%; min-width: 0; }
+.sb-manager-name-popover__error { grid-area: error; }
+.sb-manager-name-popover__create { grid-area: create; box-sizing: border-box; min-width: 76px; height: 34px; min-height: 34px; margin: 0; }
+.sb-manager-name-popover [hidden] { display: none; }
+
+@media (max-width: 450px), (max-height: 360px) {
+    .sb-action-sheet .sb-manager-name-popover {
+        grid-template: "input" auto "error" auto "create" auto / minmax(0, 1fr);
+        min-inline-size: 0;
+        padding: 10px;
+    }
+
+    .sb-action-sheet .sb-manager-name-popover__input,
+    .sb-action-sheet .sb-manager-name-popover__create { width: 100%; height: 44px; min-height: 44px; }
+
 }
 
 .sb-action-popover[hidden],
@@ -507,6 +547,7 @@ body.reduced-motion :is(.sb-action-menu-item, .sb-action-menu-reaction) {
     position: fixed;
     inset: auto 0 0 0;
     z-index: var(--sb-z-modal, 3000);
+    text-shadow: none;
     display: flex;
     flex-direction: column;
     gap: 6px;

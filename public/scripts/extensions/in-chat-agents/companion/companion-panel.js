@@ -1099,9 +1099,16 @@ async function handlePanelAction(event) {
             return;
         }
 
+        // SillyBunny: hiding prompt history is destructive and names the exclusion action.
         const result = await new Popup(
             `Exclude messages #0–#${messageIndex - 1} from prompts? The shard carries that history from here on; messages stay visible in the chat and can be unhidden later.`,
             POPUP_TYPE.CONFIRM,
+            '',
+            {
+                okButton: 'Exclude',
+                defaultResult: POPUP_RESULT.NEGATIVE,
+                onOpen: popup => popup.okButton.classList.add('is-destructive'),
+            },
         ).show();
         if (result !== POPUP_RESULT.AFFIRMATIVE) {
             return;

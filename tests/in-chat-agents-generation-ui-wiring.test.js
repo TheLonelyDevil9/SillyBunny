@@ -68,6 +68,17 @@ describe('in-chat agents generation UI wiring', () => {
         expect(indexSource).not.toContain('eventSource.on(eventName, refreshGenerationUi);');
     });
 
+    test('leaves the generation UI alone for dry-run generation starts', () => {
+        const listenerStart = indexSource.indexOf('eventSource.on(event_types.GENERATION_STARTED, (_type, _params, isDryRun) => {');
+        const listenerEnd = indexSource.indexOf('});', listenerStart);
+        const listenerSource = indexSource.slice(listenerStart, listenerEnd);
+
+        expect(listenerStart).toBeGreaterThanOrEqual(0);
+        expect(listenerSource).toContain('if (isDryRun) {\n            return;\n        }');
+        expect(listenerSource.indexOf('return;')).toBeLessThan(listenerSource.indexOf('refreshGenerationUi();'));
+        expect(indexSource).not.toMatch(/\[\s*event_types\.GENERATION_STARTED,/);
+    });
+
     test('wires companion message cards and actions into chat rendering', () => {
         expect(publicIndexSource).toContain('mes_run_companions');
         expect(companionUiSource).toContain('renderCompanionResultsForMessage');
@@ -82,7 +93,7 @@ describe('in-chat agents generation UI wiring', () => {
         expect(editorSource).toContain('headerAction(output, t`AI Maker…`');
         expect(editorSource).toContain('apply(await helpers.maker(fields()))');
         expect(dialogsSource).toContain('await services.generateCompanionKitWithAI(');
-        expect(dialogsSource).toContain('if (!await show(preview)) return null;');
+        expect(dialogsSource).toContain('if (!await show(preview, { title: t`Generate Companion` })) return null;');
     });
 
     test('passes custom tracker regeneration instructions into the LLM prompt', () => {

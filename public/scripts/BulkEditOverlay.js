@@ -25,6 +25,8 @@ import { convertCharacterToPersona } from './personas.js';
 import { callGenericPopup, POPUP_TYPE } from './popup.js';
 import { createTagInput, getTagKeyForEntity, getTagsList, printTagList, tag_map, compareTagsForSort, removeTagFromMap, importTags, tag_import_setting } from './tags.js';
 import { t } from './i18n.js';
+// SillyBunny: retain the upstream tag controls and listeners inside the shared Dialog frame.
+import { openDialog } from './sillybunny-editor/dialog.js';
 
 function getBulkEntity(id) {
     if (typeof id === 'number') {
@@ -184,6 +186,8 @@ class CharacterContextMenu {
  * Represents a tag control not bound to a single character
  */
 class BulkTagPopupHandler {
+    #dialog = null;
+
     /**
      * The entity keys for this popup
      * @type {Array<number|string>}
@@ -219,6 +223,7 @@ class BulkTagPopupHandler {
                         <div id="bulk_tag_popup_import_existing_tags" class="menu_button" title="Import existing tags from selected characters" data-i18n="[title]Import existing tags from selected characters">
                             Import Existing
                         </div>`;
+        // SillyBunny: The shared entry class keeps this adopted field aligned with framed dialog searches.
         return `<div id="bulk_tag_shadow_popup">
             <div id="bulk_tag_popup" class="wider_dialogue_popup">
                 <div id="bulk_tag_popup_holder">
@@ -228,7 +233,8 @@ class BulkTagPopupHandler {
                     <br>
                     <div id="bulk_tags_div" class="marginBot5" data-characters='${characterData}'>
                         <div class="tag_controls">
-                            <input id="bulkTagInput" class="text_pole tag_input wide100p margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" maxlength="25" />
+                            <!-- SillyBunny: use the shared entry metrics without changing the upstream input. -->
+                            <input id="bulkTagInput" class="text_pole sb-dialog__entry tag_input wide100p margin0" data-i18n="[placeholder]Search / Create Tags" placeholder="Search / Create tags" maxlength="25" />
                             <div class="tags_view menu_button fa-solid fa-tags" title="View all tags" data-i18n="[title]View all tags"></div>
                         </div>
                         <div id="bulkTagList" class="m-t-1 tags"></div>
@@ -264,7 +270,20 @@ class BulkTagPopupHandler {
             return;
         }
 
-        document.body.insertAdjacentHTML('beforeend', this.#getHtml());
+        const template = document.createElement('template');
+        template.innerHTML = this.#getHtml();
+        const popupElement = template.content.querySelector('#bulk_tag_shadow_popup');
+        const heading = popupElement?.querySelector('#bulk_tag_popup h3');
+        const closeButton = popupElement?.querySelector('#bulk_tag_popup_cancel');
+        if (!(popupElement instanceof HTMLElement) || !(heading instanceof HTMLElement)) {
+            throw new Error('Bulk tag editor markup is incomplete.');
+        }
+
+        const title = heading.textContent.trim();
+        heading.hidden = true;
+        if (closeButton instanceof HTMLElement) closeButton.hidden = true;
+        // SillyBunny: the shared frame supplies the title and Close action while the legacy IDs stay queryable.
+        this.#dialog = openDialog({ tier: 'dialog', title, content: popupElement, className: 'sb-bulk-tag-dialog' });
 
         const entities = this.characterIds.map(getBulkEntity).filter(Boolean);
         buildAvatarList($('#bulk_tags_avatars_block'), entities);
@@ -333,10 +352,15 @@ class BulkTagPopupHandler {
      * Hide and remove the tag control
      */
     hide() {
-        let popupElement = document.querySelector('#bulk_tag_shadow_popup');
-        if (popupElement) {
-            document.body.removeChild(popupElement);
+        // SillyBunny: the frame owns removal after its close transition; the fallback covers an unframed compatibility node.
+        if (this.#dialog) {
+            const dialog = this.#dialog;
+            this.#dialog = null;
+            void dialog.close('close', 'close');
+            return;
         }
+
+        document.querySelector('#bulk_tag_shadow_popup')?.remove();
 
         // No need to redraw here, all tags actions were redrawn when they happened
     }

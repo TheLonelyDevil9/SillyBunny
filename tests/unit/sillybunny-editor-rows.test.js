@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import {
     createRow,
     createSwitchRow,
+    createCheckRow,
     createComboRow,
     createSpinRow,
     createEntryRow,
@@ -48,6 +49,7 @@ function assertAssociation({ row, control }, label) {
 
 const controlFactories = [
     ['switch', createSwitchRow, true, false],
+    ['check', createCheckRow, true, false],
     ['combo', options => createComboRow({ options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], ...options }), 'a', 'b'],
     ['spin', createSpinRow, 3, 4],
     ['entry', createEntryRow, 'first', 'second'],
@@ -303,6 +305,47 @@ describe('createSwitchRow', () => {
     });
 });
 
+describe('createCheckRow', () => {
+    test('puts a plain native checkbox at the end of a whole-row label', () => {
+        const onChange = jest.fn();
+        const { row, control } = createCheckRow({ label: 'Model', subtitle: 'Helpful description', field: 'model', checked: true, onChange });
+        expect(row.tagName).toBe('LABEL');
+        expect(row.className).toBe('ds-row ds-row-check');
+        expect(row.htmlFor).toBe(control.id);
+        expect(row.lastChild).toBe(control);
+        expect(control.type).toBe('checkbox');
+        expect(control.classList.contains('sb-switch')).toBe(false);
+        expect(control.hasAttribute('role')).toBe(false);
+        expect(control.hasAttribute('aria-checked')).toBe(false);
+        assertAssociation({ row, control }, 'Model');
+        control.checked = false;
+        change(control);
+        expect(onChange).toHaveBeenCalledWith(false);
+    });
+
+    test('adopting an upstream checkbox keeps its id, name, value and listeners, and drops switch semantics', () => {
+        const control = input('checkbox');
+        control.value = 'api-url';
+        control.classList.add('sb-switch');
+        control.setAttribute('role', 'switch');
+        const existing = jest.fn();
+        control.addEventListener('input', existing);
+        const result = createCheckRow({ label: 'API URL', field: 'exclude', input: control });
+        expect(result.control).toBe(control);
+        expect([control.id, control.name, control.value]).toEqual(['existing-checkbox', 'preserved-name', 'api-url']);
+        expect(control.classList.contains('sb-switch')).toBe(false);
+        expect(control.hasAttribute('role')).toBe(false);
+        control.dispatchEvent(new Event('input'));
+        expect(existing).toHaveBeenCalledTimes(1);
+        result.setValue(false);
+        expect(result.getValue()).toBe(false);
+    });
+
+    test('rejects a non-checkbox input', () => {
+        expect(() => createCheckRow({ label: 'Title', field: 'field', input: input('text') })).toThrow(TypeError);
+    });
+});
+
 describe('createComboRow', () => {
     test('builds options, a label and suffix, with optional flexible width', () => {
         const onChange = jest.fn();
@@ -442,6 +485,26 @@ describe('createSpinRow', () => {
 });
 
 describe('createEntryRow', () => {
+    test('adopts Popup mainInput without changing textarea identity, classes or results', () => {
+        const input = document.createElement('textarea');
+        input.className = 'popup-input';
+        input.name = 'profile-name';
+        input.rows = 1;
+        input.value = 'Original name';
+        const onInput = jest.fn();
+        input.addEventListener('input', onInput);
+        const entry = createEntryRow({ label: 'Profile name:', field: 'name', input });
+        expect(entry.control).toBe(input);
+        expect(entry.row.querySelector('label').htmlFor).toBe(input.id);
+        expect(input.name).toBe('profile-name');
+        expect(input.className).toBe('popup-input');
+        entry.setValue('New name');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(onInput).toHaveBeenCalledTimes(1);
+        expect(entry.getValue()).toBe('New name');
+        expect(() => createEntryRow({ label: 'Name', field: 'name', floating: true, input })).toThrow(TypeError);
+        entry.destroy();
+    });
     test('places the entry below its label, with separate input and change notifications', () => {
         const onInput = jest.fn();
         const onChange = jest.fn();
@@ -501,14 +564,15 @@ describe('createEntryRow floating title', () => {
         expect(control.labels[0]).toBe(title);
     });
 
-    test('a created input gets a blank placeholder so the CSS can tell an empty field from a filled one', () => {
+    test('a floating hint moves to aria-description and the placeholder stays blank', () => {
         const { control } = createEntryRow({ label: 'Name', field: 'name', floating: true });
         expect(control.getAttribute('placeholder')).toBe(' ');
         const filled = createEntryRow({ label: 'Name', field: 'name', floating: true, placeholder: 'Model name' });
-        expect(filled.control.placeholder).toBe('Model name');
+        expect(filled.control.getAttribute('placeholder')).toBe(' ');
+        expect(filled.control.getAttribute('aria-description')).toBe('Model name');
     });
 
-    test('adoption keeps identity, type, placeholder and listeners for text, URL and search inputs', () => {
+    test('adoption keeps identity, type, accessible hint and listeners for text, URL and search inputs', () => {
         for (const type of ['text', 'url', 'search']) {
             const control = input(type, 'value');
             control.placeholder = 'Example';
@@ -520,17 +584,19 @@ describe('createEntryRow floating title', () => {
             expect(result.control).toBe(control);
             expect(control.type).toBe(type);
             expect(control.id).toBe(`existing-${type}`);
-            expect(control.placeholder).toBe('Example');
+            expect(control.getAttribute('placeholder')).toBe(' ');
+            expect(control.getAttribute('aria-description')).toBe('Example');
             expect(old.children).toHaveLength(0);
             change(control);
             expect(listener).toHaveBeenCalledTimes(1);
         }
     });
 
-    test('an adopted input without a placeholder gets a blank one and keeps any it has', () => {
+    test('an adopted input without a placeholder gets a blank marker', () => {
         const control = input('text');
         createEntryRow({ label: 'Field', field: 'field', floating: true, input: control });
         expect(control.getAttribute('placeholder')).toBe(' ');
+        expect(control.hasAttribute('aria-description')).toBe(false);
     });
 
     test('rejects inputs whose type is not single-line text', () => {

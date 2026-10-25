@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { acceptPopup } from './helpers/popup.js';
 import { mkdir, readFile } from 'node:fs/promises';
 import { q56Screenshot } from './helpers/q56-review.js';
 import {
@@ -94,7 +95,7 @@ test('q56 dropdown sweep toggles each trigger closed on its second pointer click
             const dialog = page.locator('dialog[open]');
             await dialog.getByRole('textbox', { name: 'Script Name', exact: true }).fill('QA toggle');
             await dialog.getByRole('textbox', { name: 'Find', exact: true }).fill('/QA/g');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await check(editor.detail.getByRole('button', { name: 'Regex Script', exact: true }), 'Regex row menu');
             await editor.discard.click();
         }
@@ -167,6 +168,7 @@ for (const width of [360, 390, 430, 768]) {
                 const dialog = page.locator('dialog[open]');
                 const fields = await dialog.locator('textarea:visible').evaluateAll(nodes => nodes.map(node => ({ field: node.getAttribute('aria-label'), height: node.getBoundingClientRect().height })));
                 heights.push({ id: 'regex-dialog', fields });
+                await expect(dialog.locator('.sb-dialog__title')).toHaveText('Add Regex Script');
                 for (const field of fields) expect.soft(field.height, `regex: ${field.field}`).toBeGreaterThanOrEqual(160);
                 await dialog.locator('.popup-button-cancel').click();
             }
@@ -176,6 +178,7 @@ for (const width of [360, 390, 430, 768]) {
                     await editor.detail.getByRole('button', { name: 'Generate Kit…', exact: true }).click();
                 } else await editor.detail.getByRole('button', { name: 'AI Maker…', exact: true }).click();
                 const dialog = page.locator('dialog[open]');
+                if (id === 'companion') await expect(dialog.locator('.sb-dialog__title')).toHaveText('AI Maker');
                 const fields = await dialog.locator('textarea:visible').evaluateAll(nodes => nodes.map(node => ({ field: node.id, height: node.getBoundingClientRect().height })));
                 expect(fields.length).toBeGreaterThan(0);
                 heights.push({ id: `${id}-dialog`, fields });
@@ -238,6 +241,79 @@ async function round2Screenshot(page, name) {
     await mkdir(round2Screens, { recursive: true });
     await page.mouse.move(1, 1);
     await page.screenshot({ path: `${round2Screens}/${name}.png` });
+}
+
+for (const { width, height } of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    test(`Refine floating entry stays legible and hides its placeholder at ${width}px`, async ({ page, baseURL }, testInfo) => {
+        const editor = await setup(page, baseURL, width);
+        await page.setViewportSize({ width, height });
+        await mockEditorModel(page);
+        await editor.open('pre');
+        await editor.prompt.fill('A prompt to refine.');
+        await activateAgentEditorAction(page, editor.detail, 'Refine…');
+
+        const dialog = page.locator('dialog[open]');
+        const input = dialog.locator('#ica--refine-custom');
+        await expect(dialog.locator('.sb-dialog__title')).toHaveText('Refine');
+        await expect(input).toBeVisible();
+        await input.evaluate(node => node.blur());
+
+        const readStyles = () => input.evaluate(node => {
+            const title = node.labels[0];
+            const field = node.closest('.ds-row-entry__field');
+            const fieldBox = field.getBoundingClientRect();
+            const titleBox = title.getBoundingClientRect();
+            const placeholder = getComputedStyle(node, '::placeholder');
+            const titleStyle = getComputedStyle(title);
+            return {
+                focused: document.activeElement === node,
+                fieldCenter: fieldBox.top + fieldBox.height / 2,
+                titleCenter: titleBox.top + titleBox.height / 2,
+                fieldTop: fieldBox.top,
+                titleTop: titleBox.top,
+                titleFontSize: parseFloat(titleStyle.fontSize),
+                inputFontSize: parseFloat(getComputedStyle(node).fontSize),
+                titleTransform: titleStyle.transform,
+                placeholderColor: placeholder.color,
+                placeholderOpacity: placeholder.opacity,
+                placeholderTextShadow: placeholder.textShadow,
+                titleTextShadow: titleStyle.textShadow,
+            };
+        });
+        const isTransparent = style => style.placeholderOpacity === '0'
+            || style.placeholderColor === 'transparent'
+            || style.placeholderColor === 'rgba(0, 0, 0, 0)';
+
+        const empty = await readStyles();
+        await testInfo.attach('Refine empty field styles', { body: JSON.stringify(empty), contentType: 'application/json' });
+        expect(empty.focused).toBe(false);
+        expect(isTransparent(empty)).toBe(true);
+        expect(empty.placeholderTextShadow).toBe('none');
+        expect(Math.abs(empty.titleCenter - empty.fieldCenter)).toBeLessThanOrEqual(3);
+        expect(empty.titleFontSize).toBe(empty.inputFontSize);
+        expect(empty.titleTextShadow).toBe('none');
+        await mkdir('/tmp/opencode/round1-step1-shots/after', { recursive: true });
+        await page.mouse.move(1, 1);
+
+        await input.focus();
+        const focused = await readStyles();
+        expect(focused.focused).toBe(true);
+        expect(isTransparent(focused)).toBe(true);
+        expect(focused.placeholderTextShadow).toBe('none');
+        expect(focused.titleTop - focused.fieldTop).toBeLessThan(12);
+        expect(focused.titleFontSize).toBeLessThan(focused.inputFontSize);
+        expect(focused.titleTextShadow).toBe('none');
+
+        await input.fill('A custom refinement instruction.');
+        await input.blur();
+        const filled = await readStyles();
+        expect(filled.focused).toBe(false);
+        expect(isTransparent(filled)).toBe(true);
+        expect(filled.placeholderTextShadow).toBe('none');
+        expect(filled.titleTop - filled.fieldTop).toBeLessThan(12);
+        expect(filled.titleFontSize).toBeLessThan(filled.inputFontSize);
+        expect(filled.titleTextShadow).toBe('none');
+    });
 }
 
 async function outerScroll(detail) {
@@ -418,7 +494,7 @@ test('round2 More survives saved, switched, preview, helper, template and create
         await check(`${width} saved`);
         await activateAgentEditorAction(page, editor.detail, 'Preview Prompt in Context');
         await expect(page.locator('dialog[open]')).toBeVisible();
-        await page.locator('dialog[open] .popup-button-ok').click();
+        await acceptPopup(page.locator('dialog[open]'));
         await check(`${width} after helper`);
         const preview = editor.detail.getByRole('radio', { name: 'Preview', exact: true });
         if (await preview.isVisible()) await preview.check();
@@ -471,7 +547,7 @@ test('390px phone property sheet matches Prompt pills, controls, title and summa
                 selected: read(group.querySelector('input:checked + span'), properties),
                 unselected: read(group.querySelector('input:not(:checked) + span'), properties),
                 title: read(sheet.querySelector('h2'), [
-                    'color', 'font-family', 'font-size', 'font-weight', 'line-height', 'margin', 'padding',
+                    'color', 'font-family', 'font-size', 'font-weight', 'margin', 'padding',
                 ]),
                 select: read(sheet.querySelector('.sb-prompt-dropdown'), [
                     'color', 'background-color', 'height', 'width', 'min-height', 'padding',
@@ -512,7 +588,7 @@ test('390px phone property sheet matches Prompt pills, controls, title and summa
     const promptSummary = prompt.getByRole('button', { name: 'Prompt properties', exact: true });
     await expect(promptSummary).toHaveText(/^.+ · .+ · .+ ›$/);
     await promptSummary.click();
-    const reference = page.locator('.sb-prompt-sheet');
+    const reference = page.locator('.sb-dialog.sb-prompt-properties-dialog');
     const forbid = reference.getByRole('switch', { name: 'Forbid overrides', exact: true });
     await forbid.uncheck();
     const promptText = await promptSummary.textContent();
@@ -861,7 +937,7 @@ for (const width of [1440, 390]) {
             }).click();
             const dialog = page.locator('dialog[open]');
             await dialog.locator('.maximized_textarea').fill('Expanded locally');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(editor.prompt).toHaveValue('Expanded locally');
             await editor.discard.click();
             await page.emulateMedia({
@@ -910,7 +986,7 @@ for (const width of [1440, 390]) {
                     name: 'Find',
                     exact: true,
                 }).fill('/QA/g');
-                await dialog.locator('.popup-button-ok').click();
+                await acceptPopup(dialog);
             }
             await rows.first().getByRole('button', {
                 name: 'Regex Script',
@@ -925,7 +1001,7 @@ for (const width of [1440, 390]) {
                 name: 'Replace',
                 exact: true,
             }).fill('replacement');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await rows.first().getByRole('switch').uncheck();
             await rows.first().getByRole('button', {
                 name: 'Regex Script',
@@ -1092,7 +1168,7 @@ for (const width of [1440, 390]) {
             expect(editor.saves()).toHaveLength(0);
             await editor.name.fill('Explicitly saved');
             await more('Duplicate');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect.poll(() => editor.saves().length).toBe(2);
             expect(editor.saves()[0]).toMatchObject({
                 id: 'editor-replace',
@@ -1102,7 +1178,7 @@ for (const width of [1440, 390]) {
             expect(editor.saves()[1].name).toBe('Explicitly saved');
             await editor.prompt.fill(' ');
             await more('Duplicate');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(editor.prompt).toHaveAttribute('aria-invalid', 'true');
             expect(editor.saves()).toHaveLength(2);
         },
@@ -1122,13 +1198,15 @@ for (const width of [1440, 390]) {
             await activateAgentEditorAction(page, editor.detail, 'Preview Prompt in Context');
             await expect(dialog).toHaveCount(1);
             await expect(dialog.locator('pre')).toContainText('Unsaved preview marker');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await activateAgentEditorAction(page, editor.detail, 'Refine…');
             await expect(dialog.locator('[name="ica-refine-mode"]')).toHaveCount(5);
-            await dialog.locator('.popup-button-ok').click();
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Refine');
+            await acceptPopup(dialog);
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Refine');
             await expect(dialog.locator('h4').last()).toHaveText('Refined');
             await expect(dialog.locator('pre').last()).toHaveText('Mock refined prompt');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(editor.prompt).toHaveValue('Mock refined prompt');
             await editor.detail.getByRole('button', {
                 name: 'Add Regex Script',
@@ -1139,11 +1217,11 @@ for (const width of [1440, 390]) {
                 exact: true,
             });
             await find.fill('');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(find).toHaveAttribute('aria-invalid', 'true');
             await expect(find).toBeFocused();
             await find.fill('/QA/g');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(editor.detail.locator('.ica-agent-regex-list .ds-row')).toHaveCount(1);
             await editor.detail.getByRole('textbox', {
                 name: 'Format Example',
@@ -1153,14 +1231,24 @@ for (const width of [1440, 390]) {
                 name: 'Generate Kit…',
                 exact: true,
             }).click();
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Generate Kit');
+            await expect(dialog).toHaveClass(/sb-dialog--window/);
+            await expect(dialog.locator('.popup-button-ok')).toHaveText('Apply');
+            await expect(dialog.locator('.popup-button-cancel')).toHaveText('Discard');
+            await expect(dialog.locator('.sb-dialog__bottom-bar').getByText('Regenerate', { exact: true })).toBeVisible();
             await expect(dialog.locator('#ica--tracker-builder-extra-instructions')).toBeVisible();
             await expect(dialog.locator('.editor_maximize, .ica--textarea-fullscreen-toggle')).toHaveCount(0);
+            await dialog.locator('.popup-content').evaluate(node => node.id = 'qa-tracker-preview-body');
             await dialog.evaluate(node => node.dataset.qaTrackerPreview = 'same-popup');
             await dialog.locator('#ica--tracker-builder-extra-instructions').fill('QA regeneration');
             await dialog.getByText('Regenerate', { exact: true }).click();
             await expect.poll(() => page.evaluate(() => window.__editorModelCalls)).toBe(3);
             await expect(dialog).toHaveAttribute('data-qa-tracker-preview', 'same-popup');
-            await dialog.locator('.popup-button-ok').click();
+            await expect(dialog.locator('.popup-content')).toHaveAttribute('id', 'qa-tracker-preview-body');
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Generate Kit');
+            await expect(dialog.locator('.sb-dialog__bottom-bar').getByText('Regenerate', { exact: true })).toBeVisible();
+            await expect(dialog.locator('#ica--tracker-builder-extra-instructions')).toHaveValue('QA regeneration');
+            await acceptPopup(dialog);
             await expect(editor.prompt).toHaveValue('Mock tracker prompt');
             expect(editor.saves()).toHaveLength(0);
             await editor.discard.click();
@@ -1174,16 +1262,18 @@ for (const width of [1440, 390]) {
                 exact: true,
             }).click();
             await dialog.locator('#ica--companion-maker-goal').fill('QA helper');
-            await dialog.locator('.popup-button-ok').click();
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('AI Maker');
+            await acceptPopup(dialog);
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Generate Companion');
             await expect(dialog.locator('pre')).toHaveText('Mock companion prompt');
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             await expect(editor.prompt).toHaveValue('Mock companion prompt');
             await editor.detail.getByRole('button', {
                 name: 'Preview Feedback',
                 exact: true,
             }).click();
             await expect(dialog).toHaveCount(1);
-            await dialog.locator('.popup-button-ok').click();
+            await acceptPopup(dialog);
             expect(editor.saves()).toHaveLength(0);
             await editor.save.click();
             await expect(editor.save).toBeDisabled();
@@ -1202,6 +1292,7 @@ for (const width of [1440, 390]) {
             });
             await editor.detail.getByRole('textbox', { name: 'Format Example', exact: true }).fill('[TRACKER|Field]');
             await editor.detail.getByRole('button', { name: 'Generate Kit…', exact: true }).click();
+            await expect(dialog.locator('.sb-dialog__title')).toHaveText('Generate Kit');
             await expect(dialog).toContainText('Fallback scaffold used.');
             await dialog.locator('.popup-button-cancel').click();
             await expect(editor.prompt).not.toHaveValue('Mock tracker prompt');

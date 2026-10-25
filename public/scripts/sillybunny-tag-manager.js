@@ -1,18 +1,16 @@
 import { t, translate } from './i18n.js';
 import { createEntityRow, entityKey } from './sillybunny-editor/entity-row.js';
-import { createRow } from './sillybunny-editor/rows.js';
 import { reconcileRows, bindListKeyboard, bindSortable } from './sillybunny-editor/list-rows.js';
-import { createListSearch } from './sillybunny-editor/list-search.js';
-import { createListHeader } from './sillybunny-editor/list-header.js';
 import { createStatusPage } from './sillybunny-editor/status-page.js';
-import { openActionMenu, closeActionMenu, MOBILE_QUERY } from './sillybunny-action-menu.js';
-import { createSheetController, blockUpstreamDrawerClose } from './sillybunny-sheet.js';
-import { animateIn, stopMotion, SPRING_SHEET } from './sillybunny-motion.js';
+import { openPicker } from './sillybunny-editor/picker.js';
+import { openDialog } from './sillybunny-editor/dialog.js';
+import { LAYOUT_MOBILE_QUERY } from './sillybunny-editor/breakpoints.js';
+import { openActionMenu, openPopover } from './sillybunny-action-menu.js';
 
 const STYLESHEETS = [
-    { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+    { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
     { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-    { href: 'css/sillybunny-tag-manager.css?v=20261018a', id: 'deferred-tag-manager-css' },
+    { href: 'css/sillybunny-tag-manager.css?v=20261021a', id: 'deferred-tag-manager-css' },
 ];
 let activeManager = null;
 let opening = null;
@@ -145,96 +143,32 @@ export async function openTagManager(adapter) {
  */
 export function createTagManager(adapter) {
     const { getState, commit, create, rename, actions } = adapter;
-    const mobile = window.matchMedia(MOBILE_QUERY);
-    const returnFocus = document.activeElement;
+    const layout = window.matchMedia(LAYOUT_MOBILE_QUERY);
     const cache = new Map();
     const controls = new Map();
     let disposed = false;
-    let suspended = false;
     let dragging = false;
     let reconciling = false;
     let finish;
     const closed = new Promise(resolve => finish = resolve);
-    const host = element('dialog', 'sb-tag-manager-host');
-    host.setAttribute('aria-labelledby', 'sb-tag-manager-title');
-    const backdrop = element('div', 'sb-tag-manager__backdrop');
-    backdrop.setAttribute('aria-hidden', 'true');
-    backdrop.addEventListener('click', () => { if (!mobile.matches) close(); });
-    backdrop.tabIndex = -1;
-    backdrop.hidden = true;
-    const root = element('section', 'sb-tag-manager');
-    root.id = 'tag_view_list';
-    root.hidden = true;
-    const headerControl = createListHeader({ title: t`Tag Management`, className: 'sb-tag-manager__header', actions: [
-        { id: 'more', label: t`Tag Management`, icon: 'ellipsis-vertical', menu: true, onActivate: trigger => openMenu(trigger, headerSections()) },
-        { id: 'close', label: t`Close`, icon: 'xmark', onActivate: () => close() },
-    ] });
-    const header = headerControl.element;
-    const handle = element('div', 'sb-tag-manager__handle');
-    handle.setAttribute('aria-hidden', 'true');
-    const title = header.querySelector('.sb-list-header__title');
-    title.classList.add('sb-tag-manager__title');
-    title.id = 'sb-tag-manager-title';
-    headerControl.button('more').classList.add('sb-tag-manager__button', 'sb-tag-manager__menu');
-    headerControl.button('close').classList.add('sb-tag-manager__button', 'sb-tag-manager__close');
-    header.prepend(handle);
-    const searchField = element('label', 'sb-tag-manager__search-field');
-    const searchInput = element('input', 'text_pole sb-tag-manager__search');
-    searchInput.type = 'search';
-    searchInput.placeholder = t`Search...`;
-    searchInput.setAttribute('aria-label', t`Search`);
-    searchField.append(icon('magnifying-glass'), searchInput);
-    const scroller = element('div', 'sb-tag-manager__body');
-    const newInput = element('input', 'text_pole sb-tag-manager__new');
-    newInput.setAttribute('aria-label', t`Create a new tag`);
-    newInput.placeholder = t`Create a new tag`;
-    const newError = element('small', 'sb-tag-manager__error');
-    newError.id = 'sb-tag-manager-new-error';
-    newError.hidden = true;
-    newInput.setAttribute('aria-describedby', newError.id);
-    const createButton = button(t`Create a new tag`, 'plus', () => createPending(), 'sb-tag-manager__add');
-    const newEntry = createRow({ label: '', field: 'new-tag', suffix: [newInput, createButton] });
-    newEntry.row.querySelector('.ds-row-text').remove();
-    const newGroup = element('div', 'ds-pref-group sb-tag-manager__create');
-    newGroup.append(newEntry.row, newError);
+    /** @type {ReturnType<typeof openDialog>|null} */
+    let frame = null;
+    const search = {
+        get query() { return frame?.search?.query ?? ''; },
+        clear() { frame?.search?.clear(); },
+        report(shown, total) { frame?.search?.report(shown, total); },
+    };
     const list = element('div', 'ds-pref-group ds-entity-list tag_view_list_tags');
     list.setAttribute('role', 'list');
     list.setAttribute('aria-label', t`Tag Management`);
     const empty = element('div', 'sb-tag-manager__empty');
-    const status = element('div', 'sb-list-editor__status');
-    status.setAttribute('aria-live', 'polite');
     const restoreInput = element('input');
     restoreInput.type = 'file';
     restoreInput.id = 'tag_view_restore_input';
     restoreInput.accept = '.json';
     restoreInput.hidden = true;
-    scroller.append(newGroup, list, empty);
-    root.append(header, searchField, scroller, status, restoreInput);
-    host.append(backdrop, root);
-    const search = createListSearch({
-        field: searchField, input: searchInput, scope: root, scroller, status,
-        debounce: 300, onChange: () => refresh(),
-    });
-    searchInput.addEventListener('keydown', event => {
-        if (event.key !== 'Escape' || event.isComposing) return;
-        // This search is always visible (there is no reveal button to reopen it).
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        search.clear();
-    }, true);
-    const sheet = createSheetController({
-        sheet: root, backdrop, getInitialFocus: () => searchInput,
-        getReturnFocus: () => returnFocus, canClose: () => canClose(), canAnimateClose: () => mobile.matches,
-        onClose: () => {
-            if (suspended) {
-                // The shared action menu temporarily owns the one-sheet focus trap.
-                root.hidden = false;
-                backdrop.hidden = false;
-                return;
-            }
-            dispose();
-        },
-    });
+    const content = document.createDocumentFragment();
+    content.append(list, empty, restoreInput);
 
     function setError(input, error, message = '') {
         error.textContent = message;
@@ -276,27 +210,15 @@ export function createTagManager(adapter) {
     }
 
     function close() {
-        if (suspended || disposed) return false;
-        if (mobile.matches) return sheet.close();
-        if (!canClose()) return false;
-        dispose();
-        return true;
+        if (disposed || !frame) return false;
+        return frame.close('close', 'close');
     }
 
     function dispose() {
         if (disposed) return;
         disposed = true;
-        closeActionMenu({ animate: false });
         sortable?.destroy();
-        headerControl.destroy();
         unbindKeyboard();
-        search.destroy();
-        mobile.removeEventListener('change', layoutChanged);
-        // The action-menu singleton reuses its sheet; do not remove its cached frame with this dialog.
-        for (const layer of host.querySelectorAll('.sb-action-sheet, .sb-action-sheet-backdrop')) document.body.append(layer);
-        host.close();
-        host.remove();
-        if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
         finish();
     }
 
@@ -325,19 +247,7 @@ export function createTagManager(adapter) {
 
     function openMenu(trigger, sections) {
         if (!canClose()) return;
-        suspended = mobile.matches;
-        openActionMenu({ trigger, title: t`Tag Management`, sections, bounds: root, onClose: () => {
-            if (!suspended || disposed) return;
-            suspended = false;
-            root.hidden = true;
-            sheet.open();
-            stopMotion(root);
-            stopMotion(backdrop);
-        } });
-        // Native modal dialogs make body-mounted menus inert; keep the shared menu in their top layer.
-        for (const layer of document.querySelectorAll('.sb-action-popover, .sb-action-sheet, .sb-action-sheet-backdrop')) {
-            host.append(layer);
-        }
+        openActionMenu({ trigger, title: t`Tag Management`, sections, bounds: frame?.surface ?? null });
     }
 
     function move(tag, direction) {
@@ -369,6 +279,71 @@ export function createTagManager(adapter) {
             await actions.delete(row);
             refresh();
         }, { danger: true })] }];
+    }
+
+    function renderTagMembers(tag, container) {
+        const state = getState();
+        const keys = Object.entries(state.tagMap).filter(([, ids]) => Array.isArray(ids) && ids.includes(tag.id)).map(([key]) => key);
+        const members = [
+            ...state.characters.filter(character => keys.includes(String(character.avatar))).map(character => ({
+                key: String(character.avatar), name: String(character.name ?? character.avatar), avatar: adapter.getAvatar?.(character),
+            })),
+            ...state.groups.filter(group => keys.includes(String(group.id))).map(group => ({
+                key: String(group.id), name: String(group.name ?? group.id), avatar: adapter.getGroupAvatar?.(group),
+            })),
+        ];
+        const rows = members.map(member => {
+            const remove = button(t`Remove`, 'minus', () => {
+                actions.removeMember(tag, member.key);
+                renderTagMembers(tag, container);
+                commit();
+            }, 'sb-tag-manager__member-remove');
+            return createEntityRow({
+                key: `tag-member:${tag.id}:${member.key}`,
+                label: member.name,
+                title: member.name,
+                avatar: member.avatar ?? null,
+                suffix: [remove],
+                compatClasses: { row: ['ds-entity-row--surface'] },
+            }).row;
+        });
+        if (!rows.length) rows.push(createStatusPage({ icon: 'users', title: t`No Members`, compact: true }).element);
+        container.replaceChildren(...rows);
+    }
+
+    function openMembers(tag) {
+        if (!frame || !tag) return;
+        const list = element('div', 'ds-pref-group ds-entity-list sb-tag-manager__members');
+        list.setAttribute('role', 'list');
+        const add = button(t`Add`, 'plus', () => {
+            const state = getState();
+            const assigned = new Set(Object.entries(state.tagMap).filter(([, ids]) => Array.isArray(ids) && ids.includes(tag.id)).map(([key]) => key));
+            const items = [
+                ...state.characters.filter(character => !assigned.has(String(character.avatar))).map(character => ({ value: String(character.avatar), label: String(character.name ?? character.avatar) })),
+                ...state.groups.filter(group => !assigned.has(String(group.id))).map(group => ({ value: String(group.id), label: String(group.name ?? group.id) })),
+            ];
+            openPicker({
+                trigger: add,
+                title: t`Add`,
+                items,
+                selected: null,
+                searchLabel: t`Search`,
+                emptyText: t`No results`,
+                bounds: frame?.surface ?? null,
+                onSelect: key => {
+                    if (assigned.has(key)) return;
+                    actions.addMember(tag, key);
+                    commit();
+                    renderTagMembers(tag, list);
+                },
+            });
+        }, 'sb-tag-manager__member-add');
+        const content = document.createDocumentFragment();
+        content.append(list);
+        const page = frame.push({ title: tag.name, content, initialFocus: () => add });
+        add.classList.add('sb-dialog__icon-button');
+        page.header.querySelector('.sb-dialog__header-end').append(add);
+        renderTagMembers(tag, list);
     }
 
     function showColor(tag, property) {
@@ -422,6 +397,7 @@ export function createTagManager(adapter) {
         const entity = createEntityRow({
             key: entityKey('tag', tag.id), label: tag.name, title: name, avatar: dot,
             subtitle: '', grip: true, suffix: [more],
+            activation: 'navigate',
             compatClasses: { row: ['tag_view_item'] }, attributes: { id: tag.id },
         });
         const { row, slots } = entity;
@@ -433,7 +409,10 @@ export function createTagManager(adapter) {
         count.append(countValue, document.createTextNode('\u00a0'), countLabel);
         entity.update({ subtitle: count });
         slots.grip.classList.add('drag-handle');
+        slots.grip.addEventListener('click', event => event.stopPropagation());
         row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-haspopup', 'dialog');
         const colors = element('div', 'sb-tag-manager__colors');
         colors.hidden = true;
         const pickers = {};
@@ -469,11 +448,12 @@ export function createTagManager(adapter) {
         const counts = countLiveTagEntities(state.tagMap, state.characters, state.groups);
         const sorted = adapter.sort(state.tags, counts);
         const query = search.query.trim().toLowerCase();
-        const focused = root.contains(document.activeElement) ? document.activeElement : null;
+        const scroller = frame?.body ?? null;
+        const focused = list.contains(document.activeElement) ? document.activeElement : null;
         const pendingField = focused instanceof HTMLInputElement ? {
             value: focused.value, start: focused.selectionStart, end: focused.selectionEnd, direction: focused.selectionDirection,
         } : null;
-        const scrollTop = scroller.scrollTop;
+        const scrollTop = scroller?.scrollTop ?? 0;
         // Keep pending fields mounted even when an external update or search hides their row.
         reconciling = true;
         try {
@@ -497,7 +477,7 @@ export function createTagManager(adapter) {
                     focused.setSelectionRange(pendingField.start, pendingField.end, pendingField.direction);
                 }
             }
-            scroller.scrollTop = scrollTop;
+            if (scroller) scroller.scrollTop = scrollTop;
         } finally {
             reconciling = false;
         }
@@ -509,32 +489,53 @@ export function createTagManager(adapter) {
         sortable?.setDisabled(Boolean(query));
     }
 
-    function createPending() {
-        if (!newInput.value.trim()) return;
-        const parsed = parseTagName(newInput.value, getState().tags);
-        setError(newInput, newError, parsed.ok ? '' : parsed.error);
+    function createPending(input, error, popover) {
+        const parsed = parseTagName(input.value, getState().tags);
+        setError(input, error, parsed.ok ? '' : parsed.error);
         if (!parsed.ok) return;
         const tag = create(parsed.name);
-        newInput.value = '';
         search.clear();
         commit();
         refresh();
+        popover.close();
         controls.get(tag.id)?.input.focus({ preventScroll: false });
     }
-    newInput.addEventListener('blur', createPending);
-    newInput.addEventListener('keydown', event => {
-        if (event.isComposing) return;
-        if (event.key === 'Enter') { event.preventDefault(); createPending(); }
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation();
-            newInput.value = '';
-            setError(newInput, newError);
-        }
+
+    function openCreatePopover(trigger) {
+        const content = element('div', 'sb-manager-name-popover');
+        const label = element('strong', 'sb-manager-name-popover__label', t`Create a new tag`);
+        const input = element('input', 'text_pole sb-dialog__entry sb-manager-name-popover__input');
+        input.type = 'text';
+        label.id = 'sb-tag-manager-new-label';
+        const error = element('small', 'sb-tag-manager__error sb-manager-name-popover__error');
+        error.hidden = true;
+        input.setAttribute('aria-describedby', error.id = 'sb-tag-manager-new-error');
+        const create = element('button', 'menu_button sb-dialog__response is-suggested menu_button_primary sb-manager-name-popover__create', t`Create`);
+        create.type = 'button';
+        create.disabled = true;
+        const updateValidity = () => {
+            const parsed = parseTagName(input.value, getState().tags);
+            create.disabled = !parsed.ok;
+            setError(input, error, input.value.trim() && !parsed.ok ? parsed.error : '');
+        };
+        create.addEventListener('click', () => createPending(input, error, popup));
+        input.addEventListener('input', updateValidity);
+        input.addEventListener('keydown', event => {
+            if (event.isComposing || event.keyCode === 229) return;
+            if (event.key !== 'Enter') return;
+            updateValidity();
+            if (!create.disabled) { event.preventDefault(); create.click(); }
+        });
+        content.append(label, input, error, create);
+        const popup = openPopover({ trigger, content, title: t`Create a new tag`, titleLabel: label, titleInput: input, bounds: frame?.surface ?? null, initialFocus: () => input });
+    }
+    const unbindKeyboard = bindListKeyboard(list, {
+        keySourceSelector: '.drag-handle',
+        onOpen: row => { openMembers(getState().tags.find(tag => tag.id === row.id)); return true; },
+        onRename: row => row.querySelector('input')?.focus(),
     });
-    const unbindKeyboard = bindListKeyboard(list, { onRename: row => row.querySelector('input')?.focus() });
     const sortable = bindSortable(list, {
-        handle: '.drag-handle', items: '.tag_view_item', touch: () => mobile.matches,
+        handle: '.drag-handle', items: '.tag_view_item', touch: () => layout.matches,
         start: () => { dragging = true; }, update: () => {
             const ids = [...list.children].map(row => row.id);
             const state = getState();
@@ -543,43 +544,36 @@ export function createTagManager(adapter) {
             commit();
         }, stop: () => { dragging = false; refresh(); },
     });
-    let dragStart = null;
-    handle.addEventListener('pointerdown', event => {
-        dragStart = event.clientY;
-        handle.setPointerCapture?.(event.pointerId);
-    });
-    handle.addEventListener('pointerup', event => {
-        if (mobile.matches && dragStart !== null && event.clientY - dragStart >= 80) close();
-        dragStart = null;
-    });
-    handle.addEventListener('pointercancel', () => dragStart = null);
-    host.addEventListener('cancel', event => { event.preventDefault(); close(); });
-    host.addEventListener('close', () => { if (!disposed) dispose(); });
-    blockUpstreamDrawerClose(host);
-    function layoutChanged() {
-        if (disposed) return;
-        host.dataset.mobile = String(mobile.matches);
-        if (mobile.matches) {
-            root.hidden = true;
-            sheet.open();
-        } else {
-            stopMotion(root);
-            stopMotion(backdrop);
-            root.hidden = false;
-            backdrop.hidden = false;
-        }
-    }
-    mobile.addEventListener('change', layoutChanged);
     refresh();
+    const searchInput = () => frame?.surface.querySelector('.sb-dialog__search-input') ?? null;
     return {
-        root, host, closed, refresh, close, canClose,
-        focus: () => searchInput.focus({ preventScroll: true }),
+        /** The dialog surface (`#tag_view_list`), available after show(). */
+        get root() { return frame?.surface ?? null; },
+        get host() { return frame?.root ?? null; },
+        closed, refresh, close, canClose,
+        focus: () => (frame?.search?.isOpen ? searchInput() : frame?.searchToggle)?.focus({ preventScroll: true }),
         show() {
-            document.body.append(host);
-            host.showModal();
-            layoutChanged();
-            if (!mobile.matches) animateIn(root, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], SPRING_SHEET);
-            searchInput.focus({ preventScroll: true });
+            if (frame) return;
+            frame = openDialog({
+                tier: 'window',
+                title: t`Tag Management`,
+                className: 'sb-tag-manager',
+                content,
+                search: { placeholder: t`Search...`, label: t`Search`, collapsed: true, escapeClearsFirst: true, typeToSearchSelector: '.tag_view_item', debounce: 300, onChange: () => refresh() },
+                // A pending invalid rename blocks the menus as it blocks closing.
+                menu: () => (canClose() ? headerSections() : []),
+                menuLabel: t`Tag Management`,
+                canClose: () => canClose(),
+            });
+            frame.surface.id = 'tag_view_list';
+            const add = button(t`Create a new tag`, 'plus', openCreatePopover, 'sb-tag-manager__add');
+            add.classList.add('sb-dialog__icon-button');
+            add.addEventListener('keydown', event => {
+                if (event.key === 'Enter') event.stopPropagation();
+            });
+            frame.header.querySelector('.sb-dialog__header-end').prepend(add);
+            frame.closed.then(dispose);
+            refresh();
         },
     };
 }

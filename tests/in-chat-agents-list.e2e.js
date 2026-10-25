@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { chooseAgentTemplate, expectAgentMenuIcons } from './helpers/in-chat-agents-editor.js';
 import { buttonStates, promptButtonReference, q56Screenshot } from './helpers/q56-review.js';
+import { assertIsolatedServer, protectMaintainerServer } from './helpers/maintainer-server.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
@@ -14,7 +15,7 @@ const READS = new Set([
 
 async function openAgents(page, baseURL, width = 1440) {
     const origin = new URL(baseURL).origin;
-    if (new URL(baseURL).port !== '4455') throw new Error('Agents QA requires the isolated 4455 instance');
+    assertIsolatedServer(baseURL, 'Agents');
     const writes = [];
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -23,6 +24,14 @@ async function openAgents(page, baseURL, width = 1440) {
         const request = route.request();
         const url = new URL(request.url());
         if (url.origin !== origin) return route.abort();
+        if (url.pathname === '/api/settings/get') {
+            const response = await route.fetch();
+            const data = await response.json();
+            const settings = JSON.parse(data.settings);
+            settings.main_api = 'openai';
+            data.settings = JSON.stringify(settings);
+            return route.fulfill({ response, json: data });
+        }
         if (!url.pathname.startsWith('/api/') || request.method() === 'GET') return route.continue();
         if (READS.has(url.pathname) || url.pathname.startsWith('/api/tokenizers/')) return route.continue();
         if (/^\/api\/chats\/(?:group\/)?get$/.test(url.pathname) && request.postDataJSON()?.allow_create !== true) return route.continue();
@@ -159,25 +168,76 @@ for (const width of [1440, 390]) {
     });
 }
 
-test('context and feedback previews use the document icon and context wording', async ({ page, baseURL }) => {
-    const { root, saves, errors } = await openAgents(page, baseURL);
-    const row = root.locator('.ica-agent-row[data-agent-id="qa-bravo"]');
-    await menu(page, row, 'Agent Menu');
-    const preview = page.getByRole('menuitem', { name: 'Preview Prompt in Context', exact: true });
-    await expect(preview.locator(':scope > i')).toHaveClass(/fa-file-lines/);
-    await expect(page.getByRole('menuitem', { name: 'Preview Prompt', exact: true })).toHaveCount(0);
-    await page.keyboard.press('Escape');
-    await page.evaluate(async () => {
-        const store = await import('/scripts/extensions/in-chat-agents/agent-store.js');
-        store.getAgentById('qa-bravo').execution = 'companion';
-        (await import('/scripts/extensions/in-chat-agents/ui/agent-list.js')).refreshAgentsPanels();
+for (const width of [1440, 390]) {
+    test(`${width}px prompt and feedback previews use Window frames and one scroll area`, async ({ page, baseURL }) => {
+        const { root, saves, errors } = await openAgents(page, baseURL, width);
+        await protectMaintainerServer(page);
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await page.evaluate(async () => {
+            const store = await import('/scripts/extensions/in-chat-agents/agent-store.js');
+            const app = await import('/script.js');
+            const promptAgent = store.getAgentById('qa-bravo');
+            promptAgent.prompt = `${Array.from({ length: 150 }, (_, index) => `Prompt line ${index + 1}`).join('\n')}\nlast prompt sentinel`;
+            app.chat.splice(0, app.chat.length, {
+                name: 'QA Assistant',
+                is_user: false,
+                mes: 'Preview feedback fixture.',
+                extra: {
+                    inChatAgentCompanionResults: {
+                        'qa-bravo': {
+                            status: 'done',
+                            content: `${Array.from({ length: 80 }, (_, index) => `Feedback line ${index + 1}`).join('\n')}\nlast feedback sentinel`,
+                        },
+                    },
+                },
+            });
+            promptAgent.execution = 'inline';
+            (await import('/scripts/extensions/in-chat-agents/ui/agent-list.js')).refreshAgentsPanels();
+        });
+
+        const row = root.locator('.ica-agent-row[data-agent-id="qa-bravo"]');
+        await menu(page, row, 'Agent Menu');
+        const preview = page.getByRole('menuitem', { name: 'Preview Prompt in Context', exact: true });
+        await expect(preview.locator(':scope > i')).toHaveClass(/fa-file-lines/);
+        await expect(page.getByRole('menuitem', { name: 'Preview Prompt', exact: true })).toHaveCount(0);
+        await preview.click();
+        const promptDialog = page.locator('dialog[open]');
+        await expect(promptDialog).toHaveClass(/sb-dialog--window/);
+        await expect(promptDialog.locator('.sb-dialog__title')).toHaveText('Preview Prompt in Context');
+        await expect(promptDialog.locator('.popup-button-close')).toBeVisible();
+        await expect(promptDialog.locator('.popup-button-ok')).toBeHidden();
+        const promptBody = promptDialog.locator('.popup-content');
+        await expect(promptBody.locator('pre')).toContainText('last prompt sentinel');
+        await expect.poll(() => promptBody.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+        expect(await promptBody.locator('pre').evaluate(node => getComputedStyle(node).overflowY)).toBe('visible');
+        await promptBody.evaluate(node => node.scrollTop = node.scrollHeight);
+        expect(await promptBody.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+        await promptDialog.locator('.popup-button-close').click();
+        await expect(promptDialog).toHaveCount(0);
+
+        await page.evaluate(async () => {
+            const store = await import('/scripts/extensions/in-chat-agents/agent-store.js');
+            const agent = store.getAgentById('qa-bravo');
+            agent.execution = 'companion';
+            agent.category = 'companion';
+            agent.companion.feedback.enabled = true;
+            (await import('/scripts/extensions/in-chat-agents/ui/agent-list.js')).refreshAgentsPanels();
+        });
+        await menu(page, row, 'Agent Menu');
+        const feedback = page.getByRole('menuitem', { name: 'Preview Feedback', exact: true });
+        await expect(feedback.locator(':scope > i')).toHaveClass(/fa-file-lines/);
+        await feedback.click();
+        const feedbackDialog = page.locator('dialog[open]');
+        await expect(feedbackDialog).toHaveClass(/sb-dialog--window/);
+        await expect(feedbackDialog.locator('.sb-dialog__title')).toHaveText('Preview Feedback');
+        await expect(feedbackDialog.locator('.popup-button-close')).toBeVisible();
+        await expect(feedbackDialog.locator('.ica--prompt-preview pre')).toContainText('last feedback sentinel');
+        await feedbackDialog.locator('.popup-button-close').click();
+        await expect(feedbackDialog).toHaveCount(0);
+        expect(saves()).toHaveLength(0);
+        expect(errors).toEqual([]);
     });
-    await menu(page, row, 'Agent Menu');
-    await expect(page.getByRole('menuitem', { name: 'Preview Feedback', exact: true }).locator(':scope > i'))
-        .toHaveClass(/fa-file-lines/);
-    expect(saves()).toHaveLength(0);
-    expect(errors).toEqual([]);
-});
+}
 
 test('search header toggle, Ctrl+F, type-to-search and Escape follow the prompt list pattern', async ({ page, baseURL }) => {
     const { root, saves } = await openAgents(page, baseURL);
@@ -221,7 +281,7 @@ for (const width of [1440, 390]) {
         const search = root.getByRole('searchbox', { name: 'Search Agents', exact: true });
         await menu(page, root);
         await expect(page.getByRole('menuitemcheckbox')).toHaveCount(0);
-        await expect(page.getByRole('menuitem', { name: 'Settings', exact: true }).locator('i')).toHaveClass('fa-solid fa-gear');
+        await expect(page.getByRole('menuitem', { name: 'Settings', exact: true }).locator('i')).toHaveClass(/fa-gear/);
         await page.keyboard.press('Escape');
         await expect(filter).toBeHidden();
         await expect(trigger).toHaveAttribute('aria-pressed', 'false');
@@ -275,6 +335,11 @@ for (const width of [1440, 390]) {
             await page.getByRole('menuitem', { name: label, exact: true }).click();
             const picker = page.getByRole('dialog', { name: label.slice(0, -1), exact: true });
             await expect(picker.getByRole('combobox')).toBeFocused();
+            if (width === 390) {
+                const handleLayer = await page.locator('.ica--tpanel-handle').evaluate(node => Number.parseInt(getComputedStyle(node).zIndex, 10));
+                const overlayLayer = await page.evaluate(() => Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sb-z-overlay'), 10));
+                expect(handleLayer).toBeLessThan(overlayLayer);
+            }
             const headings = await picker.locator('.sb-picker__group-heading').allTextContents();
             expect(headings.some(heading => heading.includes(' · '))).toBe(true);
             await expect(picker.getByRole('option').filter({ hasText: /Pathfinder|Anti-Slop Regex|Director Core|NSFW Mode/ })).toHaveCount(0);
@@ -295,7 +360,11 @@ for (const width of [1440, 390]) {
         await expect(root.locator('.ica-agent-row, .ica-agents-group')).toHaveCount(0);
         const status = root.locator('.sb-status-page');
         await expect(status.getByRole('heading')).toHaveText('No Agents');
-        await expect(status.locator('.sb-status-page__description')).toHaveAttribute('data-sb-copy-placeholder', 'true');
+        await expect(status.locator('.sb-status-page__description')).toHaveCount(0);
+        const secondary = status.getByRole('button', { name: 'New Agent from Template…', exact: true });
+        await expect(secondary).toHaveCSS('border-radius', '9px');
+        await expect(secondary).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        expect(await secondary.evaluate(button => getComputedStyle(button).border)).toMatch(/^0px none/);
         await status.getByRole('button', { name: 'New Agent', exact: true }).click();
         await expect(root.locator('.ica-agent-detail')).toBeVisible();
         await back(root);
@@ -746,10 +815,13 @@ test('saved extra copies update and restore by ID; Update keeps order while Rest
     const copy = root.locator('[data-sb-list-key="agent:qa-copy-two"]');
     await menu(page, copy, 'Agent Menu');
     await page.getByRole('menuitem', { name: /^Update to v/ }).click();
-    await page.locator('dialog[open] .popup-button-cancel').click();
+    const updateDialog = page.locator('dialog.popup[open]').last();
+    await expect(updateDialog).toHaveClass(/sb-dialog--alert/);
+    await updateDialog.locator('.popup-button-cancel').click();
     expect(saves()).toHaveLength(0);
     await menu(page, copy, 'Agent Menu');
     await page.getByRole('menuitem', { name: /^Update to v/ }).click();
+    await expect(page.locator('dialog.popup[open]').last()).toHaveClass(/sb-dialog--alert/);
     await page.locator('dialog[open] .popup-button-ok').click();
     await expect.poll(() => saves().length).toBe(1);
     expect(JSON.parse(saves()[0].body)).toMatchObject({ id: 'qa-copy-two', name: fixture.name, favorite: true, enabled: true, phaseLocked: false, injection: { order: 777 }, connectionProfile: 'qa-profile', modelOverride: 'qa-model' });
@@ -762,6 +834,57 @@ test('saved extra copies update and restore by ID; Update keeps order while Rest
     expect(JSON.parse(saves()[1].body).injection.order).not.toBe(777);
     expect(await page.evaluate(async () => (await import('/scripts/extensions/in-chat-agents/agent-store.js')).getAgentById('qa-copy-one').prompt)).toBe(fixture.prompt);
     expect(await page.evaluate(() => window.__agentsMaxDialogs)).toBeLessThanOrEqual(1);
+});
+
+for (const width of [1440, 390]) {
+    test(`${width}px Update All stays an Alert and scrolls a long update list`, async ({ page, baseURL }) => {
+        const { root } = await openAgents(page, baseURL, width);
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await page.evaluate(async () => {
+            const store = await import('/scripts/extensions/in-chat-agents/agent-store.js');
+            const catalogue = await import('/scripts/extensions/in-chat-agents/catalogue.js');
+            const templates = await (await fetch('/scripts/extensions/in-chat-agents/templates/index.json')).json();
+            const template = templates.find(item => item.id === 'tpl-drift-tracker');
+            const agents = Array.from({ length: 48 }, (_, index) => {
+                const agent = catalogue.buildAgentFromTemplate(template);
+                agent.id = `qa-outdated-${index}`;
+                agent.name = `QA outdated ${index}`;
+                agent.version = 0;
+                return agent;
+            });
+            store.loadAgents(agents);
+            (await import('/scripts/extensions/in-chat-agents/ui/agent-list.js')).refreshAgentsPanels();
+        });
+        await menu(page, root);
+        await page.getByRole('menuitem', { name: /^Update All/ }).click();
+        const dialog = page.locator('dialog.popup[open]').last();
+        await expect(dialog).toHaveClass(/sb-dialog--alert/);
+        await expect(dialog).not.toHaveClass(/sb-dialog--dialog/);
+        await expect(dialog.locator('.ica--update-all-list li')).toHaveCount(48);
+        await expect(dialog.locator('.popup-body')).toHaveCSS('overflow-y', 'auto');
+        const updateList = dialog.locator('.ica--update-all-list');
+        await expect(updateList).toHaveCSS('overflow-y', 'auto');
+        await expect.poll(() => updateList.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+        await dialog.locator('.popup-button-cancel').click();
+        await expect(page.locator('dialog.popup[open]')).toHaveCount(0);
+    });
+}
+
+test('Convert Trackers confirmation stays an Alert', async ({ page, baseURL }) => {
+    const { root, saves } = await openAgents(page, baseURL);
+    await page.evaluate(async () => {
+        const store = await import('/scripts/extensions/in-chat-agents/agent-store.js');
+        const tracker = store.getAgentById('qa-alpha');
+        tracker.category = 'tracker';
+        tracker.execution = 'inline';
+        (await import('/scripts/extensions/in-chat-agents/ui/agent-list.js')).refreshAgentsPanels();
+    });
+    await menu(page, root);
+    await page.getByRole('menuitem', { name: 'Convert Trackers to Companions…', exact: true }).click();
+    const dialog = page.locator('dialog.popup[open]').last();
+    await expect(dialog).toHaveClass(/sb-dialog--alert/);
+    await dialog.locator('.popup-button-cancel').click();
+    expect(saves()).toHaveLength(0);
 });
 
 test('template editor Save materialises once and a later saved edit retains its ID', async ({ page, baseURL }) => {

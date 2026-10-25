@@ -29,6 +29,8 @@ import {
     this_chid,
 } from '../script.js';
 import { power_user } from './power-user.js';
+// SillyBunny: adopt persona name/title fields into shared entry rows.
+import { utilityFormOptions } from './sillybunny-editor/adapters/utility-dialogs.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import {
     PAGINATION_TEMPLATE,
@@ -61,6 +63,8 @@ import { debounce_timeout } from './constants.js';
 import { FILTER_TYPES, FilterHelper } from './filters.js';
 import { groups, selected_group } from './group-chats.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
+// SillyBunny: mirror the native lorebook select while retaining persona persistence upstream.
+import { lorebookSelectOptions } from './sillybunny-editor/adapters/preset-lorebook-dialogs.js';
 import { t } from './i18n.js';
 import { openWorldInfoEditor, world_info, world_names } from './world-info.js';
 import { renderTemplateAsync } from './templates.js';
@@ -736,6 +740,8 @@ export async function createPersona(avatarId) {
 
 async function createDummyPersona() {
     const popup = new Popup(t`Enter a name for this persona:`, POPUP_TYPE.INPUT, '', {
+        // SillyBunny: keep the mainInput and optional title inputResults unchanged.
+        ...utilityFormOptions({ title: t`Enter a name for this persona:`, mainLabel: t`Name`, clearContent: true }),
         customInputs: [{
             id: 'persona_title',
             type: 'text',
@@ -1200,7 +1206,12 @@ export async function askForPersonaSelection(title, text, personas, { okButton =
         });
     }
 
-    const popup = new Popup(content, POPUP_TYPE.TEXT, '', { okButton: okButton, customButtons: customButtons });
+    const popup = new Popup(content, POPUP_TYPE.TEXT, '', {
+        okButton: okButton,
+        customButtons: customButtons,
+        // SillyBunny: persona selection is an action list, so keep it in the Dialog tier at every list size.
+        tier: 'dialog',
+    });
     const result = await popup.show();
     return Number(result) >= 100 ? personas[Number(result) - 100] : null;
 }
@@ -1740,7 +1751,8 @@ async function onPersonaLoreButtonClick({ shiftKey, altKey }) {
         }
     });
 
-    await callGenericPopup(template, POPUP_TYPE.TEXT);
+    // SillyBunny: immediate-apply select row and a shared Dialog-tier Close header.
+    await callGenericPopup(template, POPUP_TYPE.TEXT, '', lorebookSelectOptions(template[0]));
 }
 
 async function onPersonaDescriptionPositionInput() {

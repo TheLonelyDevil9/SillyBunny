@@ -61,14 +61,17 @@
     <link rel="stylesheet" type="text/css" href="css/toggle-dependent.css">
     <link rel="stylesheet" type="text/css" href="css/select2-overrides.css?v=20260609a">
     <link rel="stylesheet" type="text/css" href="css/mobile-styles.css?v=20261016a" media="(max-width: 768px)">
-    <link rel="stylesheet" type="text/css" href="css/sillybunny-theme.css?v=20261016a">
-    <link rel="stylesheet" type="text/css" href="css/sillybunny-paper-theme.css?v=20261003a" media="(max-width: 768px)">
-    <link rel="stylesheet" type="text/css" href="css/sillybunny-tabs.css?v=20261016b">
+    <!-- SillyBunny: shell stylesheet cache keys track fork CSS changes without changing upstream asset URLs. -->
+    <link rel="stylesheet" type="text/css" href="css/sillybunny-theme.css?v=20261026b">
+    <!-- SillyBunny: the mobile surface stylesheet cache key tracks its fork-owned responsive rules. -->
+    <link rel="stylesheet" type="text/css" href="css/sillybunny-paper-theme.css?v=20261026a" media="(max-width: 768px)">
+    <!-- SillyBunny: keep the Characters shell cache key aligned with its fork-owned stylesheet edits. -->
+    <link rel="stylesheet" type="text/css" href="css/sillybunny-tabs.css?v=20261026b">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-character-creator.css?v=20260930a">
     <!-- SillyBunny: entity lists and tag filters load after startup; the group editor activates them on open. -->
     <link rel="preload" as="style" href="css/sillybunny-entity-list.css?v=20261018a" data-sb-deferred-style data-sb-media="all">
-    <!-- SillyBunny: the Characters/Groups list activates this deferred stylesheet on first mount — see docs/ui-migration.md -->
-    <link rel="preload" as="style" href="css/sillybunny-character-list.css?v=20261018c" data-sb-deferred-style data-sb-media="all">
+    <!-- SillyBunny: the Characters/Groups list activates this deferred stylesheet on first mount. Keep this version aligned with the runtime loader URLs. -->
+    <link rel="preload" as="style" href="css/sillybunny-character-list.css?v=20261026b" data-sb-deferred-style data-sb-media="all">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-mobile-shell.css?v=20261016b" media="(max-width: 768px)">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-mobile-navigation.css?v=20261001e">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-message-actions.css?v=20261017a">
@@ -5270,6 +5273,26 @@
                             </div>
                             </div>
                         </div>
+                        <!-- SillyBunny: the persona editor hides the persona header that holds the upstream Usage Stats button, so Data & Security shows Usage Stats as a row. -->
+                        <div id="user_stats_controls" class="ds-row ds-row-actions">
+                            <div class="ds-row-text"><span class="ds-row-label" data-i18n="Usage Stats">Usage Stats</span><small class="ds-row-subtitle" data-sb-copy-placeholder="true">TODO(copy)</small></div>
+                            <div class="ds-row-suffix">
+                            <button type="button" class="margin0 menu_button menu_button_icon user_stats_button" data-i18n="Usage Stats">Usage Stats</button>
+                            </div>
+                        </div>
+                        <!-- SillyBunny: the Account popup does not show Download Backup and Settings Snapshots, so Data & Security shows them as rows in its Export category. -->
+                        <div id="user_backup_controls" class="ds-row ds-row-actions">
+                            <div class="ds-row-text"><span class="ds-row-label" data-i18n="Download Backup">Download Backup</span><small class="ds-row-subtitle" data-i18n="Download a complete backup of your user data.">Download a complete backup of your user data.</small></div>
+                            <div class="ds-row-suffix">
+                            <button id="user_backup_button" type="button" class="margin0 menu_button menu_button_icon" data-i18n="Download Backup">Download Backup</button>
+                            </div>
+                        </div>
+                        <div id="settings_snapshots_controls" class="ds-row ds-row-actions">
+                            <div class="ds-row-text"><span class="ds-row-label" data-i18n="Settings Snapshots">Settings Snapshots</span><small class="ds-row-subtitle" data-i18n="Manage your settings snapshots.">Manage your settings snapshots.</small></div>
+                            <div class="ds-row-suffix">
+                            <button id="settings_snapshots_button" type="button" class="margin0 menu_button menu_button_icon" data-i18n="Settings Snapshots">Settings Snapshots</button>
+                            </div>
+                        </div>
                         <textarea id="settingsSearch" class="textarea_compact flex1" rows="1" placeholder="Search Settings" data-i18n="[placeholder]Search Settings"></textarea>
                     </div>
                 </div>
@@ -6826,7 +6849,8 @@
                         <!-- SillyBunny: flat scrolling character sheet replaces the four sub-tab panels; every upstream field ID and wrapper ID is kept for extension compatibility. -->
                         <form id="form_create" class="sb-editor-sheet" action="javascript:void(null);" method="post" enctype="multipart/form-data">
                             <header class="sb-editor-header" id="sb_character_editor_header">
-                                <button class="sb-editor-icon-button sb-editor-back" id="sb_character_editor_back" type="button" title="Back to character list" aria-label="Back to character list" data-i18n="[title]Back to character list;[aria-label]Back to character list">
+                                <!-- SillyBunny: shared header-icon-button state styling keeps editor controls consistent with list and settings headers. -->
+                                <button class="sb-editor-icon-button sb-header-icon-button sb-editor-back" id="sb_character_editor_back" type="button" title="Back to character list" aria-label="Back to character list" data-i18n="[title]Back to character list;[aria-label]Back to character list">
                                     <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                                 </button>
                                 <!-- SillyBunny: the title doubles as the rename affordance (the legacy
@@ -6856,15 +6880,15 @@
                             </header>
 
                             <div class="sb-editor-toolbar form_create_bottom_buttons_block" id="sb_character_editor_toolbar">
-                                <div id="favorite_button" class="sb-editor-icon-button menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites" data-label="FAV."></div>
+                                <div id="favorite_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites" data-label="FAV."></div>
                                 <input type="hidden" id="fav_checkbox" name="fav" />
-                                <div id="world_button" class="sb-editor-icon-button menu_button fa-solid fa-globe" title="Character Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to World Info' popup" data-i18n="[title]world_button_title"><span class="sr-only" data-i18n="Character Lore">Character Lore</span></div>
-                                <div class="chat_lorebook_button sb-editor-icon-button menu_button fa-solid fa-passport" title="Chat Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Chat Lorebook' popup" data-i18n="[title]chat_lorebook_button_title"></div>
-                                <div id="char_connections_button" class="sb-editor-icon-button menu_button fa-solid fa-face-smile" title="Connected Personas" data-i18n="[title]Connected Personas"></div>
-                                <div id="export_button" class="sb-editor-icon-button menu_button fa-solid fa-file-export" title="Export and Download" data-i18n="[title]Export and Download"></div>
-                                <div id="dupe_button" class="sb-editor-icon-button menu_button fa-solid fa-clone" title="Duplicate Character" data-i18n="[title]Duplicate Character"></div>
+                                <div id="world_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-globe" title="Character Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to World Info' popup" data-i18n="[title]world_button_title"><span class="sr-only" data-i18n="Character Lore">Character Lore</span></div>
+                                <div class="chat_lorebook_button sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-passport" title="Chat Lore&#10;&#10;Click to load&#10;Shift/Alt-click or long-press to open 'Link to Chat Lorebook' popup" data-i18n="[title]chat_lorebook_button_title"></div>
+                                <div id="char_connections_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-face-smile" title="Connected Personas" data-i18n="[title]Connected Personas"></div>
+                                <div id="export_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-file-export" title="Export and Download" data-i18n="[title]Export and Download"></div>
+                                <div id="dupe_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-clone" title="Duplicate Character" data-i18n="[title]Duplicate Character"></div>
                                 <span class="sb-editor-toolbar-spacer" aria-hidden="true"></span>
-                                <button id="sb_character_editor_quick_edit" class="sb-editor-icon-button" type="button" aria-pressed="false" title="Quick edit mode" aria-label="Quick edit mode" data-i18n="[title]Quick edit mode;[aria-label]Quick edit mode">
+                                <button id="sb_character_editor_quick_edit" class="sb-editor-icon-button sb-header-icon-button" type="button" aria-pressed="false" title="Quick edit mode" aria-label="Quick edit mode" data-i18n="[title]Quick edit mode;[aria-label]Quick edit mode">
                                     <i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
                                 </button>
                                 <!-- SillyBunny: #char-management-dropdown is kept as a hidden transport,
@@ -6885,7 +6909,7 @@
                                     <option id="import_tags" data-i18n="Import Tags">Import Tags</option>
                                     <option id="set_as_assistant" data-i18n="Set / Unset as Welcome Page Assistant">Set / Unset as Welcome Page Assistant</option>
                                 </select>
-                                <button id="sb_character_editor_more" class="sb-editor-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="More character actions" aria-label="More character actions" data-i18n="[title]More character actions;[aria-label]More character actions">
+                                <button id="sb_character_editor_more" class="sb-editor-icon-button sb-header-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="More character actions" aria-label="More character actions" data-i18n="[title]More character actions;[aria-label]More character actions">
                                     <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                                 </button>
                                 <!-- SillyBunny: recovered from the hidden #rm_PinAndTabs so these actions
@@ -7252,7 +7276,7 @@
                          sillybunny-character-editor.css; only the group-specific row layout lives here. -->
                     <div name="Group Chat Edit Panel" id="rm_group_chats_block" class="right_menu sb-editor-sheet">
                         <header class="sb-editor-header" id="sb_group_editor_header">
-                            <button class="sb-editor-icon-button sb-editor-back" id="sb_group_editor_back" type="button" title="Back to groups" aria-label="Back to groups" data-i18n="[title]Back to groups;[aria-label]Back to groups">
+                            <button class="sb-editor-icon-button sb-header-icon-button sb-editor-back" id="sb_group_editor_back" type="button" title="Back to groups" aria-label="Back to groups" data-i18n="[title]Back to groups;[aria-label]Back to groups">
                                 <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                             </button>
                             <!-- SillyBunny: the title doubles as the rename affordance, matching the
@@ -7271,10 +7295,10 @@
                         </header>
 
                         <div class="sb-editor-toolbar" id="sb_group_editor_toolbar">
-                            <div id="group_favorite_button" class="sb-editor-icon-button menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites" data-label="FAV."></div>
+                            <div id="group_favorite_button" class="sb-editor-icon-button sb-header-icon-button menu_button fa-solid fa-star" title="Add to Favorites" data-i18n="[title]Add to Favorites" data-label="FAV."></div>
                             <input id="rm_group_fav" type="hidden" />
                             <span class="sb-editor-toolbar-spacer" aria-hidden="true"></span>
-                            <button id="sb_group_editor_more" class="sb-editor-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="Group actions" aria-label="Group actions" data-i18n="[title]Group actions;[aria-label]Group actions">
+                            <button id="sb_group_editor_more" class="sb-editor-icon-button sb-header-icon-button" type="button" aria-haspopup="menu" aria-expanded="false" title="Group actions" aria-label="Group actions" data-i18n="[title]Group actions;[aria-label]Group actions">
                                 <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                             </button>
                             <!-- SillyBunny: transports. These keep their upstream handlers and IDs

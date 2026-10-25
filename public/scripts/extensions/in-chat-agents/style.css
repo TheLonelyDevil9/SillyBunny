@@ -138,8 +138,9 @@
 .ica--prompt-preview pre {
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: min(60vh, 520px);
-    overflow: auto;
+    overflow-wrap: anywhere;
+    max-height: none;
+    overflow: visible;
     margin: 10px 0 0;
     padding: 12px;
     border-radius: 10px;
@@ -199,12 +200,48 @@
 .ica--tracker-preview-frame {
     margin-top: 8px;
     padding: 12px;
-    max-height: min(42vh, 420px);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #555) 76%, transparent);
     border-radius: var(--sb-radius-md, 12px);
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #222) 46%, transparent);
-    -webkit-overflow-scrolling: touch;
+}
+
+.ica--tracker-preview-frame pre {
+    max-height: none;
+    overflow: visible;
+    overflow-wrap: anywhere;
+}
+
+.ica--tracker-preview-prompt,
+.ica--tracker-preview-extraction {
+    margin: 0;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ica-transform-diff {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+dialog.popup.sb-dialog--window .ica-transform-diff {
+    max-height: none;
+    overflow: visible;
+}
+
+.ica--post-main-intercept-review-output {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+dialog.popup.sb-dialog--window .pf--settings:not(.pf--settings-embedded) {
+    max-height: none;
+    overflow: visible;
 }
 
 .ica--tracker-preview-source {
@@ -895,7 +932,7 @@
 
 .ica--tpanel-handle {
     position: fixed;
-    z-index: calc(var(--sb-z-popout, 4000) - 1);
+    z-index: calc(var(--sb-z-overlay, 2000) - 1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -934,6 +971,12 @@
 .ica--tpanel-handle:focus-visible {
     outline: none;
     box-shadow: var(--sb-focus-ring-inset);
+}
+
+/* SillyBunny: modal surfaces must cover the fixed companion handle as well as the page. */
+body:has(dialog[open]) .ica--tpanel-handle {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .ica--tpanel-handle[data-edge="right"],
@@ -1340,41 +1383,9 @@ body.reduced-motion :is(.ica--tpanel, .ica--companion-card) .fa-spin {
     padding: 0;
     border: 0;
     border-radius: var(--sb-icon-control-radius);
-    background: transparent;
-    color: inherit;
     font-size: var(--sb-type-control);
     line-height: 1;
     cursor: pointer;
-    transition: background-color var(--sb-transition-fast), color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
-}
-
-.ica-agents-editor .sb-list-header__button:focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
-}
-
-.ica-agents-editor .sb-list-header__button[aria-pressed='true'] {
-    background: var(--sb-flat-selected-bg);
-}
-
-@media (hover: hover) {
-    .ica-agents-editor .sb-list-header__button:hover {
-        background: var(--sb-flat-hover-bg);
-    }
-
-    .ica-agents-editor .sb-list-header__button[aria-pressed='true']:hover {
-        background: var(--sb-flat-selected-hover-bg);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .ica-agents-editor .sb-list-header__button {
-        transition: none;
-    }
-}
-
-body.reduced-motion .ica-agents-editor .sb-list-header__button {
-    transition: none;
 }
 
 .ica-agents-search {
@@ -1452,38 +1463,6 @@ body.reduced-motion .ica-agents-editor .sb-list-header__button {
     overflow: auto;
     overscroll-behavior: contain;
     padding: 0 12px 16px;
-}
-
-/* Status pages sit and act like World Info's (`.sb-wi-list-body` inset, flat `#WorldInfo .sb-wi-editor .menu_button`). */
-.ica-agents-body > .sb-status-page {
-    margin-block-start: 8px;
-}
-
-#sb-settings-page .ica-agents-editor .sb-status-page__action {
-    padding: 6px 12px;
-    border: 0;
-    border-radius: var(--sb-radius-control);
-    box-shadow: none;
-}
-
-#sb-settings-page .ica-agents-editor .sb-status-page__action:not(.is-suggested) {
-    background: transparent;
-    color: inherit;
-}
-
-@media (hover: hover) {
-    #sb-settings-page .ica-agents-editor .sb-status-page__action:not(.is-suggested):not(:disabled):hover {
-        background: var(--sb-flat-hover-bg);
-    }
-}
-
-#sb-settings-page .ica-agents-editor .sb-status-page__action:not(.is-suggested):not(:disabled):active {
-    background: var(--sb-flat-active-bg);
-}
-
-#sb-settings-page .ica-agents-editor .sb-status-page__action:focus-visible {
-    outline: none;
-    box-shadow: var(--sb-focus-ring-inset);
 }
 
 .ica-agents-group {

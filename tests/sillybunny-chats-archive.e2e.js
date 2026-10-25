@@ -41,6 +41,11 @@ test.beforeAll(async () => {
                 response.end(fixtureHtml(url.searchParams.has('long'), url.searchParams.has('duplicate-characters')));
                 return;
             }
+            if (url.pathname === '/sillybunny-editor/dialog.js') {
+                response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+                response.end('export const openAlert = async () => "cancel";');
+                return;
+            }
             const asset = url.pathname.startsWith('/extension/')
                 ? { root: extensionRoot, relativePath: url.pathname.slice('/extension/'.length) }
                 : url.pathname.startsWith('/public/')
@@ -204,7 +209,7 @@ test('owns the popup frame spacing and keeps mobile controls inside the viewport
         const content = dialog.querySelector('.popup-content');
         const root = dialog.querySelector('.sbca-root');
         const controls = dialog.querySelector('.popup-controls');
-        const close = dialog.querySelector('.popup-button-close');
+        const close = dialog.querySelector(':is(.sb-dialog__close, .popup-button-close)');
         const dialogStyle = getComputedStyle(dialog);
         const bodyStyle = getComputedStyle(body);
         const contentStyle = getComputedStyle(content);
@@ -219,10 +224,10 @@ test('owns the popup frame spacing and keeps mobile controls inside the viewport
             bodyPaddingLeft: parseFloat(bodyStyle.paddingLeft),
             bodyPaddingRight: parseFloat(bodyStyle.paddingRight),
             bodyPaddingTop: parseFloat(bodyStyle.paddingTop),
-            closeHeight: closeRect.height,
+            closeTargetHeight: closeRect.height,
             closeRight: dialogRect.right - closeRect.right,
             closeTop: closeRect.top - dialogRect.top,
-            closeWidth: closeRect.width,
+            closeTargetWidth: closeRect.width,
             contentMarginTop: contentStyle.marginTop,
             contentPaddingLeft: contentStyle.paddingLeft,
             controlsInsideBody: controlsRect.bottom <= bodyRect.bottom + 0.5,
@@ -242,8 +247,8 @@ test('owns the popup frame spacing and keeps mobile controls inside the viewport
     expect(frame.bodyPaddingRight).toBeGreaterThanOrEqual(12);
     expect(frame.bodyPaddingBottom).toBeGreaterThanOrEqual(8);
     expect(frame.bodyPaddingLeft).toBeGreaterThanOrEqual(12);
-    expect(frame.closeHeight).toBeGreaterThanOrEqual(44);
-    expect(frame.closeWidth).toBeGreaterThanOrEqual(44);
+    expect(frame.closeTargetHeight).toBeGreaterThanOrEqual(44);
+    expect(frame.closeTargetWidth).toBeGreaterThanOrEqual(44);
     expect(frame.closeTop).toBeGreaterThanOrEqual(4);
     expect(frame.closeRight).toBeGreaterThanOrEqual(4);
     expect(frame.controlsInsideBody).toBe(true);

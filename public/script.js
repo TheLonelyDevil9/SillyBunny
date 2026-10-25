@@ -94,6 +94,9 @@ import {
     deleteGroupChatByName,
     waitForQueuedGroupChatSaves,
 } from './scripts/group-chats.js';
+// SillyBunny: chat-history and chat-file confirmations use the shared frame so legacy controls keep their identities without owning modal geometry.
+import { openAlert } from './scripts/sillybunny-editor/dialog.js';
+import { openChatHistoryDialog } from './scripts/sillybunny-chat-dialogs.js';
 
 import {
     collapseNewlines,
@@ -315,6 +318,8 @@ import { evaluateMacros, getLastMessageId, initMacros } from './scripts/macros.j
 import { currentUser, setUserControls } from './scripts/user.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup, fixToastrForDialogs } from './scripts/popup.js';
 import { renderTemplate, renderTemplateAsync } from './scripts/templates.js';
+// SillyBunny: scenario overrides adopt their textareas into the shared Window rows.
+import { scenarioOverrideOptions } from './scripts/sillybunny-editor/adapters/window-content-dialogs.js';
 import { initScrapers } from './scripts/scrapers.js';
 import { initCustomSelectedSamplers, validateDisabledSamplers } from './scripts/samplerSelect.js';
 import { DragAndDropHandler } from './scripts/dragdrop.js';
@@ -355,6 +360,10 @@ import { compressRequest, setRequestCompressionConfig } from './scripts/request-
 import { canJumpToSwipeForMessage, canOpenSwipePickerForMessage, initSwipePicker } from './scripts/swipe-picker.js';
 import { bindIOSFastTapSendButton, isIOSWebKitPlatform } from './scripts/mobile-send-button.js';
 import { DELETE_CHOICE, confirmMessageDeletion } from './scripts/sillybunny-delete-confirm.js';
+// SillyBunny: character lorebook rows mirror the existing native selects and Select2 state.
+import { lorebookSelectOptions } from './scripts/sillybunny-editor/adapters/preset-lorebook-dialogs.js';
+// SillyBunny: screenshot spin rows preserve the existing parseInt/range-validation contract.
+import { messageScreenshotOptions } from './scripts/sillybunny-editor/adapters/misc-dialogs.js';
 // SillyBunny: character editor controller (Step 3b, feat/v1.9.0-ui-overhaul)
 import {
     beginCharacterEditorLoad,
@@ -10160,7 +10169,12 @@ export async function deleteCharacterById(chid) {
     }
     const avatar = character.avatar;
     let deleteChats = false;
+    // SillyBunny: destructive character confirmation names the delete action.
     const confirmed = await Popup.show.confirm(t`Delete the character?`, await renderTemplateAsync('deleteConfirm'), {
+        okButton: t`Delete`,
+        // SillyBunny: destructive confirmations focus Cancel and style Delete in the shared frame.
+        defaultResult: 0,
+        onOpen: popup => popup.okButton.classList.add('is-destructive'),
         onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
     });
     if (!confirmed || !characters.some(item => item.avatar === avatar)) {
@@ -11537,10 +11551,12 @@ export async function renameCharacter(name = null, { silent = false, renameChats
                     ? renameChats
                     : silent
                         ? false
+                        // SillyBunny: past-chat rename confirmation names the update action.
                         : await Popup.show.confirm(
                             t`Character renamed!`,
                             `<p>${t`Past chats will still contain the old character name. Would you like to update the character name in previous chats as well?`}</p>
                             <i><b>${t`Sprites folder (if any) should be renamed manually.`}</b></i>`,
+                            { okButton: t`Update` },
                         ) == POPUP_RESULT.AFFIRMATIVE;
 
                 if (renamePastChatsConfirm) {
@@ -13687,7 +13703,11 @@ async function promptForMessageScreenshotRange(messageId) {
         <small>${t`Single message: use the same message ID for both fields.`}</small>
     `;
 
+    // SillyBunny: retain one adapter lifecycle for the Popup-owned screenshot fields.
+    const dialogOptions = messageScreenshotOptions({ startId: MESSAGE_SCREENSHOT_INPUT_IDS.start, endId: MESSAGE_SCREENSHOT_INPUT_IDS.end });
     const popup = new Popup(content, POPUP_TYPE.CONFIRM, '', {
+        // SillyBunny: adopt custom inputs into unnormalized spin rows inside the scrolling body.
+        ...dialogOptions,
         okButton: t`Download PNG`,
         cancelButton: t`Cancel`,
         customInputs: [
@@ -13707,7 +13727,9 @@ async function promptForMessageScreenshotRange(messageId) {
             },
         ],
         wider: true,
-        onOpen: function () {
+        onOpen: function (activePopup) {
+            // SillyBunny: compose the adapter lifecycle without changing the initial selection.
+            dialogOptions.onOpen(activePopup);
             const startInput = popup.dlg.querySelector(`#${MESSAGE_SCREENSHOT_INPUT_IDS.start}`);
             if (startInput instanceof HTMLInputElement) {
                 startInput.focus({ preventScroll: true });
@@ -14811,7 +14833,12 @@ async function runChatCleanup() {
         ${renderChatCleanupList(candidates)}`,
         POPUP_TYPE.CONFIRM,
         null,
-        { wider: true, allowVerticalScrolling: true },
+        {
+            wider: true,
+            allowVerticalScrolling: true,
+            // SillyBunny: Cleanup defaults to cancel so the destructive action is always opt-in.
+            defaultResult: POPUP_RESULT.NEGATIVE,
+        },
     );
     if (confirm !== POPUP_RESULT.AFFIRMATIVE) {
         return;
@@ -15581,7 +15608,8 @@ export async function setCharacterSettingsOverrides() {
     });
 
     $template.find('.remove_scenario_override').on('click', async function () {
-        const confirm = await Popup.show.confirm(t`Are you sure you want to remove all overrides?`, t`This action cannot be undone.`);
+        // SillyBunny: override removal is destructive and names the remove action.
+        const confirm = await Popup.show.confirm(t`Are you sure you want to remove all overrides?`, t`This action cannot be undone.`, { okButton: t`Remove`, defaultResult: POPUP_RESULT.NEGATIVE, onOpen: popup => popup.okButton.classList.add('is-destructive') });
         if (!confirm) {
             return;
         }
@@ -15596,6 +15624,8 @@ export async function setCharacterSettingsOverrides() {
 
     // Wait for popup close/confirm.
     await callGenericPopup($template, POPUP_TYPE.TEXT, '', {
+        // SillyBunny: the override editor uses the Window tier with full-width textarea rows.
+        ...scenarioOverrideOptions($template),
         wide: true,
         large: true,
         allowVerticalScrolling: true,
@@ -16194,6 +16224,8 @@ async function openCharacterWorldPopup() {
     });
 
     const popup = new Popup(template, POPUP_TYPE.TEXT, '', {
+        // SillyBunny: adopt both selects before the existing desktop Select2 initialization.
+        ...lorebookSelectOptions(template[0], { character: true }),
         onOpen: function (popup) {
             const popupDialog = $(popup.dlg);
 
@@ -17528,9 +17560,11 @@ export async function deleteCharacter(characterKey, { deleteChats = true } = {})
 
     const inTempChat = this_chid === undefined && name2 === neutralCharacterName;
     if (inTempChat) {
+        // SillyBunny: losing temporary-chat messages makes character deletion destructive.
         const confirmClose = await Popup.show.confirm(
             t`You are currently in a temporary chat.`,
             t`Deleting this character will close the chat and you will lose any unsaved messages. Do you want to proceed?`,
+            { okButton: t`Delete`, defaultResult: POPUP_RESULT.NEGATIVE, onOpen: popup => popup.okButton.classList.add('is-destructive') },
         );
         if (!confirmClose) {
             return false;
@@ -18154,8 +18188,15 @@ jQuery(async function () {
             return;
         }
 
-        const result = await callGenericPopup('<h3>' + t`Delete the Chat File?` + '</h3>', POPUP_TYPE.CONFIRM);
-        if (result === POPUP_RESULT.AFFIRMATIVE) {
+        // SillyBunny: Return must not activate a committed chat-file deletion, so the shared alert focuses Cancel and has no destructive default.
+        const result = await openAlert({
+            heading: t`Delete the Chat File?`,
+            responses: [
+                { id: 'cancel', label: t`Cancel` },
+                { id: 'delete', label: t`Delete`, appearance: 'destructive' },
+            ],
+        });
+        if (result === 'delete') {
             await handleDeleteChat(deleteFileName, selected_group, false);
         }
     });
@@ -18402,23 +18443,28 @@ jQuery(async function () {
             }
             if ((selected_group && !is_group_generating) || (this_chid !== undefined && !is_send_press) || fromSlashCommand) {
                 await displayPastChats();
-                //this is just to avoid the shadow for past chat view when using /delchat
-                //however, the dialog popup still gets one..
                 if (!fromSlashCommand) {
-                    console.log('displaying shadow');
-                    $('#shadow_select_chat_popup').css('display', 'block');
-                    $('#shadow_select_chat_popup').css('opacity', 0.0);
-                    $('#shadow_select_chat_popup').transition({
-                        opacity: 1.0,
-                        duration: animation_duration,
-                        easing: animation_easing,
-                    });
+                    // SillyBunny: the adapter moves the existing controls into the Window and returns them to the hidden compatibility wrapper on close.
+                    openChatHistoryDialog();
                 }
             }
         } else if (id == 'option_start_new_chat') {
             if ((selected_group || this_chid !== undefined) && !is_send_press) {
                 let deleteCurrentChat = false;
+                // SillyBunny: deleting the current chat makes the new-chat action destructive.
                 const result = await Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
+                    okButton: t`Start`,
+                    onOpen: popup => {
+                        const checkbox = popup.dlg.querySelector('#del_chat_checkbox');
+                        if (!(checkbox instanceof HTMLInputElement)) return;
+                        const syncDestructiveState = () => {
+                            const destructive = checkbox.checked;
+                            popup.defaultResult = destructive ? POPUP_RESULT.NEGATIVE : POPUP_RESULT.AFFIRMATIVE;
+                            popup.okButton.classList.toggle('is-destructive', destructive);
+                        };
+                        checkbox.addEventListener('change', syncDestructiveState);
+                        syncDestructiveState();
+                    },
                     onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
                 });
                 if (!result) {
@@ -19275,7 +19321,8 @@ jQuery(async function () {
                 const source = editorCharacter && getCharacterSource(editorId);
                 if (source && isValidUrl(source)) {
                     const url = new URL(source);
-                    const confirm = await Popup.show.confirm('Open Source', `<span>Do you want to open the link to ${url.hostname} in a new tab?</span><var>${url}</var>`);
+                    // SillyBunny: source confirmation names the open action.
+                    const confirm = await Popup.show.confirm('Open Source', `<span>Do you want to open the link to ${url.hostname} in a new tab?</span><var>${url}</var>`, { okButton: t`Open` });
                     if (confirm) {
                         window.open(source, '_blank');
                     }

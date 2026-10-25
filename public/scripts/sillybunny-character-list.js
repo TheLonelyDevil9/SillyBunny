@@ -19,8 +19,8 @@ import { rememberOpenedEntity } from './sillybunny-auto-load.js';
 
 const CHARACTER_LIST_STYLESHEETS = Object.freeze([
     { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-    { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
-    { href: 'css/sillybunny-character-list.css?v=20261020b', id: 'deferred-character-list-css' },
+    { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
+    { href: 'css/sillybunny-character-list.css?v=20261026b', id: 'deferred-character-list-css' },
 ]);
 const PAGE_SIZES = Object.freeze([10, 25, 50, 100, 250, 500, 1000]);
 const mountedLists = new WeakMap();
@@ -1009,9 +1009,13 @@ function createCharacterListController(container, dependencies, restoreDOM) {
         if (!model.sourceCount && !hasVisibleFolder) {
             const template = await dataModules.script.getEmptyBlock?.();
             const legacy = template?.[0] ?? template;
+            const legacyTitle = legacy?.querySelector?.('h1')?.textContent?.trim()
+                || legacy?.find?.('h1')?.text?.()?.trim();
             const empty = createStatusPage({
                 icon: 'address-card',
-                title: legacy?.textContent?.trim() || t`No results`,
+                title: legacyTitle || t`No results`,
+                description: t`There are no items to display.`,
+                compact: true,
                 actions: [{ label: t`New`, primary: true, onActivate: () => {
                     globalThis.SillyBunnyCharactersNavigation?.recordCreateOrigin?.(state.view);
                     clickTransport(state.view === 'groups' ? '#rm_button_group_chats' : '#rm_button_create');
@@ -1019,10 +1023,14 @@ function createCharacterListController(container, dependencies, restoreDOM) {
             });
             content = empty.element;
         } else if (!model.entities.length && !hasVisibleFolder) {
-            const empty = createStatusPage({ icon: 'magnifying-glass', title: t`No results`, actions: [{ label: t`Clear all filters`, onActivate: () => document.querySelector('#rm_characters_block .clearAllFilters')?.click() }] });
+            const empty = createStatusPage({ icon: 'magnifying-glass', title: t`No results`, compact: true, actions: [{ label: t`Clear all filters`, onActivate: () => document.querySelector('#rm_characters_block .clearAllFilters')?.click() }] });
             content = empty.element;
         }
-        if (revision === renderRevision) status.replaceChildren(...(content ? [content] : []));
+        if (revision !== renderRevision) return;
+        const isEmpty = Boolean(content);
+        box.hidden = isEmpty;
+        status.hidden = !isEmpty;
+        status.replaceChildren(...(content ? [content] : []));
     }
 
     async function render(model) {

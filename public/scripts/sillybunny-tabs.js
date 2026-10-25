@@ -13,8 +13,13 @@ import { isIOSWebKitPlatform, isLegacyIOSWebKitPlatform } from './mobile-send-bu
 import { initializeMobileBottomBar, syncMobileBottomBar } from './sillybunny-mobile-bottom-bar.js';
 import { initializeMessageActions } from './sillybunny-message-actions.js';
 import { initializeToastMotion } from './sillybunny-toast-motion.js';
+import './sillybunny-extension-actions.js';
 import { initializeColorPickers } from './sillybunny-color-picker.js';
+import { openActionMenu } from './sillybunny-action-menu.js';
 import { createPresetAutosaveToggle, initializePresetAutosave, refreshPresetProtectionUi } from './sillybunny-preset-autosave.js';
+import { registerSidePanel } from './sillybunny-editor/side-panel.js';
+import { openAlert, openDialog } from './sillybunny-editor/dialog.js';
+import { openMassDeleteChatDialog } from './sillybunny-chat-dialogs.js';
 import {
     animateIn,
     animateOut,
@@ -677,34 +682,34 @@ const SB_SHORTCUT_LABELS = Object.freeze({
 });
 const SB_PANEL_STYLESHEETS = Object.freeze({
     'left:editor': [
-        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-prompt-editor.css?v=20261018a', id: 'deferred-prompt-editor-css' },
     ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
         // SillyBunny: the rebuilt World Info shell stays deferred like the Prompt Editor.
-        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
-        { href: 'css/sillybunny-world-info-editor.css?v=20261018e', id: 'deferred-world-info-editor-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-world-info-editor.css?v=20261026a', id: 'deferred-world-info-editor-css' },
     ],
     'characters:persona': [
         // SillyBunny: persona editor assets stay deferred like World Info — see docs/ui-migration.md
-        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
+        { href: 'css/sillybunny-persona-editor.css?v=20261026a', id: 'deferred-persona-editor-css' },
         { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
     ],
     'characters:characters': [
         // SillyBunny: the shared list and its selection UI stay deferred until the mount gate resolves — see docs/ui-migration.md.
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-character-list.css?v=20261018c', id: 'deferred-character-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261026b', id: 'deferred-character-list-css' },
     ],
     'characters:groups': [
         // SillyBunny: Characters and Groups use the same deferred selection UI — see docs/ui-migration.md.
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-character-list.css?v=20261018c', id: 'deferred-character-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261026b', id: 'deferred-character-list-css' },
     ],
     'characters:import': [
-        { href: 'css/sillybunny-editor-shell.css?v=20261018b', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
         { href: 'css/sillybunny-character-import.css?v=20261018a', id: 'deferred-character-import-css' },
     ],
@@ -1464,6 +1469,7 @@ const sbState = {
     mobileNav: {
         lastOpenedAt: 0,
         quickActionContainer: null,
+        quickActionTrigger: null,
         quickActionSection: null,
         quickActionDivider: null,
     },
@@ -1487,7 +1493,6 @@ const sbState = {
         sourceChangeHandler: null,
         sidebarOpen: false,
         mobileToolsOpen: false,
-        mobileToolsReturnFocus: null,
         bindingRetryTimer: 0,
         boundEventSource: null,
         windowBindingsAttached: false,
@@ -3059,7 +3064,8 @@ function getMobilePopupDialogForKeyboard(element) {
         return null;
     }
 
-    const dialog = element.closest('dialog.popup');
+    // Framed popups keep themselves above the keyboard (bindKeyboardInset in sillybunny-editor/dialog.js).
+    const dialog = element.closest('dialog.popup:not(.sb-dialog)');
     return dialog instanceof HTMLElement && dialog.open ? dialog : null;
 }
 
@@ -3287,6 +3293,19 @@ function syncExistingMobileNavQuickActions(overlay) {
         const quickActionSection = list.closest('.sb-mobile-quick-action-section');
         if (quickActionSection instanceof HTMLElement) {
             sbState.mobileNav.quickActionSection = quickActionSection;
+            let trigger = quickActionSection.querySelector('.sb-mobile-quick-actions-trigger');
+            if (!(trigger instanceof HTMLButtonElement)) {
+                const title = quickActionSection.querySelector('.sb-mobile-section-title');
+                trigger = createElement('button', {
+                    className: 'sb-mobile-section-title sb-mobile-quick-actions-trigger',
+                    text: title?.textContent?.trim() || 'Quick Actions',
+                    attrs: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
+                });
+                if (title) title.replaceWith(trigger);
+                else quickActionSection.prepend(trigger);
+            }
+            sbState.mobileNav.quickActionTrigger = trigger;
+            bindMobileQuickActionTrigger(trigger);
         }
         refreshMobileNavQuickActions();
     }
@@ -3809,25 +3828,15 @@ function clearAllBrowserCookies() {
 }
 
 async function confirmClearCookiesAndCache() {
-    const context = getSillyTavernContext();
-    if (!context?.Popup?.show?.confirm) {
-        return window.confirm('Clear cookies & cache? This removes browser-accessible SillyBunny cookies and cached UI data, then reloads the page.');
-    }
-
-    const result = await context?.Popup?.show?.confirm?.(
-        'Clear cookies & cache?',
-        'This removes browser-accessible SillyBunny cookies, browser cache, temporary session data, and IndexedDB cache stores, then reloads the page. Saved settings and account data stay intact, but you may need to sign in again if your setup uses browser cookies.',
-        {
-            okButton: 'Clear cookies & cache',
-            cancelButton: 'Cancel',
-        },
-    );
-
-    if (context?.POPUP_RESULT) {
-        return result === context.POPUP_RESULT.AFFIRMATIVE;
-    }
-
-    return result === true || result === 1;
+    const response = await openAlert({
+        heading: 'Clear cookies & cache?',
+        body: 'This removes browser cache, service worker data, temporary session data, and IndexedDB cache stores for SillyBunny, then reloads the page. Saved settings and account data stay intact. Clearing browser cookies may require you to sign in again.',
+        responses: [
+            { id: 'cancel', label: t`Cancel` },
+            { id: 'clear', label: 'Clear cookies & cache', appearance: 'destructive' },
+        ],
+    });
+    return response === 'clear';
 }
 
 async function clearServerCookies() {
@@ -5201,8 +5210,15 @@ async function handleDeleteChat() {
         return;
     }
 
-    const confirmed = await chatContext.context?.Popup?.show?.confirm?.('Delete chat?', 'This action cannot be undone.');
-    if (!confirmed) {
+    const confirmed = await openAlert({
+        heading: t`Delete chat?`,
+        body: t`This action cannot be undone.`,
+        responses: [
+            { id: 'cancel', label: t`Cancel` },
+            { id: 'delete', label: t`Delete`, appearance: 'destructive' },
+        ],
+    });
+    if (confirmed !== 'delete') {
         return;
     }
 
@@ -5254,197 +5270,10 @@ function getMassDeleteOlderThanDays(files, days, currentChatId) {
     return files.filter(chatFile => chatFile.fileName !== currentChatId && chatFile.sortTimestamp > 0 && chatFile.sortTimestamp < cutoff);
 }
 
-function bindChatDeleteVisualViewport(overlay) {
-    const visualViewport = window.visualViewport;
-    if (!(overlay instanceof HTMLElement) || !isMobileViewport() || !visualViewport) {
-        return () => {};
-    }
-
-    let animationFrame = 0;
-
-    function readViewportNumber(value, fallback = 0) {
-        const number = Number(value);
-        return Number.isFinite(number) && number > 0 ? number : fallback;
-    }
-
-    function update() {
-        animationFrame = 0;
-        const fallbackWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-        const fallbackHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-        const isKeyboardClosed = Math.abs(readViewportNumber(visualViewport.height, fallbackHeight) - fallbackHeight) <= 2
-            && Math.abs(readViewportNumber(visualViewport.offsetTop) || 0) <= 2
-            && Math.abs(readViewportNumber(visualViewport.offsetLeft) || 0) <= 2;
-
-        if (isKeyboardClosed) {
-            overlay.style.removeProperty('--sb-chat-delete-vv-left');
-            overlay.style.removeProperty('--sb-chat-delete-vv-top');
-            overlay.style.removeProperty('--sb-chat-delete-vv-width');
-            overlay.style.removeProperty('--sb-chat-delete-vv-height');
-            overlay.classList.remove('sb-chat-delete-overlay--keyboard-open');
-            return;
-        }
-
-        const viewportLeft = Math.max(0, readViewportNumber(visualViewport.offsetLeft));
-        const viewportTop = Math.max(0, readViewportNumber(visualViewport.offsetTop));
-        const viewportWidth = Math.max(1, readViewportNumber(visualViewport.width, fallbackWidth));
-        const viewportHeight = Math.max(1, readViewportNumber(visualViewport.height, fallbackHeight));
-
-        overlay.classList.add('sb-chat-delete-overlay--keyboard-open');
-        overlay.style.setProperty('--sb-chat-delete-vv-left', `${viewportLeft}px`);
-        overlay.style.setProperty('--sb-chat-delete-vv-top', `${viewportTop}px`);
-        overlay.style.setProperty('--sb-chat-delete-vv-width', `${viewportWidth}px`);
-        overlay.style.setProperty('--sb-chat-delete-vv-height', `${viewportHeight}px`);
-    }
-
-    function scheduleUpdate() {
-        if (animationFrame) {
-            return;
-        }
-
-        animationFrame = window.requestAnimationFrame(update);
-    }
-
-    overlay.classList.add('sb-chat-delete-overlay--visual-viewport');
-    update();
-    visualViewport.addEventListener('resize', scheduleUpdate);
-    visualViewport.addEventListener('scroll', scheduleUpdate);
-    window.addEventListener('resize', scheduleUpdate, { passive: true });
-    window.addEventListener('orientationchange', scheduleUpdate);
-
-    return () => {
-        if (animationFrame) {
-            window.cancelAnimationFrame(animationFrame);
-        }
-
-        visualViewport.removeEventListener('resize', scheduleUpdate);
-        visualViewport.removeEventListener('scroll', scheduleUpdate);
-        window.removeEventListener('resize', scheduleUpdate);
-        window.removeEventListener('orientationchange', scheduleUpdate);
-        overlay.classList.remove('sb-chat-delete-overlay--visual-viewport');
-        overlay.style.removeProperty('--sb-chat-delete-vv-left');
-        overlay.style.removeProperty('--sb-chat-delete-vv-top');
-        overlay.style.removeProperty('--sb-chat-delete-vv-width');
-        overlay.style.removeProperty('--sb-chat-delete-vv-height');
-    };
-}
-
 function showBottomChatMassDeleteDialog(files, currentChatId) {
-    return new Promise(resolve => {
-        const overlay = createElement('div', { className: 'sb-chat-delete-overlay' });
-        const dialog = createElement('div', {
-            className: 'sb-chat-delete-dialog',
-            attrs: {
-                role: 'dialog',
-                'aria-modal': 'true',
-                'aria-labelledby': 'sb-chat-delete-title',
-            },
-        });
-        const title = createElement('h3', { id: 'sb-chat-delete-title', text: 'Mass delete chats' });
-        const note = createElement('p', {
-            className: 'sb-chat-delete-note',
-            text: 'Delete saved chats for the current character or group. The open chat is protected.',
-        });
-        const list = createElement('div', { className: 'sb-chat-delete-list' });
-        const ageRow = createElement('div', { className: 'sb-chat-delete-age' });
-        const ageLabel = createElement('label', { text: 'Older than' });
-        const ageInput = createElement('input', {
-            className: 'text_pole',
-            attrs: { type: 'number', min: '1', step: '1', value: '30', inputmode: 'numeric' },
-        });
-        const dayText = createElement('span', { text: 'days' });
-        const presets = createElement('div', { className: 'sb-chat-delete-presets' });
-        const status = createElement('small', { className: 'sb-chat-delete-status' });
-        const actions = createElement('div', { className: 'sb-chat-delete-actions' });
-        const deleteSelectedButton = createElement('button', { className: 'menu_button', text: 'Delete selected', attrs: { type: 'button' } });
-        const deleteOlderButton = createElement('button', { className: 'menu_button', text: 'Delete older', attrs: { type: 'button' } });
-        const cancelButton = createElement('button', { className: 'menu_button', text: 'Cancel', attrs: { type: 'button' } });
-        const checkboxes = [];
-        let cleanupVisualViewport = () => {};
-        let isFinished = false;
-
-        function finish(result) {
-            if (isFinished) {
-                return;
-            }
-
-            isFinished = true;
-            document.removeEventListener('keydown', handleKeydown);
-            cleanupVisualViewport();
-            overlay.remove();
-            resolve(result);
-        }
-
-        function getSelectedNames() {
-            return checkboxes.filter(checkbox => checkbox.checked).map(checkbox => checkbox.value);
-        }
-
-        function updateStatus() {
-            const selectedCount = getSelectedNames().length;
-            const olderCount = getMassDeleteOlderThanDays(files, ageInput.value, currentChatId).length;
-            status.textContent = `${selectedCount} selected. ${olderCount} older than ${ageInput.value || 0} day(s).`;
-            deleteSelectedButton.disabled = selectedCount === 0;
-            deleteOlderButton.disabled = olderCount === 0;
-        }
-
-        function handleKeydown(event) {
-            if (event.key === 'Escape') {
-                finish(null);
-            }
-        }
-
-        for (const days of [7, 30, 90, 180]) {
-            const button = createElement('button', { className: 'menu_button', text: String(days), attrs: { type: 'button' } });
-            button.addEventListener('click', () => {
-                ageInput.value = String(days);
-                updateStatus();
-            });
-            presets.appendChild(button);
-        }
-
-        for (const chatFile of files) {
-            const row = createElement('label', { className: 'sb-chat-delete-row' });
-            const checkbox = createElement('input', {
-                attrs: {
-                    type: 'checkbox',
-                    value: chatFile.fileName,
-                },
-            });
-            checkbox.disabled = chatFile.fileName === currentChatId;
-            const text = createElement('span', { className: 'sb-chat-delete-row-text' });
-            const name = createElement('strong', { text: chatFile.fileName });
-            const meta = createElement('small', { text: [formatChatTimestamp(chatFile.lastMessage), chatFile.chatItems ? `${chatFile.chatItems} msg` : ''].filter(Boolean).join(' - ') });
-
-            text.append(name, meta);
-            row.append(checkbox, text);
-            list.appendChild(row);
-            if (checkbox instanceof HTMLInputElement && !checkbox.disabled) {
-                checkbox.addEventListener('change', updateStatus);
-                checkboxes.push(checkbox);
-            }
-        }
-
-        ageInput.addEventListener('input', updateStatus);
-        deleteSelectedButton.addEventListener('click', () => finish({ mode: 'selected', names: getSelectedNames() }));
-        deleteOlderButton.addEventListener('click', () => finish({ mode: 'older', days: Number(ageInput.value) }));
-        cancelButton.addEventListener('click', () => finish(null));
-        overlay.addEventListener('click', event => {
-            if (event.target === overlay) {
-                finish(null);
-            }
-        });
-
-        ageLabel.append(ageInput, dayText);
-        ageRow.append(ageLabel, presets);
-        actions.append(deleteSelectedButton, deleteOlderButton, cancelButton);
-        dialog.append(title, note, ageRow, status, list, actions);
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-        cleanupVisualViewport = bindChatDeleteVisualViewport(overlay);
-        document.addEventListener('keydown', handleKeydown);
-        updateStatus();
-        if (!isMobileViewport()) {
-            ageInput.focus({ preventScroll: true });
-        }
+    return openMassDeleteChatDialog(files, currentChatId, {
+        getOlderCount: days => getMassDeleteOlderThanDays(files, days, currentChatId).length,
+        formatChatTimestamp,
     });
 }
 
@@ -5492,9 +5321,15 @@ async function handleMassDeleteChats() {
             return;
         }
 
-        const confirmed = await chatContext.context?.Popup?.show?.confirm?.('Delete chats?', `Delete ${names.length} chat(s)? This cannot be undone.`)
-            ?? window.confirm(`Delete ${names.length} chat(s)? This cannot be undone.`);
-        if (!confirmed) {
+        const confirmed = await openAlert({
+            heading: t`Delete chats?`,
+            body: t`Delete ${names.length} chat(s)? This cannot be undone.`,
+            responses: [
+                { id: 'cancel', label: t`Cancel` },
+                { id: 'delete', label: t`Delete`, appearance: 'destructive' },
+            ],
+        });
+        if (confirmed !== 'delete') {
             return;
         }
 
@@ -5757,13 +5592,14 @@ function buildChatSidebar() {
     }
 
     root.id = 'sb-chat-sidebar';
+    root.classList.remove('draggable');
     root.classList.add('sb-chat-sidebar');
     root.style.top = 'calc(var(--sb-topbar-layout-offset) + 18px)';
     root.style.right = '16px';
     root.style.left = 'auto';
     root.style.bottom = 'auto';
 
-    title.textContent = 'Recent Chats';
+    title.textContent = t`Recent Chats`;
 
     const body = createElement('div', { className: 'sb-chat-sidebar-body' });
     const list = createElement('div', { className: 'sb-chat-sidebar-list' });
@@ -5774,7 +5610,14 @@ function buildChatSidebar() {
 
     movingDivs.appendChild(root);
 
-    getChatbarState().sidebar = { root, title, list };
+    const controller = registerSidePanel({
+        id: 'sb-chat-sidebar',
+        element: root,
+        title: t`Recent Chats`,
+        defaultSide: 'right',
+        onClose: () => { getChatbarState().sidebarOpen = false; },
+    });
+    getChatbarState().sidebar = { root, title, list, controller };
     return getChatbarState().sidebar;
 }
 
@@ -5782,7 +5625,7 @@ function isChatSidebarOpen() {
     return Boolean(getChatbarState().sidebarOpen);
 }
 
-function setChatSidebarOpenState(shouldOpen) {
+function setChatSidebarOpenState(shouldOpen, { opener = document.activeElement, restoreFocus = false } = {}) {
     const refs = buildChatSidebar();
 
     if (!refs?.root) {
@@ -5791,11 +5634,13 @@ function setChatSidebarOpenState(shouldOpen) {
 
     const isOpen = Boolean(shouldOpen);
     getChatbarState().sidebarOpen = isOpen;
-    refs.root.style.display = isOpen ? 'flex' : 'none';
     refs.root.classList.toggle('sb-chat-sidebar-visible', isOpen);
 
     if (isOpen) {
+        void refs.controller.open({ opener });
         scheduleChatbarRefresh(0);
+    } else {
+        refs.controller.close({ restoreFocus });
     }
 }
 
@@ -5805,7 +5650,7 @@ function toggleChatSidebar() {
         return;
     }
 
-    setChatSidebarOpenState(!isChatSidebarOpen());
+    setChatSidebarOpenState(!isChatSidebarOpen(), { restoreFocus: true });
 }
 
 function buildMobileChatTools() {
@@ -5814,7 +5659,7 @@ function buildMobileChatTools() {
         return existingMobileTools;
     }
 
-    const overlay = createElement('div', { id: 'sb-mobile-chat-tools' });
+    const overlay = createElement('div', { className: 'sb-mobile-chat-tools-content' });
     const panel = createElement('div', { id: 'sb-mobile-chat-tools-panel', attrs: { tabindex: '-1' } });
     const header = createElement('div', { className: 'sb-mobile-chat-header' });
     const dismissButton = createTopBarIconButton(
@@ -5824,7 +5669,7 @@ function buildMobileChatTools() {
             title: 'Close chat tools',
             className: 'sb-mobile-chat-close',
         },
-        () => closeMobileChatTools(),
+        () => closeMobileChatTools({ restoreFocus: true }),
     );
     const chatSelectField = createChatField({
         id: 'sb-mobile-chat-select-field',
@@ -5879,13 +5724,6 @@ function buildMobileChatTools() {
     searchStatus.hidden = true;
     connectionSection.hidden = true;
 
-    overlay.hidden = true;
-    overlay.setAttribute('aria-hidden', 'true');
-
-    if ('inert' in overlay) {
-        overlay.inert = true;
-    }
-
     chatSelectField.appendChild(chatSelect);
     searchField.append(searchInput, searchStatus);
     connectionField.appendChild(connectionSelect);
@@ -5912,12 +5750,7 @@ function buildMobileChatTools() {
     panel.append(header, chatSelectField, actions, connectionSection, recentSection);
     overlay.appendChild(panel);
 
-    overlay.addEventListener('click', event => {
-        if (event.target === overlay) {
-            closeMobileChatTools();
-        }
-    });
-    overlay.addEventListener('keydown', event => {
+    panel.addEventListener('keydown', event => {
         if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented || !getChatbarState().mobileToolsOpen) {
             return;
         }
@@ -5947,10 +5780,15 @@ function buildMobileChatTools() {
         syncConnectionProfileSelection(connectionSelect.value);
     });
 
+    // SillyBunny: keep the detached dialog content out of the page until its modal host owns it.
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+    if ('inert' in overlay) overlay.inert = true;
     document.body.appendChild(overlay);
 
     getChatbarState().mobileTools = {
-        overlay,
+        overlay: null,
+        content: overlay,
         panel,
         chatSelect,
         searchInput,
@@ -5959,6 +5797,7 @@ function buildMobileChatTools() {
         connectionSection,
         connectionSelect,
         connectionStatus,
+        restoreFocusAfterClose: false,
         ...buttons,
     };
 
@@ -5969,55 +5808,68 @@ function setMobileChatToolsOpenState(shouldOpen, { restoreFocus = false } = {}) 
     const refs = buildMobileChatTools();
     const isOpen = Boolean(shouldOpen) && isMobileViewport();
 
-    if (!refs?.overlay) {
+    if (!refs?.content) {
         return;
     }
 
     const wasOpen = getChatbarState().mobileToolsOpen;
     getChatbarState().mobileToolsOpen = isOpen;
     if (isOpen && !wasOpen) {
-        const activeElement = document.activeElement;
-        getChatbarState().mobileToolsReturnFocus = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
-    }
-    if (isOpen || !wasOpen) {
-        refs.overlay.hidden = !isOpen;
-    }
-    refs.overlay.classList.toggle('sb-chat-tools-open', isOpen);
-    refs.overlay.setAttribute('aria-hidden', String(!isOpen));
-
-    if ('inert' in refs.overlay) {
-        refs.overlay.inert = !isOpen;
+        refs.content.hidden = false;
+        refs.content.setAttribute('aria-hidden', 'false');
+        if ('inert' in refs.content) refs.content.inert = false;
+        const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        refs.restoreFocusAfterClose = false;
+        const dialog = openDialog({
+            tier: 'dialog',
+            title: t`Chat actions`,
+            content: refs.content,
+            className: 'sb-mobile-chat-tools-dialog',
+            initialFocus: () => refs.panel,
+        });
+        const sourceHeader = refs.content.querySelector('.sb-mobile-chat-header');
+        const searchField = sourceHeader?.querySelector('#sb-mobile-chat-search-field');
+        const closeButton = sourceHeader?.querySelector('#sb-mobile-chat-close');
+        if (searchField) refs.panel.prepend(searchField);
+        sourceHeader?.remove();
+        dialog.header.querySelector('.sb-dialog__close')?.remove();
+        if (closeButton) dialog.header.querySelector('.sb-dialog__header-end')?.append(closeButton);
+        dialog.root.id = 'sb-mobile-chat-tools';
+        dialog.root.classList.add('sb-chat-tools-open');
+        dialog.root.setAttribute('aria-hidden', 'false');
+        refs.overlay = dialog.root;
+        refs.dialog = dialog;
+        dialog.root.addEventListener('cancel', () => { refs.restoreFocusAfterClose = true; });
+        dialog.closed.then(() => {
+            if (refs.dialog !== dialog) return;
+            const shouldRestoreFocus = refs.restoreFocusAfterClose;
+            refs.restoreFocusAfterClose = false;
+            refs.dialog = null;
+            refs.overlay = null;
+            sourceHeader.append(closeButton);
+            refs.content.prepend(sourceHeader);
+            refs.content.hidden = true;
+            refs.content.setAttribute('aria-hidden', 'true');
+            if ('inert' in refs.content) refs.content.inert = true;
+            getChatbarState().mobileToolsOpen = false;
+            queueMobileModalStateSync();
+            if (shouldRestoreFocus && returnFocus?.isConnected) {
+                window.requestAnimationFrame(() => {
+                    if (!returnFocus.isConnected || returnFocus.closest('[inert]')) return;
+                    returnFocus.focus({ preventScroll: true });
+                });
+            }
+        });
+        scheduleChatbarRefresh(0);
+    } else if (wasOpen) {
+        refs.overlay?.setAttribute('aria-hidden', 'true');
+        refs.overlay?.classList.remove('sb-chat-tools-open');
+        refs.restoreFocusAfterClose = restoreFocus;
+        if (restoreFocus) refs.dialog?.close('close');
+        else refs.dialog?.forceClose();
     }
 
     queueMobileModalStateSync();
-
-    if (isOpen) {
-        if (!wasOpen) {
-            stopMotion(refs.panel);
-            animateIn(refs.panel, [
-                { opacity: 0, transform: 'translateY(12px) scale(0.98)' },
-                { opacity: 1, transform: 'none' },
-            ], SPRING_SHEET);
-            // Escape is handled on the sheet, so focus has to be inside it.
-            window.requestAnimationFrame(() => refs.panel.focus({ preventScroll: true }));
-        }
-        scheduleChatbarRefresh(0);
-    } else if (wasOpen) {
-        refs.overlay.hidden = false;
-        animateOut(refs.panel, [
-            { opacity: 1, transform: 'none' },
-            { opacity: 0, transform: 'translateY(12px) scale(0.98)' },
-        ], () => {
-            refs.overlay.hidden = true;
-        }, { enabled: isMobileViewport(), duration: MOTION_FAST });
-
-        const returnFocus = getChatbarState().mobileToolsReturnFocus;
-        getChatbarState().mobileToolsReturnFocus = null;
-        if (restoreFocus && returnFocus?.isConnected) {
-            // Wait for the modal sync frame, which lifts inert from the chat column.
-            window.requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
-        }
-    }
 }
 
 function openMobileChatTools() {
@@ -6815,7 +6667,7 @@ async function refreshChatbarState() {
     const chatNames = files.map(chat => chat.fileName);
 
     if (chatContext.chatId && !chatNames.includes(chatContext.chatId)) {
-        files.unshift({ fileName: chatContext.chatId, tokenEstimate: 0 });
+        files.unshift(normalizeChatInfo(chatContext.chatId));
     }
 
     populateChatSelector(mobileRefs?.chatSelect, files, chatContext, chatContext.canBrowseChats ? 'No saved chats yet' : 'No chat selected');
@@ -7436,6 +7288,16 @@ function setCharacterEditorEmptyState(visible) {
     const emptyState = document.getElementById('sb_character_editor_empty');
 
     if (emptyState instanceof HTMLElement) {
+        if (!emptyState.classList.contains('sb-status-page')) {
+            emptyState.classList.add('sb-status-page', 'sb-status-page--compact');
+            emptyState.setAttribute('role', 'status');
+            emptyState.querySelector('.sb-character-editor-empty-icon')?.classList.add('sb-status-page__icon');
+            emptyState.querySelector('.sb-character-editor-empty-copy h3')?.classList.add('sb-status-page__title', 'title-2');
+            emptyState.querySelector('.sb-character-editor-empty-copy p')?.classList.add('sb-status-page__description');
+            emptyState.querySelector('.sb-character-editor-empty-actions')?.classList.add('sb-status-page__actions');
+            emptyState.querySelectorAll('.sb-character-editor-empty-actions .menu_button').forEach(button => button.classList.add('sb-status-page__action'));
+            emptyState.querySelector('#sb_character_empty_browse')?.classList.add('menu_button_primary', 'is-suggested');
+        }
         emptyState.hidden = !visible;
     }
 
@@ -7727,10 +7589,13 @@ async function openCreatorNotesFullscreen() {
 
     const wrapper = document.createElement('div');
     wrapper.className = 'sb-creator-notes-fullscreen';
+    // SillyBunny: the notes body is a document, so its Window body uses the View surface.
+    wrapper.classList.add('sb-document');
     wrapper.append(spoiler);
 
     try {
-        await context.callGenericPopup(wrapper, context.POPUP_TYPE.TEXT, '', { wide: true, large: true });
+        // SillyBunny: formatted Creator's Notes use the shared Window body without changing the live node.
+        await context.callGenericPopup(wrapper, context.POPUP_TYPE.TEXT, '', { tier: 'window', title: t`Creator's Notes`, wide: true, large: true });
     } finally {
         if (anchor.isConnected) {
             anchor.replaceWith(spoiler);
@@ -10881,8 +10746,15 @@ async function handleSillyTavernFolderImport() {
         return;
     }
 
-    const confirmed = window.confirm(`Import data from this folder into the current SillyBunny account?\n\n${sourcePath}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`);
-    if (!confirmed) {
+    const response = await openAlert({
+        heading: 'Import data from this folder into the current SillyBunny account?',
+        body: `${sourcePath}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`,
+        responses: [
+            { id: 'cancel', label: t`Cancel` },
+            { id: 'import', label: 'Import', appearance: 'destructive' },
+        ],
+    });
+    if (response !== 'import') {
         return;
     }
 
@@ -10924,8 +10796,15 @@ async function handleSillyTavernExtensionSync() {
         return;
     }
 
-    const confirmed = window.confirm(`Sync third-party extensions from this SillyTavern folder into the current SillyBunny account?\n\n${sourcePath}\n\nMatching extension folders will be replaced. SillyBunny will show a detailed report instead of reloading immediately.`);
-    if (!confirmed) {
+    const response = await openAlert({
+        heading: 'Sync third-party extensions from this SillyTavern folder into the current SillyBunny account?',
+        body: `${sourcePath}\n\nMatching extension folders will be replaced. SillyBunny will show a detailed report instead of reloading immediately.`,
+        responses: [
+            { id: 'cancel', label: t`Cancel` },
+            { id: 'sync', label: t`Yes`, appearance: 'destructive' },
+        ],
+    });
+    if (response !== 'sync') {
         return;
     }
 
@@ -10973,8 +10852,15 @@ async function handleSillyTavernZipImport(file) {
         return;
     }
 
-    const confirmed = window.confirm(`Import this SillyTavern backup ZIP into the current SillyBunny account?\n\n${file.name}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`);
-    if (!confirmed) {
+    const response = await openAlert({
+        heading: 'Import this SillyTavern backup ZIP into the current SillyBunny account?',
+        body: `${file.name}\n\nFiles with the same name will be replaced, and the page will reload when the import finishes.`,
+        responses: [
+            { id: 'cancel', label: t`Cancel` },
+            { id: 'import', label: 'Import', appearance: 'destructive' },
+        ],
+    });
+    if (response !== 'import') {
         if (refs.zipFileInput instanceof HTMLInputElement) {
             refs.zipFileInput.value = '';
         }
@@ -13173,7 +13059,11 @@ function revealSettingsCategoryFor(target) {
     }
 }
 
+/** Counts search jumps, so that the delayed steps of a jump stop when a newer jump replaces it. */
+let searchJumpCount = 0;
+
 function revealSearchMatch(shellKey, match) {
+    const jump = ++searchJumpCount;
     closeAllDropdowns({ except: shellKey });
 
     // Entries with a custom action (e.g. persona results) bypass DOM scrolling
@@ -13203,12 +13093,20 @@ function revealSearchMatch(shellKey, match) {
     // The search result already selects a destination, so show it past the mobile sidebar.
     if (isMobileViewport()) setSettingsMobileContentView(true);
 
+    // The jump finishes on timers. A page that the user opens or closes in the meantime must not be
+    // undone, so each delayed step below stops when the stack shows a different page than it expects.
+    const stackKey = `${shellKey}:${match.tabId}`;
+    const openRowAtJump = sbSubpageStacks.get(stackKey)?.openRowId ?? null;
+
     window.setTimeout(() => {
         // SillyBunny: subpage-hosted tabs route through the stack, not the old drawer routing.
         // Matches inside the store would otherwise trigger jQuery slideToggle on inline-drawer
         // toggles, injecting inline display:block and bleeding the old panel into view.
-        const stack = sbSubpageStacks.get(`${shellKey}:${match.tabId}`);
+        const stack = sbSubpageStacks.get(stackKey);
         if (stack) {
+            if (jump !== searchJumpCount || stack.openRowId !== openRowAtJump) {
+                return;
+            }
             const row = stack.rows.find(r => {
                 const source = r.source?.();
                 return source instanceof HTMLElement && source.contains(match.element);
@@ -13219,6 +13117,7 @@ function revealSearchMatch(shellKey, match) {
                     ? 0
                     : SB_SUBPAGE_DURATION;
                 window.setTimeout(() => {
+                    if (jump !== searchJumpCount || stack.openRowId !== row.id) return;
                     if (!(match.element instanceof HTMLElement)) return;
                     expandHiddenAccordions(match.element);
                     scrollElementIntoManagedView(match.element, {
@@ -13840,6 +13739,41 @@ function updateMobileNavButtonLabel() {
     button.setAttribute('aria-label', title);
 }
 
+function runMobileQuickAction(action) {
+    closeMobileNav();
+
+    if (action.type === 'custom') {
+        void activateMobileQuickAction(action);
+    } else if (action.type === 'shell') {
+        openShell(action.shellKey);
+    } else if (action.shellKey === 'characters') {
+        openCharacterPanelTab(action.tabId);
+    } else {
+        toggleShellPanel(action.shellKey, action.tabId);
+    }
+}
+
+function openMobileQuickActionMenu(trigger, event) {
+    const actions = sbState.mobileQuickActions.map(normalizeMobileQuickAction).filter(Boolean);
+    openActionMenu({
+        trigger,
+        title: trigger.textContent.trim(),
+        keyboard: event.detail === 0,
+        bounds: document.getElementById('sb-mobile-nav-content'),
+        sections: [{ items: actions.map(action => ({
+            label: action.label,
+            icon: `fa-solid ${action.icon || SB_MOBILE_QUICK_ACTION_ICON_FALLBACK}`,
+            onSelect: () => runMobileQuickAction(action),
+        })) }],
+    });
+}
+
+function bindMobileQuickActionTrigger(trigger) {
+    if (!(trigger instanceof HTMLButtonElement) || trigger.dataset.sbBound === 'true') return;
+    trigger.dataset.sbBound = 'true';
+    trigger.addEventListener('click', event => openMobileQuickActionMenu(trigger, event));
+}
+
 function createMobileQuickActionButton(item) {
     const action = normalizeMobileQuickAction(item);
     if (!action) {
@@ -13863,19 +13797,7 @@ function createMobileQuickActionButton(item) {
     const label = createElement('span', { text: action.label });
 
     button.append(icon, label);
-    button.addEventListener('click', () => {
-        closeMobileNav();
-
-        if (action.type === 'custom') {
-            activateMobileQuickAction(action);
-        } else if (action.type === 'shell') {
-            openShell(action.shellKey);
-        } else if (action.shellKey === 'characters') {
-            openCharacterPanelTab(action.tabId);
-        } else {
-            toggleShellPanel(action.shellKey, action.tabId);
-        }
-    });
+    button.addEventListener('click', () => runMobileQuickAction(action));
 
     return button;
 }
@@ -13888,15 +13810,21 @@ function refreshMobileNavQuickActions() {
     }
 
     sbState.mobileNav.quickActionContainer = list;
+    const trigger = sbState.mobileNav.quickActionTrigger;
     list.replaceChildren();
 
     if (!sbState.mobileQuickActions.length) {
+        list.hidden = false;
+        if (trigger) trigger.hidden = true;
         list.appendChild(createElement('div', {
             className: 'sb-mobile-quick-action-empty',
             text: 'No mobile Quick Actions selected yet.',
         }));
         return;
     }
+
+    list.hidden = true;
+    if (trigger) trigger.hidden = false;
 
     for (const action of sbState.mobileQuickActions) {
         const button = createMobileQuickActionButton(action);
@@ -13928,13 +13856,20 @@ function buildMobileNav() {
     }
 
     const sectionBlock = createElement('section', { className: 'sb-mobile-section' });
-    const quickActionTitle = createElement('span', { className: 'sb-mobile-section-title', text: 'Quick Actions' });
+    const quickActionTitle = createElement('button', {
+        className: 'sb-mobile-section-title sb-mobile-quick-actions-trigger',
+        text: 'Quick Actions',
+        attrs: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
+    });
     const list = createElement('div', { className: 'sb-mobile-section-list sb-mobile-quick-action-list' });
+    list.hidden = true;
+    bindMobileQuickActionTrigger(quickActionTitle);
 
     sectionBlock.classList.add('sb-mobile-quick-action-section');
     sectionBlock.append(quickActionTitle, list);
     content.append(sectionBlock);
     sbState.mobileNav.quickActionContainer = list;
+    sbState.mobileNav.quickActionTrigger = quickActionTitle;
     sbState.mobileNav.quickActionSection = sectionBlock;
     sbState.mobileNav.quickActionDivider = null;
     refreshMobileNavQuickActions();

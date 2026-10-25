@@ -26,6 +26,18 @@ async function openEditor(page) {
     await expect(page.locator('#sb_character_editor_header')).toBeVisible();
 }
 
+async function expectDuplicateAligned(page) {
+    await expect.poll(() => page.evaluate(() => {
+        const duplicate = document.getElementById('dupe_button').getBoundingClientRect();
+        const exportButton = document.getElementById('export_button').getBoundingClientRect();
+        return {
+            horizontalOffset: Math.round(Math.abs(duplicate.x - exportButton.right - 2)),
+            verticalOffset: Math.round(Math.abs(duplicate.y - exportButton.y)),
+            heightOffset: Math.round(Math.abs(duplicate.height - exportButton.height)),
+        };
+    })).toEqual({ horizontalOffset: 0, verticalOffset: 0, heightOffset: 0 });
+}
+
 async function stubCharacterMutations(page) {
     await page.route('**/api/characters/edit*', route => route.fulfill({ body: 'ok' }));
     await page.route('**/api/characters/save*', route => route.fulfill({ body: 'ok' }));
@@ -110,6 +122,69 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 812 
         }
     });
 }
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    test(`character editor popups keep their actions reachable at ${viewport.width}px`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await openEditor(page);
+
+        await openExportMenu(page);
+        await expect(page.locator(viewport.width < 451 ? '.sb-action-sheet' : '.sb-action-popover')).toBeVisible();
+        await page.keyboard.press('Escape');
+
+        await page.evaluate(() => { void import('/script.js').then(app => app.duplicateCharacter()); });
+        const duplicate = page.locator('dialog.popup[open]');
+        await expect(duplicate).toContainText('duplicate this character');
+        await duplicate.locator('.popup-button-cancel').click();
+
+        await page.evaluate(async () => {
+            const app = await import('/script.js');
+            const personas = await import('/scripts/personas.js');
+            const { power_user } = await import('/scripts/power-user.js');
+            const character = app.characters[app.this_chid];
+            const avatar = character.avatar;
+            power_user.personas[avatar] = 'QA Connected Persona';
+            power_user.persona_descriptions[avatar] = {
+                title: '', description: 'QA persona', position: 0, depth: 2, role: 0, lorebook: '',
+                connections: [{ type: 'character', id: avatar }], appendices: [], activeAppendices: {},
+            };
+            void personas.showCharConnections();
+        });
+        await expect(page.locator('dialog.popup[open]')).toContainText('Persona Connections');
+        await page.keyboard.press('Escape');
+
+        await page.locator('#world_button').click({ modifiers: ['Shift'] });
+        await expect(page.locator('dialog.popup[open]')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.locator('#sb_character_editor_toolbar .chat_lorebook_button').click({ modifiers: ['Shift'] });
+        await expect(page.locator('dialog.popup[open]')).toBeVisible();
+        await page.keyboard.press('Escape');
+    });
+}
+
+test.describe('character toolbar resize', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('duplicate action returns aligned after switching from mobile to desktop', async ({ page }) => {
+        await openEditor(page);
+        const duplicate = page.locator('#dupe_button');
+        await expect(duplicate).toHaveClass(/sb-editor-toolbar-collapsed/);
+
+        await page.setViewportSize({ width: 769, height: 844 });
+        await expect.poll(() => duplicate.evaluate(node => node.classList.contains('sb-editor-toolbar-collapsed'))).toBe(false);
+        await expectDuplicateAligned(page);
+
+        await page.setViewportSize({ width: 1440, height: 844 });
+        await expectDuplicateAligned(page);
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(duplicate).toHaveClass(/sb-editor-toolbar-collapsed/);
+
+        await page.setViewportSize({ width: 1440, height: 844 });
+        await expect.poll(() => duplicate.evaluate(node => node.classList.contains('sb-editor-toolbar-collapsed'))).toBe(false);
+        await expectDuplicateAligned(page);
+    });
+});
 
 for (const theme of ['Libadwaita', 'Libadwaita Light']) test(`editor headings match Customize typography in ${theme}`, async ({ page }) => {
     await openEditor(page);

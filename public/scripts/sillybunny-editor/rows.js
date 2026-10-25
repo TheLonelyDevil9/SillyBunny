@@ -3,6 +3,7 @@
 let nextRowId = 0;
 const reservedIds = new Map();
 const idReservations = new WeakMap();
+const floatingDescriptionSources = new WeakMap();
 
 function releaseId(node) {
     const id = idReservations.get(node);
@@ -173,11 +174,36 @@ export function createSwitchRow({ label, subtitle, field, id, checked, disabled,
     const control = prepareInput(input, 'checkbox', id);
     control.classList.add('sb-switch');
     control.setAttribute('role', 'switch');
-    // ARIA in HTML forbids aria-checked on a native checkbox; `checked` is the switch state.
+    return checkboxRow('ds-row-switch', { label, subtitle, field, checked, disabled, onChange, control });
+}
+
+/**
+ * One item of a pick-several list: a native checkbox at the end, and the whole row toggles it.
+ * Same contract as {@link createSwitchRow}; use a switch row for a single on/off setting.
+ * @param {object} options
+ * @param {string} options.label
+ * @param {string} options.field
+ * @param {string} [options.id]
+ * @param {string} [options.subtitle]
+ * @param {boolean} [options.checked]
+ * @param {boolean} [options.disabled]
+ * @param {(checked: boolean) => void} [options.onChange]
+ * @param {HTMLInputElement} [options.input]
+ * @returns {object}
+ */
+export function createCheckRow({ label, subtitle, field, id, checked, disabled, onChange, input }) {
+    const control = prepareInput(input, 'checkbox', id);
+    control.classList.remove('sb-switch');
+    control.removeAttribute('role');
+    return checkboxRow('ds-row-check', { label, subtitle, field, checked, disabled, onChange, control });
+}
+
+function checkboxRow(variant, { label, subtitle, field, checked, disabled, onChange, control }) {
+    // ARIA in HTML forbids aria-checked on a native checkbox; `checked` is the state.
     control.removeAttribute('aria-checked');
     if (checked !== undefined) control.checked = Boolean(checked);
     if (disabled !== undefined) control.disabled = Boolean(disabled);
-    const row = element('label', 'ds-row ds-row-switch');
+    const row = element('label', `ds-row ${variant}`);
     markField(row, field);
     row.htmlFor = control.id;
     row.append(textColumn(label, subtitle, control), control);
@@ -259,12 +285,23 @@ function numberAttribute(input, name) {
  * @param {number} [options.max]
  * @param {number} [options.step=1]
  * @param {boolean} [options.nullable=false]
+ * @param {boolean} [options.normalize=true]  False keeps an adopted text/number input's upstream validation unchanged.
  * @param {string} [options.placeholder]
  * @param {(value: number|null) => void} [options.onChange]
  * @param {HTMLInputElement} [options.input]
  * @returns {object}
  */
-export function createSpinRow({ label, subtitle, field, id, value, min, max, step = 1, nullable = false, placeholder, onChange, input }) {
+export function createSpinRow({ label, subtitle, field, id, value, min, max, step = 1, nullable = false, normalize: normalizeInput = true, placeholder, onChange, input }) {
+    if (!normalizeInput) {
+        if (!input || input.tagName !== 'INPUT' || !['text', 'number'].includes(input.type)) {
+            throw new TypeError('An unnormalized spin row needs a text or number input.');
+        }
+        ensureId(input, id);
+        input.classList.add('ds-spin');
+        input.inputMode = 'numeric';
+        const row = suffixRow(label, subtitle, field, input);
+        return rowController(row, input);
+    }
     const control = prepareInput(input, 'number', id);
     // Created spin inputs take the app's themed field style; adopted ones keep their own classes.
     if (!input) control.classList.add('text_pole', 'ds-spin');
@@ -318,6 +355,38 @@ function prepareFloatingInput(input, id) {
     return control;
 }
 
+export function prepareFloatingPlaceholder(control, { describe = true } = {}) {
+    const hint = control.getAttribute('placeholder')?.trim();
+    if (hint) {
+        control.dataset.sbFloatingPlaceholder = hint;
+        if (describe) {
+            if (!floatingDescriptionSources.has(control)) {
+                floatingDescriptionSources.set(control, control.getAttribute('aria-description') ?? '');
+            }
+            const description = [floatingDescriptionSources.get(control), hint]
+                .filter((value, index, values) => value && values.indexOf(value) === index)
+                .join(' ');
+            if (control.getAttribute('aria-description') !== description) control.setAttribute('aria-description', description);
+        }
+    }
+    if (control.getAttribute('placeholder') !== ' ') control.setAttribute('placeholder', ' ');
+}
+
+function prepareEntryInput(input, id) {
+    // Popup's public mainInput is a textarea, including its single-line name prompts.
+    if (input?.tagName !== 'TEXTAREA') {
+        if (input && (input.tagName !== 'INPUT' || !['text', 'password', 'email', 'url', 'search', 'tel'].includes(input.type))) {
+            throw new TypeError('Expected a text or password entry input.');
+        }
+        const control = input ?? document.createElement('input');
+        if (!input) control.type = 'text';
+        ensureId(control, id);
+        return control;
+    }
+    ensureId(input, id);
+    return input;
+}
+
 function secretStatus(control, { savedText, missingText }) {
     const status = element('span', 'ds-row-entry__status');
     ensureId(status);
@@ -327,7 +396,9 @@ function secretStatus(control, { savedText, missingText }) {
     status.append(icon, text);
     associateDescription(control, status);
     const read = () => {
-        const placeholder = control.getAttribute('placeholder') ?? '';
+        const rawPlaceholder = control.getAttribute('placeholder')?.trim();
+        if (rawPlaceholder) control.dataset.sbFloatingPlaceholder = rawPlaceholder;
+        const placeholder = control.dataset.sbFloatingPlaceholder ?? '';
         const state = savedText && placeholder.startsWith(savedText) ? 'saved'
             : missingText && placeholder.startsWith(missingText) ? 'missing'
                 : 'unknown';
@@ -335,6 +406,7 @@ function secretStatus(control, { savedText, missingText }) {
         status.hidden = state === 'unknown';
         icon.className = `fa-solid ${state === 'saved' ? 'fa-circle-check' : 'fa-circle-exclamation'}`;
         text.textContent = placeholder;
+        prepareFloatingPlaceholder(control, { describe: false });
     };
     read();
     // secrets.js reports key status by rewriting the placeholder; follow it rather than edit secrets.js.
@@ -364,8 +436,7 @@ function revealToggle(control, label) {
 }
 
 function floatingEntryRow({ label, subtitle, field, control, suffix, secret }) {
-    // :placeholder-shown tells an empty field from a filled one, including programmatic .val() writes.
-    if (!control.hasAttribute('placeholder')) control.setAttribute('placeholder', ' ');
+    prepareFloatingPlaceholder(control);
     const row = element('div', 'ds-row ds-row-entry ds-row-entry--floating');
     markField(row, field);
     const line = element('span', 'ds-row-entry__line');
@@ -409,12 +480,12 @@ function floatingEntryRow({ label, subtitle, field, control, suffix, secret }) {
  *     Mirrors key status from the placeholder and masks where supported; the input type never changes. `floating` only.
  * @param {(value: string) => void} [options.onInput]
  * @param {(value: string) => void} [options.onChange]
- * @param {HTMLInputElement} [options.input]
+ * @param {HTMLInputElement|HTMLTextAreaElement} [options.input]  Textareas are supported in the stacked layout only.
  * @returns {object}
  */
 export function createEntryRow({ label, subtitle, field, id, value, placeholder, maxLength, floating = false, suffix, secret, onInput, onChange, input }) {
     if ((secret || suffix) && !floating) throw new TypeError('Secret and suffix options need the floating layout.');
-    const control = floating ? prepareFloatingInput(input, id) : prepareInput(input, 'text', id);
+    const control = floating ? prepareFloatingInput(input, id) : prepareEntryInput(input, id);
     if (value !== undefined) control.value = value;
     if (placeholder !== undefined) control.placeholder = placeholder;
     if (maxLength !== undefined) control.maxLength = maxLength;

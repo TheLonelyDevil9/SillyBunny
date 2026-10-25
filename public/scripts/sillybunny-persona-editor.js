@@ -23,7 +23,7 @@ import { mountPersonaDetail, personaDraftKey } from './sillybunny-persona-detail
 
 const STYLESHEETS = [
     { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-    { href: 'css/sillybunny-persona-editor.css?v=20261018a', id: 'deferred-persona-editor-css' },
+    { href: 'css/sillybunny-persona-editor.css?v=20261026a', id: 'deferred-persona-editor-css' },
     { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
 ];
 const mountedEditors = new WeakMap();
@@ -125,6 +125,7 @@ export function mountPersonaEditor(container) {
     // HUMAN: replace — Sort control label.
     const sortButton = button(t`Sort`, 'arrow-down-wide-short', trigger => openSortMenu(trigger), 'sb-persona-sort-button');
     const listMenu = button(t`Persona Management`, 'ellipsis-vertical', trigger => openListMenu(trigger), 'sb-persona-list-menu');
+    [searchButton, newButton, sortButton, listMenu].forEach(control => control.classList.add('sb-header-icon-button'));
     for (const control of [sortButton, listMenu]) {
         control.setAttribute('aria-haspopup', 'menu');
         control.setAttribute('aria-expanded', 'false');

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
+import { expectSharedDialogEntryStyles } from './helpers/dialog-entry-parity.js';
 
 function readPayload(request) {
     const body = request.postDataBuffer();
@@ -45,6 +46,10 @@ async function routeCharacters(page, characters) {
     await page.route('**/api/chats/get', route => route.fulfill({ json: [] }));
 }
 
+test.beforeEach(async ({ page }) => {
+    await protectMaintainerServer(page);
+});
+
 async function waitForApp(page) {
     await page.waitForFunction(() => window.SillyTavern?.getContext?.()?.eventSource?.autoFireLastArgs?.has('app_ready'), null, { timeout: 60000 });
     await page.waitForFunction(() => !document.getElementById('preloader'));
@@ -69,7 +74,6 @@ for (const { label, width } of [{ label: 'desktop', width: 1440 }, { label: 'mob
         test.use({ viewport: { width, height: 844 }, hasTouch: width === 390, isMobile: width === 390 });
 
         test('Manager create, editor assignment, bulk move, search expansion, and delete preserve characters', async ({ page }) => {
-            await protectMaintainerServer(page);
             const characters = makeCharacters(3);
             const settingsState = await routeSettings(page, settings => {
                 clearListFilters(settings);
@@ -88,33 +92,71 @@ for (const { label, width } of [{ label: 'desktop', width: 1440 }, { label: 'mob
 
             await list.locator('[data-action-id="more"]').click();
             await page.getByRole('menuitem', { name: 'Manage Folders', exact: true }).click();
-            const manager = page.locator('.sb-folder-manager-host[open]');
+            const manager = page.locator('.sb-dialog-host[open]:has(> .sb-folder-manager)');
             await expect(manager).toBeVisible();
-            const name = manager.locator('.sb-folder-manager__new');
-            await name.fill('QA Folder');
-            await manager.locator('.sb-folder-manager__add').click();
+            const createFolder = async name => {
+                const addFolder = manager.getByRole('button', { name: 'New Folder', exact: true });
+                if (page.viewportSize().width > 450) {
+                    await addFolder.focus();
+                    await page.keyboard.press('Enter');
+                } else {
+                    await addFolder.click();
+                }
+                const input = page.locator('.sb-custom-popover:visible, .sb-action-sheet:visible').getByRole('textbox', { name: 'New Folder', exact: true });
+                await input.fill(name);
+                if (page.viewportSize().width > 450) {
+                    const create = page.locator('.sb-custom-popover:visible').getByRole('button', { name: 'Create', exact: true });
+                    await page.keyboard.press('Tab');
+                    await expect(create).toBeFocused();
+                    await page.keyboard.press('Shift+Tab');
+                    await expect(input).toBeFocused();
+                    await page.keyboard.press('Tab');
+                    await page.keyboard.press('Space');
+                } else {
+                    await input.press('Enter');
+                }
+            };
+            await createFolder('QA Folder');
             const folderId = await page.evaluate(async () => (await import('/scripts/sillybunny-folders.js')).getFolders('characters')[0].id);
             await expect(manager.locator(`[data-folder-id="${folderId}"]`)).toBeVisible();
-            await name.fill('QA Delete Folder');
-            await manager.locator('.sb-folder-manager__add').click();
+            await manager.getByRole('button', { name: 'Search', exact: true }).click();
+            const managerSearch = manager.getByRole('searchbox', { name: 'Search', exact: true });
+            await expectSharedDialogEntryStyles(managerSearch);
+            await managerSearch.fill('no-folder-matches-this');
+            await expect(manager.locator('.sb-folder-manager__folder-row:not([hidden])')).toHaveCount(0);
+            await expect(manager.getByRole('heading', { name: 'No results', exact: true })).toBeVisible();
+            await managerSearch.fill('QA Folder');
+            await expect(manager.locator(`[data-folder-id="${folderId}"]`)).toBeVisible();
+            await expect(manager.locator('.sb-folder-manager__folder-row:not([hidden])')).toHaveCount(1);
+            await managerSearch.press('Escape');
+            await managerSearch.press('Escape');
+            const folderRow = manager.locator(`[data-folder-id="${folderId}"]`);
+            await folderRow.locator('.sb-folder-manager__dot').click();
+            await expect(manager.locator('.sb-dialog__back').last()).toBeVisible();
+            await manager.locator('.sb-dialog__back').last().click();
+            await folderRow.focus();
+            await page.keyboard.press('Enter');
+            await expect(manager.locator('.sb-dialog__back').last()).toBeVisible();
+            await manager.locator('.sb-dialog__back').last().click();
+            await createFolder('QA Delete Folder');
             const deleteFolderId = await page.evaluate(async () => (await import('/scripts/sillybunny-folders.js')).getFolders('characters').find(folder => folder.name === 'QA Delete Folder').id);
             const deleteFolderRow = manager.locator(`[data-folder-id="${deleteFolderId}"]`);
             await deleteFolderRow.locator('.sb-folder-manager__row-menu').click();
             await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-            const cancelDelete = page.locator('dialog.popup[open]').last();
+            const cancelDelete = page.locator('.sb-dialog-host[role="alertdialog"][open]');
             await expect(cancelDelete).toContainText('Delete Folder?');
             await cancelDelete.getByRole('button', { name: 'Cancel', exact: true }).click();
             await expect(deleteFolderRow).toBeVisible();
             await deleteFolderRow.locator('.sb-folder-manager__row-menu').click();
             await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
-            const confirmDelete = page.locator('dialog.popup[open]').last();
+            const confirmDelete = page.locator('.sb-dialog-host[role="alertdialog"][open]');
             await expect(confirmDelete.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
             await expect(confirmDelete).toContainText('The characters in this folder stay in your library.');
             await confirmDelete.getByRole('button', { name: 'Delete', exact: true }).click();
             await expect.poll(() => page.evaluate(async id => (await import('/scripts/sillybunny-folders.js')).getFolders('characters').some(folder => folder.id === id), deleteFolderId)).toBe(false);
 
             await manager.locator(`[data-folder-id="${folderId}"] .sb-folder-manager__count`).click();
-            await expect(manager.locator('.sb-folder-manager__back')).toBeVisible();
+            await expect(manager.locator('.sb-dialog__back').last()).toBeVisible();
             await manager.locator('.sb-folder-manager__add-member').click();
             const picker = page.locator('.sb-picker:visible, .sb-picker-sheet:visible').last();
             await expect(picker).toBeVisible();
@@ -124,9 +166,9 @@ for (const { label, width } of [{ label: 'desktop', width: 1440 }, { label: 'mob
             await expect.poll(() => page.evaluate(async () => (await import('/scripts/sillybunny-folders.js')).getFolderId('characters', 'folder-qa-2.png'))).toBe(folderId);
             await manager.locator('.sb-folder-manager__remove').click();
             await expect.poll(() => page.evaluate(async () => (await import('/scripts/sillybunny-folders.js')).getFolderId('characters', 'folder-qa-2.png'))).toBeNull();
-            await manager.locator('.sb-folder-manager__back').click();
+            await manager.locator('.sb-dialog__back').last().click();
 
-            await manager.locator('.sb-folder-manager__close').click();
+            await manager.locator('.sb-dialog__close').click();
 
             let firstRow = list.locator('[data-sb-list-key="character:folder-qa-0.png"]');
             await firstRow.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -279,3 +321,34 @@ for (const { label, width } of [{ label: 'desktop', width: 1440 }, { label: 'mob
         });
     });
 }
+
+test('desktop Folder Manager New Folder trigger closes its open popover on repeat activation', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 844 });
+    const characters = makeCharacters(1);
+    await routeSettings(page, settings => {
+        clearListFilters(settings);
+        settings.power_user.sb_folders = {
+            version: 1,
+            migratedFromTags: true,
+            characters: { folders: [], members: {} },
+            groups: { folders: [], members: {} },
+        };
+    });
+    await routeCharacters(page, characters);
+    await page.route('**/api/characters/edit', route => route.fulfill({ body: 'ok' }));
+    await page.goto('/');
+    await waitForApp(page);
+    const list = await openCharacters(page);
+    await list.locator('[data-action-id="more"]').click();
+    await page.getByRole('menuitem', { name: 'Manage Folders', exact: true }).click();
+    const manager = page.locator('.sb-dialog-host[open]:has(> .sb-folder-manager)');
+    await expect(manager).toBeVisible();
+    const addFolder = manager.getByRole('button', { name: 'New Folder', exact: true });
+    await addFolder.click();
+    const popover = page.locator('.sb-custom-popover:visible');
+    await expect(popover).toBeVisible();
+    await expect(addFolder).toHaveAttribute('aria-expanded', 'true');
+    await addFolder.click();
+    await expect(popover).toHaveCount(0);
+    await expect(addFolder).toHaveAttribute('aria-expanded', 'false');
+});

@@ -419,7 +419,8 @@ export async function visualNovelUpdateLayers(container) {
 
         const avatar = element.data('avatar');
         const layerIndex = layerIndices.indexOf(avatar);
-        element.css('z-index', layerIndex);
+        // SillyBunny: sprite layers sit above chat but below zoomed avatars (the shared layer ladder).
+        element.css('z-index', `calc(var(--sb-z-sprites, 100) + ${layerIndex})`);
         element.show();
 
         const promise = new Promise(resolve => {
@@ -3405,6 +3406,14 @@ export async function init() {
         $(document).on('keydown', '.expression_list_regenerate', onExpressionGenerationKeydown);
         $(document).on('click', '.expression_list_delete', onClickExpressionDelete);
         $(window).on('resize', () => updateVisualNovelModeDebounced());
+        // SillyBunny: docked panels change the Visual Novel canvas width without a viewport resize.
+        window.addEventListener('sb:side-panel-layout', () => {
+            if (isVisualNovelMode()) {
+                void visualNovelUpdateLayers($('#visual-novel-wrapper')).catch(error => {
+                    console.error('Failed to reposition Visual Novel sprites after a side-panel layout change.', error);
+                });
+            }
+        });
         $('#open_chat_expressions').hide();
 
         await renderAdditionalExpressionSettings();

@@ -1,7 +1,9 @@
 import { t } from '../i18n.js';
-import { MOBILE_QUERY, positionPopover } from '../sillybunny-action-menu.js';
+import { positionPopover } from '../sillybunny-action-menu.js';
+import { OVERLAY_SHEET_QUERY } from './breakpoints.js';
 import { animateIn, animateOut, stopMotion, MOTION_FAST, MOTION_POPOVER_CLOSE, MOTION_EASE_OUT_CUBIC } from '../sillybunny-motion.js';
 import { blockUpstreamDrawerClose, createSheetController } from '../sillybunny-sheet.js';
+import { hostOverlayLayer } from './overlay-host.js';
 
 let activePicker = null;
 let pickerId = 0;
@@ -26,7 +28,7 @@ function createIcon(icon, fallback = 'fa-solid fa-puzzle-piece') {
 }
 
 function isMobileLayout() {
-    return window.matchMedia(MOBILE_QUERY).matches;
+    return window.matchMedia(OVERLAY_SHEET_QUERY).matches;
 }
 
 function setTriggerExpanded(trigger, expanded) {
@@ -525,6 +527,7 @@ export function openPicker({
         frame.title.textContent = title;
         frame.element.setAttribute('aria-labelledby', frame.title.id || (frame.title.id = createId('sb-picker-title')));
         buildPickerContent(state, frame.body);
+        hostOverlayLayer(frame.backdrop, frame.element);
         frame.element.addEventListener('keydown', handlePickerKeydown, true);
         state.input.addEventListener('input', handlePickerInput);
         state.surface = frame.element;
@@ -548,7 +551,7 @@ export function openPicker({
         popover.addEventListener('focusout', handlePopoverFocusOut);
         state.input.addEventListener('input', handlePickerInput);
         blockUpstreamDrawerClose(popover);
-        document.body.append(popover);
+        hostOverlayLayer(popover);
         state.surface = popover;
         state.removeContentListeners = () => {
             popover.removeEventListener('keydown', handlePickerKeydown);

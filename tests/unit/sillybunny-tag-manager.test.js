@@ -5,18 +5,16 @@ import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globa
 import fs from 'node:fs';
 
 let menuOptions;
+let popoverOptions;
 const openActionMenu = jest.fn(options => menuOptions = options);
 const closeActionMenu = jest.fn();
+const openPopover = jest.fn(options => { popoverOptions = options; return { close: jest.fn(), get isOpen() { return true; } }; });
 await jest.unstable_mockModule('../../public/scripts/sillybunny-action-menu.js', () => ({
-    openActionMenu, closeActionMenu, MOBILE_QUERY: '(max-width: 768px)',
+    openActionMenu, openPopover, closeActionMenu, MOBILE_QUERY: '(max-width: 768px)', positionPopover: jest.fn(),
 }));
 await jest.unstable_mockModule('../../public/scripts/i18n.js', () => ({
     t: (strings, ...values) => strings.reduce((text, part, index) => text + part + (values[index] ?? ''), ''),
     translate: text => text,
-}));
-await jest.unstable_mockModule('../../public/scripts/sillybunny-motion.js', () => ({
-    animateIn: jest.fn(), stopMotion: jest.fn(), play: jest.fn(),
-    animateOut: jest.fn((node, frames, done) => done()), MOTION_FAST: 0, MOTION_SLOW: 0, SPRING_SHEET: {},
 }));
 const { createTagManager, parseTagName, countLiveTagEntities, updateTagColors, loadTagManagerStyles, openTagManager, refreshTagManager } = await import('../../public/scripts/sillybunny-tag-manager.js');
 const settle = async () => { for (let index = 0; index < 15; index++) await Promise.resolve(); };
@@ -26,11 +24,12 @@ let adapter;
 let mobile;
 const names = () => [...manager.root.querySelectorAll('.tag_view_item')].map(row => row.id);
 const input = id => manager.root.querySelector(`[id="${id}"] .sb-tag-manager__name`);
-const key = (node, value) => node.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true }));
+const key = (node, value, options = {}) => node.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, ...options }));
 
 beforeEach(() => {
     jest.clearAllMocks();
     menuOptions = null;
+    popoverOptions = null;
     mobile = { matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn() };
     window.matchMedia = () => mobile;
     HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
@@ -121,7 +120,7 @@ describe('tag manager interactions', () => {
         const field = input('alpha');
         field.value = 'beta';
         field.dispatchEvent(new Event('blur'));
-        manager.root.querySelector('.sb-tag-manager__close').focus();
+        manager.root.querySelector('.sb-dialog__close').focus();
         expect(manager.close()).toBe(false);
         expect(field.value).toBe('beta');
         expect(field.getAttribute('aria-invalid')).toBe('true');
@@ -153,46 +152,64 @@ describe('tag manager interactions', () => {
         expect(manager.host.isConnected).toBe(false);
     });
 
-    test.each(['cancel', 'scrim', 'button', 'drag'])('mobile %s close route vetoes invalid pending names', route => {
+    test('mobile scrim taps do not close the sheet', () => {
+        mobile.matches = true;
+        mount();
+        input('alpha').value = ' ';
+        manager.host.querySelector('.sb-dialog-scrim').click();
+        expect(manager.host.open).toBe(true);
+        expect(input('alpha').getAttribute('aria-invalid')).toBe(null);
+    });
+
+    test.each(['cancel', 'button', 'drag'])('mobile %s close route vetoes invalid pending names', route => {
         mobile.matches = true;
         mount();
         input('alpha').value = ' ';
         if (route === 'cancel') manager.host.dispatchEvent(new Event('cancel', { cancelable: true }));
-        if (route === 'scrim') manager.host.querySelector('.sb-tag-manager__backdrop').click();
-        if (route === 'button') manager.root.querySelector('.sb-tag-manager__close').click();
+        if (route === 'button') manager.root.querySelector('.sb-dialog__close').click();
         if (route === 'drag') {
-            const handle = manager.root.querySelector('.sb-tag-manager__handle');
-            handle.dispatchEvent(new MouseEvent('pointerdown', { clientY: 5 }));
-            handle.dispatchEvent(new MouseEvent('pointerup', { clientY: 150 }));
+            const handle = manager.root.querySelector('.sb-dialog__handle');
+            handle.dispatchEvent(new MouseEvent('pointerdown', { clientY: 5, bubbles: true }));
+            handle.dispatchEvent(new MouseEvent('pointerup', { clientY: 150, bubbles: true }));
         }
         expect(manager.host.open).toBe(true);
         expect(input('alpha').getAttribute('aria-invalid')).toBe('true');
     });
 
-    test('creation happens on commit, not keystrokes; duplicate creation is rejected', () => {
+    test('creation stays disabled until a valid name and rejects duplicates', () => {
         mount();
-        const field = manager.root.querySelector('.sb-tag-manager__new');
+        manager.root.querySelector('.sb-tag-manager__add').click();
+        const field = popoverOptions.content.querySelector('input');
+        const create = popoverOptions.content.querySelector('button');
+        expect(create.disabled).toBe(true);
         field.value = 'New tag';
         field.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(adapter.create).not.toHaveBeenCalled();
+        key(field, 'Enter', { isComposing: true });
+        key(field, 'Enter', { keyCode: 229 });
         expect(adapter.create).not.toHaveBeenCalled();
         key(field, 'Enter');
         expect(adapter.create).toHaveBeenCalledWith('New tag');
         expect(input('new').value).toBe('New tag');
-        field.value = 'alpha';
-        key(field, 'Enter');
+        manager.root.querySelector('.sb-tag-manager__add').click();
+        const duplicate = popoverOptions.content.querySelector('input');
+        const duplicateButton = popoverOptions.content.querySelector('button');
+        duplicate.value = 'alpha';
+        duplicate.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(duplicateButton.disabled).toBe(true);
         expect(adapter.create).toHaveBeenCalledTimes(1);
-        expect(field.getAttribute('aria-invalid')).toBe('true');
     });
 
-    test('the creation entry uses one placeholder and a labelled plus affordance', () => {
+    test('the header plus opens a labelled name popover', () => {
         mount();
-        const entry = manager.root.querySelector('[data-sb-editor-field="new-tag"]');
-        expect(entry.textContent).toBe('');
-        const field = entry.querySelector('input');
-        expect(field.placeholder).toBe('Create a new tag');
-        field.value = 'From plus';
-        entry.querySelector('.sb-tag-manager__add').click();
-        expect(adapter.create).toHaveBeenCalledWith('From plus');
+        const add = manager.root.querySelector('.sb-tag-manager__add');
+        expect(add.getAttribute('aria-label')).toBe('Create a new tag');
+        add.click();
+        const field = popoverOptions.content.querySelector('input');
+        expect(field.placeholder).toBe('');
+        expect(popoverOptions.titleInput).toBe(field);
+        expect(popoverOptions.titleLabel.textContent).toBe('Create a new tag');
+        expect(popoverOptions.content.querySelector('strong').textContent).toBe('Create a new tag');
     });
 
     test.each(['alphabetical', 'by_entries'])('dragging from %s keeps the grip and switches to manual ordering', mode => {
@@ -216,13 +233,13 @@ describe('tag manager interactions', () => {
     test('legacy tag-folder controls are absent from the manager', async () => {
         mount();
         expect(manager.root.querySelector('.sb-tag-manager__folder')).toBeNull();
-        manager.root.querySelector('.sb-tag-manager__menu').click();
+        manager.root.querySelector('.sb-dialog__menu').click();
         expect(menuOptions.sections.flatMap(section => section.items).some(item => item.label === 'Tags as Folders')).toBe(false);
     });
 
     test.each(['Backup', 'Restore', 'Prune'])('%s routes to its upstream handler', async label => {
         mount();
-        manager.root.querySelector('.sb-tag-manager__menu').click();
+        manager.root.querySelector('.sb-dialog__menu').click();
         menuOptions.sections.flatMap(section => section.items).find(item => item.label === label).onSelect();
         await settle();
         expect(adapter.actions[label.toLowerCase()]).toHaveBeenCalledTimes(1);
@@ -259,7 +276,7 @@ describe('tag manager interactions', () => {
         const field = input('alpha');
         field.focus();
         field.value = 'Pending';
-        const scroller = manager.root.querySelector('.sb-tag-manager__body');
+        const scroller = manager.root.querySelector('.sb-dialog__body');
         scroller.scrollTop = 100;
         state.tagMap['Alice.png'].push('beta');
         state.tags[0].color = 'blue';
@@ -320,7 +337,7 @@ describe('tag manager interactions', () => {
         const field = input('alpha');
         field.value = ' ';
         key(field, 'Enter');
-        const search = manager.root.querySelector('.sb-tag-manager__search');
+        const search = manager.root.querySelector('.sb-dialog__search-input');
         search.value = 'beta';
         search.dispatchEvent(new Event('input'));
         jest.advanceTimersByTime(300);
@@ -333,7 +350,8 @@ describe('tag manager interactions', () => {
     test('search uses the shared debounce and retains mounted pending fields', () => {
         jest.useFakeTimers();
         mount();
-        const search = manager.root.querySelector('.sb-tag-manager__search');
+        const search = manager.root.querySelector('.sb-dialog__search-input');
+        manager.root.querySelector('.sb-dialog__search-toggle').click();
         search.value = 'alpha';
         search.dispatchEvent(new Event('input'));
         jest.advanceTimersByTime(300);
@@ -341,7 +359,7 @@ describe('tag manager interactions', () => {
         expect(manager.root.querySelector('[id="alpha"]').hidden).toBe(false);
         expect(input('beta')).not.toBeNull();
         key(search, 'Escape');
-        expect(manager.root.querySelector('.sb-tag-manager__search-field').hidden).toBe(false);
+        expect(manager.root.querySelector('.sb-dialog__search').hidden).toBe(false);
         expect(search.value).toBe('');
         expect(manager.root.querySelector('[id="beta"]').hidden).toBe(false);
     });
@@ -372,7 +390,7 @@ describe('tag manager interactions', () => {
         await settle();
         expect(sort).toHaveBeenCalledTimes(1);
         expect(document.querySelector('[id="external"]')).not.toBeNull();
-        document.querySelector('.sb-tag-manager__close').click();
+        document.querySelector('.sb-dialog__close').click();
         await opening;
     });
 

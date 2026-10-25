@@ -28,6 +28,7 @@ import {
     saveOrganization,
     searchScope,
 } from './api.js';
+import { openAlert } from '../../../sillybunny-editor/dialog.js';
 
 const KINDS = [
     ['solo', 'Characters'],
@@ -465,6 +466,7 @@ export async function openArchive(ctx, opener = null) {
     const instance = new ctx.Popup(ui.root, ctx.POPUP_TYPE.TEXT, '', {
         wide: true,
         large: true,
+        tier: 'window',
         allowVerticalScrolling: false,
         okButton: tr(ctx, 'Close'),
     });
@@ -481,6 +483,7 @@ export async function openArchive(ctx, opener = null) {
 
     try {
         const shown = instance.show();
+        ui.observeLayout();
         void loadRows(ctx, state, ui);
         void loadOrganization(ctx, state, ui);
         await shown;
@@ -510,7 +513,15 @@ function buildRoot(ctx, state) {
     const root = el('div', 'sbca-root');
     root.dataset.sbcaView = 'list';
     root.dataset.sbcaDensity = 'comfortable';
-    const mobileQuery = globalThis.matchMedia('(max-width: 1000px)');
+    // Match the archive's container queries, not the viewport around a narrower Window frame.
+    const mobileQuery = Object.assign(new EventTarget(), { matches: globalThis.matchMedia('(max-width: 1000px)').matches });
+    const layoutObserver = new ResizeObserver(([entry]) => {
+        const width = entry.contentRect.width;
+        const matches = width <= 1000;
+        if (!width || mobileQuery.matches === matches) return;
+        mobileQuery.matches = matches;
+        mobileQuery.dispatchEvent(Object.assign(new Event('change'), { matches: mobileQuery.matches }));
+    });
     const avoidSoftwareKeyboard = globalThis.matchMedia('(max-width: 1000px), (any-pointer: coarse)');
 
     const heading = el('h3', 'sbca-heading', tr(ctx, 'Chat Archive'));
@@ -701,6 +712,9 @@ function buildRoot(ctx, state) {
 
     const ui = {
         root,
+        observeLayout() {
+            layoutObserver.observe(root.closest('.sbca-dialog.sb-dialog--window > .popup-body') ?? document.body);
+        },
         heading,
         search,
         characterMentions,
@@ -886,6 +900,7 @@ function buildRoot(ctx, state) {
         clearTimeout(queryTimer);
         clearTimeout(tagTimer);
         mobileQuery.removeEventListener('change', handleBreakpoint);
+        layoutObserver.disconnect();
         document.removeEventListener('pointerdown', closeOwnerOnOutside);
     };
 
@@ -1784,14 +1799,21 @@ function namedItemHasReferences(organization, type, id) {
     ));
 }
 
-function deleteNamedItem(ctx, state, ui, type, item) {
-    if (type === 'views' && !globalThis.confirm(tr(ctx, 'Delete saved view {name}?', { name: item.name }))) {
-        return;
-    }
-    if ((type === 'folders' || type === 'collections')
-        && namedItemHasReferences(state.organization, type, item.id)
-        && !globalThis.confirm(tr(ctx, 'Delete {name} and remove it from chats and saved views?', { name: item.name }))) {
-        return;
+async function deleteNamedItem(ctx, state, ui, type, item) {
+    const message = type === 'views'
+        ? tr(ctx, 'Delete saved view {name}?', { name: item.name })
+        : (type === 'folders' || type === 'collections') && namedItemHasReferences(state.organization, type, item.id)
+            ? tr(ctx, 'Delete {name} and remove it from chats and saved views?', { name: item.name })
+            : null;
+    if (message) {
+        const response = await openAlert({
+            heading: message,
+            responses: [
+                { id: 'cancel', label: tr(ctx, 'Cancel') },
+                { id: 'delete', label: tr(ctx, 'Delete'), appearance: 'destructive' },
+            ],
+        });
+        if (response !== 'delete') return;
     }
     state.organization = normalizeOrganization({
         ...state.organization,
@@ -1850,7 +1872,14 @@ async function importOrganization(ctx, state, ui) {
         ui.backup.status.textContent = tr(ctx, 'This organization backup is invalid or unsupported.');
         return;
     }
-    if (!globalThis.confirm(tr(ctx, 'Replace all current folders, collections, saved views, tags, and favorites?'))) {
+    const response = await openAlert({
+        heading: tr(ctx, 'Replace all current folders, collections, saved views, tags, and favorites?'),
+        responses: [
+            { id: 'cancel', label: tr(ctx, 'Cancel') },
+            { id: 'replace', label: tr(ctx, 'Replace'), appearance: 'destructive' },
+        ],
+    });
+    if (response !== 'replace') {
         return;
     }
     state.organizationLoadAbort?.abort();

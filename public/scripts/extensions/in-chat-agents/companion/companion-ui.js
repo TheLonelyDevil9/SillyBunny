@@ -765,6 +765,8 @@ export async function editCompanionResult(messageIndex, agentId, message, result
     const popupResult = await new Popup(editor, POPUP_TYPE.CONFIRM, '', {
         okButton: 'Save Note',
         cancelButton: 'Cancel',
+        tier: 'window',
+        title: 'Edit companion note',
         wide: true,
         large: true,
     }).show();
@@ -783,7 +785,12 @@ export async function editCompanionResult(messageIndex, agentId, message, result
 }
 
 async function deleteCompanionCard(messageIndex, agentId, message) {
-    const popupResult = await new Popup('Delete this companion note?', POPUP_TYPE.CONFIRM).show();
+    // SillyBunny: destructive companion deletion names the delete action.
+    const popupResult = await new Popup('Delete this companion note?', POPUP_TYPE.CONFIRM, '', {
+        okButton: 'Delete',
+        defaultResult: POPUP_RESULT.NEGATIVE,
+        onOpen: popup => popup.okButton.classList.add('is-destructive'),
+    }).show();
     if (popupResult !== POPUP_RESULT.AFFIRMATIVE) {
         return;
     }

@@ -82,12 +82,16 @@ import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '
 import { renderTemplateAsync } from './templates.js';
 import { SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { callGenericPopup, Popup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
+// SillyBunny: Native confirmation uses the shared alert so discarded drafts keep a safe default.
+import { openAlert } from './sillybunny-editor/dialog.js';
 import { t } from './i18n.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { COMETAPI_IGNORE_PATTERNS, IGNORE_SYMBOL, MEDIA_DISPLAY, MEDIA_TYPE } from './constants.js';
 import { setOpenRouterProviders, syncNanoGptProvidersForModel, syncOpenRouterProvidersForModel, updateNanoGptProvidersWarning, updateOpenRouterProvidersWarning } from './textgen-models.js';
 import { getNanoGptServiceTiers, isNanoGptPayg, updateServiceTierOptions } from './service-tiers.js';
+// SillyBunny: YAML and reasoning controls adopt shared full-width Window rows.
+import { customEndpointParametersOptions } from './sillybunny-editor/adapters/window-content-dialogs.js';
 import { hasTextOrArrayPayload, shouldRetainContextAtDepth, stripHtmlTagsFromContext, stripOocBlocksFromContext } from './ooc-blocks.js';
 import { checkPostInterceptChatBudget, shouldCheckPostInterceptChatBudget } from './openai-prompt-budget.js';
 import {
@@ -4374,10 +4378,17 @@ function injectServerChatCompletionConfigCard() {
 
     $advancedDrawerContent.append(buildServerChatCompletionConfigDrawer());
 
+    // SillyBunny: Reloading this editor can discard a draft, so Cancel is the default response.
     document.getElementById('sb-chat-completion-config-reload')?.addEventListener('click', async () => {
-        if (serverChatCompletionConfigState.loaded && updateServerChatCompletionConfigDirtyState()
-            && !window.confirm('Discard your unsaved server config edits and reload from config.yaml?')) {
-            return;
+        if (serverChatCompletionConfigState.loaded && updateServerChatCompletionConfigDirtyState()) {
+            const response = await openAlert({
+                heading: 'Discard your unsaved server config edits and reload from config.yaml?',
+                responses: [
+                    { id: 'cancel', label: t`Cancel` },
+                    { id: 'discard', label: t`Discard`, appearance: 'destructive' },
+                ],
+            });
+            if (response !== 'discard') return;
         }
 
         await loadServerChatCompletionConfig({ force: true });
@@ -9721,7 +9732,8 @@ async function onCustomizeParametersClick() {
 
     syncCustomReasoningPopup();
 
-    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true });
+    // SillyBunny: preserve YAML whitespace while the shared Window body owns scrolling.
+    await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: true, large: true, ...customEndpointParametersOptions(template) });
 }
 
 /**

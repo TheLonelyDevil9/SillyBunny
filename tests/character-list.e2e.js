@@ -52,6 +52,28 @@ test.beforeEach(async ({ page }) => {
     await page.route(/\/api\/(?:characters|groups|chats)\/(?:create|delete|duplicate|rename)$/, route => route.abort());
 });
 
+test('Start new chat reflects current-chat deletion in its destructive response and Return default', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.waitForFunction(() => window.SillyTavern?.getContext?.()?.eventSource?.autoFireLastArgs?.has('app_ready'), null, { timeout: 60000 });
+    await page.waitForFunction(() => !document.getElementById('preloader'));
+    await page.evaluate(async () => {
+        const app = await import('/script.js');
+        const id = app.characters.findIndex(character => character.avatar === 'qa-list-character-0.png');
+        await app.selectCharacterById(id, { switchMenu: false });
+        document.getElementById('option_start_new_chat').click();
+    });
+    const popup = page.locator('dialog.popup[open]').last();
+    await expect(popup.locator('.popup-button-ok')).not.toHaveClass(/is-destructive/);
+    await popup.locator('#del_chat_checkbox').check();
+    await expect(popup.locator('.popup-button-ok')).toHaveClass(/is-destructive/);
+    await page.keyboard.press('Enter');
+    await expect(popup).toBeVisible();
+    await popup.locator('#del_chat_checkbox').uncheck();
+    await expect(popup.locator('.popup-button-ok')).not.toHaveClass(/is-destructive/);
+    await popup.locator('.popup-button-cancel').click();
+});
+
 test.afterEach(async ({ page }) => {
     await page.evaluate(async () => {
         if (!window.__sbCharacterListOriginalGroups) return;
@@ -87,6 +109,24 @@ async function showView(page, view) {
     await expect(list(page)).toBeVisible();
     await expect(list(page)).toHaveAttribute('data-view', view);
     await expect.poll(() => page.evaluate(async () => (await import('/script.js')).menu_type)).toBe('characters');
+}
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    test(`Groups filter toolbar avoids extra vertical padding at ${viewport.width}px`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await page.goto('/');
+        await page.waitForFunction(() => window.SillyTavern?.getContext?.()?.eventSource?.autoFireLastArgs?.has('app_ready'), null, { timeout: 60000 });
+        await page.waitForFunction(() => !document.getElementById('preloader'));
+        await showView(page, 'groups');
+
+        const filterRow = page.locator('.sb-character-list__filters');
+        await expect(filterRow).toBeVisible();
+        const height = await filterRow.evaluate(node => node.getBoundingClientRect().height);
+        const stylesheetLinks = await page.evaluate(() => [...document.querySelectorAll('link[href*="sillybunny-character-list.css"]')].map(link => link.href));
+
+        expect(height).toBeLessThanOrEqual(viewport.width <= 768 ? 45 : 41);
+        expect(stylesheetLinks).toHaveLength(1);
+    });
 }
 
 for (const { label, width, reducedMotion, appReducedMotion = false } of [
@@ -340,6 +380,69 @@ async function expectEditorBackRestoration(page, view) {
     });
     await expect(list(page).locator(`[data-sb-list-key=${JSON.stringify(key)}]`)).toBeFocused();
     await expect.poll(() => page.evaluate(() => window.SillyBunnyCharacterListController.captureState())).toEqual(origin);
+}
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    test(`empty Characters and Groups use a top status page at ${viewport.width}px`, async ({ page }) => {
+        await prepareList(page, viewport);
+        await setSearch(page, 'no matching entity');
+        await expect(list(page).locator('.sb-character-list__box')).toBeHidden();
+        await expect(list(page).locator('.sb-status-page__title')).toHaveText('No results');
+        await expect(list(page).locator('.sb-status-page__description')).toHaveCount(0);
+
+        await page.evaluate(async () => {
+            const app = await import('/script.js');
+            const groups = await import('/scripts/group-chats.js');
+            app.entitiesFilter.setFilterData('search', '', true);
+            document.getElementById('character_search_bar').value = '';
+            app.characters.splice(0, app.characters.length);
+            groups.groups.splice(0, groups.groups.length);
+            await app.printCharacters(false);
+        });
+        const status = list(page).locator('.sb-character-list__status');
+        await expect(status).toBeVisible();
+        await expect(list(page).locator('.empty_block')).toHaveCount(0);
+        await expect(status.locator('.sb-status-page__description')).toHaveText('There are no items to display.');
+        await expect(status.locator('.sb-status-page__title')).not.toHaveText('');
+        const statusBox = await status.boundingBox();
+        const statusPageBox = await status.locator('.sb-status-page').boundingBox();
+        const paneBox = await list(page).boundingBox();
+        const controlBottoms = await Promise.all(['.sb-character-list__header', '.sb-character-list__search', '.sb-character-list__filters'].map(selector => list(page).locator(selector).boundingBox()));
+        expect(statusBox).not.toBeNull();
+        expect(statusPageBox).not.toBeNull();
+        expect(paneBox).not.toBeNull();
+        expect(controlBottoms.every(Boolean)).toBe(true);
+        expect(Math.abs(statusPageBox.y - Math.max(...controlBottoms.map(box => box.y + box.height)))).toBeLessThanOrEqual(1);
+        const typography = await status.locator('.sb-status-page').evaluate(element => {
+            const title = getComputedStyle(element.querySelector('.sb-status-page__title'));
+            const description = getComputedStyle(element.querySelector('.sb-status-page__description'));
+            return { titleSize: parseFloat(title.fontSize), descriptionSize: parseFloat(description.fontSize), titleWeight: Number(title.fontWeight) };
+        });
+        expect(typography.titleSize).toBeGreaterThan(typography.descriptionSize * 1.25);
+        expect(typography.titleWeight).toBeGreaterThanOrEqual(700);
+        await page.evaluate(() => {
+            window.__sbEmptyStatusCreateClicked = false;
+            document.getElementById('rm_button_create').addEventListener('click', () => {
+                window.__sbEmptyStatusCreateClicked = true;
+            }, { once: true });
+        });
+        await status.locator('.sb-status-page__action').click();
+        expect(await page.evaluate(() => window.__sbEmptyStatusCreateClicked)).toBe(true);
+
+        await showView(page, 'groups');
+        const groupStatus = list(page).locator('.sb-character-list__status');
+        await expect(groupStatus).toBeVisible();
+        await expect(list(page).locator('.sb-character-list__box')).toBeHidden();
+        await expect(list(page).locator('.empty_block')).toHaveCount(0);
+        await expect(groupStatus.locator('.sb-status-page__description')).toHaveText('There are no items to display.');
+        const groupTypography = await groupStatus.locator('.sb-status-page').evaluate(element => {
+            const title = getComputedStyle(element.querySelector('.sb-status-page__title'));
+            const description = getComputedStyle(element.querySelector('.sb-status-page__description'));
+            return { titleSize: parseFloat(title.fontSize), descriptionSize: parseFloat(description.fontSize), titleWeight: Number(title.fontWeight) };
+        });
+        expect(groupTypography.titleSize).toBeGreaterThan(groupTypography.descriptionSize * 1.25);
+        expect(groupTypography.titleWeight).toBeGreaterThanOrEqual(700);
+    });
 }
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 375, height: 812 }]) {
@@ -895,7 +998,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         const dialog = page.locator('dialog.popup[open]').last();
         await expect(dialog).toContainText('Delete 1 characters?');
         await expect(dialog.locator('#del_char_checkbox')).toBeVisible();
-        await dialog.getByRole('button', { name: 'No', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
         await expect(list(page)).toHaveAttribute('data-selection-mode', 'false');
     });
 
@@ -907,7 +1010,11 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         await listRows(page, 'groups').first().locator('.ch_name').click();
         await list(page).locator('.sb-selection-action[data-action-id="tag"]').click();
         await expect(page.locator('#bulk_tag_popup')).toContainText('Modify tags of 1 groups');
-        await page.locator('#bulk_tag_popup_cancel').click();
+        const tagEntry = page.locator('#bulkTagInput');
+        await expect(tagEntry).toHaveClass(/sb-dialog__entry/);
+        await expect(tagEntry).toHaveCSS('border-radius', '9px');
+        await expect(tagEntry).toHaveCSS('padding-inline-start', '9px');
+        await page.locator('.sb-dialog.sb-bulk-tag-dialog .sb-dialog__close').click();
         await expect(page.locator('#bulk_tag_popup')).toHaveCount(0);
         await expect(list(page)).toHaveAttribute('data-selection-mode', 'false');
         await enterSelection(page);
@@ -915,7 +1022,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         await list(page).locator('.sb-selection-action[data-action-id="delete"]').click();
         const dialog = page.locator('dialog.popup[open]').last();
         await expect(dialog).toContainText('Delete 1 groups?');
-        await dialog.getByRole('button', { name: 'No', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
         await expect(list(page)).toHaveAttribute('data-selection-mode', 'false');
         await enterSelection(page);
         await showView(page, 'characters');

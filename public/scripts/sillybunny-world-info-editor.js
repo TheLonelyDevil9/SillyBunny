@@ -28,7 +28,7 @@ import {
 import { mountWorldInfoSettings } from './sillybunny-world-info-settings.js';
 import { mountWorldInfoEntry, worldInfoDraftKey } from './sillybunny-world-info-entry.js';
 
-const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261018e', id: 'deferred-world-info-editor-css' };
+const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261026a', id: 'deferred-world-info-editor-css' };
 const mountedEditors = new WeakMap();
 const itemKey = item => item.kind === 'settings' ? 'settings' : `entry:${item.uid}`;
 
@@ -200,6 +200,7 @@ export function mountWorldInfoEditor(container) {
     const searchButton = button(t`Search`, 'magnifying-glass', () => searchControl.toggle());
     // HUMAN: replace — Sort control label.
     const filterButton = button(t`lorum ipsum`, 'arrow-down-wide-short', trigger => openFilterMenu(trigger), 'sb-wi-sort-button');
+    [bookActions, newEntryButton, searchButton, filterButton].forEach(control => control.classList.add('sb-header-icon-button'));
     filterButton.setAttribute('aria-haspopup', 'menu');
     filterButton.setAttribute('aria-expanded', 'false');
     listHeader.append(bookSwitcher, headerSpacer, searchButton, newEntryButton, filterButton, bookActions);
@@ -421,7 +422,11 @@ export function mountWorldInfoEditor(container) {
         const { name, data } = state;
         if (!(await shell.guardLeave())) return;
         if (state.data !== data) return;
-        if (!await Popup.show.confirm(t`Delete world info entry with UID: ${uid}?`, t`This action is irreversible!`)) return;
+        if (!await Popup.show.confirm(t`Delete world info entry with UID: ${uid}?`, t`This action is irreversible!`, {
+            okButton: t`Delete`,
+            defaultResult: POPUP_RESULT.NEGATIVE,
+            onOpen: popup => popup.okButton.classList.add('is-destructive'),
+        })) return;
         if (state.data !== data) return;
         const result = await remove(deps, name, data, uid);
         if (!result.ok || state.data !== data) return finishListMutation(data, result);
@@ -459,7 +464,11 @@ export function mountWorldInfoEditor(container) {
         const { name, data } = state;
         if (!(await shell.guardLeave()) || state.data !== data) return;
         // HUMAN: replace — bulk delete confirmation; the selected count remains explicit.
-        if (!await Popup.show.confirm(`${t`lorum ipsum`} (${uids.length})`, t`This action is irreversible!`)) return;
+        if (!await Popup.show.confirm(`${t`lorum ipsum`} (${uids.length})`, t`This action is irreversible!`, {
+            okButton: t`Delete`,
+            defaultResult: POPUP_RESULT.NEGATIVE,
+            onOpen: popup => popup.okButton.classList.add('is-destructive'),
+        })) return;
         if (state.data !== data) return;
         const targets = existingSelectedUids(uids);
         const result = await remove(deps, name, data, targets);
@@ -509,10 +518,10 @@ export function mountWorldInfoEditor(container) {
                 const prompt = element('p', '', t`Move/Copy '${title}' to:`);
                 prompt.append(element('strong', '', target));
                 const popup = new Popup(prompt, POPUP_TYPE.CONFIRM, '', {
+                    okButton: false,
                     cancelButton: t`Cancel`,
                     customButtons: [{ text: t`Move`, result: POPUP_RESULT.CUSTOM1 }, { text: t`Copy`, result: POPUP_RESULT.CUSTOM2 }],
                 });
-                popup.okButton.hidden = true;
                 const choice = await popup.show();
                 if (![POPUP_RESULT.CUSTOM1, POPUP_RESULT.CUSTOM2].includes(choice) || state.name !== source) return;
                 if (!(await shell.guardLeave())) return;

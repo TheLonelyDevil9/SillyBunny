@@ -146,6 +146,17 @@ let pathfinderExtensionsMountPromise = null;
 let pathfinderExtensionsMountRevision = 0;
 let fixTrackersRunning = false;
 let refreshAgentsPanels = () => {};
+let dialogAdaptersPromise;
+
+function loadDialogAdapters() {
+    if (dialogAdaptersPromise) return dialogAdaptersPromise;
+    const pending = import('./ui/dialog-adapters.js');
+    dialogAdaptersPromise = pending.catch(error => {
+        dialogAdaptersPromise = null;
+        throw error;
+    });
+    return dialogAdaptersPromise;
+}
 
 const REMOVED_BUNDLED_GROUP_IDS = new Set([
     'grp-pura-director',
@@ -602,7 +613,11 @@ async function convertTrackersFromList() {
         toastr.info('Every tracker already runs as a companion.');
         return;
     }
-    const result = await new Popup(`Convert ${inlineTrackers.length} tracker agent(s) to companion execution? They will run automatically on their own model and show in the Tracker panel.`, POPUP_TYPE.CONFIRM).show();
+    // SillyBunny: confirmation labels identify the tracker conversion action.
+    const result = await new Popup(`Convert ${inlineTrackers.length} tracker agent(s) to companion execution? They will run automatically on their own model and show in the Tracker panel.`, POPUP_TYPE.CONFIRM, '', {
+        tier: 'alert',
+        okButton: t`Convert`,
+    }).show();
     if (result !== POPUP_RESULT.AFFIRMATIVE) return;
     for (const agent of inlineTrackers) {
         if (!convertAgentExecution(agent, 'companion')) continue;
@@ -926,13 +941,18 @@ async function performAgentBulkAction(keys, action, { properties = {}, onSaved =
 async function editAgentListProperties(keys, options) {
     const content = document.getElementById('ica--bulkEditPopup');
     if (!content) throw new Error('Agent bulk-edit content is unavailable');
+    const { prepareBulkEditDialog } = await loadDialogAdapters();
+    const dialog = prepareBulkEditDialog(content);
     const marker = document.createComment('Agent bulk-edit origin');
     content.before(marker);
     const fields = ['role', 'phase', 'promptMode', 'promptEnabled', 'ppEnabled', 'scan'];
     for (const field of fields) content.querySelector(`#ica--bulkEdit-${field}`).value = '';
+    dialog.sync();
     content.style.display = '';
     try {
-        const result = await new Popup(content, POPUP_TYPE.CONFIRM, '', { okButton: t`Apply`, cancelButton: t`Cancel`, wide: true }).show();
+        const result = await new Popup(content, POPUP_TYPE.CONFIRM, '', {
+            okButton: t`Apply`, cancelButton: t`Cancel`, tier: 'dialog', title: t`Bulk Edit Selected Agents`, wide: true,
+        }).show();
         if (result !== POPUP_RESULT.AFFIRMATIVE) return false;
         const properties = Object.fromEntries(fields.map(field => [field, content.querySelector(`#ica--bulkEdit-${field}`).value]));
         if (fields.every(field => properties[field] === '')) {
@@ -1054,7 +1074,11 @@ async function pickManualAgentRunTargets(agent) {
         }
     });
 
-    const popupResult = await new Popup(picker, POPUP_TYPE.CONFIRM, '', { okButton: 'Apply', cancelButton: 'Cancel' }).show();
+    const { prepareManualRunTargets } = await loadDialogAdapters();
+    prepareManualRunTargets(picker);
+    const popupResult = await new Popup(picker, POPUP_TYPE.CONFIRM, '', {
+        okButton: t`Apply`, cancelButton: t`Cancel`, tier: 'dialog',
+    }).show();
     if (popupResult !== POPUP_RESULT.AFFIRMATIVE) {
         return null;
     }
@@ -1379,6 +1403,8 @@ async function previewCompanionFeedbackPrompt(agent) {
     );
 
     await new Popup(previewHtml, POPUP_TYPE.TEXT, '', {
+        tier: 'window',
+        title: t`Preview Feedback`,
         wide: true,
         large: true,
         allowVerticalScrolling: true,
@@ -1409,6 +1435,8 @@ async function previewPreGenerationPrompt(agent, promptOverride = null) {
     );
 
     await new Popup(previewHtml, POPUP_TYPE.TEXT, '', {
+        tier: 'window',
+        title: t`Preview Prompt in Context`,
         wide: true,
         large: true,
         allowVerticalScrolling: true,
@@ -1432,9 +1460,12 @@ async function updateAgentFromSourceTemplate(agent) {
 
     const agentVersion = getAgentVersionValue(agent);
     const templateVersion = getTemplateVersionValue(template);
+    // SillyBunny: template updates use an explicit affirmative action label.
     const result = await new Popup(
         `Update "${escapeHtml(agent.name || template.name)}" from template v${escapeHtml(agentVersion)} to v${escapeHtml(templateVersion)}? Enabled state, quick toggle pin, order, and profile overrides will be kept.`,
         POPUP_TYPE.CONFIRM,
+        '',
+        { tier: 'alert', okButton: t`Update` },
     ).show();
 
     if (result !== POPUP_RESULT.AFFIRMATIVE) {
@@ -1459,9 +1490,12 @@ async function updateAllAgentsFromSourceTemplates() {
             return `<li>${escapeHtml(agent.name || template.name)} — v${escapeHtml(getAgentVersionValue(agent))} &rarr; v${escapeHtml(getTemplateVersionValue(template))}</li>`;
         })
         .join('');
+    // SillyBunny: bulk template updates use an explicit affirmative action label.
     const result = await new Popup(
         `Update ${outdatedAgents.length} agent(s) to their latest templates? Enabled state, quick toggle pin, order, and profile overrides will be kept.<ul class="ica--update-all-list">${names}</ul>`,
         POPUP_TYPE.CONFIRM,
+        '',
+        { tier: 'alert', allowVerticalScrolling: true, okButton: t`Update` },
     ).show();
 
     if (result !== POPUP_RESULT.AFFIRMATIVE) {
@@ -2161,9 +2195,13 @@ async function createCustomGroup(selectedKeys = null) {
         `);
     }
 
+    const { prepareCustomGroupDialog } = await loadDialogAdapters();
+    prepareCustomGroupDialog(html);
     const result = await new Popup(html, POPUP_TYPE.CONFIRM, '', {
         okButton: 'Create Group',
         cancelButton: 'Cancel',
+        tier: 'dialog',
+        title: t`Create Group`,
         wide: true,
     }).show();
 
@@ -2538,12 +2576,12 @@ function buildTrackerPreviewPopupContent(generatedKit, sampleText, extraInstruct
             <div class="ica--tracker-preview-slot"></div>
             <div class="ica--editor-section ica--regex-subsection">
                 <strong>Prompt</strong>
-                <pre style="white-space:pre-wrap;max-height:220px;overflow-y:auto;padding:10px;border:1px solid var(--SmartThemeBorderColor);border-radius:8px;">${escapeHtml(generatedKit.prompt)}</pre>
+                <pre class="ica--tracker-preview-prompt">${escapeHtml(generatedKit.prompt)}</pre>
             </div>
             <div class="ica--editor-section ica--regex-subsection">
                 <strong>Extraction</strong>
                 <div class="ica--regex-note"><b>Variable:</b> <code>${escapeHtml(generatedKit.postProcess.extractVariable)}</code></div>
-                <pre style="white-space:pre-wrap;max-height:120px;overflow-y:auto;padding:10px;border:1px solid var(--SmartThemeBorderColor);border-radius:8px;">${escapeHtml(generatedKit.postProcess.extractPattern)}</pre>
+                <pre class="ica--tracker-preview-extraction">${escapeHtml(generatedKit.postProcess.extractPattern)}</pre>
             </div>
             <div class="ica--editor-section ica--regex-subsection">
                 <strong>Regex Beautifiers</strong>
@@ -2960,6 +2998,8 @@ async function openPromptTransformHistoryPopup(messageIndex) {
     });
 
     await new Popup(html, POPUP_TYPE.TEXT, '', {
+        tier: 'window',
+        title: t`View agent changes`,
         wide: true,
         large: true,
         allowVerticalScrolling: true,
@@ -3162,6 +3202,8 @@ async function openPathfinderEditor(agent) {
     try {
         await new Popup(settingsPanel, POPUP_TYPE.TEXT, '', {
             okButton: 'Close',
+            tier: 'window',
+            title: t`Pathfinder`,
             wide: true,
             large: true,
             onClosing: () => canClosePathfinderSettings(settingsPanel),
@@ -3417,9 +3459,13 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         </div>
     `);
 
+    const { prepareRefinePromptDialog } = await loadDialogAdapters();
+    prepareRefinePromptDialog(html);
     const result = await new Popup(html, POPUP_TYPE.CONFIRM, '', {
-        okButton: 'Refine',
-        cancelButton: 'Cancel',
+        okButton: t`Refine`,
+        cancelButton: t`Cancel`,
+        tier: 'dialog',
+        title: t`Refine`,
     }).show();
 
     if (result !== POPUP_RESULT.AFFIRMATIVE || !isCurrent()) return null;
@@ -3463,8 +3509,10 @@ async function refinePromptWithAI(currentPrompt, category, phase, connectionProf
         `);
 
         const acceptResult = await new Popup(diffHtml, POPUP_TYPE.CONFIRM, '', {
-            okButton: 'Accept',
-            cancelButton: 'Discard',
+            okButton: t`Accept`,
+            cancelButton: t`Discard`,
+            tier: 'dialog',
+            title: t`Refine`,
             wide: true,
         }).show();
 
@@ -3789,8 +3837,14 @@ async function resetBundledAgentsFromSettings() {
         cancelAgentGeneration();
         refreshGenerationUi();
     });
+    eventSource.on(event_types.GENERATION_STARTED, (_type, _params, isDryRun) => {
+        if (isDryRun) {
+            return;
+        }
+
+        refreshGenerationUi();
+    });
     for (const eventName of [
-        event_types.GENERATION_STARTED,
         event_types.GENERATION_ENDED,
         event_types.GENERATION_STOPPED,
     ]) {

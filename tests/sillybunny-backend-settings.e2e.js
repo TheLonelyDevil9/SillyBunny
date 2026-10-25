@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { acceptPopup } from './helpers/popup.js';
 import { auditPromptingLayout } from './helpers/libadwaita-audit.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
@@ -215,7 +216,7 @@ function getPresetFixture(api) {
 }
 
 async function confirmPresetExport(page, api) {
-    if (api === 'openai') await page.locator('dialog[open] .popup-button-ok').click();
+    if (api === 'openai') await acceptPopup(page.locator('dialog[open]'));
 }
 
 function expectPresetMetadata(exported, preset, api) {
@@ -726,7 +727,7 @@ test('Text Completions templates use the shared editor and guard backend and pre
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(dialog).toContainText('You have unsaved changes to this template. Discard them?');
-    await dialog.getByRole('button', { name: 'Yes', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Discard', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator('#instruct_presets option:checked')).toHaveText('SB Prompt Editor Guard');
     await expect(editor.locator('.sb-prompt-detail')).toBeHidden();
@@ -889,7 +890,7 @@ test('Mobile Sampling follows provider and manual sampler visibility', async ({ 
     await expect(card('#temp_textgenerationwebui')).toBeHidden();
     await temperature.check();
     await expect(card('#temp_textgenerationwebui')).toBeVisible();
-    await page.locator('dialog[open] .popup-button-ok').click();
+    await acceptPopup(page.locator('dialog[open]'));
     const bannedTokens = sampling.locator('#send_banned_tokens_textgenerationwebui');
     const enabled = await bannedTokens.isChecked();
     await sampling.locator('#send_banned_tokens_label .menu_button').click();
@@ -933,6 +934,7 @@ test('Extensions detail pages retain live controls and restore their list', asyn
     await page.setViewportSize({ width: 390, height: 844 });
     const extensions = await openPanel(page, 'extensions', 'right');
     const firstRow = extensions.locator('.sb-subpage-row').first();
+    await expect(firstRow.locator('.sb-subpage-row-icon')).toHaveCSS('font-family', /Font Awesome/);
     const containerId = await firstRow.getAttribute('data-sb-subpage-row');
     await page.evaluate(id => {
         const container = document.getElementById(id);
@@ -947,6 +949,36 @@ test('Extensions detail pages retain live controls and restore their list', asyn
     await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'true');
     await expect(firstRow).toBeVisible();
     expect(await page.evaluate(() => window.phase3ExtensionNodes.every(node => node.isConnected))).toBe(true);
+});
+
+test('Extensions lists user-installed extensions after System Extensions, without a description', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const extensions = await openPanel(page, 'extensions', 'right');
+    const system = extensions.getByRole('list', { name: 'System Extensions', exact: true });
+    await expect.poll(() => system.locator('.sb-subpage-row').count()).toBeGreaterThan(0);
+
+    // A user-installed extension mounts by appending its own markup to a settings column or to a
+    // container slot the page authors, and the list is grouped from that markup alone.
+    await page.evaluate(() => {
+        const drawer = title => `<div class="inline-drawer"><div class="inline-drawer-toggle inline-drawer-header"><b>${title}</b></div><div class="inline-drawer-content"><label class="checkbox_label"><input type="checkbox"><span>${title} setting</span></label></div></div>`;
+        document.getElementById('extensions_settings').insertAdjacentHTML('beforeend', `<div class="qa-user-extension">${drawer('QA User Extension')}</div>`);
+        document.getElementById('dice_container').insertAdjacentHTML('beforeend', drawer('QA Dice Slot'));
+    });
+    const user = extensions.getByRole('list', { name: 'User-installed Extensions', exact: true });
+    await expect(user.locator('.sb-subpage-heading-title')).toHaveText(['QA User Extension', 'QA Dice Slot']);
+    await expect(user.locator('.sb-subpage-heading-description, [data-sb-copy-placeholder]')).toHaveCount(0);
+    await expect(extensions.locator('.sb-subpage-list')).not.toContainText('lorum ipsum');
+    expect(await extensions.locator('[data-sb-subpage-group]').evaluateAll(groups => groups.map(group => group.dataset.sbSubpageGroup))).toEqual(['system', 'user']);
+    await expectNoOverflow(extensions);
+
+    await user.locator('.sb-subpage-row').first().click();
+    await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'false');
+    await expect(extensions.locator('.sb-subpage-detail-title')).toHaveText('QA User Extension');
+    await expect(extensions.locator('.sb-subpage-detail-description')).toBeHidden();
+    await extensions.locator('.sb-subpage-back').click();
+    await expect(extensions.locator('.sb-subpage-detail')).toHaveAttribute('aria-hidden', 'true');
+    await expect(user.locator('.sb-subpage-row')).toHaveCount(2);
 });
 
 test('Universal search reaches Extensions detail pages after the list is built', async ({ page, baseURL }) => {

@@ -34,18 +34,23 @@
     --sb-spring-navigation: cubic-bezier(0.16, 1, 0.3, 1);
     --sb-z-base: 0;
     --sb-z-raised: 10;
+    /* Layer ladder: chat < expression sprites < zoomed avatars < docked side panels < top bar <
+       shell drawers / sidebar < settings page < popovers / menus / toasts < dialogs (top layer). */
     --sb-z-dropdown: 100;
+    --sb-z-sprites: 100;
+    --sb-z-zoomed-avatar: 200;
+    --sb-z-side-panel: 300;
     --sb-z-sticky: 500;
     --sb-z-shell: 1000;
     --sb-z-shell-panel: 1100;
     --sb-z-shell-sidebar: 1200;
     --sb-z-overlay: 2000;
     --sb-z-modal: 3000;
-    --sb-z-modal-content: 3100;
+    --sb-z-modal-content: 3000;
     --sb-z-popout: 4000;
     --sb-z-toast: 5000;
     --sb-z-streaming: 6000;
-    --sb-z-context-menu: 8000;
+    --sb-z-context-menu: 4000;
     --sb-z-loader: 9000;
     --sb-z-critical: 10000;
     --sb-color-warning: var(--color-warning, #ffc252);
@@ -197,6 +202,10 @@
     --sb-chat-view-bg: var(--sb-layer-view-source);
     --sb-layer-bottombar: var(--sb-layer-bottombar-source);
     --sb-layer-window: var(--sb-layer-window-source);
+    /* Alert surfaces keep the dialog layer; document windows (maximized editors, inspectors)
+       use the View layer like a document body. */
+    --sb-layer-alert: var(--sb-layer-dialog);
+    --sb-layer-view-surface: var(--sb-layer-view);
     /* Complementary rail (Conversation pals rail, Settings sidebar and its header).
        libadwaita sidebar-bg: #2e2e32 in Libadwaita dark, #ebebed in light. */
     --sb-sidebar-bg-source: color-mix(in srgb, var(--SmartThemeBlurTintColor) 95%, var(--SmartThemeBodyColor) 5%);
@@ -270,7 +279,7 @@ input[type="submit"] {
 .avatar_zoom_container,
 .zoomed_avatar,
 .avatar_zoom {
-    z-index: calc(var(--sb-z-modal-content) + 5) !important;
+    z-index: var(--sb-z-zoomed-avatar) !important;
 }
 
 .zoomed_avatar > :is(.zoomed_avatar_container, .avatar_zoom_container) {
@@ -279,7 +288,7 @@ input[type="submit"] {
 }
 
 .zoomed_avatar > .panelControlBar {
-    z-index: calc(var(--sb-z-modal-content) + 6) !important;
+    z-index: calc(var(--sb-z-zoomed-avatar) + 1) !important;
     pointer-events: auto;
 }
 
@@ -538,13 +547,13 @@ hr {
 }
 
 .standoutHeader,
-h3:not(.popup h3):not(#chat h3),
+h3:not(.popup h3):not(.sb-dialog h3):not(#chat h3),
 .inline-drawer-header {
     letter-spacing: 0;
 }
 
 .standoutHeader,
-h3:not(.popup h3):not(#chat h3) {
+h3:not(.popup h3):not(.sb-dialog h3):not(#chat h3) {
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 74%, transparent);
     border-radius: var(--sb-radius-md);
     padding: 10px 14px;
@@ -657,8 +666,8 @@ h3:not(.popup h3):not(#chat h3) {
     flex: 0 0 auto;
 }
 
-.menu_button:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']),
-.menu_button_icon:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']) {
+.menu_button:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']),
+.menu_button_icon:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']) {
     background: var(--sb-button-bg);
     border-radius: var(--sb-radius-button);
 }
@@ -1080,8 +1089,8 @@ input[type="checkbox"].sb-switch.checkbox_disabled {
 
 /* libadwaita button hover: a deeper neutral fill only, no accent ring or lift. */
 @media (hover: hover) {
-    .menu_button:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
-    .menu_button_icon:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
+    .menu_button:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
+    .menu_button_icon:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
     .right_menu_button:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
     .drawer-icon.closedIcon:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover {
         transform: none;
@@ -1090,10 +1099,10 @@ input[type="checkbox"].sb-switch.checkbox_disabled {
     }
 }
 
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button,
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button_icon,
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button,
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button_icon {
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button:not(.sb-status-page__action),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button_icon:not(.sb-status-page__action),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button:not(.sb-status-page__action),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button_icon:not(.sb-status-page__action) {
     min-height: 32px;
     padding: 6px 10px;
     border-radius: 10px;
@@ -1101,8 +1110,8 @@ input[type="checkbox"].sb-switch.checkbox_disabled {
     line-height: 1.2;
 }
 
-.menu_button:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active,
-.menu_button_icon:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active,
+.menu_button:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active,
+.menu_button_icon:not(.sb-status-page__action):not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active,
 .right_menu_button:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active {
     transform: scale(0.97);
     transition: transform var(--sb-transition-fast);
@@ -1245,12 +1254,26 @@ input[type="checkbox"].sb-switch.checkbox_disabled {
     text-shadow: none;
 }
 
+/* Destructive Popup actions keep Destructive Red instead of inheriting suggested-action blue. */
+.menu_button.popup-button-ok.is-destructive:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']) {
+    background: var(--sb-color-danger);
+    color: var(--sb-on-solid-accent);
+    border-color: transparent;
+    box-shadow: none;
+}
+
 @media (hover: hover) {
     .menu_button.menu_button_primary:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover,
     .menu_button.popup-button-ok:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover {
         background: color-mix(in srgb, var(--color-primary, var(--sb-accent)) 82%, white 18%);
         border-color: transparent;
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary, var(--sb-accent)) 34%, transparent);
+    }
+
+    .menu_button.popup-button-ok.is-destructive:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover {
+        background: color-mix(in srgb, var(--sb-color-danger) 90%, var(--sb-shell-text));
+        border-color: transparent;
+        box-shadow: none;
     }
 }
 
@@ -2181,13 +2204,84 @@ body.bubblechat #chat .mes[is_user='true']:has(.reasoning_edit_textarea)::before
 
 /* libadwaita swipe picker: borderless rows, flat hover, neutral selection like the shell tabs. */
 .swipe_picker_block {
-    gap: 6px;
-    margin-top: 2px;
-    padding: 10px 12px;
+    position: relative;
+    gap: 8px;
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    border-bottom: 1px solid var(--sb-shell-border);
     border-color: transparent;
-    border-radius: var(--sb-radius-control);
+    border-bottom-color: var(--sb-shell-border);
+    border-radius: 0;
     background: transparent;
     transition: background-color var(--sb-transition-fast), box-shadow var(--sb-transition-fast), transform var(--sb-transition-fast);
+}
+
+.swipe_picker_div {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
+    border-radius: var(--sb-radius-card);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
+}
+
+.swipe_picker_block:last-child {
+    border-bottom: 0;
+}
+
+.swipe_picker_block #select_chat_name_wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.swipe_picker_block #select_chat_name_wrapper > :first-child {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+}
+
+.swipe_picker_block #select_chat_name_wrapper > :first-child::before {
+    display: inline-flex;
+    width: 24px;
+    align-items: center;
+    justify-content: flex-start;
+    color: transparent;
+    font: var(--fa-font-solid);
+    font-size: 12px;
+}
+
+.swipe_picker_block[highlight] #select_chat_name_wrapper > :first-child::before {
+    content: '\f00c';
+    color: var(--sb-accent);
+}
+
+.swipe_picker_block #select_chat_name_wrapper > :last-child {
+    display: contents;
+}
+
+.swipe_picker_block .select_chat_info {
+    display: block;
+    grid-area: 2 / 1 / 3 / 3;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.swipe_picker_block .select_chat_info > * {
+    display: inline;
+    white-space: nowrap;
+}
+
+.swipe_picker_block .select_chat_info .chat_file_size {
+    margin-inline-start: 6px;
+}
+
+.swipe_picker_block .select_chat_actions {
+    grid-area: 1 / 2;
+    justify-self: end;
 }
 
 /* Cancels upstream's sticky white hover on touch; hover-capable devices get the flat fill below. */
@@ -2213,36 +2307,70 @@ body.bubblechat #chat .mes[is_user='true']:has(.reasoning_edit_textarea)::before
     background: var(--sb-flat-selected-bg);
 }
 
+.swipe_picker_block:active {
+    background: var(--sb-flat-active-bg);
+}
+
 .swipe_picker_block .select_chat_block_mes {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
     font-size: calc(var(--mainFontSize) * 0.86);
     line-height: var(--sb-line-body);
     color: var(--sb-muted-fg);
 }
 
-/* Swipe picker close: a libadwaita circular flat button with a plain cross. swipe-picker.js sets
-   inline display:block, width/height:auto, so the glyph is centred with text-align and a
-   line-height equal to the min-size box instead of flex. Padding lives here rather than in the
-   picker script: the button's box model belongs with its sizing. */
-.swipe_picker_popup .popup-button-close.right_menu_button.fa-solid {
-    flex: 0 0 auto;
-    padding: 0;
-    min-inline-size: 34px;
-    max-inline-size: 34px;
-    min-block-size: 34px;
-    max-block-size: 34px;
-    border-radius: 999px;
-    line-height: 34px;
-    text-align: center;
+.swipe_picker_popup .popup-content {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 12px;
 }
 
-.swipe_picker_popup .popup-button-close::before {
-    content: '\f00d';
+.swipe_picker_popup .swipe_picker_div {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 /* The Swipe ID entry matches the shell entries: tinted fill, no rest border, accent focus. */
 .swipe_picker_popup .popup-controls input {
     border-color: transparent;
     background-color: var(--sb-composer-input-bg);
+}
+
+.swipe_picker_popup .swipe_picker_footer {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border-top: 1px solid var(--sb-shell-border);
+    background: var(--sb-layer-window);
+}
+
+.swipe_picker_footer .swipe_picker_id_row {
+    gap: 10px;
+    margin-inline-end: 0;
+}
+
+.swipe_picker_footer .popup-button-custom {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 60px;
+    max-width: none;
+    margin: 0;
+}
+
+@media (max-width: 450px), (max-height: 22.5rem) {
+    .swipe_picker_popup .swipe_picker_footer {
+        justify-content: center;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    }
 }
 
 .swipe_picker_popup .popup-controls input.text_pole:is(:focus, :focus-visible) {
@@ -2255,11 +2383,27 @@ body.bubblechat #chat .mes[is_user='true']:has(.reasoning_edit_textarea)::before
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    inline-size: 32px;
-    block-size: 32px;
+    inline-size: 40px;
+    block-size: 40px;
     padding: 0;
     border-radius: 999px;
     transition: opacity var(--sb-transition-fast), background-color var(--sb-transition-fast), transform var(--sb-transition-fast);
+}
+
+.swipe_picker_block :is(.swipe_picker_copy, .swipe_picker_branch, .swipe_picker_delete) {
+    cursor: pointer;
+}
+
+.swipe_picker_block :is([role="button"], .swipe_picker_expand_label):focus-visible {
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
+}
+
+@media (pointer: coarse) {
+    .swipe_picker_block :is(.swipe_picker_expand_label, .swipe_picker_copy, .swipe_picker_branch, .swipe_picker_delete) {
+        inline-size: 44px;
+        block-size: 44px;
+    }
 }
 
 @media (hover: hover) {
@@ -2276,7 +2420,22 @@ body.bubblechat #chat .mes[is_user='true']:has(.reasoning_edit_textarea)::before
 
 .swipe_picker_block .select_chat_block_filename {
     font-size: calc(var(--mainFontSize) * 0.88);
+    font-weight: 700;
+    color: var(--SmartThemeBodyColor);
+    opacity: 1;
+}
+
+.swipe_picker_block .swipe_picker_current {
+    margin-inline-start: 4px;
+    color: var(--sb-accent);
+    font-size: var(--sb-type-meta);
     font-weight: 600;
+}
+
+.swipe_picker_block .select_chat_info .select_chat_block_filename {
+    color: var(--sb-muted-fg);
+    font-weight: 400;
+    opacity: 1;
 }
 
 .swipe_picker_block .chat_messages_date,
@@ -6209,10 +6368,10 @@ body.reduced-motion *::after {
         font-size: var(--sb-type-control);
     }
 
-    .sb-shell-panel-scroller .menu_button,
-    .sb-shell-panel-scroller .menu_button_icon,
-    .sb-shell-panel-scroller button.menu_button,
-    .sb-shell-panel-scroller button.menu_button_icon {
+    .sb-shell-panel-scroller .menu_button:not(.sb-status-page__action),
+    .sb-shell-panel-scroller .menu_button_icon:not(.sb-status-page__action),
+    .sb-shell-panel-scroller button.menu_button:not(.sb-status-page__action),
+    .sb-shell-panel-scroller button.menu_button_icon:not(.sb-status-page__action) {
         min-height: 38px;
         padding: 8px 12px;
         border-radius: 12px;
@@ -6681,258 +6840,1358 @@ body.reduced-motion .popup[closing] {
     order: -1;
 }
 
-/* Narrow widths (MOBILE_QUERY in sillybunny-action-menu.js): AdwDialog bottom sheet. Full-screen
-   and special popups keep their own frames: large/wide, transparent, image zoom, crop (the only
-   type that shows .popup-crop-wrap) and the swipe picker. */
-@keyframes sb-popup-sheet-in {
-    from {
-        transform: translateY(100%);
-    }
-    to {
-        transform: translateY(0);
-    }
+.popup-controls > .popup-button-ok {
+    order: 1;
 }
 
-@keyframes sb-popup-sheet-out {
-    from {
-        transform: translateY(0);
-    }
-    to {
-        transform: translateY(100%);
-    }
-}
-
-@media (max-width: 768px) {
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) {
-        position: fixed;
-        inset: auto 0 0 0;
-        box-sizing: border-box;
-        width: auto;
-        min-width: 0;
-        max-width: none;
-        /* popup.css sets min-height: fit-content, which would beat max-height. */
-        min-height: 0;
-        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px);
-        margin: 0;
-        padding: 22px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-        border-width: 1px 0 0;
-        /* sillybunny-paper-theme.css forces an important 14px radius on .popup. */
-        border-radius: var(--sb-radius-overlay) var(--sb-radius-overlay) 0 0 !important;
-        background: var(--sb-layer-dialog);
-        box-shadow: var(--sb-shadow-dialog);
-    }
-
-    /* Grab handle, same geometry as the mobile shell drawers. Visual only. */
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block']))::before {
-        content: '';
-        position: absolute;
-        top: 8px;
-        left: 50%;
-        width: 42px;
-        height: 4px;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--SmartThemeBodyColor) 36%, transparent);
-        opacity: 0.82;
-        pointer-events: none;
-        transform: translateX(-50%);
-    }
-
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-body {
-        flex: 1 1 auto;
-        height: auto;
-        min-height: 0;
-        max-height: none;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-    }
-
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-body > * {
-        flex-shrink: 0;
-    }
-
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-body > .popup-content {
-        flex: 1 1 auto;
-        min-height: 0;
-        max-height: none;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-    }
-
-    /* Display popups have no responses; reserve a header band so content clears the close button. */
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])):has(> .popup-button-close[style*='block']) .popup-body {
-        padding-top: 30px;
-    }
-
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-button-close {
-        top: 8px;
-        right: max(8px, env(safe-area-inset-right, 0px));
-        width: 44px;
-        height: 44px;
-        padding: 0;
-        border-radius: 999px;
-        font-size: 20px;
-        line-height: 44px;
-        text-align: center;
-    }
-
-    /* AdwAlertDialog narrow layout: stacked full-width responses, affirmative on top and Cancel at
-       the bottom. column-reverse mirrors the desktop row, so custom responses stay in between. */
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-controls {
-        flex-direction: column-reverse;
-        flex-wrap: nowrap;
-        align-self: stretch;
-        align-items: stretch;
-        gap: 8px;
-        margin-top: 12px;
-    }
-
-    .popup:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) .popup-controls > .menu_button {
-        flex: 0 0 auto;
-        width: 100%;
-        min-height: 44px;
-        box-sizing: border-box;
-    }
-}
-
-@media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
-    body:not(.reduced-motion) .popup[opening]:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) {
-        animation: sb-popup-sheet-in var(--sb-spring-sheet-duration) var(--sb-spring-sheet);
-    }
-
-    body:not(.reduced-motion) .popup[closing]:not(.large_dialogue_popup, .wide_dialogue_popup, .transparent_dialogue_popup, .swipe_picker_popup, .sb-popup-fullscreen):not(:has(.img_enlarged_container, > .popup-body > .popup-crop-wrap[style*='block'])) {
-        animation: sb-popup-sheet-out 200ms var(--sb-ease-out-cubic) forwards;
-    }
-}
-
-/* Full-screen Libadwaita dialog surface used by the Extensions manager. It keeps the shared Popup
-   lifecycle and focus handling, while replacing the old centered browser-sized frame with a page
-   surface that can hold the complete extension list on desktop and mobile. */
-.popup.sb-popup-fullscreen {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100dvh !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0;
-    border-radius: 0 !important;
-    background: var(--sb-layer-view);
-    box-shadow: none;
-    overflow: hidden;
-}
-
-.popup.sb-popup-fullscreen::before {
-    content: none;
-}
-
-.popup.sb-popup-fullscreen .popup-body {
-    width: 100%;
-    height: 100%;
-    max-height: none !important;
+/* Popup tiers (sillybunny-editor/popup-frame.js). dialog.popup is itself the surface. These rules
+   override popup.css (min-height: fit-content, clipped .popup-content), the style.css size classes,
+   mobile-styles.css, popup-safari-fix.css and the paper theme's forced radius. Excluded popups (crop,
+   transparent, image zoom, swipe picker) keep the rules above. */
+dialog.popup.sb-dialog {
+    /* Modal dialogs centre between top and bottom; raising bottom keeps them above the keyboard. */
+    bottom: var(--sb-dialog-keyboard-inset, 0px);
+    box-sizing: border-box;
     min-height: 0;
+    max-width: calc(100dvw - 32px);
+    max-height: calc(100dvh - 32px - var(--sb-dialog-keyboard-inset, 0px));
+    margin: auto;
     padding: 0;
+    border: 1px solid var(--SmartThemeBorderColor);
+    text-shadow: none;
+    background: var(--sb-layer-dialog);
+    box-shadow: var(--sb-shadow-dialog);
     overflow: hidden;
 }
 
-.popup.sb-popup-fullscreen .popup-content {
-    display: flex;
-    flex-direction: column;
+dialog.popup.sb-dialog > .popup-body {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
     min-height: 0;
+    max-height: none;
+    padding: 0;
+}
+
+/* Override popup-safari-fix.css without changing its upstream-only sizing branch. */
+body.safari dialog.popup.sb-dialog > .popup-body {
+    height: auto;
+    max-height: none;
+}
+
+dialog.popup.sb-dialog .popup-content {
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: none;
     margin: 0;
-    padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 28px max(20px, env(safe-area-inset-left, 0px));
+    padding: 0;
+    overflow: visible;
+    overflow-wrap: anywhere;
+}
+
+dialog.popup.sb-dialog .popup-input {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 12px 0 0;
+}
+
+dialog.popup.sb-dialog .popup-inputs {
+    margin: 12px 0 0;
+    font-size: inherit;
+}
+
+dialog.popup.sb-dialog .popup-inputs label span {
+    opacity: 1;
+}
+
+/* Alert: centred heading and body, one scrolling body, fixed responses (AdwAlertDialog). */
+dialog.popup.sb-dialog--alert {
+    width: max-content;
+    min-width: min(300px, calc(100dvw - 32px));
+    max-width: min(372px, calc(100dvw - 32px));
+    border-radius: var(--sb-radius-alert);
+    text-align: center;
+}
+
+dialog.popup.sb-dialog--alert,
+dialog.popup.sb-dialog--alert > .popup-body {
+    background: var(--sb-layer-alert);
+}
+
+dialog.popup.sb-dialog--dialog {
+    background: var(--sb-layer-window);
+}
+
+dialog.popup.sb-dialog--window {
+    background: var(--sb-layer-window);
+}
+
+dialog.popup.sb-dialog--dialog > .sb-dialog__header {
+    border-bottom-color: transparent;
+    background: var(--sb-layer-window);
+}
+
+dialog.popup.sb-dialog--dialog > .sb-dialog__header[data-scrolled='true'] {
+    border-bottom-color: var(--sb-shell-border);
+}
+
+dialog.popup.sb-dialog--window > .sb-dialog__header {
+    border-bottom-color: var(--sb-shell-border);
+    background: var(--sb-layer-headerbar);
+}
+
+dialog.popup.sb-dialog--alert > .popup-body {
+    padding: 24px 24px 12px;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
 }
 
-.popup.sb-popup-fullscreen .sb-popup-dialog-header,
-.popup.sb-popup-fullscreen .extensions_toolbar,
-.popup.sb-popup-fullscreen .extensions_info > .marginBot10,
-.popup.sb-popup-fullscreen .extensions_info > h3,
-.popup.sb-popup-fullscreen .extensions_info > p {
-    width: min(100%, 1120px);
-    margin-inline: auto;
+dialog.popup.sb-dialog--alert .sb-dialog__heading {
+    margin: 0 0 10px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--sb-shell-text, var(--SmartThemeBodyColor));
+    font-size: var(--sb-type-headline);
+    font-weight: 800;
+    line-height: var(--sb-line-title, 1.18);
 }
 
-.popup.sb-popup-fullscreen .sb-popup-dialog-header {
-    display: flex;
-    align-items: center;
-    min-height: 52px;
-    padding: 8px 56px 8px 4px;
-    box-sizing: border-box;
+dialog.popup.sb-dialog--alert :is(.popup-inputs, .sb-dialog__extra) {
+    text-align: start;
 }
 
-.popup.sb-popup-fullscreen .sb-popup-dialog-header h2 {
+dialog.popup.sb-dialog--alert .sb-dialog__extra {
+    margin-top: 16px;
+}
+
+dialog.popup.sb-dialog--alert :is(.popup-inputs, .sb-dialog__extra) .ds-row {
+    border-bottom: 0;
+}
+
+dialog.popup.sb-dialog--alert :is(.popup-inputs, .sb-dialog__extra) .ds-row-label > small {
+    font-size: inherit;
+}
+
+dialog.popup.sb-dialog--alert > .popup-controls {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-self: stretch;
+    justify-content: stretch;
+    gap: 12px;
+    max-width: none;
     margin: 0;
-    color: var(--sb-shell-text);
-    font-size: var(--sb-type-title);
-    font-weight: 700;
+    padding: 12px 24px 24px;
 }
 
-.popup.sb-popup-fullscreen .extensions_info {
+dialog.popup.sb-dialog--alert > .popup-controls > .menu_button {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+dialog.popup.sb-dialog--alert > .popup-controls.is-measuring > .menu_button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Stacked: keep Cancel at the bottom within thumb reach. */
+dialog.popup.sb-dialog--alert > .popup-controls.is-stacked {
+    flex-direction: column-reverse;
+    gap: 8px;
+}
+
+dialog.popup.sb-dialog--alert > .popup-controls.is-stacked > .menu_button {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 44px;
+}
+
+/* Dialog and Window: header bar, scrolling .popup-content, inputs fixed below it. */
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) {
+    border-radius: var(--sb-radius-overlay);
+    text-align: start;
+}
+
+dialog.popup.sb-dialog--dialog {
+    width: min(640px, calc(100dvw - 32px));
+    min-width: min(360px, calc(100dvw - 32px));
+    max-width: calc(100dvw - 32px);
+    max-height: min(90dvh, calc(100dvh - 32px - var(--sb-dialog-keyboard-inset, 0px)));
+}
+
+dialog.popup.sb-dialog--window {
+    width: min(max(640px, var(--sheldWidth, 64vw)), calc(100dvw - 32px)) !important;
+    min-width: 0 !important;
+    max-width: calc(100dvw - 32px) !important;
+    height: auto;
+    max-height: min(90dvh, calc(100dvh - 32px - var(--sb-dialog-keyboard-inset, 0px)));
+}
+
+dialog.popup.sb-dialog--window.sb-dialog--fill { height: 90dvh; }
+
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) > .popup-body {
+    height: auto;
+    overflow: hidden;
+}
+
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) .popup-content {
+    flex: 1 1 auto;
+    padding: 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+dialog.popup.sb-dialog--window:not(.sb-dialog--fill) :is(.popup-body, .popup-content) { flex: 0 1 auto; }
+
+/* Maximized editors give the scrolling surface to the textarea, not both it and the Popup body. */
+dialog.popup.sb-dialog--window.sb-dialog--maximized-editor > .popup-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+}
+
+dialog.popup.sb-dialog--window.sb-dialog--maximized-editor .popup-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+dialog.popup.sb-dialog--window.sb-dialog--maximized-editor .sb-maximized-editor {
+    flex: 1 1 auto;
+    align-items: stretch;
+    justify-content: stretch;
+    min-height: 0;
+}
+
+dialog.popup.sb-dialog--window.sb-dialog--maximized-editor .sb-maximized-editor > textarea.maximized_textarea {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    resize: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+/* Creator's Notes keeps its formatted live node in the shared Window's single body scroller. */
+dialog.popup.sb-dialog--window:has(.sb-creator-notes-fullscreen) .sb-creator-notes-fullscreen {
+    min-height: 100%;
+    overflow-wrap: anywhere;
+}
+
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) :is(.popup-input, .popup-inputs) {
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0 16px 16px;
+}
+
+dialog.popup.sb-dialog > .sb-dialog__header > .popup-controls {
+    display: contents;
+}
+
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) {
+    padding-bottom: var(--sb-popup-response-height, 0px);
+}
+
+dialog.popup.sb-dialog > .sb-dialog__header > .popup-controls > .sb-dialog__bottom-bar {
+    position: absolute;
+    inset: auto 0 0;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header > .sb-dialog__titles {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header > .popup-controls > .menu_button {
+    flex: none;
+    grid-row: 1;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    white-space: nowrap;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header .popup-button-cancel {
+    grid-column: 1;
+    justify-self: start;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header .popup-button-ok {
+    grid-column: 3;
+    justify-self: end;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header > .popup-button-close {
+    position: static;
+    display: grid;
+    place-items: center;
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    box-sizing: border-box;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+    padding: 0;
+    border-radius: 999px;
+    font-size: calc(var(--mainFontSize) * 1.1);
+    opacity: 1;
+}
+
+/* Header end slots keep custom actions before Close, regardless of insertion order. */
+dialog.popup.sb-dialog .sb-dialog__header > .sb-dialog__header-end > :is(.popup-button-close, .sb-dialog__close) {
+    order: 999;
+    position: static;
+    flex: 0 0 auto;
+}
+
+dialog.popup.sb-dialog .sb-dialog__header > .popup-button-close.sb-dialog__back {
+    grid-column: 1;
+    justify-self: start;
+}
+
+dialog.popup.sb-dialog .sb-popup-dialog-header:empty {
+    display: none;
+}
+
+/* Bottom sheets (AdwDialog under max-width 450px or max-height 360px). */
+dialog.popup.sb-dialog[data-presentation='sheet'] {
+    inset: auto 0 var(--sb-dialog-keyboard-inset, 0px) 0;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px - var(--sb-dialog-keyboard-inset, 0px));
+    margin: 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--sb-popup-response-height, 0px));
+    border-width: 1px 0 0;
+    border-radius: var(--sb-radius-overlay) var(--sb-radius-overlay) 0 0 !important;
+}
+
+dialog.popup.sb-dialog--window.sb-dialog--fill[data-presentation='sheet'] {
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px - var(--sb-dialog-keyboard-inset, 0px));
+}
+
+dialog.popup.sb-dialog[data-presentation='sheet'] > .sb-dialog__header > .popup-controls > .sb-dialog__bottom-bar {
+    bottom: env(safe-area-inset-bottom, 0px);
+}
+
+dialog.popup.sb-dialog > .sb-dialog__handle {
+    display: none;
+}
+
+dialog.popup.sb-dialog[data-presentation='sheet'] > .sb-dialog__handle {
+    display: block;
+    position: absolute;
+    z-index: 2;
+    inset: 0 50% auto auto;
+    width: 80px;
+    height: 20px;
+    translate: 50% 0;
+    touch-action: none;
+}
+
+dialog.popup.sb-dialog[data-presentation='sheet'] > .sb-dialog__handle::before {
+    content: '';
+    position: absolute;
+    inset: 8px 19px auto;
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 36%, transparent);
+}
+
+dialog.popup.sb-dialog[data-presentation='sheet'] .sb-dialog__header {
+    padding-top: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+
+dialog.popup.sb-dialog--alert[data-presentation='sheet'] > .popup-body {
+    padding: 28px 20px 12px;
+}
+
+dialog.popup.sb-dialog--alert[data-presentation='sheet'] > .popup-controls {
+    padding: 8px 16px 16px;
+}
+
+dialog.popup.sb-dialog[data-presentation='sheet'] .popup-content {
+    padding: 12px;
+}
+
+dialog.popup.sb-dialog--alert[data-presentation='sheet'] .popup-content {
+    padding: 0;
+}
+
+/* Keep the parent laid out but hidden until the pushed page closes. */
+dialog.popup.sb-dialog--page {
+    position: fixed;
+    inset: auto;
+    top: var(--sb-page-top);
+    left: var(--sb-page-left);
+    width: var(--sb-page-width) !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: var(--sb-page-height) !important;
+    max-height: none;
+    margin: 0;
+}
+
+dialog.popup.sb-dialog--page::backdrop {
+    background: transparent !important;
+}
+
+[data-sb-covered] {
+    visibility: hidden !important;
+}
+
+@keyframes sb-dialog-window-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes sb-dialog-window-out {
+    from {
+        opacity: 1;
+        transform: none;
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+}
+
+@keyframes sb-dialog-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+@keyframes sb-dialog-sheet-out {
+    from {
+        transform: translateY(var(--sb-dialog-drag-offset, 0px));
+    }
+
+    to {
+        transform: translateY(100%);
+    }
+}
+
+@keyframes sb-dialog-page-in {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+@keyframes sb-dialog-page-out {
+    from {
+        transform: none;
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    body:not(.reduced-motion) dialog.popup.sb-dialog--window[data-presentation='floating'][opening] {
+        animation: sb-dialog-window-in var(--sb-spring-sheet-duration) var(--sb-spring-sheet);
+    }
+
+    body:not(.reduced-motion) dialog.popup.sb-dialog--window[data-presentation='floating'][closing] {
+        animation: sb-dialog-window-out 200ms var(--sb-ease-out-cubic) forwards;
+    }
+
+    body:not(.reduced-motion) dialog.popup.sb-dialog[data-presentation='sheet'][opening] {
+        animation: sb-dialog-sheet-in var(--sb-spring-sheet-duration) var(--sb-spring-sheet);
+    }
+
+    body:not(.reduced-motion) dialog.popup.sb-dialog[data-presentation='sheet'][closing] {
+        animation: sb-dialog-sheet-out 200ms var(--sb-ease-out-cubic) forwards;
+    }
+
+    body:not(.reduced-motion) dialog.popup.sb-dialog--page[opening] {
+        animation: sb-dialog-page-in var(--sb-spring-navigation-duration) var(--sb-spring-navigation);
+    }
+
+    body:not(.reduced-motion) dialog.popup.sb-dialog--page[closing] {
+        animation: sb-dialog-page-out 200ms var(--sb-ease-out-cubic) forwards;
+    }
+}
+
+/* Keep legacy callPopup available to extensions, with Cancel before the affirmative action. */
+#shadow_popup {
+    background-color: var(--sb-dialog-backdrop);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#dialogue_popup {
+    width: max-content;
+    min-width: min(300px, calc(100dvw - 32px));
+    max-width: min(372px, calc(100dvw - 32px));
+    max-height: calc(100dvh - 32px);
+    padding: 0;
+    border-radius: var(--sb-radius-alert);
+    background: var(--sb-layer-dialog);
+    box-shadow: var(--sb-shadow-dialog);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#dialogue_popup_holder {
+    min-height: 0;
+    padding: 24px 24px 24px;
+}
+
+#dialogue_popup_text {
+    min-height: 0;
+    overflow-wrap: anywhere;
+}
+
+#shadow_popup #dialogue_popup_text h3 {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--sb-type-headline);
+    font-weight: 800;
+}
+
+#dialogue_popup_controls {
+    flex-wrap: nowrap;
+    align-self: stretch;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 0;
+}
+
+#dialogue_popup_controls > .menu_button {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+}
+
+#dialogue_popup_controls > #dialogue_popup_cancel {
+    order: -1;
+}
+
+#dialogue_popup_controls > #dialogue_popup_ok {
+    background: var(--sb-color-danger);
+    color: var(--sb-on-solid-accent);
+}
+
+/* Extensions manager (Window tier). */
+dialog.popup.sb-dialog .extensions_info {
     width: 100%;
     max-width: 1120px;
     margin: 0 auto;
-    text-align: left;
+    text-align: start;
 }
 
-.popup.sb-popup-fullscreen .extensions_toolbar {
+dialog.popup.sb-dialog .extensions_toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
     top: 0;
     margin-bottom: 16px;
     border: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
     border-radius: var(--sb-radius-card);
-    background: color-mix(in srgb, var(--sb-layer-window) 94%, transparent);
+    /* SillyBunny: keep the sticky toolbar opaque while it overlays extension rows. */
+    background: var(--sb-layer-window);
     box-shadow: none;
 }
 
-.popup.sb-popup-fullscreen .popup-controls {
+/* SillyBunny: lay the debug menu's preserved table/action contract out as shared preference rows. */
+dialog.popup.sb-dialog--window .sb-debug-menu {
+    display: block;
+    margin: 0;
+    border: 0;
+    border-collapse: collapse;
+}
+
+dialog.popup.sb-dialog--window .sb-debug-menu > tbody {
+    display: flex;
+    flex-direction: column;
+}
+
+dialog.popup.sb-dialog--window .sb-debug-menu tr,
+dialog.popup.sb-dialog--window .sb-debug-menu td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+}
+
+dialog.popup.sb-dialog--window .sb-debug-menu td {
+    padding: 0;
+}
+
+dialog.popup.sb-dialog--window .sb-debug-menu .ds-row-debug {
+    word-break: normal;
+    border-bottom: 1px solid color-mix(in srgb, var(--sb-shell-border) 72%, transparent);
+}
+
+dialog.popup.sb-dialog--window .sb-debug-menu .ds-row-suffix > [data-debug-function] {
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Fallback for content no adapter has converted (third-party included): checkbox labels become
+   rows with the text first and the control at the end. */
+dialog.popup.sb-dialog .checkbox_label {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: start;
+}
+
+dialog.popup.sb-dialog .checkbox_label > input[type='checkbox'] {
+    order: 1;
+    flex: 0 0 auto;
+    margin: 0;
+    margin-inline-start: auto;
+}
+
+/* Shared content adapters own the layout instead of upstream range-block wrappers. */
+.sb-dialog-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.sb-dialog .sb-dialog-rows .ds-row-entry__caption {
+    margin-block-start: 6px;
+}
+
+dialog.popup.sb-dialog .ds-row--stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+
+dialog.popup.sb-dialog .ds-row--stacked > .ds-row-text,
+dialog.popup.sb-dialog .ds-row--stacked .ds-row-text > :is(input, textarea, select) {
     flex: 0 0 auto;
     width: 100%;
-    margin: 0;
-    padding: 12px max(20px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
-    border-top: 1px solid var(--sb-shell-border);
-    background: var(--sb-layer-window);
+    min-width: 0;
+    max-width: 100%;
     box-sizing: border-box;
 }
 
-.popup.sb-popup-fullscreen .popup-controls > .menu_button {
+dialog.popup.sb-dialog .ds-row--stacked.sb-window-stacked-textarea textarea {
+    min-height: 8lh;
+}
+
+/* Icon results share the Popup body scroller rather than an independently clipped grid. */
+dialog.popup.sb-dialog.sb-icon-picker {
+    height: auto;
+}
+
+.sb-icon-picker .faPicker-container {
+    overflow: visible;
+    gap: 16px;
+}
+
+.sb-icon-picker .faPicker {
+    flex: none;
+    overflow: visible;
+}
+
+.sb-dialog .ds-row-suffix :is(input[type='number'], input.ds-spin) {
+    width: 6em;
+    min-width: 0;
+    text-align: end;
+}
+
+.sb-dialog.message_screenshot_popup .popup-inputs:empty {
+    display: none !important;
+}
+
+/* Select2 remains initialized beside the source select; the shared picker owns presentation. */
+.sb-dialog .ds-select-row .select2-container {
+    display: none !important;
+}
+
+/* Adopted rows retain caller selectors without inheriting generic checkbox-label spacing. */
+.sb-dialog .ds-row.checkbox_label {
+    min-height: 44px;
+    gap: 12px;
+    padding: 6px 16px;
+}
+
+.sb-dialog .ds-row.checkbox_label:has(.ds-row-subtitle) {
+    min-height: 52px;
+}
+
+.sb-dialog .ds-row.checkbox_label .ds-row-label {
+    line-height: 1.3;
+}
+
+.sb-dialog .ds-row.checkbox_label .ds-row-subtitle {
+    line-height: 1.4;
+}
+
+dialog.popup.sb-dialog--alert .popup-content :is(h2, h3) {
+    margin-top: 0;
+}
+
+dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) .popup-content :is(h2, h3, h4) {
+    font-size: var(--sb-type-title);
+}
+
+/* Shared dialog frame (sillybunny-editor/dialog.js): Alert, Dialog and Window tiers over one
+   transparent modal host. Sheets follow OVERLAY_SHEET_QUERY. */
+.sb-dialog-host[open] {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 16px 16px calc(16px + var(--sb-dialog-keyboard-inset, 0px));
+    border: 0;
+    background: transparent;
+    color: var(--SmartThemeBodyColor);
+    font-family: var(--mainFontFamily);
+    overflow: hidden;
+}
+
+.sb-dialog-host::backdrop {
+    background: transparent;
+}
+
+.sb-dialog-host [hidden] {
+    display: none !important;
+}
+
+.sb-dialog-scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--sb-dialog-backdrop);
+}
+
+.sb-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: var(--sb-radius-overlay);
+    text-shadow: none;
+    background: var(--sb-layer-window);
+    box-shadow: var(--sb-shadow-dialog);
+    color: var(--SmartThemeBodyColor);
+    overflow: hidden;
+    isolation: isolate;
+}
+
+/* AdwAlertDialog: 300px preferred, 372px at most (600px with preferWide). */
+.sb-dialog--alert {
+    width: max-content;
+    min-width: min(300px, 100%);
+    max-width: min(372px, 100%);
+    border-radius: var(--sb-radius-alert);
+}
+
+.sb-dialog--dialog,
+.sb-dialog--window {
+    background: var(--sb-layer-window);
+}
+
+.sb-dialog--alert.sb-dialog--wide {
+    max-width: min(600px, 100%);
+}
+
+/* AdwDialog follows its content, up to AdwPreferencesDialog's 640px. */
+.sb-dialog--dialog {
+    width: min(640px, 100%);
+    min-width: min(360px, 100%);
+    max-height: min(90dvh, 100%);
+}
+
+/* The shell's large pop-out footprint (Tag Manager). */
+.sb-dialog--window {
+    width: min(max(640px, var(--sheldWidth, 64vw)), 100%);
+    min-height: min(360px, 100%);
+    height: fit-content;
+    max-height: 90dvh;
+}
+
+.sb-dialog--window.sb-dialog--fill {
+    height: 90dvh;
+}
+
+.sb-dialog__handle {
+    display: none;
+}
+
+.sb-dialog__pages {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sb-dialog__page {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    background: var(--sb-layer-window);
+}
+
+.sb-dialog--window :is(.sb-dialog__pages, .sb-dialog__page) {
+    flex: 1 1 auto;
+}
+
+.sb-dialog--window:not(.sb-dialog--fill) :is(.sb-dialog__pages, .sb-dialog__page) {
+    flex: 0 1 auto;
+}
+
+/* In document windows even pushed pages stay on the View surface. */
+.sb-dialog--window.sb-dialog--view :is(.sb-dialog__pages, .sb-dialog__page) {
+    background: var(--sb-layer-view-surface);
+}
+
+/* Pushed pages: the entering page stays in flow so a content-sized dialog follows it. */
+.sb-dialog__page.is-underlay,
+.sb-dialog__page.is-leaving {
+    position: absolute;
+    inset: 0;
+}
+
+.sb-dialog__page.is-leaving {
+    z-index: 1;
+}
+
+/* Header bar: start | centred title | end, as AdwHeaderBar. */
+.sb-dialog__header {
+    display: grid;
+    grid-template-columns: minmax(var(--sb-dialog-header-side, 0px), auto) minmax(0, 1fr) minmax(var(--sb-dialog-header-side, 0px), auto);
+    align-items: center;
+    gap: 6px;
     flex: 0 0 auto;
-    width: auto;
-    min-width: 96px;
+    box-sizing: border-box;
+    min-height: 56px;
+    padding: 6px;
+    border-bottom: 1px solid transparent;
+    background: var(--sb-layer-window);
 }
 
-.popup.sb-popup-fullscreen .popup-button-close {
-    z-index: 2;
-    top: 16px;
-    right: max(16px, env(safe-area-inset-right, 0px));
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border-radius: 999px;
-    line-height: 40px;
+.sb-dialog__header[data-header-centering-loose] {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.sb-dialog--dialog .sb-dialog__header[data-scrolled='true'] {
+    border-bottom-color: var(--sb-shell-border);
+}
+
+.sb-dialog--window .sb-dialog__header {
+    border-bottom-color: var(--sb-shell-border);
+    background: var(--sb-layer-headerbar);
+}
+
+.sb-dialog__header-start,
+.sb-dialog__header-end {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.sb-dialog__header-start {
+    justify-content: flex-start;
+    justify-self: start;
+    width: max-content;
+}
+
+.sb-dialog__header-end {
+    justify-content: flex-end;
+    justify-self: end;
+    width: max-content;
+}
+
+.sb-dialog__titles {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    padding-inline: 6px;
     text-align: center;
-    background: var(--sb-flat-hover-bg);
 }
 
-@media (max-width: 768px) {
-    .popup.sb-popup-fullscreen .popup-content {
-        padding-top: max(16px, env(safe-area-inset-top, 0px));
-        padding-inline: max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-left, 0px));
-        padding-bottom: 20px;
+.sb-dialog__title {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    overflow: hidden;
+    color: var(--sb-shell-text, var(--SmartThemeBodyColor));
+    font-size: var(--sb-type-title);
+    font-weight: var(--sb-weight-title, 700);
+    line-height: var(--sb-line-title, 1.18);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-dialog__subtitle {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--sb-muted-fg);
+    font-size: var(--sb-type-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-dialog :is(.sb-dialog__icon-button, .sb-dialog__close) {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--SmartThemeBodyColor);
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.sb-dialog :is(.sb-dialog__icon-button, .sb-dialog__close):active {
+    background: var(--sb-flat-active-bg);
+}
+
+/* Responses keep the primary (suggested, .menu_button_primary) and ghost button families. */
+.sb-dialog .sb-dialog__response {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 38px;
+    margin: 0;
+    padding: 8px 14px;
+    font-size: var(--sb-type-control);
+    font-weight: var(--sb-weight-control, 600);
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: normal;
+}
+
+.sb-dialog__header .sb-dialog__response {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Mirrors the base .menu_button enabled-state :not() chain so the destructive fill wins on specificity. */
+.menu_button.sb-dialog__response.is-destructive:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']) {
+    border-color: transparent;
+    background: var(--sb-color-danger);
+    color: var(--sb-on-solid-accent);
+    text-shadow: none;
+}
+
+.menu_button.sb-dialog__response.is-destructive:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):active {
+    background: color-mix(in srgb, var(--sb-color-danger) 80%, var(--sb-shell-text));
+}
+
+.sb-dialog .sb-dialog__response:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sb-dialog__search {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    min-height: 0;
+    padding: 6px 6px 7px;
+    border-bottom: 1px solid var(--sb-headerbar-shade);
+    background: var(--sb-layer-headerbar);
+    color: var(--sb-shell-text);
+    overflow: hidden;
+}
+
+.sb-dialog__search-entry {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    min-height: 34px;
+    border-radius: 9px;
+    background: transparent;
+}
+
+.sb-dialog__search-entry > i {
+    position: absolute;
+    z-index: 1;
+    inset-inline-start: 9px;
+    top: 50%;
+    color: currentColor;
+    opacity: 0.7;
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+:is(.sb-dialog, .sb-dialog-host, dialog.popup, .sb-action-popover, .sb-action-sheet) .text_pole.sb-dialog__entry {
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    padding-inline: 9px;
+    border: 0;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--sb-shell-text) 10%, transparent);
+    color: var(--sb-shell-text);
+    box-shadow: none;
+}
+
+.sb-dialog__search .sb-dialog__search-input { text-indent: 20px; }
+
+:is(.sb-dialog, .sb-dialog-host, dialog.popup, .sb-action-popover, .sb-action-sheet) .text_pole.sb-dialog__entry:focus {
+    outline: 2px solid var(--sb-focus-ring);
+    outline-offset: -2px;
+    box-shadow: none;
+}
+
+.sb-dialog__search[data-state='closed'] {
+    display: none;
+}
+
+.sb-dialog__search[data-state='opening'],
+.sb-dialog__search[data-state='closing'] {
+    will-change: height, opacity;
+}
+
+@media (pointer: coarse) {
+    .sb-dialog__entry,
+    .sb-dialog__search .sb-dialog__search-input {
+        height: 44px;
+        min-height: 44px;
     }
 
-    .popup.sb-popup-fullscreen .sb-popup-dialog-header {
-        min-height: 52px;
-        padding-inline-start: 0;
+    :is(.sb-dialog, .sb-dialog-host, dialog.popup, .sb-action-popover, .sb-action-sheet) .text_pole.sb-dialog__entry {
+        height: 44px;
+        min-height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sb-dialog__search {
+        transition: none;
+    }
+}
+
+.sb-dialog__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+    background: var(--sb-layer-window);
+}
+
+/* Document windows (maximized editors, notes, inspectors, debugger output) use a View body
+   instead of a Window body, and their textareas and output lose their own frames. */
+.sb-dialog--window.sb-dialog--view,
+.sb-dialog--window.sb-dialog--view .sb-dialog__body {
+    background: var(--sb-layer-view-surface);
+}
+
+.sb-dialog--window.sb-dialog--view textarea,
+.sb-dialog--window.sb-dialog--view .regex-popup-content {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.sb-dialog__bottom-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+    background: var(--sb-sidebar-bg);
+}
+
+/* Extra responses stay end-aligned instead of inheriting Popup's wrapped-row growth. */
+.sb-dialog .sb-dialog__bottom-bar > .popup-button-custom {
+    flex: 0 1 auto;
+}
+
+.sb-dialog__status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Groups inside dialogs and windows: boxed list (12px, 8% tint). */
+.sb-dialog .ds-pref-group {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: var(--sb-radius-card);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
+}
+
+:root[data-sb-surface-tone='light'] .sb-dialog .ds-pref-group {
+    background: var(--sb-layer-view);
+}
+
+.sb-dialog .ds-pref-group-header {
+    margin: 0 0 8px;
+    padding: 0 4px;
+}
+
+/* Group headings as in Connections: body size, weight 700, no box. */
+.sb-dialog .ds-pref-group-heading,
+dialog.popup.sb-dialog .popup-content .ds-pref-group-heading {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--sb-shell-text, var(--SmartThemeBodyColor));
+    font-size: var(--sb-type-body);
+    font-weight: 700;
+}
+
+.sb-dialog .ds-pref-group-subtitle {
+    padding: 0;
+}
+
+.sb-dialog :is(.ds-pref-group, .sb-editor-section) + :is(.ds-pref-group, .sb-editor-section, .ds-pref-group-header) {
+    margin-top: 16px;
+}
+
+.sb-dialog__extra > .ds-row {
+    border-bottom: 0;
+}
+
+/* Alert: centred heading and body, fixed responses below the scrolling body. */
+.sb-dialog--alert .sb-dialog__body {
+    padding: 24px 24px 12px;
+    text-align: center;
+}
+
+.sb-dialog__heading {
+    margin: 0 0 10px;
+    color: var(--sb-shell-text, var(--SmartThemeBodyColor));
+    font-size: var(--sb-type-headline);
+    font-weight: 800;
+    line-height: var(--sb-line-title, 1.18);
+}
+
+.sb-dialog__message {
+    margin: 0;
+    font-size: var(--sb-type-body);
+    line-height: var(--sb-line-body, 1.55);
+}
+
+.sb-dialog__extra {
+    margin-top: 16px;
+    text-align: start;
+}
+
+.sb-dialog__responses {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 12px;
+    padding: 12px 24px 24px;
+}
+
+.sb-dialog__responses > .sb-dialog__response {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.sb-dialog__responses.is-measuring > .sb-dialog__response {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Stacked: keep Cancel at the bottom within thumb reach. */
+.sb-dialog__responses.is-stacked {
+    flex-direction: column-reverse;
+    gap: 8px;
+}
+
+.sb-dialog__responses.is-stacked > .sb-dialog__response {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 44px;
+}
+
+/* Bottom sheets (AdwDialog under max-width 450px or max-height 360px). */
+.sb-dialog-host[data-presentation='sheet'][open] {
+    align-items: flex-end;
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 0 var(--sb-dialog-keyboard-inset, 0px);
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-width: 1px 0 0;
+    border-radius: var(--sb-radius-overlay) var(--sb-radius-overlay) 0 0;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog--window.sb-dialog--fill {
+    height: 100%;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog__handle {
+    display: block;
+    position: absolute;
+    z-index: 2;
+    inset: 0 50% auto auto;
+    width: 80px;
+    height: 20px;
+    translate: 50% 0;
+    touch-action: none;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog__handle::before {
+    content: '';
+    position: absolute;
+    inset: 8px 19px auto;
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 36%, transparent);
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog__header {
+    padding-top: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog__body {
+    padding: 12px;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog--alert .sb-dialog__body {
+    padding: 28px 20px 12px;
+}
+
+.sb-dialog-host[data-presentation='sheet'] .sb-dialog__responses {
+    padding: 8px 16px 16px;
+}
+
+.sb-dialog :is(button, input, select, textarea, [tabindex]):focus-visible {
+    outline: none;
+    box-shadow: var(--sb-focus-ring-inset);
+}
+
+@media (hover: hover) {
+    .sb-dialog :is(.sb-dialog__icon-button, .sb-dialog__close):hover {
+        background: var(--sb-flat-hover-bg);
     }
 
-    .popup.sb-popup-fullscreen .popup-button-close {
-        top: max(8px, env(safe-area-inset-top, 0px));
-        right: max(8px, env(safe-area-inset-right, 0px));
+    .menu_button.sb-dialog__response.is-destructive:not(.disabled):not(.is-disabled):not([disabled]):not([aria-disabled='true']):hover {
+        background: color-mix(in srgb, var(--sb-color-danger) 90%, var(--sb-shell-text));
     }
+}
+
+@media (pointer: coarse) {
+    .sb-dialog :is(.sb-dialog__icon-button, .sb-dialog__response, .sb-dialog__search-input) {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .sb-dialog :is(.sb-dialog__icon-button, .sb-dialog__close),
+    dialog.popup.sb-dialog .sb-dialog__header > .popup-button-close {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    .sb-dialog {
+        border-color: CanvasText;
+    }
+
+    .sb-dialog .sb-dialog__response:is(.is-suggested, .is-destructive) {
+        border: 1px solid ButtonText;
+    }
+
+    .sb-dialog :is(button, input, select, textarea, [tabindex]):focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sb-dialog-host * {
+        transition: none !important;
+    }
+}
+
+body.reduced-motion .sb-dialog-host * {
+    transition: none !important;
 }
 
 /* Select2 Dropdowns */
