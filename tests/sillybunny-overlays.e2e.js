@@ -3,6 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { openQuietChatForSmoke } from './chat-scroll-regression-helpers.js';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
 import { expectSharedDialogEntryStyles } from './helpers/dialog-entry-parity.js';
+import { visiblePageClose } from './helpers/dialog-pages.js';
 
 test.beforeEach(async ({ page }) => {
     await protectMaintainerServer(page);
@@ -311,6 +312,7 @@ for (const width of [1440, 390]) {
             await expect(filteredRows).toHaveCount(1);
             const renameRow = frame.locator('#select_chat_div .select_chat_block_wrapper').filter({ hasText: 'QA History Rename' });
             await renameRow.getByRole('button', { name: 'Export JSONL chat file', exact: true }).click();
+            await expect(page.getByRole('menu', { name: 'Export Chat', exact: true })).toBeVisible();
             await page.getByRole('menuitem', { name: 'Export JSONL chat file', exact: true }).click();
             await expect.poll(() => exportRequests.length).toBe(1);
             expect(exportRequests[0]).toMatchObject({ file: 'QA History Rename.jsonl', format: 'jsonl' });
@@ -328,6 +330,13 @@ for (const width of [1440, 390]) {
             expect(renameRequests[0].original_file).toBe('QA History Rename.jsonl');
             expect(renameRequests[0].renamed_file).toBe('QA History Renamed.jsonl');
             await expect(search).toHaveValue('');
+            await expect(filteredRows).toHaveCount(17);
+
+            await search.fill('QA History Chat 01');
+            await expect(filteredRows).toHaveCount(1);
+            await search.press('Escape');
+            await expect(search).toBeHidden();
+            await expect(frame.locator('.sb-dialog__search-input')).toHaveValue('');
             await expect(filteredRows).toHaveCount(17);
 
             const deleteRow = frame.locator('#select_chat_div .select_chat_block_wrapper').filter({ hasText: 'QA History Renamed' });
@@ -360,7 +369,7 @@ for (const width of [1440, 390]) {
                 const cleanup = frame.locator('.sb-dialog__page.sb-chat-history-cleanup-page');
                 await cleanup.locator('#chat_cleanup_preview').click();
                 await cleanup.getByRole('button', { name: 'Back', exact: true }).click();
-                await frame.locator('.sb-dialog__close').click();
+                await (await visiblePageClose(frame)).click();
                 await expect(frame).toHaveCount(0);
                 await expect(focusTarget).toBeFocused();
             };
@@ -491,11 +500,12 @@ for (const width of [1440, 390]) {
             const frame = page.locator('.sb-dialog-host[data-tier="window"]:has(.sb-chat-history-dialog)');
             await expect(frame).toBeVisible();
             const statusPage = frame.locator('#select_chat_div .sb-status-page');
-            await expect(statusPage).toContainText('TODO(copy)');
+            await expect(statusPage).toContainText('No Chats');
+            await expect(statusPage).toContainText('Saved chats appear here.');
 
             await frame.getByRole('searchbox', { name: 'Search', exact: true }).fill('missing');
             await expect(statusPage).toContainText('No results');
-            await expect(statusPage).not.toContainText('TODO(copy)');
+            await expect(statusPage).not.toContainText('No Chats');
             await frame.locator('.sb-dialog__close').click();
             await expect(frame).toHaveCount(0);
             await expect(page.locator('#select_chat_popup').locator('xpath=..')).toHaveAttribute('id', 'shadow_select_chat_popup');

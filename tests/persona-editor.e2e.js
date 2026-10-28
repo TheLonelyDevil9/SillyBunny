@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
 import { protectMaintainerServer, showToasts } from './helpers/maintainer-server.js';
+import { fetchJsonOrSkip } from './helpers/route-fetch.js';
 
 const sessions = new WeakMap();
 
@@ -23,8 +24,8 @@ test.beforeEach(async ({ page }) => {
         return route.fulfill({ json: { result: 'ok', version: payload._version + 1 } });
     });
     await page.route('**/api/avatars/get', async route => {
-        const response = await route.fetch();
-        const avatars = await response.json();
+        const avatars = await fetchJsonOrSkip(route);
+        if (!avatars) return;
         return route.fulfill({ json: [...avatars, ...session.createdAvatars] });
     });
     await page.route('**/api/avatars/upload', route => {
@@ -195,7 +196,8 @@ test.describe('Persona editor', () => {
         await expect(description).not.toBeFocused();
         await expect(page.locator('dialog.popup[open]')).toHaveCount(0);
         await entry.getByRole('button', { name: 'Back', exact: true }).click();
-        const dialog = page.locator('dialog.popup[open]');
+        // The Cancel popup keeps [open] while it closes, and the second Back opens another guard before that ends.
+        const dialog = page.locator('dialog.popup[open]:not([closing])');
         await expect(dialog).toBeVisible();
         for (const label of ['Cancel', 'Discard', 'Save']) await expect(dialog.getByText(label, { exact: true })).toBeVisible();
         await dialog.getByText('Cancel', { exact: true }).click();

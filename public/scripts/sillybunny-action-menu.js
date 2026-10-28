@@ -10,6 +10,7 @@ import { MOTION_EASE_OUT_CUBIC, MOTION_FAST, MOTION_POPOVER_CLOSE, animateIn, an
 import { blockUpstreamDrawerClose, createSheetController } from './sillybunny-sheet.js';
 import { hostOverlayLayer } from './sillybunny-editor/overlay-host.js';
 import { OVERLAY_SHEET_QUERY } from './sillybunny-editor/breakpoints.js';
+import { bindSheetSwipeClose, createSheetHandle } from './sillybunny-editor/sheet-gestures.js';
 
 /** @deprecated Use OVERLAY_SHEET_QUERY or LAYOUT_MOBILE_QUERY from sillybunny-editor/breakpoints.js. */
 export const MOBILE_QUERY = OVERLAY_SHEET_QUERY;
@@ -257,6 +258,7 @@ function ensureSheet() {
     element.setAttribute('role', 'dialog');
     element.setAttribute('aria-modal', 'true');
     element.setAttribute('aria-labelledby', SHEET_TITLE_ID);
+    element.tabIndex = -1;
 
     const header = document.createElement('div');
     header.className = 'sb-action-sheet-header';
@@ -265,7 +267,6 @@ function ensureSheet() {
     const title = document.createElement('h2');
     title.id = SHEET_TITLE_ID;
     title.className = 'sb-action-sheet-title';
-    title.tabIndex = -1;
     const subtitle = document.createElement('div');
     subtitle.className = 'sb-action-sheet-subtitle';
     heading.append(title, subtitle);
@@ -281,18 +282,19 @@ function ensureSheet() {
 
     const body = document.createElement('div');
     body.className = 'sb-action-sheet-body';
-    element.append(header, body);
+    element.append(createSheetHandle(), header, body);
     document.body.append(backdrop, element);
 
     const controller = createSheetController({
         sheet: element,
         backdrop,
-        getInitialFocus: () => open?.initialFocus?.() ?? (open?.keyboard ? getItems()[0] : null) ?? title,
+        getInitialFocus: () => open?.initialFocus?.() ?? (open?.keyboard ? getItems()[0] : null) ?? element,
         getReturnFocus: () => (open?.trigger?.isConnected ? open.trigger : null),
         canAnimateClose: () => isMobileLayout(),
         onClose: () => finishClose(),
     });
     sheet = { element, backdrop, title, subtitle, body, controller };
+    bindSheetSwipeClose({ sheet: element, backdrop, headerSelector: '.sb-action-sheet-header', close: () => closeActionMenu({ restoreFocus: true }) });
     return sheet;
 }
 
@@ -420,7 +422,7 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
     const origin = positionPopover(popover, trigger, point, bounds);
     open = { kind: 'popover', trigger, menu, popover, keyboard, onClose, point, bounds };
     setTriggerExpanded(trigger, true);
-    // DESIGN.md: Popovers 200ms fade + scale 0.96 -> 1 from trigger.
+    // Popovers open with a 200ms fade and a scale from 0.96 to 1, so they grow out of the trigger.
     animateIn(popover, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], {
         duration: MOTION_FAST,
         easing: MOTION_EASE_OUT_CUBIC,
@@ -502,7 +504,6 @@ export function closeActionMenu({ animate = true, restoreFocus = false } = {}) {
     const hadFocus = popover.contains(document.activeElement);
     finishClose();
     stopMotion(popover);
-    // DESIGN.md: Popover close 150ms fade (no scale or movement).
     const motion = animateOut(popover, [{ opacity: 1 }, { opacity: 0 }], () => {
         popover.hidden = true;
     }, { enabled: animate, duration: MOTION_POPOVER_CLOSE, onEnd: () => popover.remove() });

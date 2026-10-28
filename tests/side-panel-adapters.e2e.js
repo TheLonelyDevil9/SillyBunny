@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
 import { openQuietChatForSmoke } from './chat-scroll-regression-helpers.js';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
+import { fetchBodyOrSkip } from './helpers/route-fetch.js';
 
 const VIEWPORTS = [
     { width: 1920, height: 1080 },
@@ -68,7 +69,7 @@ test('side panels share dialog headers, boxed groups, and theme-derived surfaces
         const panelButtons = [...panelHeader.querySelectorAll('.sb-dialog__icon-button')];
         const popupButton = popupHeader.querySelector('.sb-dialog__close');
         const body = panel.querySelector('.sb-side-panel__body');
-        const edge = getComputedStyle(panel).boxShadow;
+        const panelStyle = getComputedStyle(panel);
         return {
             panelHeaderHeight: panelHeader.getBoundingClientRect().height,
             popupHeaderHeight: popupHeader.getBoundingClientRect().height,
@@ -76,17 +77,27 @@ test('side panels share dialog headers, boxed groups, and theme-derived surfaces
             popupButton: [getComputedStyle(popupButton).width, getComputedStyle(popupButton).height],
             headerBackground: getComputedStyle(panelHeader).backgroundColor,
             bodyBackground: getComputedStyle(body).backgroundColor,
-            shadow: edge,
-            side: panel.dataset.sbSidePanelSide,
+            shadow: panelStyle.boxShadow,
+            borderWidths: [panelStyle.borderTopWidth, panelStyle.borderRightWidth, panelStyle.borderBottomWidth, panelStyle.borderLeftWidth],
+            borderRadius: panelStyle.borderRadius,
+            background: panelStyle.backgroundColor,
         };
     });
     expect(headerMetrics.panelHeaderHeight).toBe(headerMetrics.popupHeaderHeight);
     expect(headerMetrics.panelButtons).toEqual([['40px', '40px'], ['40px', '40px']]);
     expect(headerMetrics.popupButton).toEqual(['40px', '40px']);
     expect(headerMetrics.headerBackground).not.toBe(headerMetrics.bodyBackground);
-    expect(headerMetrics.shadow).not.toBe('none');
-    expect(headerMetrics.shadow).toContain('inset');
-    expect(headerMetrics.shadow).toContain(headerMetrics.side === 'left' ? '-1px 0px 0px 0px inset' : '1px 0px 0px 0px inset');
+    expect(headerMetrics.shadow).toBe('none');
+    expect(headerMetrics.borderWidths).toEqual(['1px', '1px', '1px', '1px']);
+    expect(headerMetrics.borderRadius).toBe('0px');
+    expect(headerMetrics.background).toBe(await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.background = 'var(--sb-layer-window)';
+        document.body.append(probe);
+        const color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return color;
+    }));
     await popup.locator('.sb-dialog__close').click();
     await expect(popup).toHaveCount(0);
 
@@ -103,19 +114,21 @@ test('side panels share dialog headers, boxed groups, and theme-derived surfaces
             header: getComputedStyle(element.querySelector('.sb-side-panel__header')).backgroundColor,
             body: getComputedStyle(element.querySelector('.sb-side-panel__body')).backgroundColor,
             shadow: getComputedStyle(element).boxShadow,
-            edge: getComputedStyle(element).boxShadow,
+            borderTopWidth: getComputedStyle(element).borderTopWidth,
+            borderTopColor: getComputedStyle(element).borderTopColor,
         })));
     }
     expect(themeStyles[0].tone).toBe('dark');
     expect(themeStyles[1].tone).toBe('light');
     for (const style of themeStyles) {
         expect(style.header).not.toBe(style.body);
-        expect(style.shadow).not.toBe('none');
-        expect(style.edge).toContain('inset');
+        expect(style.shadow).toBe('none');
+        // With no shadow, the border is what separates a docked panel from the chat.
+        expect(style.borderTopWidth).toBe('1px');
+        expect(colourAlpha(style.borderTopColor), `${style.tone}: ${style.borderTopColor}`).toBeGreaterThan(0);
     }
     expect(themeStyles[0].header).not.toBe(themeStyles[1].header);
     expect(themeStyles[2].header).not.toBe(themeStyles[0].header);
-    expect(themeStyles[2].shadow).not.toBe(themeStyles[0].shadow);
     await page.evaluate(() => {
         const select = document.getElementById('themes');
         select.value = 'Libadwaita';
@@ -156,8 +169,213 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 360, height: 740 }
     });
 }
 
-async function boot(page, viewport) {
+test.describe('the side-panel sheet swipe at 390×844', () => {
+    const SHEET_VIEWPORT = { width: 390, height: 844 };
+
+    async function openSheet(page) {
+        await boot(page, SHEET_VIEWPORT);
+        const panel = await openPanel(page, PANELS[0]);
+        await closePanel(page, PANELS[0].id);
+        // The Author's Note trigger does not pass the composer as the opener, so the test names it.
+        await page.evaluate(() => window.SillyBunnySidePanels.openSidePanel('floatingPrompt', { opener: document.getElementById('send_textarea') }));
+        await expect(panel).toBeVisible();
+        await expect(panel).toHaveClass(/sb-side-panel--sheet/);
+        await expect.poll(() => panel.evaluate(element => element.getAnimations().length)).toBe(0);
+        return panel;
+    }
+
+    const topOf = panel => panel.evaluate(element => element.getBoundingClientRect().top);
+
+    async function centreOf(locator) {
+        const box = await locator.boundingBox();
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+
+    // The pointer stays still before release, so the release velocity is 0 and only the distance decides.
+    async function dragDown(page, from, distance) {
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(from.x, from.y + distance, { steps: 8 });
+    }
+
+    test('a long swipe from the handle follows the finger, then closes through the normal close path', async ({ page }) => {
+        const panel = await openSheet(page);
+        const restTop = await topOf(panel);
+        await dragDown(page, await centreOf(panel.locator(':scope > .sb-dialog__handle')), 220);
+        await expect.poll(() => topOf(panel)).toBeCloseTo(restTop + 220, 0);
+        await page.mouse.up();
+
+        await expect(panel).toBeHidden();
+        await expect(page.locator('body')).not.toHaveClass(/sb-has-side-panel-sheet/);
+        await expect(page.locator('#send_textarea')).toBeFocused();
+        expect(await panel.evaluate(element => element.style.transform)).toBe('');
+
+        await openPanel(page, PANELS[0]);
+        await expect.poll(() => topOf(panel)).toBeCloseTo(restTop, 0);
+    });
+
+    test('a long swipe from the header title closes the panel', async ({ page }) => {
+        const panel = await openSheet(page);
+        await dragDown(page, await centreOf(panel.locator('.sb-side-panel__title')), 220);
+        await page.mouse.up();
+        await expect(panel).toBeHidden();
+    });
+
+    test('a swipe that starts on a header control does not drag the panel', async ({ page }) => {
+        const panel = await openSheet(page);
+        const restTop = await topOf(panel);
+        await dragDown(page, await centreOf(panel.locator('.sb-side-panel__close')), 220);
+        expect(await topOf(panel)).toBe(restTop);
+        await page.mouse.up();
+        await expect(panel).toBeVisible();
+        expect(await topOf(panel)).toBe(restTop);
+    });
+
+    test('a short swipe springs back and keeps the panel open', async ({ page }) => {
+        const panel = await openSheet(page);
+        const restTop = await topOf(panel);
+        await dragDown(page, await centreOf(panel.locator(':scope > .sb-dialog__handle')), 40);
+        await expect.poll(() => topOf(panel)).toBeCloseTo(restTop + 40, 0);
+        await page.mouse.up();
+
+        await expect.poll(() => topOf(panel)).toBeCloseTo(restTop, 0);
+        await expect(panel).toBeVisible();
+        await expect(panel).toHaveClass(/sb-side-panel--sheet/);
+    });
+
+    test('reduced motion springs back at once, without an animation', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const panel = await openSheet(page);
+        const restTop = await topOf(panel);
+        await dragDown(page, await centreOf(panel.locator(':scope > .sb-dialog__handle')), 40);
+        await expect.poll(() => topOf(panel)).toBeCloseTo(restTop + 40, 0);
+        await page.mouse.up();
+
+        expect(await panel.evaluate(element => ({ animations: element.getAnimations().length, top: element.getBoundingClientRect().top }))).toEqual({ animations: 0, top: restTop });
+    });
+
+    test('the grab handle sits above the header at the shared sheet position and size', async ({ page }) => {
+        const panel = await openSheet(page);
+        const metrics = await panel.evaluate(element => {
+            const panelRect = element.getBoundingClientRect();
+            const handle = element.querySelector(':scope > .sb-dialog__handle');
+            const header = element.querySelector(':scope > .sb-side-panel__header');
+            const handleRect = handle.getBoundingClientRect();
+            const pill = getComputedStyle(handle, '::before');
+            return {
+                order: [...element.children].map(child => child.className.split(' ')[0]),
+                handle: { width: handleRect.width, height: handleRect.height, top: handleRect.top - panelRect.top, centre: handleRect.left + handleRect.width / 2 - panelRect.left - panelRect.width / 2 },
+                pill: { top: pill.top, height: pill.height },
+                headerPaddingTop: getComputedStyle(header).paddingTop,
+                headerRowMinimum: getComputedStyle(header).gridAutoRows,
+            };
+        });
+        expect(metrics.order.slice(0, 2)).toEqual(['sb-dialog__handle', 'sb-dialog__header']);
+        expect(metrics.handle.width).toBe(80);
+        expect(metrics.handle.height).toBe(20);
+        expect(metrics.handle.top).toBeLessThanOrEqual(1);
+        expect(Math.abs(metrics.handle.centre)).toBeLessThanOrEqual(1);
+        expect(metrics.pill).toEqual({ top: '8px', height: '4px' });
+        expect(metrics.headerPaddingTop).toBe('16px');
+        expect(metrics.headerRowMinimum).toBe('minmax(44px, auto)');
+    });
+
+    test('the sheet header rules do not reach a dialog header inside the hosted content', async ({ page }) => {
+        const panel = await openSheet(page);
+        const hosted = await panel.evaluate(element => {
+            const header = document.createElement('div');
+            header.className = 'sb-dialog__header';
+            element.querySelector('.sb-side-panel__content').append(header);
+            const own = getComputedStyle(element.querySelector(':scope > .sb-side-panel__header'));
+            const inner = getComputedStyle(header);
+            const result = {
+                ownTouchAction: own.touchAction,
+                hostedTouchAction: inner.touchAction,
+                hostedUserSelect: inner.userSelect,
+                hostedPaddingTop: inner.paddingTop,
+            };
+            header.remove();
+            return result;
+        });
+        expect(hosted.ownTouchAction).toBe('none');
+        expect(hosted).toMatchObject({ hostedTouchAction: 'auto', hostedUserSelect: 'auto', hostedPaddingTop: '6px' });
+    });
+
+    test('a long swipe slides out from the drag position, then closes through the normal path', async ({ page }) => {
+        await boot(page, SHEET_VIEWPORT, { motion: true });
+        const panel = await openPanel(page, PANELS[0]);
+        await closePanel(page, PANELS[0].id);
+        await page.evaluate(() => window.SillyBunnySidePanels.openSidePanel('floatingPrompt', { opener: document.getElementById('send_textarea') }));
+        await expect(panel).toHaveClass(/sb-side-panel--sheet/);
+        await expect.poll(() => panel.evaluate(element => element.getAnimations().length)).toBe(0);
+        const restTop = await topOf(panel);
+
+        await dragDown(page, await centreOf(panel.locator(':scope > .sb-dialog__handle')), 220);
+        const client = await page.context().newCDPSession(page);
+        await client.send('Animation.enable');
+        await client.send('Animation.setPlaybackRate', { playbackRate: 0.05 });
+        await page.mouse.up();
+        // The slide is still running, from the dragged position, and the panel has not closed yet.
+        expect(await topOf(panel)).toBeGreaterThanOrEqual(restTop + 200);
+        await expect(panel).toBeVisible();
+        await client.send('Animation.setPlaybackRate', { playbackRate: 1 });
+
+        await expect(panel).toBeHidden();
+        await expect(page.locator('body')).not.toHaveClass(/sb-has-side-panel-sheet/);
+        await expect(page.locator('#send_textarea')).toBeFocused();
+        expect(await panel.evaluate(element => element.style.transform)).toBe('');
+
+        await openPanel(page, PANELS[0]);
+        await expect.poll(() => panel.evaluate(element => element.getAnimations().length)).toBe(0);
+        expect(await topOf(panel)).toBe(restTop);
+    });
+
+    test('a drag that starts during the entry follows the finger', async ({ page }) => {
+        await boot(page, SHEET_VIEWPORT, { motion: true });
+        expect(await page.evaluate(async () => (await import('/scripts/sillybunny-motion.js')).prefersReducedMotion())).toBe(false);
+        // Slowing the page's animations keeps the entry running while the pointer goes down.
+        const client = await page.context().newCDPSession(page);
+        await client.send('Animation.enable');
+        await client.send('Animation.setPlaybackRate', { playbackRate: 0.02 });
+
+        const panel = await openPanel(page, PANELS[0]);
+        await expect(panel).toHaveClass(/sb-side-panel--sheet/);
+        expect(await panel.evaluate(element => element.getAnimations().length)).toBeGreaterThan(0);
+        const sheetTop = await panel.evaluate(element => Number.parseFloat(element.style.getPropertyValue('--sb-side-panel-sheet-top')));
+        await dragDown(page, await centreOf(panel.locator(':scope > .sb-dialog__handle')), 60);
+
+        await expect.poll(() => topOf(panel)).toBeCloseTo(sheetTop + 60, 0);
+        expect(await panel.evaluate(element => element.getAnimations().length)).toBe(0);
+        await client.send('Animation.setPlaybackRate', { playbackRate: 1 });
+        await page.mouse.up();
+        await expect.poll(() => topOf(panel)).toBeCloseTo(sheetTop, 0);
+        await expect(panel).toBeVisible();
+    });
+});
+
+// A computed colour is `rgb()`, `rgba()` or `color(... / alpha)`; no alpha means opaque.
+function colourAlpha(colour) {
+    const parseAlpha = text => (text.endsWith('%') ? Number.parseFloat(text) / 100 : Number.parseFloat(text));
+    const slash = colour.match(/\/\s*([\d.]+%?)\s*\)$/);
+    if (slash) return parseAlpha(slash[1]);
+    const legacy = colour.match(/^rgba\(([^)]+)\)$/);
+    if (legacy) return parseAlpha(legacy[1].split(',')[3].trim());
+    return 1;
+}
+
+async function boot(page, viewport, { motion = false } = {}) {
     await protectMaintainerServer(page);
+    if (motion) {
+        // The test data turns the reduced-motion setting on, which would skip the sheet spring.
+        await page.route('**/api/settings/get', async route => {
+            const fetched = await fetchBodyOrSkip(route, response => response.json());
+            if (!fetched) return;
+            const { response, body: data } = fetched;
+            const settings = JSON.parse(data.settings);
+            settings.power_user.reduced_motion = false;
+            return route.fulfill({ response, json: { ...data, settings: JSON.stringify(settings) } });
+        });
+    }
     await page.setViewportSize(viewport);
     await openQuietChatForSmoke(page);
     await page.route('**/api/characters/chats', route => route.fulfill({ json: RECENT_CHAT_FIXTURES }));
@@ -191,6 +409,8 @@ async function expectControlAtRowEnd(panel, controlSelector) {
 }
 
 async function readGeometry(page, panel) {
+    // A sheet springs in from below and passes over the composer, so only the settled position is the layout.
+    await expect.poll(() => panel.evaluate(element => element.getAnimations().length)).toBe(0);
     return panel.evaluate(element => {
         const panelRect = element.getBoundingClientRect();
         const chatRect = document.getElementById('sheld').getBoundingClientRect();
@@ -269,7 +489,7 @@ for (const viewport of VIEWPORTS) {
                 expect(Math.abs(geometry.panel.bottom - geometry.chatRect.bottom)).toBeLessThanOrEqual(2);
             }
             if (geometry.mode === 'sheet') {
-                await expect(panel.locator('.sb-side-panel__grab-handle')).toBeVisible();
+                await expect(panel.locator(':scope > .sb-dialog__handle')).toBeVisible();
                 expect(geometry.panel.height).toBeLessThanOrEqual(viewport.height * 0.5 + 1);
                 await page.locator('#send_textarea').fill('Composer remains usable above the panel sheet');
                 await expect(page.locator('#send_textarea')).toHaveValue('Composer remains usable above the panel sheet');

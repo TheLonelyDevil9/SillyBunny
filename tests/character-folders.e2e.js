@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
+import { visiblePageClose } from './helpers/dialog-pages.js';
 import { expectSharedDialogEntryStyles } from './helpers/dialog-entry-parity.js';
+import { fetchJsonOrSkip } from './helpers/route-fetch.js';
 
 function readPayload(request) {
     const body = request.postDataBuffer();
@@ -25,8 +27,8 @@ function makeCharacters(count) {
 async function routeSettings(page, edit) {
     const state = { saved: [] };
     await page.route('**/api/settings/get', async route => {
-        const response = await route.fetch();
-        const payload = await response.json();
+        const payload = await fetchJsonOrSkip(route);
+        if (!payload) return;
         const settings = JSON.parse(payload.settings);
         edit(settings);
         return route.fulfill({ json: { ...payload, settings: JSON.stringify(settings) } });
@@ -168,7 +170,7 @@ for (const { label, width } of [{ label: 'desktop', width: 1440 }, { label: 'mob
             await expect.poll(() => page.evaluate(async () => (await import('/scripts/sillybunny-folders.js')).getFolderId('characters', 'folder-qa-2.png'))).toBeNull();
             await manager.locator('.sb-dialog__back').last().click();
 
-            await manager.locator('.sb-dialog__close').click();
+            await (await visiblePageClose(manager)).click();
 
             let firstRow = list.locator('[data-sb-list-key="character:folder-qa-0.png"]');
             await firstRow.getByRole('button', { name: 'Edit', exact: true }).click();

@@ -547,7 +547,7 @@ function _bindToolbarButtons() {
 
     // The favourite button is a div toggled by the fav_on/fav_off classes, which
     // the toolbar cannot use to express state. Mirror it into aria-pressed so the
-    // button can render a selected fill the way DESIGN.md expects.
+    // button can render a selected fill.
     const favButton = document.getElementById('favorite_button');
     if (favButton) {
         new MutationObserver(_syncFavoritePressed)
@@ -1040,7 +1040,7 @@ function _bindFieldDirtyListeners() {
 
     // Favorite button toggle
     document.getElementById('favorite_button')?.addEventListener('click', () => {
-        // State update happens inside the upstream handler; we re-check after it runs
+        // A new card's star updates inside the upstream handler, so re-check after it runs
         requestAnimationFrame(() => session.changed());
     });
 }
@@ -1109,8 +1109,9 @@ function _restoreSnapshot(snap) {
         }
     }
 
-    // Restore favorite state via DOM (avoids needing the unexported fav_ch_checked)
-    if ('_fav' in snap) {
+    // Restore favorite state via DOM (avoids needing the unexported fav_ch_checked).
+    // A saved card's star saves on click, so a draft or baseline must not replay it.
+    if ('_fav' in snap && session.context?.mode === 'create') {
         const btn = document.getElementById('favorite_button');
         const currentFav = btn?.classList.contains('fav_on') ?? false;
         if (btn && currentFav !== snap._fav) {

@@ -1,5 +1,5 @@
 /*
- * SillyBunny message actions (DESIGN.md "Message Actions"): name-row layout, the expanded row,
+ * SillyBunny message actions: name-row layout, the expanded row,
  * the labelled message menu (popover and bottom sheet), and press-and-hold labels.
  * Loaded after the other SillyBunny sheets so it wins the cascade; user.css still loads last.
  * Behaviour lives in scripts/sillybunny-message-actions.js and scripts/sillybunny-action-menu.js.
@@ -567,6 +567,10 @@ body.reduced-motion :is(.sb-action-menu-item, .sb-action-menu-reaction) {
     align-items: center;
     gap: 8px;
     padding-inline-start: 8px;
+    /* The header starts the swipe-down close, so the browser must not scroll or select under the finger. */
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
 }
 
 .sb-action-sheet-heading {

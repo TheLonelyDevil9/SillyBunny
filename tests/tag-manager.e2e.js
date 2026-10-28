@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
 import { expectSharedDialogEntryStyles } from './helpers/dialog-entry-parity.js';
+import { visiblePageClose } from './helpers/dialog-pages.js';
 /* eslint-disable playwright/no-conditional-in-test, playwright/no-conditional-expect -- The viewport matrix adds mobile-only sheet gesture assertions. */
 
 const manager = page => page.locator('#tag_view_list');
@@ -217,6 +218,7 @@ for (const width of [1440, 390]) {
             await field.fill('qa beta');
             await field.press('Enter');
             await expect(field).toHaveAttribute('aria-invalid', 'true');
+            await expect(row(page, fixtureTag).locator('.sb-tag-manager__error')).toHaveText('That name is already in use.');
             await manager(page).locator('.sb-dialog__close').click();
             await expect(manager(page)).toBeVisible();
             await expect(field).toBeFocused();
@@ -265,6 +267,7 @@ for (const width of [1440, 390]) {
             await tagRow.locator('.ds-entity-row__avatar').click();
             const managerWindow = page.locator('.sb-dialog-host:has(> #tag_view_list)');
             await expect(managerWindow.locator('.sb-dialog__back').last()).toBeVisible();
+            await expect(await visiblePageClose(managerWindow)).toBeVisible();
             await expect(managerWindow.locator('.sb-tag-manager__members .ds-entity-row')).toHaveCount(1);
             await managerWindow.locator('.sb-tag-manager__members .sb-tag-manager__member-remove').click();
             await expect(managerWindow.locator('.sb-tag-manager__members .ds-entity-row')).toHaveCount(0);
@@ -276,17 +279,21 @@ for (const width of [1440, 390]) {
             await tagRow.focus();
             await page.keyboard.press('Space');
             await expect(managerWindow.locator('.sb-dialog__back').last()).toBeVisible();
+            await (await visiblePageClose(managerWindow)).click();
+            await expect(managerWindow).toHaveCount(0);
         });
 
         test('colour picker updates a list chip immediately, and slash-command writers refresh the open dialog', async ({ page }) => {
             await prepare(page, width);
             await openFromList(page);
             await row(page, fixtureTag).locator('.sb-tag-manager__row-menu').click();
-            await page.locator('#sb-action-menu:visible [role="menuitem"]').filter({ hasText: 'lorum ipsum' }).first().click();
+            await expect(page.locator('#sb-action-menu:visible').getByRole('menuitem', { name: 'Text Color', exact: true })).toBeVisible();
+            await page.locator('#sb-action-menu:visible [role="menuitem"]').filter({ hasText: 'Background Color' }).first().click();
             const pickerPage = page.locator('.sb-dialog-host .sb-dialog__page.sb-color-picker-dialog');
             if (width <= 450) await expect(pickerPage).toBeVisible();
             const picker = page.locator('.sb-color-picker-menu:visible');
             await expect(picker).toBeVisible();
+            await expect(page.locator('toolcool-color-picker[aria-label="Background Color"]')).toBeAttached();
             const hex = picker.getByRole('textbox', { name: 'Hex', exact: true });
             await hex.fill('#22cc88');
             await hex.press('Enter');

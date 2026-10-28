@@ -80,7 +80,7 @@ import { createStatusPage } from './sillybunny-editor/status-page.js';
 import { initializePromptEditor } from './sillybunny-prompt-editor.js';
 // SillyBunny: the Agents shell mounts independently of extension initialization.
 import { mountAgentsPanel, getAgentsPanelSearchEntries } from './extensions/in-chat-agents/ui/agent-list.js';
-// SillyBunny: character editor controller (Step 3b, feat/v1.9.0-ui-overhaul)
+// SillyBunny: character editor controller
 import { initCharacterEditor } from './sillybunny-character-editor.js';
 import { collectEntitySearchEntries, primeWorldInfoSearchCache } from './sillybunny-search-entities.js';
 const sbMobileShellLifecycle = createMobileShellLifecycle();
@@ -124,8 +124,8 @@ function initializeSettingsPanel() {
 /**
  * Tabs whose collapsible drawers are left alone.
  *
- * Extensions is the one the 6F decision names: each of its 17 drawers is a self-contained,
- * independently-authored block rather than a stray accordion.
+ * Extensions keeps its drawers: each one is a self-contained, independently authored block
+ * rather than a stray accordion.
  * Connections preserves upstream drawer content because its descendants carry provider visibility
  * gates; its scoped form pass supplies expander-row presentation without flattening that ancestry.
  */
@@ -289,7 +289,7 @@ function installSettingsSubpage(shellKey, tabId) {
     }
 }
 
-/** Phase 6F: marks the merged Chat Completion presets row and the chrome card it replaces. */
+/** Marks the merged Chat Completion presets row and the chrome card it replaces. */
 const SB_PRESET_TOOLBAR_ROW_CLASS = 'sb-preset-toolbar-row';
 const SB_PRESET_TOOLBAR_CARD_CLASS = 'sb-preset-toolbar-card';
 const SB_PRESET_ACTION_GROUP_CLASS = 'sb-action-btn-group';
@@ -485,7 +485,7 @@ function invalidateUserSettingsTabSearchIndexes() {
 /**
  * Every root that holds Customize settings content, in the order a user sees them.
  *
- * Phase 6C gives each Customize tab its own container, so the three containers are the live roots.
+ * Each Customize tab has its own container, so the three containers are the live roots.
  * The legacy block is kept on the list last because it stays in the document and third-party
  * drawers still append into it; it has no settings left, so it contributes nothing in practice.
  *
@@ -536,7 +536,7 @@ function openAllInlineDrawers(root = null) {
 }
 
 /**
- * Re-runs the drawer flatten and the 6F section order for a panel that may have been built after
+ * Re-runs the drawer flatten and the section order for a panel that may have been built after
  * the split.
  *
  * The split flattens and orders the markup it relocates, but some sections author their drawers
@@ -589,9 +589,6 @@ const SB_STORAGE_KEYS = Object.freeze({
     topbarLabelDesktopParts: 'sb-topbar-label-desktop-parts',
     topbarLabelMobilePart: 'sb-topbar-label-mobile-part',
     topbarLabelCustomText: 'sb-topbar-label-custom-text',
-    topbarLabelClickCycle: 'sb-topbar-label-click-cycle',
-    topbarLabelClickCycleDesktop: 'sb-topbar-label-click-cycle-desktop',
-    topbarLabelClickCycleMobile: 'sb-topbar-label-click-cycle-mobile',
     chatbarVisible: 'sb-chatbar-visible',
     topbarOffset: 'sb-topbar-offset',
     settingsDrawerStatePrefix: 'sb-settings-inline-drawer',
@@ -624,7 +621,7 @@ const SB_STORAGE_KEYS = Object.freeze({
 
 // The pre-overhaul shell-tab rail wrote these transient presentation attributes to <html>. Keep the
 // retired storage keys untouched for older builds and extensions, but never let stale attributes
-// suppress the Layer 2 top bar when a page is upgraded without a full browser restart.
+// suppress the top bar when a page is upgraded without a full browser restart.
 const SB_LEGACY_NAVIGATION_DATA_ATTRIBUTES = Object.freeze([
     'data-sb-mobile-nav-layout',
     'data-sb-mobile-nav-mode',
@@ -682,18 +679,18 @@ const SB_SHORTCUT_LABELS = Object.freeze({
 });
 const SB_PANEL_STYLESHEETS = Object.freeze({
     'left:editor': [
-        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
-        { href: 'css/sillybunny-prompt-editor.css?v=20261018a', id: 'deferred-prompt-editor-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-prompt-editor.css?v=20261027a', id: 'deferred-prompt-editor-css' },
     ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
         // SillyBunny: the rebuilt World Info shell stays deferred like the Prompt Editor.
-        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
-        { href: 'css/sillybunny-world-info-editor.css?v=20261026a', id: 'deferred-world-info-editor-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-world-info-editor.css?v=20261027a', id: 'deferred-world-info-editor-css' },
     ],
     'characters:persona': [
         // SillyBunny: persona editor assets stay deferred like World Info — see docs/ui-migration.md
-        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
         { href: 'css/sillybunny-persona-editor.css?v=20261026a', id: 'deferred-persona-editor-css' },
         { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
@@ -701,15 +698,15 @@ const SB_PANEL_STYLESHEETS = Object.freeze({
     'characters:characters': [
         // SillyBunny: the shared list and its selection UI stay deferred until the mount gate resolves — see docs/ui-migration.md.
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-character-list.css?v=20261026b', id: 'deferred-character-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261027a', id: 'deferred-character-list-css' },
     ],
     'characters:groups': [
         // SillyBunny: Characters and Groups use the same deferred selection UI — see docs/ui-migration.md.
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-character-list.css?v=20261026b', id: 'deferred-character-list-css' },
+        { href: 'css/sillybunny-character-list.css?v=20261027a', id: 'deferred-character-list-css' },
     ],
     'characters:import': [
-        { href: 'css/sillybunny-editor-shell.css?v=20261026c', id: 'deferred-editor-shell-css' },
+        { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-entity-list.css?v=20261018a', id: 'deferred-entity-list-css' },
         { href: 'css/sillybunny-character-import.css?v=20261018a', id: 'deferred-character-import-css' },
     ],
@@ -740,9 +737,9 @@ const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
  * Drawers whose open state is written by their own code rather than by the generic persistence
  * scan, so the scan must not also write a key for them.
  *
- * 6F removed OpenAI drawer persistence from this list: the groups
- * are flattened now, and a flattened section is not a drawer -- it has no toggle and no content
- * wrapper -- so there is no open state left for either writer to persist.
+ * OpenAI groups are not on this list: they are flattened, and a flattened section is not a
+ * drawer because it has no toggle and no content wrapper, so there is no open state left for
+ * either writer to persist.
  */
 const SB_INLINE_DRAWER_CUSTOM_PERSISTENCE_SELECTOR = '[id$="prompt_manager_drawer"]';
 const SB_STORAGE_PREFIX = 'sb-';
@@ -810,7 +807,7 @@ function migrateLegacyWorldInfoRoute(target) {
 }
 
 function migrateTabId(shellKey, tabId) {
-    // Phase 5: migrate old tab IDs to new reorganized structure
+    // Saved tab IDs from the older tab layout map onto the current tab IDs.
     const migrations = {
         left: {
             'presets': 'prompting',
@@ -866,7 +863,7 @@ function activateShortcutTarget(target) {
 
     const [shell, tab] = String(target).split(':');
 
-    // SillyBunny: toggleShellPanel routes every shell through the settings page (feat/v1.9.0-ui-overhaul)
+    // SillyBunny: toggleShellPanel routes every shell through the settings page
     if (shell === 'characters') {
         preloadPanelStylesheets('characters', tab);
         toggleShellPanel(shell, tab || null);
@@ -1005,7 +1002,6 @@ const SB_TOPBAR_LABEL_PARTS = Object.freeze([
 const SB_TOPBAR_LABEL_PART_ORDER = Object.freeze(SB_TOPBAR_LABEL_PARTS.map(part => part.id));
 const SB_TOPBAR_LABEL_PART_IDS = new Set(SB_TOPBAR_LABEL_PART_ORDER);
 const SB_TOPBAR_LABEL_CUSTOM_TEXT_MAX_LENGTH = 48;
-const SB_TOPBAR_LABEL_CYCLE_RESET_MS = 5000;
 const SB_TOPBAR_DRAG_X_RATIO = 0.36;
 const SB_TOPBAR_DRAG_Y_RATIO = 0.24;
 const SB_TOPBAR_CONTEXT_REFRESH_DEBOUNCE = 220;
@@ -1319,9 +1315,10 @@ const SB_DESKTOP_DEFAULT_QUICK_ACTIONS = Object.freeze([
     { type: 'tab', shellKey: 'characters', tabId: 'world-info', icon: 'fa-book-atlas', label: 'World Info' },
 ]);
 // SillyBunny: the optional icons-only top bar does not pool every page into one strip. It expands
-// each section in place into that section's own pages, so the bar keeps the skeleton PRODUCT.md
-// prescribes and each cluster stays readable as its own zone. Labels and icons resolve from
-// SB_SHELLS / SB_CHARACTER_PANEL_TABS at build time so a cluster cannot drift when a page is
+// each section in place into that section's own pages, so Backend, Customize and Characters each
+// keep their anchor with their own pages in the same cluster, and each cluster stays readable as
+// its own zone. Labels and icons resolve from SB_SHELLS / SB_CHARACTER_PANEL_TABS at build time
+// so a cluster cannot drift when a page is
 // renamed. Kept separate from SB_SHORTCUT_TARGETS because that one is persisted in user settings
 // and carries pseudo-entries this list must not inherit.
 const SB_TOPBAR_CLUSTERS = Object.freeze([
@@ -1366,7 +1363,7 @@ const SB_TOPBAR_CLUSTERS = Object.freeze([
 ]);
 const SB_TOPBAR_PAGE_TARGETS = Object.freeze(SB_TOPBAR_CLUSTERS.flatMap(cluster => cluster.pages));
 
-// SillyBunny: Home and Characters remain as Layer 2 anchors. Backend and Customize are redundant
+// SillyBunny: Home and Characters remain as top bar anchors. Backend and Customize are redundant
 // once all of their pages are shown, so CSS hides those two only while icons-only mode is active.
 const SB_TOPBAR_ANCHOR_IDS = Object.freeze([
     'sb-home-toggle',
@@ -1426,17 +1423,11 @@ const sbState = {
             ? 'char'
             : normalizeTopbarLabelPart(safeGetItem(SB_STORAGE_KEYS.topbarLabelMobilePart), ''),
         customText: normalizeTopbarCustomText(safeGetItem(SB_STORAGE_KEYS.topbarLabelCustomText)),
-        clickCycle: {
-            desktop: readTopbarLabelClickCycle('desktop'),
-            mobile: readTopbarLabelClickCycle('mobile'),
-        },
         contextTokens: null,
         refreshTimer: 0,
         refreshInFlight: false,
         refreshPending: false,
         refreshToken: 0,
-        cyclePart: '',
-        cycleResetTimer: 0,
         bindingRetryTimer: 0,
         boundEventSource: null,
         windowBindingsAttached: false,
@@ -1611,21 +1602,6 @@ function normalizeStoredBoolean(value, fallback = false) {
     }
 
     return fallback;
-}
-
-function readTopbarLabelClickCycle(mode) {
-    const storageKey = mode === 'mobile'
-        ? SB_STORAGE_KEYS.topbarLabelClickCycleMobile
-        : SB_STORAGE_KEYS.topbarLabelClickCycleDesktop;
-    // Keep the old choice as a read-only seed until each layout has its own saved value.
-    return normalizeStoredBoolean(
-        safeGetItem(storageKey),
-        normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.topbarLabelClickCycle), true),
-    );
-}
-
-function isTopbarLabelClickCycleEnabled() {
-    return isMobileViewport() ? sbState.topbarLabel.clickCycle.mobile : sbState.topbarLabel.clickCycle.desktop;
 }
 
 function getQuickActionState(mode) {
@@ -2001,8 +1977,6 @@ function restorePersistedTopbarState() {
         ? 'char'
         : normalizeTopbarLabelPart(safeGetItem(SB_STORAGE_KEYS.topbarLabelMobilePart), '');
     sbState.topbarLabel.customText = normalizeTopbarCustomText(safeGetItem(SB_STORAGE_KEYS.topbarLabelCustomText));
-    sbState.topbarLabel.clickCycle.desktop = readTopbarLabelClickCycle('desktop');
-    sbState.topbarLabel.clickCycle.mobile = readTopbarLabelClickCycle('mobile');
     sbState.chatbar.visible = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.chatbarVisible), sbState.chatbar.visible);
     sbState.chatbar.topbarOffset = normalizeTopbarOffset(safeGetItem(SB_STORAGE_KEYS.topbarOffset));
     sbState.compactMode = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.compactMode), sbState.compactMode);
@@ -3639,32 +3613,7 @@ function setTopbarCustomText(value) {
     }
 
     sbState.topbarLabel.customText = nextText;
-    if (!nextText && sbState.topbarLabel.cyclePart === 'custom') {
-        resetTopBarLabelCycle({ refresh: false });
-    }
-
     safeSetItem(SB_STORAGE_KEYS.topbarLabelCustomText, nextText);
-    flushSbStorageWrites();
-    updateThemePickerUi();
-    updateTopBarBrand();
-}
-
-function setTopbarLabelClickCycle(enabled) {
-    const mode = isMobileViewport() ? 'mobile' : 'desktop';
-    const nextValue = Boolean(enabled);
-    if (sbState.topbarLabel.clickCycle[mode] === nextValue) {
-        return;
-    }
-
-    sbState.topbarLabel.clickCycle[mode] = nextValue;
-    if (!nextValue) {
-        resetTopBarLabelCycle({ refresh: false });
-    }
-
-    const storageKey = mode === 'mobile'
-        ? SB_STORAGE_KEYS.topbarLabelClickCycleMobile
-        : SB_STORAGE_KEYS.topbarLabelClickCycleDesktop;
-    safeSetItem(storageKey, String(nextValue));
     flushSbStorageWrites();
     updateThemePickerUi();
     updateTopBarBrand();
@@ -3977,8 +3926,7 @@ function setTopbarContextTokens(tokens) {
 
 function isTopbarContextLabelEnabled() {
     return sbState.topbarLabel.desktopParts.includes('ctx')
-        || sbState.topbarLabel.mobilePart === 'ctx'
-        || sbState.topbarLabel.cyclePart === 'ctx';
+        || sbState.topbarLabel.mobilePart === 'ctx';
 }
 
 function syncTopbarContextTokensFromPromptManager() {
@@ -4058,19 +4006,6 @@ function getConfiguredTopbarLabelParts() {
     return normalizeTopbarLabelParts(sbState.topbarLabel.desktopParts);
 }
 
-function getTopbarLabelPartOption(partId) {
-    return SB_TOPBAR_LABEL_PARTS.find(part => part.id === partId) ?? null;
-}
-
-function getTopbarLabelCycleParts() {
-    const cycleParts = ['', 'ctx', 'char'];
-    if (sbState.topbarLabel.customText) {
-        cycleParts.push('custom');
-    }
-
-    return cycleParts;
-}
-
 function getTopBarLabelPartText(partId, context = getSillyTavernContext()) {
     switch (partId) {
         case 'ctx':
@@ -4088,60 +4023,6 @@ function getTopBarLabelPartText(partId, context = getSillyTavernContext()) {
     }
 }
 
-function getTopBarLabelPreviewText(partId, context = getSillyTavernContext()) {
-    const normalizedPart = normalizeTopbarLabelPart(partId);
-    const labelText = normalizedPart ? getTopBarLabelPartText(normalizedPart, context) : '';
-    if (labelText) {
-        return labelText;
-    }
-
-    if (normalizedPart === 'ctx') {
-        return '...';
-    }
-
-    return getTopbarLabelPartOption(normalizedPart)?.label ?? '';
-}
-
-function resetTopBarLabelCycle({ refresh = true } = {}) {
-    const hadCyclePart = Boolean(sbState.topbarLabel.cyclePart);
-    window.clearTimeout(sbState.topbarLabel.cycleResetTimer);
-    sbState.topbarLabel.cycleResetTimer = 0;
-    sbState.topbarLabel.cyclePart = '';
-
-    if (hadCyclePart && refresh) {
-        updateTopBarBrand();
-    }
-}
-
-function scheduleTopBarLabelCycleReset() {
-    window.clearTimeout(sbState.topbarLabel.cycleResetTimer);
-    sbState.topbarLabel.cycleResetTimer = window.setTimeout(() => {
-        resetTopBarLabelCycle();
-    }, SB_TOPBAR_LABEL_CYCLE_RESET_MS);
-}
-
-function cycleTopBarLabel() {
-    const cycleParts = getTopbarLabelCycleParts();
-    const currentPart = normalizeTopbarLabelPart(sbState.topbarLabel.cyclePart, '');
-    const currentIndex = cycleParts.indexOf(currentPart);
-    const nextIndex = currentIndex >= 0 ? currentIndex + 1 : 1;
-    const nextPart = cycleParts[nextIndex % cycleParts.length];
-
-    sbState.topbarLabel.cyclePart = nextPart;
-    if (nextPart) {
-        scheduleTopBarLabelCycleReset();
-    } else {
-        window.clearTimeout(sbState.topbarLabel.cycleResetTimer);
-        sbState.topbarLabel.cycleResetTimer = 0;
-    }
-
-    if (nextPart === 'ctx') {
-        scheduleTopbarContextRefresh(0);
-    }
-
-    updateTopBarBrand();
-}
-
 function returnToChatSurface() {
     // Close every overlay surface without touching the active chat itself.
     window.dispatchEvent(new CustomEvent('sb:close-conversation-workspace'));
@@ -4153,24 +4034,15 @@ function returnToChatSurface() {
     queueLandingPageStateSync();
 }
 
-function handleTopBarTitleActivation() {
-    if (isTopbarLabelClickCycleEnabled()) {
-        cycleTopBarLabel();
+function bindTopBarTitle(title) {
+    if (!(title instanceof HTMLElement) || title.dataset.sbTopbarTitleBound === 'true') {
         return;
     }
 
-    returnToChatSurface();
-}
-
-function bindTopBarTitleCycle(title) {
-    if (!(title instanceof HTMLElement) || title.dataset.sbTopbarTitleCycleBound === 'true') {
-        return;
-    }
-
-    title.dataset.sbTopbarTitleCycleBound = 'true';
+    title.dataset.sbTopbarTitleBound = 'true';
     title.addEventListener('click', event => {
         event.stopPropagation();
-        handleTopBarTitleActivation();
+        returnToChatSurface();
     });
     title.addEventListener('keydown', event => {
         if (event.key !== 'Enter' && event.key !== ' ') {
@@ -4179,17 +4051,12 @@ function bindTopBarTitleCycle(title) {
 
         event.preventDefault();
         event.stopPropagation();
-        handleTopBarTitleActivation();
+        returnToChatSurface();
     });
 }
 
 function getTopBarLabel() {
     const context = getSillyTavernContext();
-    const previewPart = normalizeTopbarLabelPart(sbState.topbarLabel.cyclePart, '');
-    if (previewPart) {
-        return getTopBarLabelPreviewText(previewPart, context);
-    }
-
     const parts = getConfiguredTopbarLabelParts()
         .map(partId => normalizeTopbarLabelPart(partId))
         .filter(Boolean);
@@ -4213,14 +4080,11 @@ function updateTopBarBrand() {
     const label = getTopBarLabel();
     const isActiveChat = hasActiveTopBarChat(context);
 
-    bindTopBarTitleCycle(title);
+    bindTopBarTitle(title);
     title.textContent = label;
     title.title = label;
-    title.setAttribute('aria-label', isTopbarLabelClickCycleEnabled()
-        ? `${label}. Tap to preview top bar label options.`
-        : `${label}. Tap to return to the chat.`);
+    title.setAttribute('aria-label', `${label}. Tap to return to the chat.`);
     title.classList.toggle('is-chat', isActiveChat);
-    title.classList.toggle('is-previewing', Boolean(sbState.topbarLabel.cyclePart));
     brand.dataset.brandState = isActiveChat ? 'chat' : 'idle';
     queueTopbarBrandFit();
 }
@@ -4280,24 +4144,6 @@ function bindTopBarBrand() {
         refresh();
         scheduleTopbarContextRefresh();
     };
-    const resetCycleAndRefreshWithContext = () => {
-        resetTopBarLabelCycle({ refresh: false });
-        refreshWithContext();
-    };
-    // SillyBunny: top-bar taps only preview alternate labels; chat/context moves restore configured text.
-    const resetCycleEvents = new Set([
-        eventTypes.APP_READY,
-        eventTypes.CHAT_CHANGED,
-        eventTypes.CHAT_CREATED,
-        eventTypes.GROUP_CHAT_CREATED,
-        eventTypes.CHARACTER_EDITED,
-        eventTypes.CHARACTER_RENAMED,
-        eventTypes.CHARACTER_DELETED,
-        eventTypes.GROUP_UPDATED,
-        eventTypes.PERSONA_CHANGED,
-        eventTypes.MAIN_API_CHANGED,
-        eventTypes.SETTINGS_UPDATED,
-    ].filter(Boolean));
     const events = [
         eventTypes.APP_READY,
         eventTypes.CHAT_CHANGED,
@@ -4317,8 +4163,7 @@ function bindTopBarBrand() {
     ].filter(Boolean);
 
     for (const eventName of new Set(events)) {
-        const eventHandler = resetCycleEvents.has(eventName) ? resetCycleAndRefreshWithContext : refreshWithContext;
-        eventSource.on(eventName, eventHandler);
+        eventSource.on(eventName, refreshWithContext);
     }
 
     if (eventTypes.CHAT_COMPLETION_PROMPT_READY) {
@@ -4449,7 +4294,7 @@ function getTopbarGroupOrder({ iconsOnly, mobile }) {
         'sb-topbar-divider-customize',
         customize.leadId,
         customize.railId,
-        // SillyBunny: permanent search lives left of the quick-access divider, mobile divider before it — feat/v1.9.0-ui-overhaul
+        // SillyBunny: permanent search sits left of the quick-access divider, and the mobile divider sits before it
         'sb-topbar-divider-search-mobile',
         'sb-topbar-search-toggle',
     ];
@@ -4469,7 +4314,7 @@ function getTopbarGroupOrder({ iconsOnly, mobile }) {
         right.push('sb-shortcut-slot6', 'sb-shortcut-slot5', 'sb-shortcut-right', 'sb-topbar-divider-quick-right');
     }
 
-    // SillyBunny: mode toggle stays in right group — feat/v1.9.0-ui-overhaul
+    // SillyBunny: the mode toggle stays in the right group
     right.push('sb-mode-toggle', 'sb-topbar-divider-mode-mobile', 'sb-home-toggle', 'sb-topbar-divider-home');
 
     if (iconsOnly && mobile) {
@@ -6540,9 +6385,8 @@ async function getConnectionStatusText() {
         // Ignore slash command lookup failures and use the current context values.
     }
 
-    // SillyBunny (feat/v1.9.0-ui-overhaul): the provider selects moved into the Connections panel,
-    // so the block no longer holds the model options this reads -- `#rm_api_block` now only carries
-    // `#main_api`. The panel is searched first and the block is kept as the fallback for the window
+    // SillyBunny: the provider selects live in the Connections panel, so the model options this
+    // reads are not in `#rm_api_block`, which only carries `#main_api`. The panel is searched first and the block is kept as the fallback for the window
     // before the panel is built.
     const apiBlock = document.querySelector('.sb-connections-panel') ?? document.getElementById('rm_api_block');
 
@@ -7800,7 +7644,7 @@ function setCharacterShellMode(mode) {
 let pendingCharacterEditorAvatar = null;
 
 function openCharacterPanelTab(tabId, { avatar = null } = {}) {
-    // SillyBunny: Characters lives in the full-screen settings page (feat/v1.9.0-ui-overhaul).
+    // SillyBunny: Characters lives in the full-screen settings page.
     const normalizedTabId = normalizeCharacterPanelTab(tabId);
     pendingCharacterEditorAvatar = normalizedTabId === 'editor' ? avatar : null;
     if (isSettingsPageHosting('characters')) {
@@ -8086,8 +7930,6 @@ window.matchMedia(SB_MOBILE_MEDIA_QUERY).addEventListener('change', () => {
     // Crossing the breakpoint can change which device's icons-only setting is in force, so the
     // whole preference re-applies rather than just the group order.
     applyTopbarIconsOnlyPreference();
-    resetTopBarLabelCycle({ refresh: false });
-    updateThemePickerUi();
     updateTopBarBrand();
     // Crossing the breakpoint also decides which rail third-party composer buttons belong in.
     queueComposerControlPlacement();
@@ -8363,7 +8205,7 @@ function observeProxyButton(buttonId, iconSelector) {
 }
 
 function activateCharacterTopbarButton() {
-    // SillyBunny: route through the full-screen settings page for consistency (feat/v1.9.0-ui-overhaul)
+    // SillyBunny: open Characters through the full-screen settings page, like the other shells
     toggleSettingsPage('characters');
 }
 
@@ -8530,7 +8372,7 @@ function buildTopBar() {
         attrs: { 'data-sb-topbar-slot-empty': 'true' },
     });
 
-    // SillyBunny: left/right shell toggles now open the full-screen settings page (feat/v1.9.0-ui-overhaul)
+    // SillyBunny: the left and right shell toggles open the full-screen settings page
     const leftButton = createProxyButton(
         {
             id: 'sb-left-shell-toggle',
@@ -8618,10 +8460,10 @@ function buildTopBar() {
     }
 
     centerGroup.innerHTML = `
-        <div id="sb-topbar-title" class="sb-brand-title" role="button" tabindex="0" aria-label="Tap to preview top bar label options">${SB_IDLE_BRAND_LABEL}</div>
+        <div id="sb-topbar-title" class="sb-brand-title" role="button" tabindex="0" aria-label="Tap to return to the chat">${SB_IDLE_BRAND_LABEL}</div>
     `;
 
-    // SillyBunny: each cluster rail is built beside the Layer 2 anchor it belongs to and stays
+    // SillyBunny: each cluster rail is built beside the top bar anchor it belongs to and stays
     // display:none until icons-only mode is on, so one static child order serves both modes and the
     // button sequence never shifts when the option is toggled. Search gets no dedicated button: it
     // rides a Quick Access slot here exactly as it does with the option off.
@@ -8641,7 +8483,7 @@ function buildTopBar() {
     const modeMobileDivider = createTopbarClusterDivider('sb-topbar-divider-mode-mobile');
     modeMobileDivider.classList.add('sb-mobile-setting');
 
-    // SillyBunny: search toggle (left group, after Customize) + mode toggle (right group, before Home) — feat/v1.9.0-ui-overhaul
+    // SillyBunny: the search toggle goes in the left group after Customize, and the mode toggle goes in the right group before Home
     const searchToggle = createProxyButton(
         {
             id: 'sb-topbar-search-toggle',
@@ -11879,33 +11721,6 @@ function createTopbarLabelSettingsGroup() {
         setTopbarCustomText(input instanceof HTMLInputElement ? input.value : '');
     });
 
-    const clickCycleId = 'sb-topbar-label-click-cycle-input';
-    const clickCycleOption = createElement('label', {
-        className: 'sb-topbar-label-option sb-topbar-label-click-cycle-option',
-        attrs: {
-            for: clickCycleId,
-        },
-    });
-    const clickCycleCheckbox = createElement('input', {
-        id: clickCycleId,
-        className: 'sb-topbar-label-checkbox',
-        attrs: {
-            type: 'checkbox',
-            'data-sb-topbar-label-click-cycle-input': 'true',
-        },
-    });
-    const clickCycleCopy = createElement('span', { className: 'sb-topbar-label-option-copy' });
-    const clickCycleTitle = createElement('strong', { text: 'Click To Preview Label Options' });
-    const clickCycleDescription = createElement('small', { text: 'When enabled, clicking the label cycles through a preview of each part. When disabled, the label stays on your selection above and clicking it returns to the chat.' });
-
-    clickCycleCheckbox.addEventListener('change', event => {
-        const input = event.currentTarget;
-        setTopbarLabelClickCycle(input instanceof HTMLInputElement ? input.checked : true);
-    });
-
-    clickCycleCopy.append(clickCycleTitle, clickCycleDescription);
-    clickCycleOption.append(clickCycleCheckbox, clickCycleCopy);
-
     desktopHeading.append(desktopTitle, desktopDescription);
     mobileHeading.append(mobileTitle, mobileDescription);
     customTextHeading.append(customTextTitle, customTextDescription);
@@ -11923,7 +11738,7 @@ function createTopbarLabelSettingsGroup() {
     return createThemeSettingsDrawer({
         id: 'sb-topbar-label-drawer',
         title: 'Top Bar Label',
-        content: [description, desktopSection, mobileSection, customTextField, clickCycleOption],
+        content: [description, desktopSection, mobileSection, customTextField],
     });
 }
 
@@ -12161,15 +11976,6 @@ function updateThemePickerUi() {
 
     if (customTextInput instanceof HTMLInputElement && customTextInput.value !== sbState.topbarLabel.customText) {
         customTextInput.value = sbState.topbarLabel.customText;
-    }
-
-    for (const input of document.querySelectorAll('[data-sb-topbar-label-click-cycle-input]')) {
-        if (!(input instanceof HTMLInputElement)) {
-            continue;
-        }
-
-        input.checked = isTopbarLabelClickCycleEnabled();
-        input.closest('.sb-topbar-label-option')?.classList.toggle('is-selected', input.checked);
     }
 
     for (const input of document.querySelectorAll('[data-sb-compact-mode-input]')) {
@@ -13024,8 +12830,8 @@ function revealSettingsCategoryFor(target) {
         return;
     }
 
-    // Phase 6A: content is split across three permanent containers, so a match can live in any
-    // of them rather than all settings living in one block.
+    // Content is split across three permanent containers, so a match can live in any of them
+    // rather than all settings living in one block.
     const roots = getUserSettingsContentRoots();
     const settingsContent = roots.find(root => root.contains(target));
     if (!settingsContent) {
@@ -13199,7 +13005,7 @@ function setActiveTab(shellKey, tabId) {
     }
 }
 
-// SillyBunny: every shell lives in the full-screen settings page (feat/v1.9.0-ui-overhaul).
+// SillyBunny: every shell lives in the full-screen settings page.
 /** @param {string} shellKey @param {string|null} [tabId] */
 function openShell(shellKey, tabId = null) {
     if (shellKey === 'left' && tabId === 'world-info') {
@@ -13225,11 +13031,10 @@ function closeShell(shellKey) {
 }
 
 /**
- * Phase 6F: the Chat Completion presets block opened with a 60px card carrying the
- * "Chat Completion Presets" label and four icon buttons, directly above a second row holding the
- * preset select and three more icon buttons. Two stacked rows of unlabeled icons above the first
- * real setting read as pure chrome, and the label duplicated the tab's own header, so the card and
- * the select row become one row: label, select, then all seven actions together.
+ * Merges the Chat Completion presets title card (label plus four icon buttons) and the select row
+ * (select plus three icon buttons) into one row: label, select, then all seven actions. A separate
+ * title card would repeat the tab's own header and stack two rows of unlabeled icons above the
+ * first real setting.
  *
  * Nodes are moved rather than rebuilt. Every action binds by id at init or through a delegated
  * `data-preset-manager-*` handler, so position is irrelevant; the label keeps its `data-i18n`
@@ -13320,12 +13125,12 @@ function buildShell(shellKey) {
 
     // For left shell, base tab is 'connections' (sys-settings-button content)
     // For right shell, base tab is 'appearance' (user-settings-button content)
-    // Phase 6A/6B/6C: each Customize tab owns a permanent container built once by
+    // Each Customize tab owns a permanent container built once by
     // splitUserSettingsContent(). The block the settings were authored in is left in the document
-    // for the sake of ids that are looked up globally, but nothing paints it any more.
+    // for the sake of ids that are looked up globally, and nothing paints it.
     let userSettingsSplit = null;
     if (shellKey === 'left') {
-        // SillyBunny (feat/v1.9.0-ui-overhaul): the base tab is the Connections panel, built by hand
+        // SillyBunny: the base tab is the Connections panel, built by hand
         // rather than by the drawer passes or the subpage stack. The drawer it replaces stays in the
         // document, detached from the layout, so every id authored inside it -- `#main_api`,
         // `#rm_api_block`, and the connection-manager extension's own markup -- is still resolvable
@@ -13458,7 +13263,7 @@ function buildShell(shellKey) {
         }
 
         if (customTab.id === 'messages') {
-            // Phase 6B: Messages owns a permanent container built once by splitUserSettingsContent().
+            // Messages owns a permanent container built once by splitUserSettingsContent().
             const panel = createShellPanel(customTab);
             if (userSettingsSplit) {
                 panel.scroller.appendChild(userSettingsSplit.messages);
@@ -13469,7 +13274,7 @@ function buildShell(shellKey) {
         }
 
         if (customTab.id === 'interface') {
-            // Phase 6C: Interface owns a permanent container built once by splitUserSettingsContent().
+            // Interface owns a permanent container built once by splitUserSettingsContent().
             const panel = createShellPanel(customTab);
             if (userSettingsSplit) {
                 panel.scroller.appendChild(userSettingsSplit.interface);
@@ -14030,8 +13835,7 @@ function injectCharacterDrawerControls() {
 
     const modeToggle = document.getElementById('sb_character_mode_toggle');
     if (modeToggle instanceof HTMLElement && modeToggle.dataset.sbBound !== 'true') {
-        // SillyBunny: mode toggle removed from Characters panel (feat/v1.9.0-ui-overhaul).
-        // Binding retained as a no-op guard so upstream code paths that call
+        // SillyBunny: the Characters panel has no mode toggle. This binding is a no-op guard so upstream code paths that call
         // injectCharacterDrawerControls don't error when the element is absent.
         modeToggle.dataset.sbBound = 'true';
     }
@@ -14527,15 +14331,15 @@ function reinitSelect2AfterShell() {
         }
     } else {
         // On desktop, reinitialize Select2 after DOM reparenting
-        // SillyBunny (feat/v1.9.0-ui-overhaul): the API controls live in the Connections panel now,
-        // which moved them out of `#rm_api_block`; the block is the fallback before it is built.
+        // SillyBunny: the API controls live in the Connections panel, not in `#rm_api_block`; the
+        // block is the fallback before the panel is built.
         const apiDropdownParent = $('.sb-connections-panel').length ? $('.sb-connections-panel') : $('#rm_api_block');
         const select2Defaults = {
             dropdownParent: apiDropdownParent.length ? apiDropdownParent : $(document.body),
             minimumResultsForSearch: 0,
         };
         const allSelectors = [...modelSelectors, '.openrouter_quantizations', '.openrouter_providers', '#nanogpt_allowed_providers', '#nanogpt_ignored_providers'];
-        // SillyBunny (feat/v1.9.0-ui-overhaul): API pickers are initialised before the Connections
+        // SillyBunny: API pickers are initialised before the Connections
         // panel exists, so their stored `dropdownParent` is the emptied 1px `#rm_api_block`, which
         // clips every menu. The panel parent must win over the stored config, and pickers outside
         // this list (the openai.js model selects) need the same fix.
@@ -15473,11 +15277,11 @@ function initAll() {
     interceptDrawerOpeners();
     bindWorldInfoRoute();
     applyDefaultDrawerStates();
-    // SillyBunny: Phase 1 — settings page + mode toggle + keyboard shortcuts (feat/v1.9.0-ui-overhaul)
+    // SillyBunny: settings page close button, mode toggle and keyboard shortcuts
     initSettingsPageClose();
     initModeToggle();
     initSettingsKeyboardShortcuts();
-    // SillyBunny: Phase 3b — character editor controller (feat/v1.9.0-ui-overhaul)
+    // SillyBunny: character editor controller
     initCharacterEditor();
     bindInlineDrawerAutoCloseToggle();
     syncMobileViewportState();
@@ -15640,8 +15444,7 @@ function initAll() {
     });
 }
 
-// ── Phase 1: settings page + mode pill + keyboard shortcuts ──────────────
-// SillyBunny feat/v1.9.0-ui-overhaul
+// ── Settings page, mode pill and keyboard shortcuts ──────────────────────
 
 const sbSettingsState = {
     open: false,

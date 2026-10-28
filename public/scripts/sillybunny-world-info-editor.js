@@ -28,7 +28,7 @@ import {
 import { mountWorldInfoSettings } from './sillybunny-world-info-settings.js';
 import { mountWorldInfoEntry, worldInfoDraftKey } from './sillybunny-world-info-entry.js';
 
-const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261026a', id: 'deferred-world-info-editor-css' };
+const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261027a', id: 'deferred-world-info-editor-css' };
 const mountedEditors = new WeakMap();
 const itemKey = item => item.kind === 'settings' ? 'settings' : `entry:${item.uid}`;
 
@@ -441,8 +441,7 @@ export function mountWorldInfoEditor(container) {
         return keys.filter(uid => state.data?.entries?.[uid]);
     }
 
-    // HUMAN: replace — selection count label; no matching count key exists in the locale.
-    const selectionTitle = count => `${count} ${t`lorum ipsum`}`;
+    const selectionTitle = count => t`${count} selected`;
 
     async function bulkAction(action) {
         if (bulkBusy) return;

@@ -17,6 +17,14 @@ function normalizeKey(key) {
     return key === null || key === undefined ? null : String(key);
 }
 
+function requireSlots(slots) {
+    const { header, headerStart, headerEnd, titleNode } = slots;
+    if (![header, headerStart, headerEnd, titleNode].every(node => node instanceof HTMLElement)) {
+        throw new TypeError('createSelectionMode headerSlots needs header, headerStart, headerEnd, and titleNode elements');
+    }
+    return { ...slots };
+}
+
 function normalizeKeys(keys) {
     if (keys === null || keys === undefined) {
         return [];
@@ -36,17 +44,22 @@ function normalizeKeys(keys) {
  * @param {(row: HTMLElement) => string} [options.getKey]
  * @param {boolean} [options.range=false] Enables anchored Shift-click and Shift-Space/Enter ranges.
  * @param {() => Iterable<string>} [options.getAllKeys] Keys across every filtered page for select-all.
- * @param {HTMLElement} options.header
+ * @param {HTMLElement} [options.header] Standalone header. Required unless `headerSlots` is given, which ignores it.
+ * @param {{ header: HTMLElement, headerStart: HTMLElement, headerEnd: HTMLElement, titleNode: HTMLElement,
+ * search?: { isOpen: boolean, query: string, open: () => void, close: () => void, setQuery: (value: string) => void },
+ * closeButton?: HTMLElement }|null} [options.headerSlots] Real dialog header to reuse. Read on every entry, so the caller
+ * may point it at another page between selections.
  * @param {HTMLElement} options.actionBar
  * @param {{ id: string, label: string, icon?: string|Element, danger?: boolean, onActivate: (keys: string[]) => void }[]} [options.actions=[]]
  * @param {(count: number) => string} [options.title]
- * @param {string} [options.selectAllLabel] Defaults to the existing Select all label.
+ * @param {string} [options.selectAllLabel] Defaults to the existing Select All label.
  * @param {() => boolean} [options.canEnter] Whether gestures or enter() may start selection.
  * @param {(keys: string[]) => void|null} [options.onChange=null]
  * @param {() => void|null} [options.onExit=null]
  * @returns {{ enter: (initialKey?: string, trigger?: HTMLElement) => void, exit: () => void, toggle: (key: string) => void,
  * select: (keys: Iterable<string>) => void, clear: () => void, selectAll: () => void,
  * readonly isActive: boolean, readonly selectedKeys: string[], readonly count: number,
+ * readonly cancelButton: HTMLElement|null, readonly selectAllButton: HTMLElement|null, readonly selectionTitle: HTMLElement|null,
  * decorate: (options?: { prune?: boolean }) => void, destroy: () => void }}
  */
 export function createSelectionMode({
@@ -62,15 +75,20 @@ export function createSelectionMode({
     actionBar,
     actions = [],
     title = count => t`${count} selected`,
-    selectAllLabel = t`Select all`,
+    selectAllLabel = t`Select All`,
     canEnter = () => true,
     onChange = null,
     onExit = null,
+    headerSlots = null,
+    iconOnlyAtNarrow = false,
 }) {
-    if (!(root instanceof HTMLElement) || !(list instanceof HTMLElement) || !(header instanceof HTMLElement) || !(actionBar instanceof HTMLElement)) {
-        throw new TypeError('createSelectionMode requires root, list, header, and actionBar elements');
+    if (!(root instanceof HTMLElement) || !(list instanceof HTMLElement) || !(actionBar instanceof HTMLElement)
+        || (!headerSlots && !(header instanceof HTMLElement))) {
+        throw new TypeError('createSelectionMode requires root, list, and actionBar elements, plus header or headerSlots');
     }
 
+    // Only a standalone header is owned by the mode. Slotted headers belong to the dialog frame and stay visible.
+    const standaloneHeader = headerSlots ? null : header;
     let active = false;
     let selected = new Set();
     let anchorKey = null;
@@ -78,10 +96,13 @@ export function createSelectionMode({
     let longPressTimer = 0;
     let longPressState = null;
     let suppressNextClick = false;
+    let headerState = null;
+    let parts = null;
     root.dataset.selectionMode = 'false';
-    header.hidden = true;
+    if (standaloneHeader) standaloneHeader.hidden = true;
     actionBar.hidden = true;
     actionBar.classList.add('sb-selection-action-bar');
+    actionBar.classList.toggle('sb-selection-action-bar--icon-only-narrow', iconOnlyAtNarrow);
     actionBar.setAttribute('role', 'toolbar');
     actionBar.setAttribute('aria-label', t`Selection actions`);
 
@@ -134,7 +155,51 @@ export function createSelectionMode({
         }
     }
 
-    function renderHeader() {
+    function toggleSelectAll() {
+        const keys = allKeys();
+        if (!areAllSelected(keys)) {
+            selectAll();
+            return;
+        }
+        const pageKeys = new Set(keys);
+        updateSelection(new Set([...selected].filter(key => !pageKeys.has(key))));
+    }
+
+    function renderSlottedHeader(slots) {
+        const { headerStart, headerEnd, titleNode, search, header: slotHeader } = slots;
+        const managed = [...headerStart.children, ...headerEnd.children].filter(node => node !== slots.closeButton);
+        const originalFocus = document.activeElement;
+        headerState = {
+            slots,
+            title: titleNode.textContent,
+            titleHidden: titleNode.hidden,
+            headerHidden: slotHeader.hidden,
+            searchOpen: Boolean(search?.isOpen),
+            searchQuery: search?.query ?? '',
+            focus: originalFocus instanceof HTMLElement ? originalFocus : null,
+            managed: managed.map(node => ({ node, hidden: node.hidden })),
+        };
+        search?.close();
+        for (const node of managed) node.hidden = true;
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'menu_button sb-selection-cancel sb-dialog__selection-cancel';
+        cancel.textContent = t`Cancel`;
+        cancel.addEventListener('click', exit);
+        const selectAllButton = document.createElement('button');
+        selectAllButton.type = 'button';
+        selectAllButton.className = 'menu_button sb-selection-select-all sb-dialog__selection-select-all';
+        selectAllButton.textContent = selectAllLabel;
+        selectAllButton.addEventListener('click', toggleSelectAll);
+        parts = { cancel, selectAll: selectAllButton, title: titleNode };
+        headerStart.append(cancel);
+        headerEnd.prepend(selectAllButton);
+        titleNode.classList.add('sb-dialog__selection-title');
+        titleNode.textContent = title(selected.size);
+        slotHeader.classList.add('is-selection-mode');
+    }
+
+    function renderStandaloneHeader() {
         const row = document.createElement('div');
         row.className = 'sb-selection-header';
 
@@ -153,18 +218,11 @@ export function createSelectionMode({
         selectAllButton.type = 'button';
         selectAllButton.className = 'sb-editor-action sb-editor-action--primary sb-selection-select-all';
         selectAllButton.textContent = selectAllLabel;
-        selectAllButton.addEventListener('click', () => {
-            const keys = allKeys();
-            if (areAllSelected(keys)) {
-                const pageKeys = new Set(keys);
-                updateSelection(new Set([...selected].filter(key => !pageKeys.has(key))));
-            } else {
-                selectAll();
-            }
-        });
+        selectAllButton.addEventListener('click', toggleSelectAll);
         row.append(cancel, heading, selectAllButton);
-        header.replaceChildren(row);
-        header.hidden = false;
+        standaloneHeader.replaceChildren(row);
+        standaloneHeader.hidden = false;
+        parts = { cancel, selectAll: selectAllButton, title: heading };
     }
 
     function renderActionBar() {
@@ -177,6 +235,8 @@ export function createSelectionMode({
             button.classList.toggle('is-danger', Boolean(action.danger));
             button.disabled = selected.size === 0;
             button.append(createIcon(action.icon));
+            button.setAttribute('aria-label', action.label);
+            button.title = action.label;
             const label = document.createElement('span');
             label.textContent = action.label;
             button.append(label);
@@ -190,15 +250,12 @@ export function createSelectionMode({
     }
 
     function render() {
-        if (!active) {
+        // Closing the dialog search while the header is built can re-render the list before the header parts exist.
+        if (!active || !parts) {
             return;
         }
-        const heading = header.querySelector('.sb-selection-title');
-        if (heading) {
-            heading.textContent = title(selected.size);
-        }
-        const selectAllButton = header.querySelector('.sb-selection-select-all');
-        selectAllButton?.setAttribute('aria-pressed', String(areAllSelected(allKeys())));
+        parts.title.textContent = title(selected.size);
+        parts.selectAll.setAttribute('aria-pressed', String(areAllSelected(allKeys())));
         for (const button of actionBar.querySelectorAll('.sb-selection-action')) {
             button.disabled = selected.size === 0;
         }
@@ -218,6 +275,7 @@ export function createSelectionMode({
         if (active || !canEnter()) {
             return;
         }
+        const slots = headerSlots ? requireSlots(headerSlots) : null;
         stopLongPress();
         const focusedRow = rowFrom(document.activeElement);
         focusReturn = trigger ?? focusedRow ?? (root.contains(document.activeElement) ? document.activeElement : list);
@@ -229,14 +287,22 @@ export function createSelectionMode({
         if (normalized !== null) {
             selected.add(normalized);
         }
-        renderHeader();
-        renderActionBar();
-        render();
-        emitChange();
-        header.querySelector('.sb-selection-cancel')?.focus({ preventScroll: true });
+        try {
+            if (slots) renderSlottedHeader(slots);
+            else renderStandaloneHeader();
+            renderActionBar();
+            render();
+            emitChange();
+        } catch (error) {
+            // A half-built header must not leave the mode active with nothing to cancel it.
+            exit({ restoreFocus: false, notify: false });
+            throw error;
+        }
+        // A change handler may have left selection mode already.
+        parts?.cancel.focus({ preventScroll: true });
     }
 
-    function exit() {
+    function exit({ restoreFocus = true, notify = true } = {}) {
         if (!active) {
             return;
         }
@@ -249,21 +315,39 @@ export function createSelectionMode({
             row.classList.remove('is-selection-selected');
             removeCheck(row);
         }
-        header.hidden = true;
+        if (standaloneHeader) standaloneHeader.hidden = true;
         actionBar.hidden = true;
-        header.replaceChildren();
+        if (headerState) {
+            const { slots, title: savedTitle, titleHidden, headerHidden, searchOpen, searchQuery, managed, focus } = headerState;
+            parts?.cancel.remove();
+            parts?.selectAll.remove();
+            for (const { node, hidden } of managed) node.hidden = hidden;
+            slots.titleNode.textContent = savedTitle;
+            slots.titleNode.classList.remove('sb-dialog__selection-title');
+            slots.titleNode.hidden = titleHidden;
+            slots.header.hidden = headerHidden;
+            slots.header.classList.remove('is-selection-mode');
+            if (searchOpen) {
+                slots.search?.open();
+                slots.search?.setQuery(searchQuery);
+            }
+            const focusTarget = focus?.isConnected ? focus : focusReturn;
+            headerState = null;
+            if (restoreFocus && focusTarget instanceof HTMLElement && focusTarget.isConnected) focusTarget.focus({ preventScroll: true });
+        } else standaloneHeader?.replaceChildren();
+        parts = null;
         actionBar.replaceChildren();
         selected = new Set();
         anchorKey = null;
         if (hadSelection) {
             emitChange();
         }
-        onExit?.();
+        if (notify) onExit?.();
         const target = focusReturn?.isConnected ? focusReturn : list;
         if (target === list && !list.hasAttribute('tabindex')) {
             list.tabIndex = -1;
         }
-        target?.focus?.({ preventScroll: true });
+        if (standaloneHeader) target?.focus?.({ preventScroll: true });
         focusReturn = null;
     }
 
@@ -446,7 +530,7 @@ export function createSelectionMode({
         if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
             const target = event.target;
             if (!(target instanceof Element) || target.closest('input:not(.sb-selection-check), textarea, select, [contenteditable="true"]')
-                || ![list, header, actionBar].some(region => region.contains(target))) return;
+                || ![list, standaloneHeader, actionBar].some(region => region?.contains(target))) return;
             event.preventDefault();
             event.stopPropagation();
             selectAll();
@@ -474,6 +558,9 @@ export function createSelectionMode({
         get isActive() { return active; },
         get selectedKeys() { return selectedSnapshot(); },
         get count() { return selected.size; },
+        get cancelButton() { return parts?.cancel ?? null; },
+        get selectAllButton() { return parts?.selectAll ?? null; },
+        get selectionTitle() { return parts?.title ?? null; },
         decorate,
         destroy() {
             anchorKey = null;
@@ -483,19 +570,15 @@ export function createSelectionMode({
             list.removeEventListener('keydown', handleKeydown, true);
             list.removeEventListener('contextmenu', handleContextMenu);
             root.removeEventListener('keydown', handleRootKeydown, true);
-            if (active) {
-                active = false;
-                root.dataset.selectionMode = 'false';
-                for (const row of rows()) {
-                    row.classList.remove('is-selection-selected');
-                    removeCheck(row);
-                }
+            if (active) exit({ restoreFocus: false, notify: false });
+            if (standaloneHeader) {
+                standaloneHeader.hidden = true;
+                standaloneHeader.replaceChildren();
             }
-            header.hidden = true;
             actionBar.hidden = true;
-            header.replaceChildren();
             actionBar.replaceChildren();
             actionBar.classList.remove('sb-selection-action-bar');
+            actionBar.classList.remove('sb-selection-action-bar--icon-only-narrow');
             actionBar.removeAttribute('role');
             actionBar.removeAttribute('aria-label');
             selected = new Set();

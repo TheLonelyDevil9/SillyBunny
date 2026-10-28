@@ -14,8 +14,10 @@ import { blockUpstreamDrawerClose } from '../sillybunny-sheet.js';
 import { closeActionMenu, openActionMenu } from '../sillybunny-action-menu.js';
 import { closePicker } from './picker.js';
 import { createListSearch } from './list-search.js';
+import { bindSheetGestures } from './sheet-gestures.js';
 import { OVERLAY_SHEET_QUERY } from './breakpoints.js';
 import { MODAL_ATTRIBUTE, getTopmostDialog, hostOverlayLayer, releaseOverlayLayers } from './overlay-host.js';
+import { FOCUSABLE_SELECTOR, closeChain, coverSurface, findCoveredSurface, registerChainLevel, returnFocusTo, unregisterChainLevel } from './page-chain.js';
 
 /*
  * Shared dialog frame.
@@ -25,13 +27,7 @@ import { MODAL_ATTRIBUTE, getTopmostDialog, hostOverlayLayer, releaseOverlayLaye
  * Both float above a scrim and become bottom sheets under OVERLAY_SHEET_QUERY.
  */
 
-export { getTopmostDialog, hostOverlayLayer };
-
-const SWIPE_DISTANCE_RATIO = 0.3;
-const SWIPE_VELOCITY = 0.5;
-const DRAG_SLOP = 4;
-const INTERACTIVE_SELECTOR = 'button, input, select, textarea, a[href], [contenteditable], [role="button"], [role="switch"], [role="menuitem"]';
-const FOCUSABLE_SELECTOR = 'button:not(:disabled), select:not(:disabled), input:not(:disabled):not([type="hidden"]), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])';
+export { getTopmostDialog, hostOverlayLayer, bindSheetGestures };
 
 /** @type {WeakMap<HTMLDialogElement, { pushPage: (spec: object) => object }>} */
 const frames = new WeakMap();
@@ -54,7 +50,7 @@ function icon(glyph) {
     return node;
 }
 
-function iconButton(label, glyph, className) {
+export function createIconButton(label, glyph, className = '') {
     const node = element('button', `sb-dialog__icon-button ${className}`);
     node.type = 'button';
     node.title = label;
@@ -103,14 +99,22 @@ export function bindHeaderLayout(header) {
         const end = measuredWidth(header.querySelector(':scope > .sb-dialog__header-end'));
         const controls = measuredWidth(header.querySelector(':scope > .popup-controls'));
         const trailing = Math.max(end, controls);
-        const style = getComputedStyle(header);
-        const padding = (parseFloat(style.paddingInlineStart) || 0) + (parseFloat(style.paddingInlineEnd) || 0);
-        const available = Math.max(0, header.clientWidth - padding - 12);
-        const titleWidth = title.scrollWidth;
+        const inlinePadding = node => {
+            const style = getComputedStyle(node);
+            return (parseFloat(style.paddingInlineStart) || 0) + (parseFloat(style.paddingInlineEnd) || 0);
+        };
+        const available = Math.max(0, header.clientWidth - inlinePadding(header) - 12);
+        // The title wrapper pads its inline edges, which the text cannot use.
+        const titleWidth = title.scrollWidth + inlinePadding(titles);
         const centeredCapacity = Math.max(0, available - (width * 2));
         const looseCapacity = Math.max(0, available - start - trailing);
         const needsLooseCentering = titleWidth > centeredCapacity + 1 && titleWidth <= looseCapacity + 1;
-        header.toggleAttribute('data-header-centering-loose', needsLooseCentering);
+        // The selection count is the one title that must stay readable. When it cannot share the row
+        // with Cancel, Select All and Close, the CSS moves it to a second row, and the side columns
+        // then only need their own width.
+        const needsStacking = header.classList.contains('is-selection-mode') && titleWidth > looseCapacity + 1;
+        header.toggleAttribute('data-header-centering-loose', needsLooseCentering || needsStacking);
+        header.toggleAttribute('data-header-stacked', needsStacking);
     };
     sync();
     const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
@@ -133,111 +137,6 @@ function appendContent(target, content) {
 
 function settle(result, onResolved) {
     return typeof result?.then === 'function' ? Promise.resolve(result).then(onResolved) : onResolved(result);
-}
-
-/**
- * Drag-to-close for bottom sheets (AdwDialog bottom sheet): the sheet follows the finger and
- * either closes or springs back. Exported for popup-frame.js and tests.
- * @param {object} options
- * @param {HTMLElement} options.surface
- * @param {HTMLElement|null} [options.scrim]
- * @param {HTMLElement[]} options.targets Elements that receive the pointer listeners.
- * @param {string} [options.startSelector] Drags start only inside a match (the handle or a header bar);
- *     drags that start on a control are always ignored, except on the handle.
- * @param {() => boolean} options.isActive
- * @param {(offset: number) => boolean|Promise<boolean>} options.requestClose
- * @returns {() => void} Unbinds the listeners.
- */
-export function bindSheetGestures({ surface, scrim = null, targets, startSelector = null, isActive, requestClose }) {
-    let drag = null;
-
-    function reset() {
-        surface.style.removeProperty('transform');
-        scrim?.style.removeProperty('opacity');
-    }
-
-    function springBack(offset) {
-        reset();
-        if (offset <= 0) return;
-        play(surface, [{ transform: `translateY(${offset}px)` }, { transform: 'none' }], SPRING_SHEET);
-        if (scrim) play(scrim, [{ opacity: 0.5 }, { opacity: 1 }], { duration: MOTION_FAST });
-    }
-
-    function onDown(event) {
-        if (drag || !isActive() || (event.button ?? 0) > 0) return;
-        const target = event.target instanceof Element ? event.target : null;
-        if (startSelector && !target?.closest(startSelector)) return;
-        if (target?.closest(INTERACTIVE_SELECTOR) && !target.closest('.sb-dialog__handle')) return;
-        // Cancelling pointerdown suppresses the compatibility mousedown, so a drag keeps focus where it was.
-        if (event.cancelable) event.preventDefault();
-        stopMotion(surface);
-        if (scrim) stopMotion(scrim);
-        drag = {
-            id: event.pointerId,
-            startY: event.clientY,
-            lastY: event.clientY,
-            lastTime: event.timeStamp,
-            velocity: 0,
-            offset: 0,
-            height: surface.getBoundingClientRect().height,
-        };
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-
-    function track(event) {
-        const offset = Math.max(0, event.clientY - drag.startY);
-        const elapsed = event.timeStamp - drag.lastTime;
-        if (elapsed > 0) drag.velocity = (event.clientY - drag.lastY) / elapsed;
-        drag.lastY = event.clientY;
-        drag.lastTime = event.timeStamp;
-        drag.offset = offset;
-        return offset;
-    }
-
-    function onMove(event) {
-        if (!drag || event.pointerId !== drag.id) return;
-        const offset = track(event);
-        if (offset < DRAG_SLOP) return;
-        surface.style.setProperty('transform', `translateY(${offset}px)`);
-        if (scrim && drag.height > 0) scrim.style.setProperty('opacity', String(Math.max(0, 1 - offset / drag.height)));
-    }
-
-    function onUp(event) {
-        if (!drag || event.pointerId !== drag.id) return;
-        const offset = track(event);
-        const { height, velocity } = drag;
-        drag = null;
-        if (offset < DRAG_SLOP) {
-            reset();
-            return;
-        }
-        if (offset <= height * SWIPE_DISTANCE_RATIO && velocity <= SWIPE_VELOCITY) {
-            springBack(offset);
-            return;
-        }
-        settle(requestClose(offset), closed => {
-            if (closed === false) springBack(offset);
-        });
-    }
-
-    function onCancel(event) {
-        if (!drag || event.pointerId !== drag.id) return;
-        const { offset } = drag;
-        drag = null;
-        springBack(offset);
-    }
-
-    const listeners = [['pointerdown', onDown], ['pointermove', onMove], ['pointerup', onUp], ['pointercancel', onCancel]];
-    for (const target of targets) {
-        if (!target) continue;
-        for (const [type, listener] of listeners) target.addEventListener(type, listener);
-    }
-    return () => {
-        for (const target of targets) {
-            if (!target) continue;
-            for (const [type, listener] of listeners) target.removeEventListener(type, listener);
-        }
-    };
 }
 
 /**
@@ -352,14 +251,21 @@ export function bindWindowHeightLock(surface, { isFill = () => false } = {}) {
  * @param {'alert'|'dialog'|'window'} options.tier
  * @param {string} [options.className]
  * @param {'content'|'fill'} [options.size='fill']
+ * @param {boolean} [options.page=false] Presents the surface as a page over a framed Popup: it never
+ *     becomes a sheet, and the host backdrop carries the dim instead of the scrim.
  */
-export function createDialogFrame({ tier, className = '', size = 'fill' }) {
+export function createDialogFrame({ tier, className = '', size = 'fill', page = false }) {
     const host = /** @type {HTMLDialogElement} */ (element('dialog', 'sb-dialog-host'));
     host.setAttribute(MODAL_ATTRIBUTE, '');
     host.dataset.tier = tier;
     const scrim = element('div', 'sb-dialog-scrim');
     scrim.setAttribute('aria-hidden', 'true');
+    scrim.hidden = page;
     const surface = element('section', `sb-dialog sb-dialog--${tier}`);
+    if (page) {
+        host.classList.add('sb-dialog-host--page');
+        surface.classList.add('sb-dialog--page');
+    }
     if (className) surface.classList.add(...className.split(/\s+/).filter(Boolean));
     if (tier === 'window' && size === 'fill') surface.classList.add('sb-dialog--fill');
     const handle = element('div', 'sb-dialog__handle');
@@ -368,16 +274,20 @@ export function createDialogFrame({ tier, className = '', size = 'fill' }) {
     host.append(scrim, surface);
     blockUpstreamDrawerClose(host);
     const query = window.matchMedia?.(OVERLAY_SHEET_QUERY) ?? { matches: false, addEventListener() {}, removeEventListener() {} };
-    const isSheet = () => query.matches;
+    const isSheet = () => query.matches && !page;
     const syncPresentation = () => {
         host.dataset.presentation = isSheet() ? 'sheet' : 'floating';
     };
     syncPresentation();
-    return { host, scrim, surface, handle, query, isSheet, syncPresentation };
+    return { host, scrim, surface, handle, query, isSheet, syncPresentation, page };
 }
 
 function openMotion(frame) {
-    const { surface, scrim, isSheet, host } = frame;
+    const { surface, scrim, isSheet, host, page } = frame;
+    if (page) {
+        animateIn(surface, [{ transform: 'translateX(100%)' }, { transform: 'none' }], SPRING_NAVIGATION);
+        return;
+    }
     animateIn(scrim, [{ opacity: 0 }, { opacity: 1 }], { duration: MOTION_FAST });
     if (isSheet()) {
         animateIn(surface, [{ transform: 'translateY(100%)' }, { transform: 'none' }], SPRING_SHEET);
@@ -389,14 +299,17 @@ function openMotion(frame) {
 }
 
 function closeMotion(frame, offset, done) {
-    const { surface, scrim, isSheet, host } = frame;
+    const { surface, scrim, isSheet, host, page } = frame;
     const from = surface.style.transform || (offset > 0 ? `translateY(${offset}px)` : 'none');
     surface.style.removeProperty('transform');
     scrim.style.removeProperty('opacity');
     const options = { duration: MOTION_FAST, easing: MOTION_EASE_OUT_CUBIC, fill: 'forwards' };
-    play(scrim, [{ opacity: 1 }, { opacity: 0 }], options);
+    if (!page) play(scrim, [{ opacity: 1 }, { opacity: 0 }], options);
     let keyframes;
-    if (isSheet()) keyframes = [{ transform: from }, { transform: 'translateY(100%)' }];
+    // A page over a sheet leaves downward after a swipe, and sideways after Back.
+    if (page && surface.hasAttribute('data-covers-sheet') && offset > 0) keyframes = [{ transform: from }, { transform: 'translateY(100%)' }];
+    else if (page) keyframes = [{ transform: 'none' }, { transform: 'translateX(100%)' }];
+    else if (isSheet()) keyframes = [{ transform: from }, { transform: 'translateY(100%)' }];
     else if (host.dataset.tier === 'window') keyframes = [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.98)' }];
     else keyframes = [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.9)' }];
     play(surface, keyframes, { ...options, inert: true, onEnd: done });
@@ -456,18 +369,18 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
             buttons.set(id, node);
         }
     } else if (nested) {
-        const back = iconButton(t`Back`, 'arrow-left', 'sb-dialog__back');
+        const back = createIconButton(t`Back`, 'arrow-left', 'sb-dialog__back');
         back.addEventListener('click', () => onBack());
         start.append(back);
     }
     if (menu) {
-        menuButton = iconButton(menuLabel, 'ellipsis-vertical', 'sb-dialog__menu');
+        menuButton = createIconButton(menuLabel, 'ellipsis-vertical', 'sb-dialog__menu');
         menuButton.setAttribute('aria-haspopup', 'menu');
         menuButton.setAttribute('aria-expanded', 'false');
         end.prepend(menuButton);
     }
-    if (!responses && !nested) {
-        closeButton = iconButton(t`Close`, 'xmark', 'sb-dialog__close');
+    if (!responses) {
+        closeButton = createIconButton(t`Close`, 'xmark', 'sb-dialog__close');
         closeButton.addEventListener('click', () => onResponse('close', 'close'));
         end.append(closeButton);
     }
@@ -475,40 +388,72 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
     let searchControl = null;
     let searchInput = null;
     let searchToggle = null;
+    let restoreAdoptedInput = null;
+    let searchKeydownHandler = null;
     const status = element('div', 'sb-dialog__status');
     status.setAttribute('aria-live', 'polite');
     const body = element('div', 'sb-dialog__body');
     const syncHeaderShade = () => header.toggleAttribute('data-scrolled', body.scrollTop > 0);
     body.addEventListener('scroll', syncHeaderShade, { passive: true });
     if (search) {
-        searchToggle = iconButton(t`Search`, 'magnifying-glass', 'sb-dialog__search-toggle');
+        searchToggle = createIconButton(t`Search`, 'magnifying-glass', 'sb-dialog__search-toggle');
         const field = element('label', 'sb-dialog__search');
         field.hidden = Boolean(search.collapsed);
         const entry = element('span', 'sb-dialog__search-entry');
-        searchInput = /** @type {HTMLInputElement} */ (element('input', 'text_pole sb-dialog__entry sb-dialog__search-input'));
-        searchInput.type = 'search';
-        searchInput.setAttribute('role', 'searchbox');
-        searchInput.placeholder = search.placeholder ?? t`Search`;
-        searchInput.setAttribute('aria-label', search.label ?? t`Search`);
+        const adoptedInput = search.input instanceof HTMLInputElement;
+        if (adoptedInput) {
+            const originalParent = search.input.parentNode;
+            const originalNextSibling = search.input.nextSibling;
+            const originalAttributes = new Set([...search.input.attributes].map(attribute => attribute.name));
+            const addedClasses = ['text_pole', 'sb-dialog__entry', 'sb-dialog__search-input']
+                .filter(className => !search.input.classList.contains(className));
+            restoreAdoptedInput = () => {
+                search.input.classList.remove(...addedClasses);
+                for (const attribute of [...search.input.attributes]) {
+                    if (!originalAttributes.has(attribute.name)) search.input.removeAttribute(attribute.name);
+                }
+                if (originalParent) {
+                    originalParent.insertBefore(
+                        search.input,
+                        originalNextSibling?.parentNode === originalParent ? originalNextSibling : null,
+                    );
+                } else search.input.remove();
+            };
+        }
+        searchInput = adoptedInput
+            ? search.input
+            : /** @type {HTMLInputElement} */ (element('input', 'text_pole sb-dialog__entry sb-dialog__search-input'));
+        searchInput.classList.add('text_pole', 'sb-dialog__entry', 'sb-dialog__search-input');
+        if (!searchInput.hasAttribute('type')) searchInput.type = 'search';
+        if (!searchInput.hasAttribute('role')) searchInput.setAttribute('role', 'searchbox');
+        if (!searchInput.hasAttribute('placeholder')) searchInput.placeholder = search.placeholder ?? t`Search`;
+        if (!searchInput.hasAttribute('aria-label') && !searchInput.hasAttribute('aria-labelledby')) {
+            searchInput.setAttribute('aria-label', search.label ?? t`Search`);
+        }
+        if (!searchInput.hasAttribute('aria-autocomplete') && search.ariaAutocomplete) searchInput.setAttribute('aria-autocomplete', search.ariaAutocomplete);
+        if (!searchInput.hasAttribute('aria-controls') && search.ariaControls) searchInput.setAttribute('aria-controls', search.ariaControls);
+        if (!searchInput.hasAttribute('enterkeyhint') && search.enterKeyHint) searchInput.enterKeyHint = search.enterKeyHint;
         field.id = uid('sb-dialog-search');
         entry.append(icon('magnifying-glass'), searchInput);
         field.append(entry);
         page.append(field);
         (start.childElementCount ? end : start).append(searchToggle);
-        searchInput.addEventListener('keydown', event => {
+        searchKeydownHandler = event => {
             if (event.key !== 'Escape' || event.isComposing) return;
             event.preventDefault();
             event.stopImmediatePropagation();
+            if (search.onEscape?.(event)) return;
             if (search.escapeClearsFirst && searchInput.value) searchControl.clear();
             else {
                 searchControl.close();
                 if (nested) onBack?.('escape');
             }
-        }, true);
+        };
+        searchInput.addEventListener('keydown', searchKeydownHandler, true);
         searchControl = createListSearch({
             field, input: searchInput, trigger: searchToggle, scope: page, scroller: body, status,
             typeToSearchSelector: search.typeToSearchSelector,
-            escapeClearsFirst: true,
+            escapeClearsFirst: Boolean(search.escapeClearsFirst),
             debounce: search.debounce ?? 0, onChange: query => search.onChange?.(query),
         });
         searchToggle.addEventListener('click', () => searchControl.toggle());
@@ -546,25 +491,29 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
             body.removeEventListener('scroll', syncHeaderShade);
             unbindHeaderLayout();
             searchControl?.destroy();
+            if (searchKeydownHandler) searchInput?.removeEventListener('keydown', searchKeydownHandler, true);
+            restoreAdoptedInput?.();
         },
     };
 }
 
 /**
  * Opens a Dialog- or Window-tier frame. When another frame is active, this frame becomes a page in it.
+ * Over a framed Popup Dialog or Window it is a page over that Popup, with Back, and with Close when it
+ * has no responses. Close closes the whole chain, one level at a time, and stops at a level that refuses.
  *
  * @param {object} o
  * @param {'dialog'|'window'} [o.tier='dialog']
  * @param {string} o.title
  * @param {string} [o.subtitle]
  * @param {HTMLElement|((body: HTMLElement) => void)} [o.content]
- * @param {{ placeholder?: string, label?: string, debounce?: number, onChange: (query: string) => void }|null} [o.search]
+ * @param {{ placeholder?: string, label?: string, debounce?: number, input?: HTMLInputElement, ariaAutocomplete?: string, ariaControls?: string, enterKeyHint?: string, escapeClearsFirst?: boolean, onEscape?: (event: KeyboardEvent) => boolean, onChange: (query: string) => void }|null} [o.search]
  * @param {((trigger: HTMLElement) => object[])|null} [o.menu] Sections for openActionMenu.
  * @param {string} [o.menuLabel]
  * @param {null|{ cancel?: { label?: string }, affirmative?: { id?: string, label: string, appearance?: 'suggested'|'destructive', enabled?: boolean }, extra?: { id: string, label: string }[] }} [o.responses]
  *     null means immediate apply: the header shows Close.
  * @param {(reason: string) => boolean|Promise<boolean>} [o.canClose] Reasons: 'close', 'cancel', 'affirmative',
- *     'escape', 'scrim', 'swipe', 'programmatic', or an extra response id.
+ *     'escape', 'scrim', 'swipe', 'back', 'programmatic', or an extra response id.
  * @param {() => HTMLElement|null} [o.initialFocus]
  * @param {string} [o.className] Added to the surface or, when pushed, to the page.
  * @param {'content'|'fill'} [o.size='fill'] Whether the Window body fills the frame.
@@ -577,18 +526,30 @@ export function openDialog({
     const parent = parentHost ? frames.get(/** @type {HTMLDialogElement} */ (parentHost)) : null;
     if (parent) return parent.pushPage({ title, subtitle, content, search, menu, menuLabel, responses, canClose, initialFocus, className, size });
 
-    const frame = createDialogFrame({ tier: tier === 'window' ? 'window' : 'dialog', className, size });
+    // A framed Popup is not an openDialog host, so it is covered here instead of through `frames`.
+    const coveredSurface = findCoveredSurface();
+    const isPage = Boolean(coveredSurface);
+    const frame = createDialogFrame({ tier: tier === 'window' ? 'window' : 'dialog', className, size, page: isPage });
     const { host, scrim, surface, query, isSheet, syncPresentation } = frame;
     const pagesNode = element('div', 'sb-dialog__pages');
     surface.append(pagesNode);
     const returnFocus = document.activeElement;
+    const returnContainer = returnFocus instanceof HTMLElement ? returnFocus.parentElement : null;
     const closeResponse = responses ? 'cancel' : 'close';
+    // Back, Escape and programmatic closes of a page return to the covered surface, as a pushed page does.
+    const dismissResponse = isPage ? (responses ? 'cancel' : 'back') : closeResponse;
     /** @type {'open'|'closing'|'closed'} */
     let state = 'open';
     let pending = false;
+    /** The async canClose check that runs now, so that a chain Close does not start a second one. */
+    let attemptRun = null;
     let heightLock = null;
     let finish;
     const closed = new Promise(resolve => finish = resolve);
+    /** @type {ReturnType<typeof coverSurface>|null} */
+    let cover = null;
+    /** @type {import('./page-chain.js').ChainLevel} */
+    const level = registerChainLevel({ surface, close: closeLevel, covered: coveredSurface, pending: pendingClose });
     /** @type {{ view: ReturnType<typeof createPage>, spec: object, resolve: Function }[]} */
     const stack = [];
 
@@ -605,7 +566,7 @@ export function openDialog({
         const approved = canClose ? canClose(reason) : true;
         if (typeof approved?.then === 'function') {
             pending = true;
-            return Promise.resolve(approved).then(ok => {
+            const run = Promise.resolve(approved).then(ok => {
                 pending = false;
                 if (ok === false || state !== 'open') return false;
                 complete(response, offset);
@@ -614,6 +575,10 @@ export function openDialog({
                 pending = false;
                 throw error;
             });
+            attemptRun = run;
+            const clear = () => { if (attemptRun === run) attemptRun = null; };
+            run.then(clear, clear);
+            return run;
         }
         if (approved === false) return false;
         complete(response, offset);
@@ -630,6 +595,29 @@ export function openDialog({
         closeMotion(frame, offset, () => dispose(response));
     }
 
+    /** The close that this host runs now, as a close outcome, or null. */
+    function pendingClose() {
+        if (!attemptRun) return null;
+        return attemptRun.then(async () => {
+            if (state === 'open') return false;
+            await closed;
+            return true;
+        });
+    }
+
+    /** Closes this level only, for a chain walk. Resolves once the level is gone. */
+    async function closeLevel() {
+        const running = pendingClose();
+        if (running) return running;
+        if (state !== 'open') {
+            await closed;
+            return true;
+        }
+        if (!(await attempt('close', closeResponse))) return false;
+        await closed;
+        return true;
+    }
+
     function dispose(response) {
         if (state === 'closed') return;
         state = 'closed';
@@ -637,12 +625,19 @@ export function openDialog({
         unbindGestures();
         unbindKeyboard();
         heightLock?.destroy();
-        for (const entry of stack) entry.view.destroy();
+        for (const entry of stack.splice(0)) {
+            entry.view.destroy();
+            entry.resolve({ response });
+        }
         frames.delete(host);
         releaseOverlayLayers(host);
         if (host.open) host.close();
         host.remove();
-        if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+        // Pages over this frame that stay open must find it removed when they take over its dim.
+        unregisterChainLevel(level);
+        // The covered surface must be interactive again before focus returns into it.
+        cover?.release();
+        returnFocusTo(returnFocus, { container: returnContainer });
         finish({ response });
     }
 
@@ -678,13 +673,16 @@ export function openDialog({
     function mountPage(spec, nested) {
         const view = createPage({
             ...spec,
-            nested,
+            // The root page of a page host also has Back, because it returns to the covered surface.
+            nested: nested || isPage,
             onResponse: (kind, id) => {
+                if (kind === 'close') return closeChain(level);
                 if (nested) return popPage(id, kind === 'affirmative' ? 'affirmative' : id);
                 return attempt(kind === 'affirmative' ? 'affirmative' : id, id);
             },
             onBack: reason => {
                 if (nested) return popPage(spec.responses ? 'cancel' : 'back', reason ?? 'back');
+                if (isPage) return attempt(reason ?? 'back', dismissResponse);
                 if (reason === 'escape') return attempt('escape', closeResponse);
                 return false;
             },
@@ -710,7 +708,14 @@ export function openDialog({
             };
             if (prefersReducedMotion()) hidePrevious();
             else play(view.page, [{ transform: 'translateX(100%)' }, { transform: 'none' }], { ...SPRING_NAVIGATION, onEnd: hidePrevious });
-            (spec.initialFocus?.() ?? (view.search?.isOpen ? view.searchInput : view.searchToggle) ?? firstFocusable(view.body) ?? firstFocusable(view.header))?.focus({ preventScroll: true });
+            // Callers add header actions and body content after push() returns, so the target is resolved
+            // once that synchronous code has run. Resolving it now would see a page that is still empty.
+            queueMicrotask(() => {
+                if (topPage() !== entry || view.page.contains(document.activeElement)) return;
+                const requested = spec.initialFocus?.();
+                const target = requested?.isConnected ? requested : null;
+                (target ?? (view.search?.isOpen ? view.searchInput : view.searchToggle) ?? firstFocusable(view.body) ?? firstFocusable(view.header))?.focus({ preventScroll: true });
+            });
         }
         return { entry, pageClosed };
     }
@@ -718,6 +723,12 @@ export function openDialog({
     function handleFor(view) {
         return {
             header: view.header,
+            headerStart: view.header.querySelector(':scope > .sb-dialog__header-start'),
+            headerEnd: view.header.querySelector(':scope > .sb-dialog__header-end'),
+            titles: view.header.querySelector(':scope > .sb-dialog__titles'),
+            titleNode: view.titleNode,
+            menuButton: view.menuButton,
+            closeButton: view.closeButton,
             body: view.body,
             search: view.search,
             searchInput: view.searchInput,
@@ -746,6 +757,7 @@ export function openDialog({
                 entry.spec.canClose = original;
             },
             push: pushPage,
+            get isOpen() { return state === 'open' && stack.includes(entry); },
         };
     }
 
@@ -755,11 +767,11 @@ export function openDialog({
 
     function requestDismiss(reason, offset = 0) {
         if (stack.length > 1) return popPage(topPage().spec.responses ? 'cancel' : 'back', reason);
-        return attempt(reason, closeResponse, offset);
+        return attempt(reason, dismissResponse, offset);
     }
 
     scrim.addEventListener('click', () => {
-        if (!isSheet()) void requestDismiss('scrim');
+        if (!isSheet() && !isPage) void requestDismiss('scrim');
     });
     host.addEventListener('cancel', event => {
         event.preventDefault();
@@ -779,7 +791,9 @@ export function openDialog({
     host.addEventListener('keydown', event => wrapTab(host, event));
 
     const unbindGestures = bindSheetGestures({
-        surface, scrim, targets: [surface], startSelector: '.sb-dialog__handle, .sb-dialog__header', isActive: isSheet,
+        surface, scrim, targets: [surface], startSelector: '.sb-dialog__handle, .sb-dialog__header',
+        // A page over a sheet keeps the sheet's grab handle, and a swipe goes back one level like Escape.
+        isActive: () => isSheet() || surface.hasAttribute('data-covers-sheet'),
         requestClose: offset => requestDismiss('swipe', offset),
     });
     const unbindKeyboard = bindKeyboardInset(host, { onInsetChange: () => heightLock?.refresh() });
@@ -795,9 +809,14 @@ export function openDialog({
     }
     query.addEventListener('change', layoutChanged);
 
+    if (isPage) {
+        cover = coverSurface(coveredSurface, surface);
+        level.onOrphan = cover.standalone;
+    }
     document.body.append(host);
     host.showModal();
-    if (host.dataset.tier === 'window') {
+    // A page takes its rectangle from the covered surface, so a measured height lock would fight it.
+    if (host.dataset.tier === 'window' && !isPage) {
         heightLock = bindWindowHeightLock(surface, { isFill: () => surface.classList.contains('sb-dialog--fill') });
     }
     openMotion(frame);
@@ -809,8 +828,8 @@ export function openDialog({
         page: root.page,
         ...handleFor(root),
         closed,
-        close: (response = closeResponse, reason = 'programmatic') => attempt(reason, response),
-        forceClose: () => complete(closeResponse),
+        close: (response = dismissResponse, reason = 'programmatic') => attempt(reason, response),
+        forceClose: () => complete(dismissResponse),
         push: pushPage,
         get isOpen() { return state === 'open'; },
     };
@@ -863,6 +882,7 @@ export function openAlert({ heading, body = '', bodyNode = null, extra = null, r
     }
     surface.append(content, responsesNode);
     const returnFocus = document.activeElement;
+    const returnContainer = returnFocus instanceof HTMLElement ? returnFocus.parentElement : null;
     let state = 'open';
     let finish;
     const result = new Promise(resolve => finish = resolve);
@@ -898,7 +918,7 @@ export function openAlert({ heading, body = '', bodyNode = null, extra = null, r
             unbindKeyboard();
             if (host.open) host.close();
             host.remove();
-            if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+            returnFocusTo(returnFocus, { container: returnContainer });
             finish(response);
         });
     }

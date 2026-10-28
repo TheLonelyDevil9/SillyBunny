@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { acceptPopup } from './helpers/popup.js';
 import { auditPromptingLayout } from './helpers/libadwaita-audit.js';
+import { fetchJsonOrSkip } from './helpers/route-fetch.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
@@ -19,13 +20,13 @@ async function loadSettings(page, baseURL, settingsStore) {
         const url = new URL(route.request().url());
         if (url.origin !== origin) return route.abort();
         if (url.pathname === '/api/extensions/discover') {
-            const response = await route.fetch();
-            const extensions = await response.json();
+            const extensions = await fetchJsonOrSkip(route);
+            if (!extensions) return;
             return route.fulfill({ json: extensions.filter(extension => !extension.name.startsWith('third-party/')) });
         }
         if (url.pathname === '/api/settings/get') {
-            const response = await route.fetch();
-            const data = await response.json();
+            const data = await fetchJsonOrSkip(route);
+            if (!data) return;
             data.request_compression = { ...data.request_compression, enabled: false };
             const settings = settingsStore?.saved ?? JSON.parse(data.settings);
             settings.firstRun = false;
@@ -898,6 +899,27 @@ test('Mobile Sampling follows provider and manual sampler visibility', async ({ 
     await sampling.locator('#send_banned_tokens_label .menu_button').click();
     await expect(bannedTokens).toBeChecked({ checked: enabled });
     await expectNoOverflow(sampling);
+});
+
+test('Mobile Backend pages stay inside the settings page when a theme sizes the drawers by ID', async ({ page, baseURL }) => {
+    await loadSettings(page, baseURL);
+    await page.setViewportSize({ width: 390, height: 844 });
+    // The Moonlit Echoes theme extension ships this mobile drawer rule.
+    await page.addStyleTag({ content: `
+        @media screen and (max-width: 1000px) {
+            body:has(#sb-topbar-stack) :is(#left-nav-panel, #right-nav-panel) {
+                height: calc(100dvh - var(--topBarBlockSize)) !important;
+                max-height: calc(100dvh - var(--topBarBlockSize)) !important;
+            }
+        }
+    ` });
+    for (const tab of ['connections', 'sampling', 'prompting', 'editor', 'context']) {
+        const panel = await openPanel(page, tab);
+        await expect.poll(() => panel.locator('.sb-shell-panel-scroller').evaluate(scroller => {
+            const host = document.getElementById('sb-settings-shell-host');
+            return scroller.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom;
+        }), { message: tab }).toBeLessThanOrEqual(1);
+    }
 });
 
 for (const api of ['openai', 'textgenerationwebui']) {

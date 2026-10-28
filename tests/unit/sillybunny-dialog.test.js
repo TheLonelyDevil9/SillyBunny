@@ -15,7 +15,8 @@ await jest.unstable_mockModule('../../public/scripts/i18n.js', () => ({
     translate: text => text,
 }));
 
-const { openDialog, openAlert, getTopmostDialog, hostOverlayLayer, bindSheetGestures, bindHeaderLayout } = await import('../../public/scripts/sillybunny-editor/dialog.js');
+const { openDialog, openAlert, getTopmostDialog, hostOverlayLayer, bindSheetGestures, bindHeaderLayout, createIconButton } = await import('../../public/scripts/sillybunny-editor/dialog.js');
+const { createSelectionMode } = await import('../../public/scripts/sillybunny-editor/selection-mode.js');
 const { OVERLAY_SHEET_QUERY, LAYOUT_MOBILE_QUERY } = await import('../../public/scripts/sillybunny-editor/breakpoints.js');
 
 const settle = async () => { for (let index = 0; index < 10; index++) await Promise.resolve(); };
@@ -57,6 +58,23 @@ describe('breakpoints', () => {
 });
 
 describe('openDialog structure', () => {
+    test('adopts and styles the supplied search input and exposes header slots and controls', async () => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.setAttribute('aria-label', 'Mention search');
+        const dialog = openDialog({ title: 'Search', menu: () => [], search: { input, onChange() {} } });
+        expect(dialog.searchInput).toBe(input);
+        expect(input.classList.contains('text_pole')).toBe(true);
+        expect(input.classList.contains('sb-dialog__entry')).toBe(true);
+        expect(dialog.menuButton).toBe(dialog.header.querySelector('.sb-dialog__menu'));
+        expect(dialog.closeButton).toBe(dialog.header.querySelector('.sb-dialog__close'));
+        expect(dialog.headerStart).toBe(dialog.header.querySelector('.sb-dialog__header-start'));
+        expect(dialog.headerEnd).toBe(dialog.header.querySelector('.sb-dialog__header-end'));
+        expect(createIconButton('Example', 'magnifying-glass').getAttribute('aria-label')).toBe('Example');
+        dialog.forceClose();
+        await dialog.closed;
+    });
+
     test('header centering uses loose tracks when the title cannot fit beside the controls', () => {
         const header = document.createElement('header');
         header.className = 'sb-dialog__header';
@@ -84,6 +102,44 @@ describe('openDialog structure', () => {
         expect(header.hasAttribute('data-header-centering-loose')).toBe(false);
         shortTitleCleanup();
     });
+    test('header centering counts the inline padding of the title wrapper', () => {
+        const header = document.createElement('header');
+        header.className = 'sb-dialog__header';
+        const start = document.createElement('div');
+        start.className = 'sb-dialog__header-start';
+        const titles = document.createElement('div');
+        titles.className = 'sb-dialog__titles';
+        const title = document.createElement('h2');
+        title.className = 'sb-dialog__title';
+        const end = document.createElement('div');
+        end.className = 'sb-dialog__header-end';
+        header.append(start, titles, end);
+        titles.append(title);
+        Object.defineProperty(header, 'clientWidth', { configurable: true, value: 390 });
+        Object.defineProperty(start, 'offsetWidth', { configurable: true, value: 38 });
+        Object.defineProperty(end, 'offsetWidth', { configurable: true, value: 132 });
+        // After the 12px grid gaps, 378px are free. A centred title gets 114px of them, a loose one 208px.
+        Object.defineProperty(title, 'scrollWidth', { configurable: true, value: 110 });
+        const padding = { [titles.className]: '6px' };
+        const styles = jest.spyOn(window, 'getComputedStyle').mockImplementation(node => ({
+            paddingInlineStart: padding[node.className] ?? '0px',
+            paddingInlineEnd: padding[node.className] ?? '0px',
+        }));
+
+        try {
+            const withPadding = bindHeaderLayout(header);
+            expect(header.hasAttribute('data-header-centering-loose')).toBe(true);
+            withPadding();
+
+            padding[titles.className] = '0px';
+            const withoutPadding = bindHeaderLayout(header);
+            expect(header.hasAttribute('data-header-centering-loose')).toBe(false);
+            withoutPadding();
+        } finally {
+            styles.mockRestore();
+        }
+    });
+
     test.each(['dialog', 'window'])('%s tier: native modal host, scrim, surface, header and scrolling body', tier => {
         const content = document.createElement('p');
         const dialog = openDialog({ tier, title: 'Title', subtitle: 'Sub', content, className: 'my-surface' });
@@ -341,9 +397,9 @@ describe('openDialog focus', () => {
         expect(document.activeElement).toBe(field);
     });
 
-    test('search reports changes, Escape clears it first and then closes', async () => {
+    test('opted-in search clears its query before closing on Escape', async () => {
         const onChange = jest.fn();
-        const dialog = openDialog({ title: 'T', search: { onChange, placeholder: 'Find' } });
+        const dialog = openDialog({ title: 'T', search: { onChange, placeholder: 'Find', escapeClearsFirst: true } });
         const input = dialog.surface.querySelector('.sb-dialog__search-input');
         expect(dialog.surface.querySelector('.sb-dialog__search').hidden).toBe(false);
         expect(input.placeholder).toBe('Find');
@@ -354,12 +410,192 @@ describe('openDialog focus', () => {
         expect(dialog.search.query).toBe('abc');
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         expect(input.value).toBe('');
-        expect(dialog.isOpen).toBe(true);
+        expect(dialog.search.isOpen).toBe(true);
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(dialog.search.isOpen).toBe(false);
         expect(dialog.isOpen).toBe(true);
         const cancel = new Event('cancel', { cancelable: true });
         dialog.root.dispatchEvent(cancel);
         await expect(dialog.closed).resolves.toEqual({ response: 'close' });
+    });
+
+    test('default search closes and clears a non-empty query on one Escape', () => {
+        const onChange = jest.fn();
+        const dialog = openDialog({ title: 'T', search: { onChange } });
+        const input = dialog.searchInput;
+        input.value = 'term';
+        input.dispatchEvent(new Event('input'));
+
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+        expect(input.value).toBe('');
+        expect(dialog.search.query).toBe('');
+        expect(dialog.search.isOpen).toBe(false);
+        expect(dialog.isOpen).toBe(true);
+        dialog.forceClose();
+    });
+
+    test('default search Escape closes and pops a nested page in one press', async () => {
+        const parent = openDialog({ title: 'Parent' });
+        const page = parent.push({ title: 'Child', search: { onChange() {} } });
+        const input = page.searchInput;
+        input.value = 'term';
+        input.dispatchEvent(new Event('input'));
+
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+        expect(input.value).toBe('');
+        expect(page.search.query).toBe('');
+        await expect(page.closed).resolves.toEqual({ response: 'back' });
+        expect(parent.isOpen).toBe(true);
+        parent.forceClose();
+        await parent.closed;
+    });
+
+    test('adopted search input restores its placement and frame-owned state, then can be reused', async () => {
+        const parent = document.createElement('div');
+        const before = document.createElement('span');
+        const input = document.createElement('input');
+        const after = document.createElement('span');
+        input.className = 'caller-class';
+        input.setAttribute('data-caller', 'kept');
+        parent.append(before, input, after);
+        document.body.append(parent);
+        const onChange = jest.fn();
+        const onInput = jest.fn();
+        input.addEventListener('input', onInput);
+
+        const first = openDialog({ title: 'First', search: { input, onChange, escapeClearsFirst: true } });
+        expect(input.parentElement).toBe(first.page.querySelector('.sb-dialog__search-entry'));
+        first.forceClose();
+        await first.closed;
+
+        expect(input.parentElement).toBe(parent);
+        expect(input.nextElementSibling).toBe(after);
+        expect(input.className).toBe('caller-class');
+        expect(input.getAttribute('data-caller')).toBe('kept');
+        for (const attribute of ['id', 'type', 'role', 'placeholder', 'aria-label', 'aria-autocomplete', 'aria-controls', 'enterkeyhint']) {
+            expect(input.hasAttribute(attribute)).toBe(false);
+        }
+        input.value = 'single';
+        input.dispatchEvent(new Event('input'));
+        expect(onInput).toHaveBeenCalledTimes(1);
+        expect(onChange).not.toHaveBeenCalled();
+        input.value = '';
+
+        const second = openDialog({ title: 'Second', search: { input, onChange, escapeClearsFirst: true } });
+        expect(input.parentElement).toBe(second.page.querySelector('.sb-dialog__search-entry'));
+        expect(input.classList.contains('sb-dialog__entry')).toBe(true);
+        expect(input.className.split(/\s+/).filter(className => className === 'sb-dialog__entry')).toHaveLength(1);
+        input.value = 'reused';
+        input.dispatchEvent(new Event('input'));
+        expect(onInput).toHaveBeenCalledTimes(2);
+        expect(onChange).toHaveBeenCalledWith('reused');
+        input.value = '';
+        const page = second.page;
+        page.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(input);
+        const row = document.createElement('div');
+        row.dataset.sbListKey = 'item';
+        page.append(row);
+        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+        expect(input.value).toBe('x');
+        expect(onChange).toHaveBeenCalledWith('x');
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(input.value).toBe('');
+        expect(second.search.isOpen).toBe(true);
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(second.search.isOpen).toBe(false);
+        expect(second.isOpen).toBe(true);
+        second.forceClose();
+        await second.closed;
+        expect(input.parentElement).toBe(parent);
+        expect(onInput).toHaveBeenCalledTimes(2);
+
+        const unparented = document.createElement('input');
+        const detached = openDialog({ title: 'Detached', search: { input: unparented, onChange() {} } });
+        detached.forceClose();
+        await detached.closed;
+        expect(unparented.parentNode).toBeNull();
+        expect(unparented.className).toBe('');
+        expect(unparented.hasAttribute('type')).toBe(false);
+        expect(unparented.hasAttribute('id')).toBe(false);
+    });
+});
+
+describe('selection mode in dialog pages', () => {
+    function createDialogSelection(dialog) {
+        const content = document.createElement('div');
+        const list = document.createElement('div');
+        const row = document.createElement('div');
+        row.dataset.sbListKey = 'one';
+        row.tabIndex = 0;
+        list.append(row);
+        const actionBar = document.createElement('div');
+        content.append(list, actionBar);
+        dialog.body.append(content);
+        const headerStart = dialog.header.querySelector('.sb-dialog__header-start');
+        const headerEnd = dialog.header.querySelector('.sb-dialog__header-end');
+        const selection = createSelectionMode({
+            root: content,
+            list,
+            actionBar,
+            actions: [],
+            headerSlots: {
+                header: dialog.header,
+                headerStart,
+                headerEnd,
+                titleNode: dialog.header.querySelector('.sb-dialog__title'),
+                search: dialog.search,
+                menuButton: dialog.menuButton,
+                closeButton: dialog.closeButton,
+            },
+        });
+        return { selection, row, content };
+    }
+
+    test('dialog close destroys active selection without losing its title or controls', async () => {
+        const dialog = openDialog({ title: 'Original title', search: { onChange() {} } });
+        const { selection, row } = createDialogSelection(dialog);
+        const originalClose = dialog.closeButton;
+        selection.enter('one', row);
+        const destroy = selection.destroy.bind(selection);
+        dialog.closed.then(destroy);
+
+        dialog.forceClose();
+        await dialog.closed;
+
+        expect(dialog.header.querySelector('.sb-dialog__title').textContent).toBe('Original title');
+        expect(dialog.header.querySelector('.sb-dialog__close')).toBe(originalClose);
+        expect(originalClose.hidden).toBe(false);
+        expect(dialog.header.classList.contains('is-selection-mode')).toBe(false);
+        expect(selection.isActive).toBe(false);
+        expect(document.activeElement).toBe(opener);
+    });
+
+    test('Escape exits selection first; a pushed page preserves parent selection until pop', async () => {
+        const dialog = openDialog({ title: 'Parent' });
+        const { selection, row } = createDialogSelection(dialog);
+        selection.enter('one', row);
+        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(selection.isActive).toBe(false);
+        expect(dialog.isOpen).toBe(true);
+        expect(dialog.header.querySelector('.sb-dialog__title').textContent).toBe('Parent');
+
+        selection.enter('one', row);
+        const page = dialog.push({ title: 'Child' });
+        expect(selection.isActive).toBe(true);
+        expect(selection.selectedKeys).toEqual(['one']);
+        page.close();
+        await page.closed;
+        expect(selection.isActive).toBe(true);
+        expect(selection.selectedKeys).toEqual(['one']);
+        expect(dialog.header.querySelector('.sb-dialog__title').textContent).toBe('1 selected');
+
+        selection.destroy();
+        dialog.forceClose();
+        await dialog.closed;
+        expect(dialog.header.querySelector('.sb-dialog__title').textContent).toBe('Parent');
     });
 });
 
@@ -445,14 +681,34 @@ describe('bottom sheets', () => {
 });
 
 describe('pages', () => {
-    test('an immediate-apply page shows Back and no Close; Back pops it and returns focus', async () => {
+    test('a pushed page reports isOpen until it is popped, and not after its frame closes', async () => {
+        const dialog = openDialog({ title: 'Root' });
+        const page = dialog.push({ title: 'Child' });
+        const nested = page.push({ title: 'Nested' });
+        expect([page.isOpen, nested.isOpen]).toEqual([true, true]);
+        expect(dialog.isOpen).toBe(true);
+
+        nested.close();
+        expect([page.isOpen, nested.isOpen]).toEqual([true, false]);
+        await nested.closed;
+        expect(nested.close()).toBe(false);
+        expect(nested.isOpen).toBe(false);
+
+        const again = page.push({ title: 'Again' });
+        expect(again.isOpen).toBe(true);
+        dialog.forceClose();
+        await dialog.closed;
+        expect([page.isOpen, again.isOpen]).toEqual([false, false]);
+    });
+
+    test('an immediate-apply page shows Back and Close; Back pops it and returns focus', async () => {
         const dialog = openDialog({ title: 'Root', content: document.createElement('button') });
         const trigger = dialog.body.querySelector('button');
         trigger.focus();
         const page = dialog.push({ title: 'Child', content: document.createElement('input') });
         expect(dialog.root.getAttribute('aria-labelledby')).toBe(page.header.querySelector('.sb-dialog__title').id);
         expect(page.header.querySelector('.sb-dialog__back')).not.toBeNull();
-        expect(page.header.querySelector('.sb-dialog__close')).toBeNull();
+        expect(page.header.querySelector('.sb-dialog__close')).not.toBeNull();
         expect(dialog.page.inert).toBe(true);
         expect(dialog.page.hidden).toBe(true);
         page.header.querySelector('.sb-dialog__back').click();
@@ -464,10 +720,36 @@ describe('pages', () => {
         expect(dialog.isOpen).toBe(true);
     });
 
+    test('Close on an immediate-apply page closes the frame through the root close path', async () => {
+        const canClose = jest.fn(() => true);
+        const dialog = openDialog({ title: 'Root', canClose });
+        const page = dialog.push({ title: 'Child' });
+        page.header.querySelector('.sb-dialog__close').click();
+        await expect(dialog.closed).resolves.toEqual({ response: 'close' });
+        await expect(page.closed).resolves.toEqual({ response: 'close' });
+        expect(canClose).toHaveBeenCalledWith('close');
+        expect(dialog.isOpen).toBe(false);
+    });
+
+    test('Close on an immediate-apply page keeps the page and frame when root canClose vetoes', async () => {
+        const canClose = jest.fn(() => false);
+        const dialog = openDialog({ title: 'Root', canClose });
+        const page = dialog.push({ title: 'Child' });
+        page.header.querySelector('.sb-dialog__close').click();
+        await settle();
+        expect(canClose).toHaveBeenCalledWith('close');
+        expect(page.page.isConnected).toBe(true);
+        expect(dialog.isOpen).toBe(true);
+        dialog.forceClose();
+        await dialog.closed;
+        await expect(page.closed).resolves.toEqual({ response: 'close' });
+    });
+
     test('a page with responses shows Cancel as Back and its affirmative; Escape pops before closing', async () => {
         const dialog = openDialog({ title: 'Root' });
         const page = dialog.push({ title: 'Child', responses: { affirmative: { id: 'apply', label: 'Apply' } } });
         expect(page.header.querySelector('.sb-dialog__back')).toBeNull();
+        expect(page.header.querySelector('.sb-dialog__close')).toBeNull();
         expect(page.header.querySelector('.sb-dialog__header-start [data-response="cancel"]')).not.toBeNull();
         escape(dialog.root);
         await expect(page.closed).resolves.toEqual({ response: 'cancel' });
@@ -475,6 +757,15 @@ describe('pages', () => {
         const second = dialog.push({ title: 'Child', responses: { affirmative: { id: 'apply', label: 'Apply' } } });
         second.header.querySelector('[data-response="apply"]').click();
         await expect(second.closed).resolves.toEqual({ response: 'apply' });
+    });
+
+    test('Escape pops an immediate-apply page before closing its frame', async () => {
+        const dialog = openDialog({ title: 'Root' });
+        const page = dialog.push({ title: 'Child' });
+        escape(dialog.root);
+        await expect(page.closed).resolves.toEqual({ response: 'back' });
+        expect(dialog.isOpen).toBe(true);
+        expect(dialog.page.hidden).toBe(false);
     });
 
     test('a page canClose can veto popping', async () => {

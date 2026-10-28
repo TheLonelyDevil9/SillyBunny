@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openMenuItem } from './helpers/chats-archive.js';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
@@ -80,11 +81,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
             await expect(alert.locator('[data-response="cancel"]')).toBeFocused();
             await expect(alert.locator('[data-response="import"]')).toHaveClass(/is-destructive/);
             await page.keyboard.press('Enter');
-            await expect(alert).toBeVisible();
-            expect(importRequests).toBe(0);
-            await alert.locator('[data-response="cancel"]').click();
             await expect(alert).toHaveCount(0);
             expect(importRequests).toBe(0);
+            await expect(panel.getByRole('button', { name: 'Import Folder', exact: true })).toBeFocused();
 
             await panel.getByRole('button', { name: 'Import Folder', exact: true }).click();
             await page.getByRole('alertdialog').locator('[data-response="import"]').click();
@@ -232,9 +231,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
             });
             await page.evaluate(async () => await window.SillyBunnyShell.openTab('characters', 'characters'));
             await page.locator('#sbca_drawer_button').click();
-            await expect(page.locator('.sbca-root')).toBeVisible();
-            await page.getByRole('button', { name: 'Manage organization' }).click();
-            const savedViews = page.locator('.sbca-named-manager').filter({ has: page.getByRole('heading', { name: 'Saved views' }) });
+            await expect(page.locator('.sbca-dialog')).toBeVisible();
+            await openMenuItem(page, 'Manage Organization');
+            const savedViews = page.locator('.sbca-organization-content section').filter({ has: page.getByRole('heading', { name: 'Saved Views' }) });
             const deleteView = savedViews.getByRole('button', { name: 'Delete Fixture view' });
             await deleteView.click();
 
@@ -264,8 +263,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
                 mimeType: 'application/json',
                 buffer: Buffer.from(JSON.stringify(backup)),
             };
-            await expect(page.locator('.sbca-root')).toBeVisible();
-            const organizationFile = page.locator('.sbca-root .sbca-organization-backup input[type="file"]');
+            await expect(page.locator('.sbca-organization-page')).toBeVisible();
+            const organizationFile = page.locator('.sbca-organization-content input[type="file"]');
             await organizationFile.setInputFiles(backupFile);
             alert = await expectDestructiveAlert(page, 'replace');
             await expect(alert).toContainText('Replace all current folders, collections, saved views, tags, and favorites?');

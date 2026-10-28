@@ -1,13 +1,13 @@
 /*
  * Shared WAAPI motion helpers for the SillyBunny shell.
- * Durations and easing mirror --sb-transition-fast/--sb-transition/--sb-transition-slow (DESIGN.md Motion).
+ * Durations and easing mirror --sb-transition-fast/--sb-transition/--sb-transition-slow, so JS and CSS motion stay in step.
  * Every helper is a no-op when prefers-reduced-motion is set or WAAPI is unavailable.
  */
 
 export const MOTION_FAST = 200;
 export const MOTION_SLOW = 250;
 export const MOTION_SURFACE = 300;
-/** Popover and menu close: a short fade with no movement (DESIGN.md Motion, Per Surface). */
+/** Popover and menu close: a short fade with no movement. */
 export const MOTION_POPOVER_CLOSE = 150;
 export const MOTION_EASE = 'cubic-bezier(0.25, 0.1, 0.25, 1)';
 export const MOTION_EASE_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
@@ -79,7 +79,8 @@ export function stopMotion(element) {
 
 /**
  * Plays keyframes on the element. `styles` are applied inline (!important) for the duration,
- * `onFinish` runs only when the animation completes, `onEnd` runs on finish and on cancel.
+ * `onFinish` runs only when the animation completes, `onEnd` runs on finish and on cancel. `onEnd` also
+ * runs when other code cancels the animation directly, for example through `getAnimations()`.
  * Without motion, `onFinish` and `onEnd` run synchronously.
  */
 export function play(element, keyframes, { duration = MOTION_SLOW, easing = MOTION_EASE, fill = 'none', styles = null, inert = false, onFinish = null, onEnd = null } = {}) {
@@ -112,6 +113,16 @@ export function play(element, keyframes, { duration = MOTION_SLOW, easing = MOTI
         },
     };
     activeMotions.set(element, motion);
+
+    // Code that cancels the animation directly, for example through `getAnimations()`, skips `motion.cancel()`.
+    // Without this handler `onEnd` would never run, and a caller that commits its end state there, such as
+    // hiding a covered page, would keep the old state for good.
+    animation.oncancel = () => {
+        if (activeMotions.get(element) !== motion) {
+            return;
+        }
+        cleanup();
+    };
 
     // onFinish commits the end state before the fill is dropped, all in one task, so nothing flashes.
     animation.finished.then(() => {
