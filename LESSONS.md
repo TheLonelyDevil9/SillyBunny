@@ -149,6 +149,7 @@ This is the largest class by a wide margin.
   - Sandbox frames have an opaque origin, so `event.origin` cannot be checked. `handleSandboxMessage()` checks `event.source`, the message schema, the nonce, the message ID and the rate limit, then the command allowlist. It rejects unknown commands.
   - Card scripts need user confirmation before they run (`confirmCardScriptExecution()`). This gate applies only to card scripts; other imported behaviour has no general gate.
   - `decodeRawImage()` in `src/transformers-image.js` passes only bytes with a PNG, JPEG, GIF, BMP, TIFF, WebP or AVIF signature to jimp. file-type before 21.3.1 loops forever on a 55-byte ASF header with a zero-size sub-header (GHSA-5v7r-6r5c-r473) and blocks the event loop, so one `POST /api/extra/caption` stopped the whole server under Node.js. Test: `tests/transformers-image.test.js`.
+  - `getPngName()` in `src/endpoints/characters.js` sanitises the name on every platform and drops a trailing `.png`, because `getPngFileName()` keeps that extension and the import route returns the name without it. `writeCharacterData()` writes only a PNG directly inside the user's characters folder (`resolveCharacterAvatarPath()`). The V2/V3 JSON import sanitises the card name as SillyTavern's `importFromJson()` does (`1bb2a5ea1`). No test guards these yet.
   - In the Android app, `src/middleware/launchToken.js` runs right after helmet and before body parsing, logging, authentication and static files (`src/server-main.js`), so other apps on the device cannot use the local server.
   - The cookie-clearing route keeps the `sillybunny_launch` cookie while the gate is on; clearing it would lock the Android browser out of the server.
   - The browser handoff answers with a page that moves to `/`, not a `302` (`c008eb38f`): Chrome does not send a `SameSite=Strict` cookie on the redirect of a navigation that another app started.
@@ -271,6 +272,16 @@ This is the largest class by a wide margin.
   - `tests/` and `src/electron/` have their own `package.json` and do not read the root `.npmrc`. In `tests/`, `npm config get` reports `min-release-age=null`, `ignore-scripts=false` and `allow-git=all`, so pass `--min-release-age=7 --ignore-scripts` there.
 - **Fixes:** the v1.2.8 release commit `221de633c` replaced `"version": "1.2.7"` with `"1.2.8"` throughout `package-lock.json`, which also changed `@types/range-parser` and `is-callable`. Their `resolved` and `integrity` still pointed at 1.2.7 and no 1.2.8 exists, so `npm ci` installed 1.2.7, but `bun pm migrate` built 1.2.8 tarball URLs that returned 404. `scripts/bump-version.js` now edits only `version` and `packages[""].version`.
 - **Limit:** a name@version comparison of the two lockfiles always lists the npm aliases `string-width-cjs`, `strip-ansi-cjs` and `wrap-ansi-cjs`, and `@jimp/plugin-blur`. npm satisfies the `@jimp/plugin-blur` peer of `@jimp/plugin-shadow@0.22.12` with a top-level 1.6.x copy, and Bun reuses 0.22.12.
+
+### Macro whitespace
+
+- **Breaks:** a trim in the macro engine removes whitespace that a template asks for with `{{newline}}`, `{{space}}` or `{{noop}}` (SillyTavern/SillyTavern#5673 and SillyTavern/SillyTavern#5674).
+- **Cause:** the engine trims text after it resolves the macros in it. `{{if}}` trims its resolved branch, scoped macros trim their content, and variable shorthand values (`{{.x = ...}}`) are trimmed. The legacy `{{trim}}` post-processor runs after `{{noop}}` is already an empty string, so `{{noop}}` does not stop it as it did in the legacy engine (`public/scripts/macros.js`).
+- **Files:** `public/scripts/macros/engine/MacroCstWalker.js`, `public/scripts/macros/engine/MacroEngine.js`, `public/scripts/macros/definitions/core-macros.js`.
+- **Guards:** `public/scripts/macros/sillybunny-whitespace-markers.js`. The walker wraps `{{newline}}` and `{{space}}` output in U+FDD0 and `{{noop}}` output in U+FDD1, and removes them after each trim. `MacroEngine.evaluate()` removes them before it returns, except for the `{{if}}` branch, which `resolve(text, { keepWhitespaceMarkers: true })` returns with markers for the trim in the `{{if}}` handler. Only the `core:` post-processors see the markers.
+- **Tests:** `tests/sillybunny-macro-whitespace.test.js` (runs the real engine in Jest), `tests/frontend/sillybunny-macro-whitespace.e2e.js`.
+- **Limit:** `{{trim}}` still removes `{{newline}}` output next to it, as the legacy engine did. Put `{{noop}}` between them to keep the newline.
+- **Limit:** prompt text that already contains U+FDD0 or U+FDD1 loses those characters.
 
 ## Reverts and release problems
 
