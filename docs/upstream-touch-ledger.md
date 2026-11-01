@@ -840,6 +840,20 @@ This ledger tracks intentional SillyBunny divergence in upstream-origin files. I
 | Last reviewed | 2026-10-28 SQLite character index replaces the node-persist disk cache. |
 | Owner | TODO(copy) |
 
+### `src/transformers.js` - caption image decoding
+| Field | Value |
+| --- | --- |
+| File | `src/transformers.js`. |
+| Area | Image captioning (`POST /api/extra/caption`). |
+| Divergence reason | TODO(copy) |
+| Target seam | `src/transformers-image.js`. |
+| Adapter shape | `getRawImage()` decodes the base64 string into a `Buffer` and returns `decodeRawImage(buffer)`, or `null` when that throws. `decodeRawImage()` throws for bytes that do not start with a PNG, JPEG, GIF, BMP, TIFF, WebP or AVIF signature, so jimp's file-type check never sees them. It decodes the rest with the server's jimp (`src/jimp.js`) instead of calling `RawImage.fromBlob()`, and returns an RGBA `JimpRawImage`, a `RawImage` subclass whose `resize()` also uses jimp instead of `OffscreenCanvas`. `crop()` and `center_crop()` stay upstream; the default captioning model does not call them. |
+| Protecting tests | `tests/transformers-image.test.js`. The test defines `self` before sillytavern-transformers loads, so the library takes the code path that it takes under Bun. |
+| Validation | `npm run test:unit --prefix tests -- transformers-image.test.js` (on the base commit, the ASF test fails when its child process reaches the 30 s deadline, the PNG test gets `null`, and the preprocessing test fails with `OffscreenCanvas not supported by this browser.`), `npm run lint`. |
+| Rollback path | Restore the upstream `getRawImage()` body (`RawImage.fromBlob()` on a `Blob` of the decoded bytes) and the `RawImage` import, then delete `src/transformers-image.js` and `tests/transformers-image.test.js`. No stored data or settings change. The rollback brings back the server hang on a malformed ASF header and the 400 for every image under Bun. |
+| Last reviewed | 2026-11-02 caption image signature check (GHSA-5v7r-6r5c-r473). |
+| Owner | TODO(copy) |
+
 ### `src/endpoints/backends/chat-completions.js` and `src/endpoints/backends/text-completions.js` - Conversation REST generation adapters
 | Field | Value |
 | --- | --- |
@@ -932,6 +946,20 @@ This ledger tracks intentional SillyBunny divergence in upstream-origin files. I
 | Rollback path | Revert the fork metadata branches while retaining upstream archive validation. |
 | Last reviewed | 2026-07-28 pre-release audit. |
 | Owner | Account and release integrator. |
+
+### `src/electron/` - Electron launcher removal
+| Field | Value |
+| --- | --- |
+| File | `src/electron/Start.bat`, `src/electron/package.json` and `src/electron/package-lock.json`, removed. SillyTavern also ships `src/electron/index.js` and `src/electron/start.sh`, which SillyBunny never adopted. |
+| Area | Packaging and launchers. |
+| Divergence reason | TODO(copy) |
+| Target seam | None. The root launchers start `server.js`, and SillyBunny ships no Electron entry point. |
+| Adapter shape | None. A SillyTavern sync that changes `src/electron/**` leaves those changes out. |
+| Protecting tests | None. |
+| Validation | `git grep -n -i "src/electron"` finds no code, test or workflow reference. `.github/pr-auto-labels-by-files.yml` parses as YAML. |
+| Rollback path | Revert the commit that removed the package (`git log --diff-filter=D -- src/electron/package.json`), which restores the three files at electron 41.1.1. The launcher still does not start until `src/electron/index.js` comes from SillyTavern, because `package.json` names it as `main`, and until the Electron binary is installed, because `Start.bat` installs with `--ignore-scripts` and the electron package downloads its binary only in its `postinstall` script. |
+| Last reviewed | 2026-11-02, package removal. |
+| Owner | TODO(copy) |
 
 ### World Info files - shell integration and safe persistence
 | Field | Value |
@@ -1211,6 +1239,21 @@ This ledger tracks intentional SillyBunny divergence in upstream-origin files. I
 | Rollback path | Delete the marked early return in `handleGlobalKeyDown()`. Then a native button that also carries `.interactable` activates twice on Enter again, so first remove `.interactable` from the SillyBunny `<button>` controls that have it, or keep the return. Drop `tests/unit/sillybunny-keyboard-enter.test.js` and the Enter tests in `tests/dialogs-accessibility.e2e.js`. |
 | Last reviewed | 2026-10-28, PR #870 (marker and unit tests checked). |
 | Owner | UI overhaul integrator. |
+
+### `public/index.html` and `public/scripts/openai.js` - Preset API/Sampler Linking group
+
+| Field | Value |
+| --- | --- |
+| File | `public/index.html`, `public/scripts/openai.js` |
+| Area | Presets page, Chat Completions preset linking settings. |
+| Divergence reason | TODO(copy) |
+| Target seam | `mountPresetLinkingGroup()` in `public/scripts/sillybunny-tabs.js` moves the three linking blocks into the `#sb-preset-linking` group, and the `#sb-preset-linking` rules in `public/css/sillybunny-tabs.css` style them. |
+| Adapter shape | The drawer markup, IDs and inputs stay where upstream puts them. Only the three switch labels and their `data-i18n` keys change to header capitalisation, and the Save Profile and Clear Profile buttons lose their icons. The toast in `maybeShowPresetConnectionBindingReminder()` quotes the first label, so its text changes with it. A `<!-- SillyBunny: -->` marker sits above the drawer and a `// SillyBunny:` marker above the toast. |
+| Protecting tests | `tests/sillybunny-backend-settings.e2e.js` (the Preset API/Sampler Linking group test and the Backend group flow); `tests/sillybunny-settings-consistency.e2e.js` (Prompting group titles); `tests/openai-sampling-profiles-wiring.test.js` (text-only profile buttons). |
+| Validation | 2026-11-01: root and tests lint with no errors; `tests/openai-sampling-profiles-wiring.test.js` 6/6; Chromium E2E on port 8231 over `sillybunny-backend-settings`, `sillybunny-preset-autosave`, the Prompting flow test in `sillybunny-settings-consistency` and the `dialogs-accessibility` one-ring test: 47 of 48 passed, and the one failure (the Text Completions template discard prompt) also fails on the base commit; `npm run check:frontend-budgets` at 1013.4 KiB blocking CSS. Screens checked at 1440×900 and 390×844, with per-model profiles off and on. |
+| Rollback path | Restore the three labels and keys, the two button icons and the toast text, and delete both markers. In `public/scripts/sillybunny-tabs.js`, remove the `mountPresetLinkingGroup()` call and function and the `sb-preset-linking` hide condition, and anchor Chat Completions on its preset row again in `placeSharedPresetControls()` so that Edit Prompts stays above the drawer. In `public/css/sillybunny-tabs.css`, remove the `#sb-preset-linking` rules and the Autosave border rule, and restore the `.sb-settings-flat-section > .sb-setting-inline-copy-center` rule. In `public/css/sillybunny-theme.css`, restore the `#openai_api-presets` linking rules. The switches then go back to a drawer inside Presets, and no saved data changes. Then drop the group test and the group title from both title lists. |
+| Last reviewed | 2026-11-01, PR #870. |
+| Owner | TODO(copy) |
 
 ## Review Checklist
 - Does the upstream-origin file contain only adapter wiring and concise comments?
