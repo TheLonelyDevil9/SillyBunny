@@ -55,6 +55,8 @@ const ALLOWED_NON_GET_PATHS = new Set([
     '/api/tokenizers/openai/count',
     '/api/ping',
     '/api/backends/chat-completions/status',
+    // Quick Image Gen reads the settings back after each save until the server confirms its sync id. These specs stub the saves, so it keeps reading.
+    '/api/settings/get',
     // The model, which the spec stubs.
     '/api/backends/chat-completions/generate',
     // Settings: the active character in them is asserted separately.
