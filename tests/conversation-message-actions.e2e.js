@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { OPEN_ACTION_SHEET } from './helpers/action-sheet.js';
 import { fetchJsonOrSkip } from './helpers/route-fetch.js';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
@@ -25,10 +27,10 @@ async function openConversation(page, baseURL, { ooc = false } = {}) {
             if (!data) return;
             const settings = JSON.parse(data.settings);
             settings.firstRun = false;
+            applyWelcomeSettings(settings);
             settings.power_user.auto_connect = false;
             settings.power_user.reduced_motion = false;
             settings.extension_settings.sillybunny_conversation = {};
-            settings.extension_settings['quick-image-gen'] = { setupWizardSeen: true };
             data.request_compression = { ...data.request_compression, enabled: false };
             data.settings = JSON.stringify(settings);
             return route.fulfill({ json: data });
@@ -58,7 +60,7 @@ async function openConversation(page, baseURL, { ooc = false } = {}) {
         const { renderConversationTimeline } = await import('/scripts/sillybunny-conversation/timeline-render.js');
         const { getSettings, saveSettings } = await import('/scripts/sillybunny-conversation/settings-store.js');
         const context = window.SillyTavern.getContext();
-        const character = context.characters.find(entry => /Bunny Guide|Seraphina/.test(entry?.name ?? ''));
+        const character = context.characters.find(entry => /Seraphina/.test(entry?.name ?? ''));
         if (!character?.avatar) throw new Error('No bundled Conversation character found.');
         openConversationWorkspaceForAvatar(character.avatar, { showToast: false });
         stopConversationAutoWorker();
@@ -67,7 +69,7 @@ async function openConversation(page, baseURL, { ooc = false } = {}) {
             await handleConversationSlashAction('/ooc A disposable note for action checks.');
         } else {
             appendConversationThreadMessage(character.avatar, {
-                role: 'assistant', name: 'Bunny Guide', mes: 'A disposable message for focus checks.', extra: {},
+                role: 'assistant', name: 'Seraphina', mes: 'A disposable message for focus checks.', extra: {},
             });
         }
         renderConversationTimeline();
@@ -175,7 +177,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
         const trigger = message.locator('.sb-conversation-mobile-menu-trigger');
         await trigger.focus();
         await trigger.press('Enter');
-        const sheet = page.locator('.sb-action-sheet');
+        const sheet = page.locator(OPEN_ACTION_SHEET);
         await expect(sheet).toBeVisible();
         await sheet.getByRole('button', { name: 'Close', exact: true }).click();
         await expect(sheet).toBeHidden();
@@ -183,6 +185,8 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
         await expect(trigger).toBeFocused();
         await trigger.press('Enter');
         await expect(sheet).toBeVisible();
+        // The sheet takes the keyboard focus a frame after it shows, and an Escape that arrives before that goes to the trigger behind it.
+        await expect(sheet.locator(':focus')).toHaveCount(1);
         await page.keyboard.press('Escape');
         await expect(sheet).toBeHidden();
         await expect(trigger).toBeFocused();

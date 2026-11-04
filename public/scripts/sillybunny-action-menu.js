@@ -31,6 +31,7 @@ const ITEM_SELECTOR = '[role^="menuitem"]:not([aria-disabled="true"])';
  * @property {boolean} [disabled]
  * @property {'radio'|'check'} [kind] - Stateful indicator; checked-only items default to radio.
  * @property {boolean} [checked]
+ * @property {Record<string, string>} [data] - Written to the item's `dataset`, for example a marker that tests or tools read.
  * @property {(event: MouseEvent) => void} onSelect
  */
 
@@ -45,7 +46,6 @@ const ITEM_SELECTOR = '[role^="menuitem"]:not([aria-disabled="true"])';
 /** @typedef {({ items: ActionMenuItem[] } | { reactions: ActionMenuReaction[] }) & { title?: string }} ActionMenuSection */
 
 let mobileQuery = null;
-let sheet = null;
 let open = null;
 let initialized = false;
 
@@ -156,6 +156,9 @@ function buildMenu(sections, label) {
             if (item.disabled) {
                 button.setAttribute('aria-disabled', 'true');
             }
+            if (item.data) {
+                Object.assign(button.dataset, item.data);
+            }
             const text = document.createElement('span');
             text.className = 'sb-action-menu-label';
             text.textContent = item.label;
@@ -238,13 +241,58 @@ function handleMenuKeydown(event) {
     event.preventDefault();
     // Arrow keys would otherwise swipe the message underneath.
     event.stopPropagation();
-    items[next]?.focus({ preventScroll: true });
+    if (!items[next]) {
+        return;
+    }
+    items[next].focus({ preventScroll: true });
+    revealItem(items[next], { first: next === 0, last: next === items.length - 1 });
 }
 
-function ensureSheet() {
-    if (sheet) {
-        return sheet;
+/**
+ * The scroll offset that brings a row into view with the least movement.
+ * All values share one coordinate space: the row and view edges are viewport positions.
+ */
+export function getRevealScrollTop({ scrollTop, viewTop, viewBottom, itemTop, itemBottom }) {
+    // Whole pixels, so a fractional row edge cannot stay a fraction outside the view.
+    if (itemTop < viewTop) {
+        return scrollTop - Math.ceil(viewTop - itemTop);
     }
+    if (itemBottom > viewBottom) {
+        return scrollTop + Math.ceil(itemBottom - viewBottom);
+    }
+    return scrollTop;
+}
+
+/**
+ * Focus uses preventScroll so the browser does not scroll the page behind a fixed layer, which means
+ * a menu that scrolls (a popover capped to a short window, or a sheet body) must reveal the row itself.
+ * The first and last rows scroll to the edge so the padding and a section title stay in view.
+ */
+function revealItem(item, { first, last }) {
+    const scroller = item.closest('.sb-action-popover, .sb-action-sheet-body');
+    if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
+        return;
+    }
+    if (first || last) {
+        scroller.scrollTop = first ? 0 : scroller.scrollHeight;
+        return;
+    }
+    const viewTop = scroller.getBoundingClientRect().top + scroller.clientTop;
+    const itemRect = item.getBoundingClientRect();
+    scroller.scrollTop = getRevealScrollTop({
+        scrollTop: scroller.scrollTop,
+        viewTop,
+        viewBottom: viewTop + scroller.clientHeight,
+        itemTop: itemRect.top,
+        itemBottom: itemRect.bottom,
+    });
+}
+
+/**
+ * Builds the sheet for one opening. It leaves the DOM when its exit ends, so a closed menu keeps no
+ * hidden `role="menu"` with the shared id and no state a caller wrote on the frame.
+ */
+function createSheet() {
     const backdrop = document.createElement('button');
     backdrop.type = 'button';
     backdrop.className = 'sb-action-sheet-backdrop';
@@ -292,29 +340,59 @@ function ensureSheet() {
         getReturnFocus: () => (open?.trigger?.isConnected ? open.trigger : null),
         canAnimateClose: () => isMobileLayout(),
         onClose: () => finishClose(),
+        onHidden: () => {
+            backdrop.remove();
+            element.remove();
+        },
     });
-    sheet = { element, backdrop, title, subtitle, body, controller };
     bindSheetSwipeClose({ sheet: element, backdrop, headerSelector: '.sb-action-sheet-header', close: () => closeActionMenu({ restoreFocus: true }) });
-    return sheet;
+    return { element, backdrop, title, subtitle, body, controller };
 }
 
 /**
- * Places the popover beside its anchor, trailing-aligned to the trigger, inside `bounds`.
+ * The part of the layout viewport that the user can see. The visual viewport is smaller while the page is
+ * zoomed in or an on-screen keyboard is open, and a fixed popover is placed in layout viewport coordinates.
+ * Its rectangle already lies inside the layout viewport, so it is not clipped by `innerWidth` and `innerHeight`:
+ * WebKit reports those as the visual size while zoomed, and clipping would collapse a panned viewport to nothing.
+ */
+function getVisibleViewport() {
+    const visual = window.visualViewport;
+    if (!visual) {
+        return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    }
+    const left = Math.max(0, visual.offsetLeft);
+    const top = Math.max(0, visual.offsetTop);
+    return { left, top, right: left + visual.width, bottom: top + visual.height };
+}
+
+/** True when the popover's left edge lines up with the trigger's left edge instead of its right edge. */
+function isLeftAligned({ alignment, point, trigger, anchor, bounds }) {
+    if (alignment === 'start' || alignment === 'end') {
+        const rtl = getComputedStyle(trigger).direction === 'rtl';
+        return (alignment === 'start') !== rtl;
+    }
+    return point ? true : (anchor.left + anchor.right) / 2 < (bounds.left + bounds.right) / 2;
+}
+
+/**
+ * Places the popover beside its anchor, trailing-aligned to the trigger, inside `bounds` and the visible viewport.
  * Triggers in the start half of the bounds (mirrored rows) align to their start edge instead.
  * Exported for other body-mounted popovers (the shared editor picker) so placement stays identical.
- * @param {'auto'|'start'} [alignment='auto'] Explicit inline-start alignment for wide picker triggers.
+ * @param {'auto'|'start'|'end'} [alignment='auto'] Explicit inline alignment: `start` for wide picker triggers, `end` for a
+ *     small menu button at the end of a row or card that sits inside much wider bounds.
  * @returns {string} transform-origin for the opening animation.
  */
 export function positionPopover(popover, trigger, point, boundsElement, alignment = 'auto') {
     const boundsRect = boundsElement?.getBoundingClientRect();
+    const view = getVisibleViewport();
     const bounds = boundsRect && boundsRect.width > 0
         ? {
-            left: Math.max(boundsRect.left, 0),
-            right: Math.min(boundsRect.right, window.innerWidth),
-            top: Math.max(boundsRect.top, 0),
-            bottom: Math.min(boundsRect.bottom, window.innerHeight),
+            left: Math.max(boundsRect.left, view.left),
+            right: Math.min(boundsRect.right, view.right),
+            top: Math.max(boundsRect.top, view.top),
+            bottom: Math.min(boundsRect.bottom, view.bottom),
         }
-        : { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight };
+        : view;
     const anchor = point
         ? { left: point.x, right: point.x, top: point.y, bottom: point.y }
         : trigger.getBoundingClientRect();
@@ -324,17 +402,15 @@ export function positionPopover(popover, trigger, point, boundsElement, alignmen
     const below = bounds.bottom - anchor.bottom - POPOVER_GAP - POPOVER_MARGIN;
     const above = anchor.top - bounds.top - POPOVER_GAP - POPOVER_MARGIN;
     const placeAbove = natural > below && above > below;
-    const available = Math.max(POPOVER_MIN_HEIGHT, placeAbove ? above : below);
+    // The minimum keeps a menu usable beside a trigger at the edge of the bounds, but never exceeds the bounds themselves.
+    const boundsRoom = Math.max(0, bounds.bottom - bounds.top - 2 * POPOVER_MARGIN);
+    const available = Math.min(Math.max(POPOVER_MIN_HEIGHT, placeAbove ? above : below), boundsRoom);
     popover.style.maxBlockSize = `${Math.floor(available)}px`;
     const height = Math.min(natural, available);
     const width = popover.offsetWidth;
 
-    const startAligned = alignment === 'start'
-        ? getComputedStyle(trigger).direction !== 'rtl'
-        : point
-            ? true
-            : (anchor.left + anchor.right) / 2 < (bounds.left + bounds.right) / 2;
-    let left = startAligned ? anchor.left : anchor.right - width;
+    const leftAligned = isLeftAligned({ alignment, point, trigger, anchor, bounds });
+    let left = leftAligned ? anchor.left : anchor.right - width;
     if (point && left + width > bounds.right - POPOVER_MARGIN) {
         left = anchor.left - width;
     }
@@ -343,11 +419,55 @@ export function positionPopover(popover, trigger, point, boundsElement, alignmen
     left = maxLeft < minLeft
         ? Math.max(bounds.left, Math.min(left, bounds.right - width))
         : Math.min(Math.max(left, minLeft), maxLeft);
-    const top = placeAbove ? anchor.top - POPOVER_GAP - height : anchor.bottom + POPOVER_GAP;
+    // When the minimum height does not fit beside the trigger, the menu slides over it rather than leave the bounds.
+    const minTop = bounds.top + POPOVER_MARGIN;
+    const maxTop = bounds.bottom - POPOVER_MARGIN - height;
+    const top = Math.min(Math.max(placeAbove ? anchor.top - POPOVER_GAP - height : anchor.bottom + POPOVER_GAP, minTop), Math.max(minTop, maxTop));
     popover.style.left = `${Math.round(left)}px`;
-    popover.style.top = `${Math.round(Math.max(top, POPOVER_MARGIN))}px`;
+    popover.style.top = `${Math.round(top)}px`;
     const originX = Math.round((anchor.left + anchor.right) / 2 - left);
     return `${originX}px ${placeAbove ? '100%' : '0'}`;
+}
+
+/** @type {{ stop: () => void }|null} */
+let visualViewportWatch = null;
+
+/**
+ * An on-screen keyboard or a pan moves the visual viewport without a window resize or a document scroll
+ * (iOS, and Chrome with the keyboard in resizes-visual mode), so an open popover places itself again, once per frame.
+ */
+function watchVisualViewport() {
+    const visual = window.visualViewport;
+    if (!visual || visualViewportWatch) {
+        return;
+    }
+    let pending = false;
+    let frameId = 0;
+    const reposition = () => {
+        pending = false;
+        const state = open;
+        if (state?.kind !== 'popover' || (!state.point && !state.trigger?.isConnected)) {
+            return;
+        }
+        positionPopover(state.popover, state.trigger, state.point ?? null, state.bounds, state.alignment);
+    };
+    const schedule = () => {
+        if (!pending) {
+            pending = true;
+            frameId = requestAnimationFrame(reposition);
+        }
+    };
+    visual.addEventListener('resize', schedule);
+    visual.addEventListener('scroll', schedule);
+    visualViewportWatch = {
+        stop() {
+            visual.removeEventListener('resize', schedule);
+            visual.removeEventListener('scroll', schedule);
+            if (pending) {
+                cancelAnimationFrame(frameId);
+            }
+        },
+    };
 }
 
 function setTriggerExpanded(trigger, expanded) {
@@ -368,8 +488,24 @@ function finishClose() {
         return;
     }
     open = null;
+    visualViewportWatch?.stop();
+    visualViewportWatch = null;
     setTriggerExpanded(state.trigger, false);
+    if (state.frame) {
+        releaseSheetIds(state);
+    }
     state.onClose?.();
+}
+
+/**
+ * A sheet stays in the DOM while it animates out, and the next menu may open in that time (a row that
+ * opens a nested menu does). The leaving sheet gives up the ids the next one uses, so `aria-controls`
+ * and `aria-labelledby` never resolve to the sheet that is on its way out.
+ */
+function releaseSheetIds({ frame, menu }) {
+    frame.title.removeAttribute('id');
+    frame.element.removeAttribute('aria-labelledby');
+    menu?.removeAttribute('id');
 }
 
 /**
@@ -383,9 +519,10 @@ function finishClose() {
  * @param {boolean} [options.keyboard] - Focus the first row instead of the surface.
  * @param {Element|null} [options.bounds] - Desktop popover stays inside this element.
  * @param {boolean} [options.forcePopover=false] - Use an anchored popover even on mobile.
+ * @param {'auto'|'start'|'end'} [options.alignment='auto'] - Popover inline alignment; see `positionPopover`.
  * @param {() => void} [options.onClose]
  */
-export function openActionMenu({ trigger, sections, title = translate('Message Actions'), subtitle = '', point = null, keyboard = false, bounds = null, forcePopover = false, onClose = null }) {
+export function openActionMenu({ trigger, sections, title = translate('Message Actions'), subtitle = '', point = null, keyboard = false, bounds = null, forcePopover = false, alignment = 'auto', onClose = null }) {
     initialize();
     if (open?.trigger === trigger && !point) {
         closeActionMenu({ restoreFocus: true });
@@ -399,13 +536,13 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
     }
 
     if (isMobileLayout() && !forcePopover) {
-        const frame = ensureSheet();
+        const frame = createSheet();
         frame.title.textContent = title;
         frame.subtitle.textContent = subtitle;
         frame.subtitle.hidden = !subtitle;
         frame.body.replaceChildren(menu);
         hostOverlayLayer(frame.backdrop, frame.element);
-        open = { kind: 'sheet', trigger, menu, keyboard, onClose };
+        open = { kind: 'sheet', frame, trigger, menu, keyboard, onClose };
         setTriggerExpanded(trigger, true);
         frame.controller.open();
         return;
@@ -419,8 +556,9 @@ export function openActionMenu({ trigger, sections, title = translate('Message A
     popover.addEventListener('focusout', handlePopoverFocusOut);
     blockUpstreamDrawerClose(popover);
     hostOverlayLayer(popover);
-    const origin = positionPopover(popover, trigger, point, bounds);
-    open = { kind: 'popover', trigger, menu, popover, keyboard, onClose, point, bounds };
+    const origin = positionPopover(popover, trigger, point, bounds, alignment);
+    open = { kind: 'popover', trigger, menu, popover, keyboard, onClose, point, bounds, alignment };
+    watchVisualViewport();
     setTriggerExpanded(trigger, true);
     // Popovers open with a 200ms fade and a scale from 0.96 to 1, so they grow out of the trigger.
     animateIn(popover, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], {
@@ -446,7 +584,7 @@ export function openPopover({ trigger, content, title = '', titleLabel = null, t
     }
     closeActionMenu({ animate: false, restoreFocus: false });
     if (isMobileLayout()) {
-        const frame = ensureSheet();
+        const frame = createSheet();
         if (titleLabel && titleInput) {
             titleLabel.hidden = true;
             titleInput.setAttribute('aria-labelledby', SHEET_TITLE_ID);
@@ -456,7 +594,7 @@ export function openPopover({ trigger, content, title = '', titleLabel = null, t
         frame.subtitle.hidden = true;
         frame.body.replaceChildren(content);
         hostOverlayLayer(frame.backdrop, frame.element);
-        open = { kind: 'sheet', trigger, keyboard: false, initialFocus, onClose };
+        open = { kind: 'sheet', frame, trigger, keyboard: false, initialFocus, onClose };
         setTriggerExpanded(trigger, true);
         frame.controller.open();
         return { close: () => closeActionMenu({ restoreFocus: true }), get isOpen() { return open?.trigger === trigger; } };
@@ -479,6 +617,7 @@ export function openPopover({ trigger, content, title = '', titleLabel = null, t
     hostOverlayLayer(popover);
     const origin = positionPopover(popover, trigger, null, bounds);
     open = { kind: 'popover', trigger, popover, keyboard: false, custom: true, initialFocus, onClose, bounds };
+    watchVisualViewport();
     setTriggerExpanded(trigger, true);
     animateIn(popover, [{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], {
         duration: MOTION_FAST,
@@ -497,7 +636,7 @@ export function closeActionMenu({ animate = true, restoreFocus = false } = {}) {
         return;
     }
     if (state.kind === 'sheet') {
-        sheet.controller.close({ animate, restoreFocus });
+        state.frame.controller.close({ animate, restoreFocus });
         return;
     }
     const { popover, trigger } = state;
@@ -609,7 +748,7 @@ function initialize() {
             if (!open.trigger?.isConnected) {
                 closeActionMenu({ animate: false });
             } else if (!open.point) {
-                positionPopover(open.popover, open.trigger, null, open.bounds);
+                positionPopover(open.popover, open.trigger, null, open.bounds, open.alignment);
             }
         }
     }, { capture: true, passive: true });

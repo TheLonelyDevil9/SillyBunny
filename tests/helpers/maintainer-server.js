@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import { appendFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 import { fetchBodyOrSkip } from './route-fetch.js';
+import { keepWelcomeClosed } from './welcome-dialog.js';
 
 function auditSettings(titlePath, event) {
     if (!process.env.SILLYBUNNY_SETTINGS_AUDIT) return;
@@ -38,6 +39,8 @@ export async function protectMaintainerServer(page) {
         const payload = readPayload(route.request());
         return route.fulfill({ json: { result: 'ok', version: payload._version + 1 } });
     });
+    // A spec that has no settings route of its own would otherwise meet Welcome on any data root that has not seen it.
+    await keepWelcomeClosed(page.context());
     page.on('response', async response => {
         if (new URL(response.url()).pathname !== '/api/settings/save') return;
         const server = await response.serverAddr().catch(() => null);
@@ -64,6 +67,8 @@ export async function protectMaintainerServer(page) {
     await page.route(/\/api\/stats\/(?:update|recreate)$/, route => route.fulfill({ json: {} }));
     await page.route(/\/api\/(?:characters|groups)\/(?:edit[^/]*|save[^/]*|merge-attributes)$/, route => route.fulfill({ body: 'ok' }));
     await page.route(/\/api\/(?:characters|groups)\/(?:create|delete|rename|duplicate)$/, route => route.abort());
+    // The real route records the chat in entity-last-chat.json on the data root. It answers sendStatus(200).
+    await page.route('**/api/characters/last-chat', route => route.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8', body: 'OK' }));
     await page.route('**/api/presets/save', route => route.fulfill({ json: { name: readPayload(route.request())?.name ?? '' } }));
     await page.route('**/api/presets/delete', route => route.fulfill({ body: 'OK' }));
     await page.route('**/api/presets/restore-defaults', route => route.fulfill({ json: { ok: true, restored: [], failed: [] } }));

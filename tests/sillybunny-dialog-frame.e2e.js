@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { OPEN_ACTION_SHEET } from './helpers/action-sheet.js';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
+import { waitForQuietFrames } from './helpers/quiet-frames.js';
 /* eslint-disable playwright/no-conditional-in-test, playwright/no-conditional-expect -- The viewport matrix switches between floating and sheet assertions. */
 
 // The shared frame in sillybunny-editor/dialog.js: tiers, the AdwDialog sheet condition
@@ -211,6 +213,38 @@ test('a dialog opened from a dialog is pushed as a page with Back and Close', as
     await expect(page.locator('.sb-dialog-host[open]')).toHaveCount(0);
 });
 
+test('each Escape asks the dialog once, also the third, where Chromium closes the modal after the cancel was prevented', async ({ page }) => {
+    await prepare(page, { width: 1440, height: 900 });
+    await page.evaluate(async () => {
+        const { openDialog } = await import('/scripts/sillybunny-editor/dialog.js');
+        window.qaEscapes = 0;
+        openDialog({
+            tier: 'dialog',
+            title: 'Guarded',
+            canClose: (reason) => {
+                if (reason === 'escape') window.qaEscapes += 1;
+                return false;
+            },
+            content: (body) => {
+                const poke = document.createElement('button');
+                poke.id = 'qa-poke';
+                poke.textContent = 'Poke';
+                body.append(poke);
+            },
+        });
+    });
+
+    for (let presses = 1; presses <= 4; presses++) {
+        // A click is the user activation that lets the next Escape be a cancel.
+        await page.locator('#qa-poke').click();
+        await page.keyboard.press('Escape');
+        await expect.poll(() => page.evaluate(() => window.qaEscapes)).toBe(presses);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        expect(await page.evaluate(() => window.qaEscapes)).toBe(presses);
+    }
+    await expect(page.locator('.sb-dialog-host[open]')).toHaveCount(1);
+});
+
 test.describe('while pages slide', () => {
     async function openWithStackedDivider(page) {
         await prepare(page, { width: 1440, height: 900 });
@@ -242,7 +276,10 @@ test.describe('while pages slide', () => {
             await new Promise(resolve => setTimeout(resolve, 1000));
             child.close();
         }
-        const slides = document.getAnimations().filter(animation => animation.effect?.target?.classList.contains('sb-dialog__page'));
+        // The page targets also carry the shade animation on ::before and the height pin holds, so keep only the transform slide.
+        const slides = document.getAnimations().filter(animation => animation.effect?.target?.classList.contains('sb-dialog__page')
+            && !animation.effect.pseudoElement
+            && animation.effect.getKeyframes().some(keyframe => 'transform' in keyframe));
         const surface = document.querySelector('.sb-dialog-host[open] .sb-dialog').getBoundingClientRect();
         // The spring is front-loaded, so find the moment the moving page has covered half of the surface.
         let best = Infinity;
@@ -421,7 +458,7 @@ test('popover sheet swipe closes and content scrolling does not', async ({ page 
         content.innerHTML = '<div style="height: 1800px">Scrollable content</div>';
         window.qaPopover = openPopover({ trigger, content, title: 'Actions' });
     });
-    const sheet = page.locator('.sb-action-sheet');
+    const sheet = page.locator(OPEN_ACTION_SHEET);
     await expect(sheet).toBeVisible();
     await expect(sheet.locator('.sb-action-sheet-title')).not.toBeFocused();
     expect(await sheet.evaluate(node => getComputedStyle(node.querySelector('.sb-action-sheet-title')).boxShadow)).toBe('none');
@@ -1032,4 +1069,170 @@ test.describe('page chains', () => {
             });
         });
     }
+});
+
+test('text inside a Dialog, a Window and an Alert has no text shadow while the theme shadow width is above zero', async ({ page }) => {
+    await prepare(page, { width: 1440, height: 900 });
+    const shadowWidth = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--shadowWidth')));
+    expect(shadowWidth).toBeGreaterThan(0);
+    // The universal rule of style.css gives the page its text shadow, so the check below fails only on a leak.
+    expect(await page.evaluate(() => getComputedStyle(document.body).textShadow)).not.toBe('none');
+
+    for (const tier of ['dialog', 'window', 'alert']) {
+        await page.evaluate(async (opening) => {
+            const { openDialog, openAlert } = await import('/scripts/sillybunny-editor/dialog.js');
+            if (opening === 'alert') {
+                window.qaDialog = openAlert({ heading: 'QA heading', body: 'QA body text.', responses: [{ id: 'cancel', label: 'Cancel' }] });
+                return;
+            }
+            const content = document.createElement('div');
+            content.innerHTML = '<p>Paragraph</p><label>Label <input value="Value"></label><button type="button">Action</button>';
+            window.qaDialog = openDialog({ tier: opening, title: 'QA Dialog', content, responses: { affirmative: { id: 'save', label: 'Save' } } });
+        }, tier);
+        const surface = page.locator('.sb-dialog-host[open] .sb-dialog');
+        await expect(surface).toBeVisible();
+
+        const haloed = await surface.evaluate(node => [node, ...node.querySelectorAll('*')]
+            .filter(element => [...element.childNodes].some(child => child.nodeType === Node.TEXT_NODE && child.textContent.trim()))
+            .filter(element => getComputedStyle(element).textShadow !== 'none')
+            .map(element => `${element.tagName.toLowerCase()}.${[...element.classList].join('.')}`));
+        expect(haloed, `${tier}: elements that still paint a text shadow`).toEqual([]);
+
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.sb-dialog-host')).toHaveCount(0);
+    }
+});
+
+test.describe('the surface shadow while pages slide', () => {
+    const SURFACE = '.sb-dialog-host[open] .sb-dialog';
+
+    async function openParent(page, { reducedMotion = 'no-preference', forcedColors = 'none' } = {}) {
+        await prepare(page, { width: 1440, height: 900 });
+        await page.emulateMedia({ reducedMotion, forcedColors });
+        await page.evaluate(async () => {
+            // The slide only runs when motion is allowed, and the host may start with its own reduced-motion setting on.
+            document.body.classList.remove('reduced-motion');
+            const { openDialog } = await import('/scripts/sillybunny-editor/dialog.js');
+            window.qaDialog = openDialog({ tier: 'dialog', title: 'Parent', content: document.createElement('p') });
+        });
+        await expect(page.locator('.sb-dialog-host[open]')).not.toHaveAttribute('opening');
+        await page.waitForFunction(() => !document.getAnimations().some(animation => animation.effect?.target?.closest?.('.sb-dialog-host')));
+        // The frames of a motion only count once the page paints steadily, as in WebKit after the app is ready.
+        await waitForQuietFrames(page);
+    }
+
+    /**
+     * Pushes a page whose content may grow late, then samples every frame until the dialog is still: whether a page
+     * slide or the height motion runs, and the shadow of the surface.
+     *
+     * The growth is tied to the animations and not to the clock, because a late change only restarts the height motion
+     * when the motion has not passed `LAST_RETARGET_PROGRESS`, and a delayed first frame would move a timer past that:
+     * - `'near-end'` grows the page once the height motion is near its end, so the change starts a new motion that
+     *   outlasts the slide;
+     * - `'after-slide'` grows it once only the height motion is left, so the change must retarget a motion that is
+     *   the only hold of the class.
+     *
+     * `reads` are the layout reads of the pages node after the slide has ended, with the class they ran under.
+     */
+    const pushAndSample = (page, { growAt = [] } = {}) => page.evaluate(({ growAt: triggers, surface }) => new Promise(async (resolve) => {
+        const { openDialog } = await import('/scripts/sillybunny-editor/dialog.js');
+        const node = document.querySelector(surface);
+        const restingShadow = getComputedStyle(node).boxShadow;
+        const block = document.createElement('div');
+        block.style.height = '300px';
+        const pending = [...triggers];
+        const grown = [];
+        let slideHasEnded = false;
+        const reads = [];
+        const readBox = Element.prototype.getBoundingClientRect;
+        Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+            if (slideHasEnded && this.classList.contains('sb-dialog__pages')) reads.push(node.classList.contains('is-paging'));
+            return readBox.call(this);
+        };
+        window.qaChild = openDialog({ title: 'Child', content: block });
+        const samples = [];
+        const sample = () => {
+            const running = document.getAnimations().filter(animation => animation.effect?.target?.closest?.('.sb-dialog-host')
+                && animation.playState === 'running' && Number.isFinite(animation.effect.getComputedTiming().endTime) && animation.effect.getComputedTiming().endTime > 5);
+            const slide = running.some(animation => animation.effect.target.classList.contains('sb-dialog__page') && !animation.effect.pseudoElement);
+            const heightMotion = running.find(animation => animation.effect.target.classList.contains('sb-dialog__pages'));
+            if (samples.some(earlier => earlier.slide) && !slide) slideHasEnded = true;
+            const progress = heightMotion?.effect.getComputedTiming().progress ?? null;
+            const due = { 'near-end': progress >= 0.985 && progress <= 0.999, 'after-slide': slideHasEnded && heightMotion !== undefined };
+            if (pending.length && due[pending[0]]) {
+                grown.push({ trigger: pending.shift(), progress });
+                block.style.height = `${300 + 120 * grown.length}px`;
+            }
+            samples.push({
+                slide,
+                height: heightMotion !== undefined,
+                shadow: getComputedStyle(node).boxShadow,
+                paging: node.classList.contains('is-paging'),
+            });
+            if (samples.length < 15 || running.length) requestAnimationFrame(sample);
+            else {
+                Element.prototype.getBoundingClientRect = readBox;
+                resolve({ restingShadow, samples, grown, reads });
+            }
+        };
+        requestAnimationFrame(sample);
+    }), { growAt, surface: SURFACE });
+
+    test('the surface has no shadow while a page slides and has it back when the slide is over', async ({ page }) => {
+        await openParent(page);
+        const { restingShadow, samples } = await pushAndSample(page);
+
+        expect(restingShadow).not.toBe('none');
+        const moving = samples.filter(sample => sample.slide || sample.height);
+        expect(moving.length, 'frames sampled while a motion runs').toBeGreaterThanOrEqual(1);
+        expect(moving.map(sample => sample.shadow)).toEqual(moving.map(() => 'none'));
+        const resting = samples.filter(sample => !sample.slide && !sample.height).slice(-3);
+        expect(resting.map(sample => sample.shadow)).toEqual(resting.map(() => restingShadow));
+        expect(await page.locator(SURFACE).evaluate(node => node.classList.contains('is-paging'))).toBe(false);
+
+        // The way back is a slide too.
+        await page.evaluate(() => window.qaChild.close());
+        await expect(page.locator(SURFACE)).toHaveClass(/is-paging/);
+        await expect.poll(() => page.locator(SURFACE).evaluate(node => getComputedStyle(node).boxShadow)).toBe('none');
+        await expect.poll(() => page.locator(SURFACE).evaluate(node => getComputedStyle(node).boxShadow), { timeout: 5000 }).toBe(restingShadow);
+    });
+
+    test('a height motion that outlasts the slide keeps the shadow off until it ends', async ({ page }) => {
+        await openParent(page);
+        const { restingShadow, samples, grown } = await pushAndSample(page, { growAt: ['near-end'] });
+
+        // The late growth restarts the height motion after the page has arrived, so the motions overlap and then only one runs.
+        expect(grown, 'the page grew while the height motion was near its end').toHaveLength(1);
+        expect(samples.some(sample => sample.height && !sample.slide)).toBe(true);
+        const moving = samples.filter(sample => sample.slide || sample.height);
+        expect(moving.map(sample => sample.shadow)).toEqual(moving.map(() => 'none'));
+        expect(samples.at(-1).shadow).toBe(restingShadow);
+    });
+
+    test('a late change that retargets the only motion left reads the layout with the shadow still off', async ({ page }) => {
+        await openParent(page);
+        const { samples, grown, reads } = await pushAndSample(page, { growAt: ['near-end', 'after-slide'] });
+
+        expect(grown.map(change => change.trigger)).toEqual(['near-end', 'after-slide']);
+        expect(samples.some(sample => sample.height && !sample.slide)).toBe(true);
+        expect(reads.length, 'layout reads of the pages node after the slide').toBeGreaterThanOrEqual(1);
+        expect(reads).toEqual(reads.map(() => true));
+    });
+
+    test('with reduced motion there is no slide and the class never appears', async ({ page }) => {
+        await openParent(page, { reducedMotion: 'reduce' });
+        const { restingShadow, samples } = await pushAndSample(page);
+
+        expect(samples.filter(sample => sample.paging)).toEqual([]);
+        expect(samples.map(sample => sample.shadow)).toEqual(samples.map(() => restingShadow));
+    });
+
+    test('in forced colours the class still ends with the slide', async ({ page }) => {
+        await openParent(page, { forcedColors: 'active' });
+        const { samples } = await pushAndSample(page);
+
+        expect(samples.some(sample => sample.paging)).toBe(true);
+        expect(samples.at(-1).paging).toBe(false);
+        expect(await page.locator(SURFACE).evaluate(node => node.classList.contains('is-paging'))).toBe(false);
+    });
 });

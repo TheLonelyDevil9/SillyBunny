@@ -90,7 +90,7 @@ describe('Connection Manager dialog adapters', () => {
         const node = root(`<div>Select profiles</div>${choices(7, false)}`);
         const options = adaptProfileDeletion(node);
         const okButton = document.createElement('button');
-        options.onOpen({ okButton });
+        options.onOpening({ okButton });
         expect(okButton.classList.contains('is-destructive')).toBe(true);
         node.querySelector('[value="id-3"]').click();
         expect([...node.querySelectorAll('input[name="exclude"]:checked')].map(input => input.value)).toEqual(['id-3']);

@@ -36,6 +36,8 @@ import {
     updateMessageMetaBadges,
     updateMessageTokenAccounting,
     refreshMessageModelIcons,
+    // SillyBunny: /random leaves a temporary chat through the same seam as every other way into a chat.
+    flushPendingChatSavesForNavigation,
 } from '../script.js';
 import { isMobile, initMovingUI, favsToHotswap } from './RossAscends-mods.js';
 import { normalizeContextRetentionDepth } from './ooc-blocks.js';
@@ -180,6 +182,9 @@ const SILLYBUNNY_PALETTE_BINDINGS = Object.freeze([
     ['border_color', '#border-color-picker', 'border'],
 ]);
 const SB_ACCENT_PROFILE_SEED_VERSION = 2;
+// SillyBunny: settings files below this revision may hold the text colors of a bundled theme from before they were
+// raised to the contrast floor; sillybunny-theme-revisions.js has the revisions and the matching rule.
+const SB_THEME_TEXT_REVISION = 1;
 // Preserve the legacy account-storage key; removing the drawer must not clear existing state.
 export const SB_ACCENT_PROFILES_DRAWER_KEY = 'SBAccentProfilesDrawerExpanded';
 const MAX_SB_ACCENT_PROFILE_NAME_LENGTH = 40;
@@ -2313,7 +2318,8 @@ export async function loadPowerUserSettings(settings, data) {
         // user-selected accent that differs from Dark V's shipped values.
         if (power_user.quote_text_color === 'rgba(198, 193, 151, 1)'
             && power_user.underline_text_color === 'rgba(145, 145, 145, 1)') {
-            power_user.quote_text_color = 'rgba(53, 132, 228, 1)';
+            // SillyBunny: the quote matches the bundled Libadwaita theme.
+            power_user.quote_text_color = 'rgba(129, 208, 255, 1)';
             power_user.underline_text_color = 'rgba(129, 208, 255, 1)';
         }
         saveSettingsDebounced();
@@ -2381,6 +2387,28 @@ export async function loadPowerUserSettings(settings, data) {
         && migratedTheme && migratedTheme.blur_tint_color !== power_user.blur_tint_color) {
         applyThemeColors(migratedTheme);
         saveSettingsDebounced();
+    }
+
+    // SillyBunny: once per settings file, a theme the user selected before its text colors were raised takes the new
+    // colors (and the new Custom CSS, when the saved CSS is the old bundled CSS). The rule is in sillybunny-theme-revisions.js.
+    if (!(Number.isInteger(savedPowerUserSettings.sb_theme_text_revision) && savedPowerUserSettings.sb_theme_text_revision >= SB_THEME_TEXT_REVISION)) {
+        // A failed load leaves the marker unset, so the repair is tried again on the next start.
+        try {
+            const { planThemeTextRepair } = await import('./sillybunny-theme-revisions.js');
+            const repair = planThemeTextRepair({ themeName: power_user.theme, palette: power_user, customCss: power_user.custom_css, themes });
+            if (repair) {
+                // The saved palette fills the keys the repair leaves alone, so applyThemeColors writes them back unchanged.
+                applyThemeColors({ ...power_user, ...repair.text });
+                if (repair.css !== null) {
+                    power_user.custom_css = repair.css;
+                    applyCustomCSS();
+                }
+            }
+            power_user.sb_theme_text_revision = SB_THEME_TEXT_REVISION;
+            saveSettingsDebounced();
+        } catch (error) {
+            console.warn('Could not repair the saved theme text colors', error);
+        }
     }
 
     if (data.movingUIPresets !== undefined) {
@@ -3375,12 +3403,13 @@ async function confirmThemeCssReplace(themeName) {
     return result === POPUP_RESULT.CUSTOM1;
 }
 
+// SillyBunny: exported so Bundled Extras applies an installed theme through the same switch as the theme select.
 /**
  * Switches the UI theme, asking first when its Custom CSS would replace Custom CSS that no theme stores.
  * @param {string} name Theme name
  * @returns {Promise<boolean>} Whether the theme was switched
  */
-async function switchUiTheme(name) {
+export async function switchUiTheme(name) {
     const theme = themes.find(x => x.name == name);
 
     if (!theme || isThemeSwitchPending) {
@@ -3403,6 +3432,25 @@ async function switchUiTheme(name) {
     } finally {
         isThemeSwitchPending = false;
     }
+}
+
+// SillyBunny: Bundled Extras installs a theme file on the server; this adds it to the list the UI shows.
+/**
+ * Adds a theme that another route saved on the server to the theme list and the theme select.
+ * @param {{ name: string }} theme The saved theme.
+ * @returns {boolean} False when the list has a theme of that name already.
+ */
+export function registerUiTheme(theme) {
+    if (themes.some(x => x.name == theme.name)) {
+        return false;
+    }
+
+    themes.push(theme);
+    const option = document.createElement('option');
+    option.value = theme.name;
+    option.innerText = theme.name;
+    $('#themes').append(option);
+    return true;
 }
 
 async function deleteTheme() {
@@ -3805,12 +3853,16 @@ async function doRandomChat(_, tagName) {
         return randomIndex.toString();
     }
 
-    resetSelectedGroup();
     const characterId = getRandomCharacterId();
     if (!characterId) {
         toastr.error('No characters found');
         return;
     }
+    // SillyBunny: the user may decline to leave a temporary chat, and then nothing changes. Nothing asks without a target.
+    if (!await flushPendingChatSavesForNavigation()) {
+        return '';
+    }
+    resetSelectedGroup();
     setCharacterId(characterId);
     setActiveCharacter(characters[characterId]?.avatar);
     setActiveGroup(null);

@@ -18,6 +18,7 @@ import { bindSheetGestures } from './sheet-gestures.js';
 import { OVERLAY_SHEET_QUERY } from './breakpoints.js';
 import { MODAL_ATTRIBUTE, getTopmostDialog, hostOverlayLayer, releaseOverlayLayers } from './overlay-host.js';
 import { FOCUSABLE_SELECTOR, closeChain, coverSurface, findCoveredSurface, registerChainLevel, returnFocusTo, unregisterChainLevel } from './page-chain.js';
+import { installSlideShade } from './slide-shade.js';
 
 /*
  * Shared dialog frame.
@@ -32,6 +33,101 @@ export { getTopmostDialog, hostOverlayLayer, bindSheetGestures };
 /** @type {WeakMap<HTMLDialogElement, { pushPage: (spec: object) => object }>} */
 const frames = new WeakMap();
 let nextId = 0;
+
+/** The dim of the covered page at the end of a push, as a share of the Dialog Backdrop alpha. */
+const SLIDE_DIM = 0.5;
+
+/**
+ * The motions that keep the shadow of a dialog surface off, as `is-paging` (slide-shade.js): its page slides and its
+ * height motion. A late change of a page's height restarts the height motion after the slide has ended, so the class
+ * stays until the last of them is over and the shadow does not return in the middle of a motion.
+ * @type {WeakMap<HTMLElement, Set<object>>}
+ */
+const pagingHolds = new WeakMap();
+
+/**
+ * @param {HTMLElement | null} surface
+ * @returns {() => void} Ends this hold. The surface regains its shadow when no hold is left.
+ */
+function holdPaging(surface) {
+    if (!surface) return () => {};
+    const holds = pagingHolds.get(surface) ?? new Set();
+    pagingHolds.set(surface, holds);
+    const hold = {};
+    holds.add(hold);
+    surface.classList.add('is-paging');
+    return () => {
+        holds.delete(hold);
+        if (!holds.size) surface.classList.remove('is-paging');
+    };
+}
+
+/**
+ * Runs the call that starts a motion with a hold that the motion ends. A start that throws has no end to release the
+ * hold, so it ends here.
+ * @param {HTMLElement | null} surface
+ * @param {(release: () => void) => *} start
+ */
+function holdPagingWhileStarting(surface, start) {
+    const release = holdPaging(surface);
+    try {
+        return start(release);
+    } catch (error) {
+        release();
+        throw error;
+    }
+}
+
+/**
+ * A surface that closes in the middle of a motion keeps the class until it is gone. Without this, the end of that
+ * motion would bring the shadow back on a surface that is fading out. `dispose` ends the hold with all others.
+ * @param {HTMLElement} surface
+ */
+function holdPagingUntilDisposed(surface) {
+    if (pagingHolds.get(surface)?.size) holdPaging(surface);
+}
+
+/** Ends every hold of a surface that is going away, so a motion that never ends cannot keep the class. */
+function clearPaging(surface) {
+    pagingHolds.get(surface)?.clear();
+    surface.classList.remove('is-paging');
+}
+
+/**
+ * Slides a page with the Page Transition Shade. The page and the page it covers have the same layer tone and header
+ * layout, so without the shade the two headers read as one bar with two titles. AdwNavigationView does the same
+ * (adw-shadow-helper.c): the sliding page casts a shadow, and the covered page dims as more of it is covered, to half
+ * the Dialog Backdrop alpha.
+ *
+ * Only the compositor animates: the transform of the page and the opacity of the dim layer, which is the `::before` of
+ * the page (slide-shade.js, `.is-sliding`). The edge shadow is a static `box-shadow` of the class. Animating a
+ * `box-shadow` instead paints the page again on every frame.
+ *
+ * The dialog surface has no shadow of its own while a slide runs (`holdPaging`): the height motion resizes the surface
+ * on every frame, and WebKit paints its blurred shadow again each time, which made slides stall.
+ * @param {HTMLElement} page
+ * @param {[string, string]} transform The transform at the start and at the end of the slide.
+ * @param {[number, number]} dim The share of the dim layer at the start and at the end, from 0 to `SLIDE_DIM`.
+ * @param {{ fill?: FillMode, onEnd?: () => void }} [options]
+ */
+function slidePage(page, transform, dim, { fill = 'none', onEnd = null } = {}) {
+    let dimLayer = null;
+    installSlideShade(page.ownerDocument);
+    page.classList.add('is-sliding');
+    const motion = holdPagingWhileStarting(page.closest('.sb-dialog'), releasePaging => play(page, transform.map(value => ({ transform: value })), {
+        ...SPRING_NAVIGATION,
+        fill,
+        onEnd: () => {
+            dimLayer?.cancel();
+            page.classList.remove('is-sliding');
+            releasePaging();
+            onEnd?.();
+        },
+    }));
+    // A slide that cannot run has already ended, and its class is gone.
+    if (motion) dimLayer = page.animate(dim.map(opacity => ({ opacity })), { ...SPRING_NAVIGATION, fill, pseudoElement: '::before' });
+    return motion;
+}
 
 function element(tag, className = '', text = '') {
     const node = document.createElement(tag);
@@ -90,11 +186,23 @@ export function bindHeaderLayout(header) {
         if (close && end.lastElementChild !== close) end.append(close);
     };
     const sync = () => {
+        // A hidden page has no layout. Measuring it reads zeros, and writing them forces a style update for nothing.
+        // The header is measured again when the page shows, because that changes its size.
+        if (header.closest('[hidden]')) return;
         keepCloseLast();
+        // Every read comes before the first write, because a write to an inline style restyles the page and a read
+        // after it would force that work in the middle of this pass. A new side width resizes the title, which runs
+        // this pass again on the settled layout.
         const sides = [...header.querySelectorAll(sideSelector)];
         const width = Math.max(0, ...sides.map(measuredWidth));
-        header.style.setProperty('--sb-dialog-header-side', `${width}px`);
-        if (!titles || !title) return;
+        const side = `${width}px`;
+        const measured = titles && title ? measureTitle(width) : null;
+        if (header.style.getPropertyValue('--sb-dialog-header-side') !== side) header.style.setProperty('--sb-dialog-header-side', side);
+        if (!measured) return;
+        header.toggleAttribute('data-header-centering-loose', measured.loose);
+        header.toggleAttribute('data-header-stacked', measured.stacked);
+    };
+    const measureTitle = (width) => {
         const start = measuredWidth(header.querySelector(':scope > .sb-dialog__header-start'));
         const end = measuredWidth(header.querySelector(':scope > .sb-dialog__header-end'));
         const controls = measuredWidth(header.querySelector(':scope > .popup-controls'));
@@ -122,8 +230,7 @@ export function bindHeaderLayout(header) {
         // with Cancel, Select All and Close, the CSS moves it to a second row, and the side columns
         // then only need their own width.
         const needsStacking = header.classList.contains('is-selection-mode') && titleWidth > looseCapacity + 1;
-        header.toggleAttribute('data-header-centering-loose', needsLooseCentering || needsStacking);
-        header.toggleAttribute('data-header-stacked', needsStacking);
+        return { loose: needsLooseCentering || needsStacking, stacked: needsStacking };
     };
     sync();
     const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
@@ -423,7 +530,7 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
     const syncHeaderShade = () => header.toggleAttribute('data-scrolled', body.scrollTop > 0);
     body.addEventListener('scroll', syncHeaderShade, { passive: true });
     if (search) {
-        searchToggle = createIconButton(t`Search`, 'magnifying-glass', 'sb-dialog__search-toggle');
+        searchToggle = createIconButton(search.toggleLabel ?? t`Search`, 'magnifying-glass', 'sb-dialog__search-toggle');
         const field = element('label', 'sb-dialog__search');
         field.hidden = Boolean(search.collapsed);
         const entry = element('span', 'sb-dialog__search-entry');
@@ -529,12 +636,16 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
  * Over a framed Popup Dialog or Window it is a page over that Popup, with Back, and with Close when it
  * has no responses. Close closes the whole chain, one level at a time, and stops at a level that refuses.
  *
+ * `search.toggleLabel` is the accessible name and tooltip of the header search button, "Search" by default.
+ * A window with other controls named "Search" gives it a more specific name, for example "Search Help".
+ * `search.label` names the field in the same way.
+ *
  * @param {object} o
  * @param {'dialog'|'window'} [o.tier='dialog']
  * @param {string} o.title
  * @param {string} [o.subtitle]
  * @param {HTMLElement|((body: HTMLElement) => void)} [o.content]
- * @param {{ placeholder?: string, label?: string, debounce?: number, input?: HTMLInputElement, ariaAutocomplete?: string, ariaControls?: string, enterKeyHint?: string, escapeClearsFirst?: boolean, onEscape?: (event: KeyboardEvent) => boolean, onChange: (query: string) => void }|null} [o.search]
+ * @param {{ placeholder?: string, label?: string, toggleLabel?: string, debounce?: number, input?: HTMLInputElement, ariaAutocomplete?: string, ariaControls?: string, enterKeyHint?: string, escapeClearsFirst?: boolean, onEscape?: (event: KeyboardEvent) => boolean, onChange: (query: string) => void }|null} [o.search]
  * @param {((trigger: HTMLElement) => object[])|null} [o.menu] Sections for openActionMenu.
  * @param {string} [o.menuLabel]
  * @param {null|{ cancel?: { label?: string }, affirmative?: { id?: string, label: string, appearance?: 'suggested'|'destructive', enabled?: boolean }, extra?: { id: string, label: string }[] }} [o.responses]
@@ -544,10 +655,14 @@ function createPage({ title, subtitle = '', content = null, search = null, menu 
  * @param {() => HTMLElement|null} [o.initialFocus]
  * @param {string} [o.className] Added to the surface or, when pushed, to the page.
  * @param {'content'|'fill'} [o.size='fill'] Whether the Window body fills the frame.
+ * @param {boolean} [o.swipeToDismiss=true] Whether a phone sheet can be dragged down to close it, or to go back a
+ *     page. When false the sheet has no grab handle and a drag on the sheet or its header does nothing. A frame
+ *     that must not end on a swipe sets this; `canClose` can still refuse 'swipe' to make a drag spring back, but the
+ *     handle then still invites a drag. Only the call that opens the frame sets it, and a call that pushes a page ignores it.
  */
 export function openDialog({
     tier = 'dialog', title, subtitle = '', content = null, search = null, menu = null, menuLabel,
-    responses = null, canClose = null, initialFocus = null, className = '', size = 'fill',
+    responses = null, canClose = null, initialFocus = null, className = '', size = 'fill', swipeToDismiss = true,
 }) {
     const parentHost = getTopmostDialog();
     const parent = parentHost ? frames.get(/** @type {HTMLDialogElement} */ (parentHost)) : null;
@@ -558,6 +673,7 @@ export function openDialog({
     const isPage = Boolean(coveredSurface);
     const frame = createDialogFrame({ tier: tier === 'window' ? 'window' : 'dialog', className, size, page: isPage });
     const { host, scrim, surface, query, isSheet, syncPresentation } = frame;
+    frame.handle.hidden = !swipeToDismiss;
     const pagesNode = element('div', 'sb-dialog__pages');
     surface.append(pagesNode);
     const returnFocus = document.activeElement;
@@ -615,6 +731,7 @@ export function openDialog({
     function complete(response, offset = 0) {
         if (state !== 'open') return;
         state = 'closing';
+        holdPagingUntilDisposed(surface);
         closeActionMenu({ animate: false });
         closePicker({ animate: false, restoreFocus: false });
         releaseOverlayLayers(host);
@@ -652,6 +769,10 @@ export function openDialog({
         unbindGestures();
         unbindKeyboard();
         heightLock?.destroy();
+        pendingSwap = null;
+        stopMotion(pagesNode);
+        releasePins();
+        clearPaging(surface);
         for (const entry of stack.splice(0)) {
             entry.view.destroy();
             entry.resolve({ response });
@@ -668,28 +789,257 @@ export function openDialog({
         finish({ response });
     }
 
+    /*
+     * A swap of pages sizes the pages node from its old height to its new one over the slide. Without this, a
+     * content-sized dialog takes the height of the incoming page in the first frame, and a page that is positioned
+     * over the node is cropped or stretched to that height. While the node is resized, every page that shows keeps
+     * the height it has at rest: a page that follows the node would reflow, and a flex item would shrink.
+     * Swaps in one task, such as closing several pages, share one height motion.
+     *
+     * A pin is an animation that holds the height and `flex-shrink` of a page, not an inline style. Any write to an
+     * inline style restyles the whole document, because the stylesheet has `:has()` rules that depend on the `style`
+     * attribute, while an animation restyles only its own element.
+     */
+    /** @type {Map<HTMLElement, Animation>} */
+    const pinnedPages = new Map();
+
+    /** Pages enter from the inline end and leave toward it, so a right-to-left document mirrors the slide. */
+    function slideOffset() {
+        return getComputedStyle(pagesNode).direction === 'rtl' ? '-100%' : '100%';
+    }
+    let pendingSwap = null;
+
+    function pinPage(page, height) {
+        pinnedPages.get(page)?.cancel();
+        // Where animations cannot run, the height motion does not run either, and nothing needs to hold a height.
+        if (typeof page.animate !== 'function') return;
+        const hold = page.animate({ height: [`${height}px`, `${height}px`], flexShrink: [0, 0] }, { duration: 1, fill: 'both' });
+        hold.persist();
+        pinnedPages.set(page, hold);
+    }
+
+    function releasePins() {
+        for (const hold of pinnedPages.values()) hold.cancel();
+        pinnedPages.clear();
+    }
+
+    function shownPageHeights() {
+        return new Map([...pagesNode.children].filter(page => !page.hidden).map(page => [page, page.getBoundingClientRect().height]));
+    }
+
+    /*
+     * Runs in a microtask after the swap, so the target height includes the content that a caller adds to a
+     * pushed page after push() returns. The slide itself starts in the swap, and the first frame is not painted
+     * before this runs. Content that settles later, such as a block sized by a ResizeObserver, is not in this
+     * measurement: watchIncomingPage follows the target while the motion runs.
+     */
+    function startHeightMotion() {
+        if (!pendingSwap) return;
+        const { from, heights } = pendingSwap;
+        pendingSwap = null;
+        const incoming = topPage()?.view.page;
+        if (state !== 'open' || !incoming?.isConnected) return;
+        const to = pagesNode.getBoundingClientRect().height;
+        retargets = 0;
+        // Style is clean after the measurement above, so the reads of the watcher force nothing. After the pins below,
+        // each one would force a style update of the whole page, because any change of an inline style restyles it.
+        if (getComputedStyle(incoming).flexGrow === '0') watchIncomingPage(incoming);
+        heights.set(incoming, to);
+        for (const [page, height] of heights) {
+            if (page.isConnected && !page.hidden) pinPage(page, height);
+        }
+        // A motion that cannot run has already ended, which stops the watcher.
+        playHeightMotion(from, to);
+    }
+
+    function findHeightAnimation() {
+        return pagesNode.getAnimations().find(animation => animation.effect?.target === pagesNode);
+    }
+
+    /**
+     * @param {number} elapsed Time into the motion to continue from, in ms.
+     * @returns {boolean} Whether the motion is running.
+     */
+    function playHeightMotion(from, to, elapsed = 0) {
+        const running = holdPagingWhileStarting(surface, releasePaging => play(pagesNode, [{ height: `${from}px` }, { height: `${to}px` }], {
+            ...SPRING_NAVIGATION,
+            onEnd: () => {
+                releasePaging();
+                endHeightMotion();
+            },
+        })) !== null;
+        const animation = running && elapsed > 0 ? findHeightAnimation() : null;
+        if (animation) animation.currentTime = elapsed;
+        return running;
+    }
+
+    let stopWatching = null;
+    let retargeting = false;
+    let retargets = 0;
+    /*
+     * A page is followed for at most this many changes of its target per slide. The late changes that are known
+     * come from a block that fits its text once and from a caller that adds content once, so a few leave room for
+     * both. The limit also stops a page whose size never settles, for example one that animates its own height,
+     * from causing a forced layout on every frame for the length of the slide.
+     */
+    const MAX_RETARGETS = 4;
+    /** Above this share of the motion the height that remains is too small for a new start to show. */
+    const LAST_RETARGET_PROGRESS = 0.98;
+
+    function endHeightMotion() {
+        releasePins();
+        if (!retargeting) stopFollowing();
+    }
+
+    /*
+     * Content can change the size of the incoming page after the height motion has measured it: a ResizeObserver
+     * callback sizes a block to its text, or a caller adds rows after an await. The motion would then end at the
+     * old height and the dialog would jump when the pins release. So the header and the body content of the page
+     * are watched until the motion ends, and when one of them has a size other than the one it had at the
+     * measurement, the motion starts again from the height it has reached, toward the height the page has now.
+     * A page that fills a fixed-height window does not depend on its content, so the caller does not watch it.
+     */
+    function watchIncomingPage(incoming) {
+        if (typeof ResizeObserver === 'undefined') return;
+        const body = incoming.querySelector(':scope > .sb-dialog__body');
+        const sizes = new Map();
+        const measure = (node) => {
+            const { width, height } = node.getBoundingClientRect();
+            return { width, height };
+        };
+        const differs = (before, after) => Math.abs(after.width - before.width) >= 0.5 || Math.abs(after.height - before.height) >= 0.5;
+        // The first report of a node is the size it already has. Reading the layout again for it would force a style
+        // update, so a report is judged by its own box and only a size that differs starts the measurement.
+        const reported = (entry) => {
+            const box = entry.borderBoxSize?.[0];
+            return box ? { width: box.inlineSize, height: box.blockSize } : measure(entry.target);
+        };
+        const resizeObserver = new ResizeObserver((entries) => {
+            if (entries.some(entry => sizes.has(entry.target) && differs(sizes.get(entry.target), reported(entry)))) check();
+        });
+        const track = (node) => {
+            if (sizes.has(node)) return;
+            sizes.set(node, measure(node));
+            resizeObserver.observe(node);
+        };
+        const trackContent = () => {
+            track(incoming.querySelector(':scope > .sb-dialog__header'));
+            if (body) [body, ...body.children].forEach(track);
+        };
+        const hasChanged = () => {
+            let changed = false;
+            for (const [node, before] of sizes) {
+                // A node that was removed measures 0 x 0, which is not a change in the size of the page.
+                if (!node.isConnected) {
+                    sizes.delete(node);
+                    resizeObserver.unobserve(node);
+                    continue;
+                }
+                if (differs(before, measure(node))) changed = true;
+            }
+            return changed;
+        };
+        function check() {
+            if (state !== 'open' || !incoming.isConnected || !hasChanged()) return;
+            retargetHeightMotion(incoming);
+            for (const node of sizes.keys()) sizes.set(node, measure(node));
+            if (++retargets >= MAX_RETARGETS) stopFollowing();
+        }
+        const mutationObserver = new MutationObserver(() => {
+            trackContent();
+            check();
+        });
+        if (body) mutationObserver.observe(body, { childList: true });
+        trackContent();
+        stopWatching = () => {
+            resizeObserver.disconnect();
+            mutationObserver.disconnect();
+        };
+    }
+
+    function stopFollowing() {
+        stopWatching?.();
+        stopWatching = null;
+    }
+
+    /*
+     * The motion continues on the timeline it had, with keyframes that give the height that shows now at the time
+     * it has reached, so its end time does not move and a target that did not change leaves it as it was.
+     */
+    function retargetHeightMotion(incoming) {
+        const staying = shownPageHeights();
+        staying.delete(incoming);
+        const current = pagesNode.getBoundingClientRect().height;
+        const animation = findHeightAnimation();
+        const progress = animation?.effect.getComputedTiming().progress ?? 1;
+        const elapsed = Number(animation?.currentTime ?? 0);
+        // Stopping the motion can end the last hold, and the read below would then run with the shadow on.
+        const keepPaging = holdPaging(surface);
+        try {
+            retargeting = true;
+            // Stopping the motion snaps the node to its natural height and releases the pins, which is how the new target is read.
+            stopMotion(pagesNode);
+            retargeting = false;
+            const to = pagesNode.getBoundingClientRect().height;
+            for (const [page, height] of staying) {
+                if (page.isConnected && !page.hidden) pinPage(page, height);
+            }
+            pinPage(incoming, to);
+            const from = (current - to * progress) / (1 - progress);
+            if (progress < LAST_RETARGET_PROGRESS && from >= 0) playHeightMotion(from, to, elapsed);
+            else playHeightMotion(current, to);
+        } finally {
+            retargeting = false;
+            keepPaging();
+        }
+    }
+
+    function swapPages(swap) {
+        if (prefersReducedMotion()) {
+            swap();
+            return;
+        }
+        if (pendingSwap) {
+            for (const [page, height] of shownPageHeights()) {
+                if (!pendingSwap.heights.has(page)) pendingSwap.heights.set(page, height);
+            }
+        } else {
+            pendingSwap = { from: pagesNode.getBoundingClientRect().height, heights: shownPageHeights() };
+            // The heights are read first, because stopping a running height motion snaps the node and its pages to their end state.
+            stopMotion(pagesNode);
+            queueMicrotask(startHeightMotion);
+        }
+        swap();
+    }
+
     function popPage(response, reason = response) {
         const entry = topPage();
         if (!entry || stack.length < 2 || state !== 'open') return false;
         const approved = entry.spec.canClose ? entry.spec.canClose(reason) : true;
         return settle(approved, ok => {
             if (ok === false || topPage() !== entry) return false;
+            const offset = slideOffset();
             stack.pop();
             const previous = topPage();
+            // A pop that stops the slide of the page it removes can end the last hold, and the reads in swapPages would then run with the shadow on.
+            const keepPaging = prefersReducedMotion() ? () => {} : holdPaging(surface);
             stopMotion(entry.view.page);
-            previous.view.page.classList.remove('is-underlay');
-            previous.view.page.hidden = false;
-            previous.view.page.inert = false;
             host.setAttribute('aria-labelledby', previous.view.titleNode.id);
             const leaving = entry.view.page;
-            leaving.inert = true;
-            leaving.classList.add('is-leaving');
+            swapPages(() => {
+                previous.view.page.classList.remove('is-underlay');
+                previous.view.page.hidden = false;
+                previous.view.page.inert = false;
+                leaving.inert = true;
+                leaving.classList.add('is-leaving');
+            });
+            keepPaging();
             const remove = () => {
                 entry.view.destroy();
                 leaving.remove();
             };
             if (prefersReducedMotion()) remove();
-            else play(leaving, [{ transform: 'none' }, { transform: 'translateX(100%)' }], { ...SPRING_NAVIGATION, fill: 'forwards', onEnd: remove });
+            else slidePage(leaving, ['none', `translateX(${offset})`], [SLIDE_DIM, 0], { fill: 'forwards', onEnd: remove });
             (entry.returnFocus?.isConnected ? entry.returnFocus : firstFocusable(previous.view.page))?.focus({ preventScroll: true });
             heightLock?.refresh();
             entry.resolve({ response });
@@ -721,28 +1071,38 @@ export function openDialog({
         const pageClosed = new Promise(done => resolve = done);
         const entry = { view, spec, resolve, returnFocus: nested ? document.activeElement : null };
         const previous = topPage();
+        // Read before the page is mounted: a read after it forces a style update of the whole page while the slide is being set up.
+        const offset = previous ? slideOffset() : null;
         stack.push(entry);
-        pagesNode.append(view.page);
-        heightLock?.refresh();
-        host.setAttribute('aria-labelledby', view.titleNode.id);
-        if (previous) {
+        const mount = () => {
+            pagesNode.append(view.page);
+            if (!previous) return;
             previous.view.page.inert = true;
             previous.view.page.classList.add('is-underlay');
-            const hidePrevious = () => {
-                if (topPage() === previous) return;
-                previous.view.page.hidden = true;
-                previous.view.page.classList.remove('is-underlay');
-            };
-            if (prefersReducedMotion()) hidePrevious();
-            else play(view.page, [{ transform: 'translateX(100%)' }, { transform: 'none' }], { ...SPRING_NAVIGATION, onEnd: hidePrevious });
+        };
+        if (previous) {
             // Callers add header actions and body content after push() returns, so the target is resolved
             // once that synchronous code has run. Resolving it now would see a page that is still empty.
+            // This runs before the height motion starts: focusing needs the page laid out, and the layout is
+            // forced once here instead of again after the motion has written its pins.
             queueMicrotask(() => {
                 if (topPage() !== entry || view.page.contains(document.activeElement)) return;
                 const requested = spec.initialFocus?.();
                 const target = requested?.isConnected ? requested : null;
                 (target ?? (view.search?.isOpen ? view.searchInput : view.searchToggle) ?? firstFocusable(view.body) ?? firstFocusable(view.header))?.focus({ preventScroll: true });
             });
+            swapPages(mount);
+        } else mount();
+        heightLock?.refresh();
+        host.setAttribute('aria-labelledby', view.titleNode.id);
+        if (previous) {
+            const hidePrevious = () => {
+                if (topPage() === previous) return;
+                previous.view.page.hidden = true;
+                previous.view.page.classList.remove('is-underlay');
+            };
+            if (prefersReducedMotion()) hidePrevious();
+            else slidePage(view.page, [`translateX(${offset})`, 'none'], [0, SLIDE_DIM], { onEnd: hidePrevious });
         }
         return { entry, pageClosed };
     }
@@ -800,8 +1160,15 @@ export function openDialog({
     scrim.addEventListener('click', () => {
         if (!isSheet() && !isPage) void requestDismiss('scrim');
     });
+    // Chromium closes a modal again after a cancel that was prevented, from the third Escape on, so one key press can
+    // deliver both events and must ask only once.
+    let escapeAnswered = false;
+    host.addEventListener('keydown', event => {
+        if (event.key === 'Escape') escapeAnswered = false;
+    }, true);
     host.addEventListener('cancel', event => {
         event.preventDefault();
+        escapeAnswered = true;
         const view = topPage()?.view;
         if (view?.search?.isOpen) {
             view.search.close();
@@ -813,6 +1180,7 @@ export function openDialog({
         // Some engines close a modal without a cancel event (repeated Escape); keep it open and ask instead.
         if (state !== 'open') return;
         host.showModal();
+        if (escapeAnswered) return;
         void requestDismiss('escape');
     });
     host.addEventListener('keydown', event => wrapTab(host, event));
@@ -820,7 +1188,7 @@ export function openDialog({
     const unbindGestures = bindSheetGestures({
         surface, scrim, targets: [surface], startSelector: '.sb-dialog__handle, .sb-dialog__header',
         // A page over a sheet keeps the sheet's grab handle, and a swipe goes back one level like Escape.
-        isActive: () => isSheet() || surface.hasAttribute('data-covers-sheet'),
+        isActive: () => swipeToDismiss && (isSheet() || surface.hasAttribute('data-covers-sheet')),
         requestClose: offset => requestDismiss('swipe', offset),
     });
     const unbindKeyboard = bindKeyboardInset(host, { onInsetChange: () => heightLock?.refresh() });

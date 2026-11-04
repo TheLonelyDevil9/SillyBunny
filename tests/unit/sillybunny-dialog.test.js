@@ -75,6 +75,16 @@ describe('openDialog structure', () => {
         await dialog.closed;
     });
 
+    test('names the search toggle Search, or the name the window gives it, in its label and tooltip', () => {
+        const plain = openDialog({ title: 'Plain', search: { onChange() {} } });
+        const named = openDialog({ title: 'Named', search: { toggleLabel: 'Search Help', onChange() {} } });
+
+        expect([plain.searchToggle.getAttribute('aria-label'), plain.searchToggle.title]).toEqual(['Search', 'Search']);
+        expect([named.searchToggle.getAttribute('aria-label'), named.searchToggle.title]).toEqual(['Search Help', 'Search Help']);
+        named.forceClose();
+        plain.forceClose();
+    });
+
     test('header centering uses loose tracks when the title cannot fit beside the controls', () => {
         const header = document.createElement('header');
         header.className = 'sb-dialog__header';
@@ -671,6 +681,35 @@ describe('bottom sheets', () => {
         expect(onButton.defaultPrevented).toBe(false);
     });
 
+    test('a frame that opts out of swipe has no grab handle, and a drag on the sheet or its header does nothing', () => {
+        sheet.matches = true;
+        const canClose = jest.fn(() => true);
+        const dialog = openDialog({ title: 'T', canClose, swipeToDismiss: false });
+        const handle = dialog.surface.querySelector('.sb-dialog__handle');
+        const title = dialog.header.querySelector('.sb-dialog__title');
+
+        expect(handle.hidden).toBe(true);
+        pointer(handle, 'pointerdown', 0, 0);
+        pointer(handle, 'pointerup', 400, 10);
+        pointer(title, 'pointerdown', 0, 0);
+        pointer(title, 'pointerup', 400, 10);
+
+        expect(canClose).not.toHaveBeenCalled();
+        expect(dialog.isOpen).toBe(true);
+    });
+
+    test('a frame closes on a swipe, with its grab handle shown, unless it opts out', async () => {
+        sheet.matches = true;
+        const dialog = openDialog({ title: 'T' });
+        const handle = dialog.surface.querySelector('.sb-dialog__handle');
+
+        expect(handle.hidden).toBe(false);
+        pointer(handle, 'pointerdown', 0, 0);
+        pointer(handle, 'pointerup', 400, 10);
+
+        await expect(dialog.closed).resolves.toEqual({ response: 'close' });
+    });
+
     test('inactive gestures (floating) are ignored', () => {
         const dialog = openDialog({ title: 'T' });
         const handle = dialog.surface.querySelector('.sb-dialog__handle');
@@ -699,6 +738,23 @@ describe('pages', () => {
         dialog.forceClose();
         await dialog.closed;
         expect([page.isOpen, again.isOpen]).toEqual([false, false]);
+    });
+
+    test('closing the frame in the task that pushed a page leaves nothing for the page height to do', async () => {
+        const errors = [];
+        const record = event => errors.push(event.error ?? event.message);
+        window.addEventListener('error', record);
+        const dialog = openDialog({ title: 'Root' });
+        const page = dialog.push({ title: 'Child' });
+
+        dialog.forceClose();
+        await dialog.closed;
+        await Promise.resolve();
+        window.removeEventListener('error', record);
+
+        expect(errors).toEqual([]);
+        expect(page.page.style.height).toBe('');
+        expect(page.page.style.flexShrink).toBe('');
     });
 
     test('an immediate-apply page shows Back and Close; Back pops it and returns focus', async () => {

@@ -11,11 +11,22 @@ import {
 } from './mobile-shell-lifecycle/index.js';
 import { isIOSWebKitPlatform, isLegacyIOSWebKitPlatform } from './mobile-send-button.js';
 import { initializeMobileBottomBar, syncMobileBottomBar } from './sillybunny-mobile-bottom-bar.js';
+import { HOME_STATE_CHANGED_EVENT, initHomeState, isHomeActive } from './sillybunny-home-state.js';
+import { CHAT_MODE_CHANGED_EVENT, getLastChatMode, initChatModeMemory, recordChatMode } from './sillybunny-chat-mode-memory.js';
+import { initBootMarks } from './sillybunny-boot-marks.js';
+import { initSplashPreferences } from './sillybunny-splash-preferences.js';
+import { initRetiredKeys } from './sillybunny-retired-keys.js';
+import { createSplashCharacterRow } from './sillybunny-splash-setting.js';
+import { power_user } from './power-user.js';
+import { accountStorage } from './util/AccountStorage.js';
 import { initializeMessageActions } from './sillybunny-message-actions.js';
 import { initializeToastMotion } from './sillybunny-toast-motion.js';
 import './sillybunny-extension-actions.js';
+// Listens for the chat from the moment the app loads, because a chat can be on screen before Home has ever rendered.
+import './sillybunny-home/greeting-art-boot.js';
 import { initializeColorPickers } from './sillybunny-color-picker.js';
 import { openActionMenu } from './sillybunny-action-menu.js';
+import { isApplePlatform } from './sillybunny-platform.js';
 import { createPresetAutosaveToggle, initializePresetAutosave, refreshPresetProtectionUi } from './sillybunny-preset-autosave.js';
 import { registerSidePanel } from './sillybunny-editor/side-panel.js';
 import { openAlert, openDialog } from './sillybunny-editor/dialog.js';
@@ -48,7 +59,7 @@ import {
 import { escapeRegex } from './util/escape-regex.js';
 import { flashHighlight, showFontAwesomePicker } from './utils.js';
 import { extension_settings } from './extensions.js';
-import { changePanelApiVisibility, characters, displayVersion, flushCharacterSaveDebounced, getOneCharacter, getThumbnailUrl, parseAvatarSource, refreshCsrfToken, select_selected_character, saveSettingsDebounced, this_chid } from '../script.js';
+import { changePanelApiVisibility, characters, displayVersion, flushCharacterSaveDebounced, getCurrentChatId, getOneCharacter, getThumbnailUrl, parseAvatarSource, refreshCsrfToken, select_selected_character, saveSettingsDebounced, this_chid } from '../script.js';
 import { addLanguagesToDropdown, t, translate } from './i18n.js';
 import { syncUserControls } from './user.js';
 import {
@@ -77,6 +88,7 @@ import {
 import { normalizeBackendSettingsRows, normalizeSettingsDetail, normalizeSettingsPresentation } from './sillybunny-settings-presentation.js';
 import { createSubpageStack, SB_SUBPAGE_DURATION, SB_SUBPAGE_STORE_CLASS } from './sillybunny-settings-subpage.js';
 import { SB_SUBPAGE_BUILDERS } from './sillybunny-settings-subpage-descriptors.js';
+import { watchStrayExtensionDrawers } from './sillybunny-settings-stray-drawers.js';
 import { createConnectionsPanel } from './sillybunny-connections-panel.js';
 import { createStatusPage } from './sillybunny-editor/status-page.js';
 import { initializePromptEditor } from './sillybunny-prompt-editor.js';
@@ -84,7 +96,12 @@ import { initializePromptEditor } from './sillybunny-prompt-editor.js';
 import { mountAgentsPanel, getAgentsPanelSearchEntries } from './extensions/in-chat-agents/ui/agent-list.js';
 // SillyBunny: character editor controller
 import { initCharacterEditor } from './sillybunny-character-editor.js';
+import { leaveTemporaryChat } from './sillybunny-temporary-chat.js';
+import { isReservedChatName } from './sillybunny-temporary-chat-state.js';
 import { collectEntitySearchEntries, primeWorldInfoSearchCache } from './sillybunny-search-entities.js';
+import { eventSource, event_types } from './events.js';
+import { registerHelpKeys } from './sillybunny-help/help-keys.js';
+import { openHelp, openKeyboardShortcuts } from './sillybunny-home/windows.js';
 const sbMobileShellLifecycle = createMobileShellLifecycle();
 const sbPresetApiSyncLifecycle = createPresetApiSyncLifecycle();
 const sbSearchRenderRequests = new WeakMap();
@@ -620,7 +637,6 @@ const SB_STORAGE_KEYS = Object.freeze({
     bottomChatSecondaryOpen: 'sb-bottom-chat-secondary-open',
     desktopButtonScale: 'sb-desktop-button-scale',
     mobileButtonScale: 'sb-mobile-button-scale',
-    desktopQuickActions: 'sb-desktop-quick-actions-v2',
     mobileQuickActions: 'sb-mobile-quick-actions-v2',
     mobileQuickActionsLegacy: 'sb-mobile-quick-actions',
     settingsDrawerAutoClose: 'sb-settings-drawer-auto-close',
@@ -630,7 +646,6 @@ const SB_STORAGE_KEYS = Object.freeze({
     topbarIconsOnly: 'sb-topbar-icons-only',
     desktopTopbarIconsOnly: 'sb-desktop-topbar-icons-only',
     mobileTopbarIconsOnly: 'sb-mobile-topbar-icons-only',
-    frontendIcon: 'sb-frontend-icon',
 
     bottomChatBarVisible: 'sb-bottom-chat-bar-visible',
     paperTextureEnabled: 'sb-paper-texture-enabled',
@@ -698,19 +713,19 @@ const SB_SHORTCUT_LABELS = Object.freeze({
 const SB_PANEL_STYLESHEETS = Object.freeze({
     'left:editor': [
         { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
-        { href: 'css/sillybunny-prompt-editor.css?v=20261027a', id: 'deferred-prompt-editor-css' },
+        { href: 'css/sillybunny-prompt-editor.css?v=20261104a', id: 'deferred-prompt-editor-css' },
     ],
     'characters:world-info': [
         { href: 'css/world-info.css?v=20260829a', id: 'deferred-world-info-css' },
         // SillyBunny: the rebuilt World Info shell stays deferred like the Prompt Editor.
         { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
-        { href: 'css/sillybunny-world-info-editor.css?v=20261027a', id: 'deferred-world-info-editor-css' },
+        { href: 'css/sillybunny-world-info-editor.css?v=20261029a', id: 'deferred-world-info-editor-css' },
     ],
     'characters:persona': [
         // SillyBunny: persona editor assets stay deferred like World Info — see docs/ui-migration.md
         { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
         { href: 'css/sillybunny-entity-list.css?v=20261105a', id: 'deferred-entity-list-css' },
-        { href: 'css/sillybunny-persona-editor.css?v=20261026a', id: 'deferred-persona-editor-css' },
+        { href: 'css/sillybunny-persona-editor.css?v=20261029a', id: 'deferred-persona-editor-css' },
         { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
     ],
     'characters:characters': [
@@ -735,21 +750,6 @@ const SB_PANEL_STYLESHEETS = Object.freeze({
         { href: 'css/extensions-panel.css?v=20260425a', id: 'deferred-extensions-panel-css' },
     ],
 });
-const SB_FRONTEND_ICON_DEFAULT = 'pixel';
-const SB_FRONTEND_ICONS = Object.freeze([
-    {
-        id: 'pixel',
-        label: 'Pixel',
-        description: 'Classic square icon.',
-        src: 'img/sillybunny-pixel-logo-og.png',
-    },
-    {
-        id: 'badge',
-        label: 'Badge',
-        description: 'Clean badge icon.',
-        src: 'img/sillybunny-badge.png',
-    },
-]);
 const SB_ACCOUNT_STORAGE_READY_MARKER = '__migrated';
 /**
  * Drawers whose open state is written by their own code rather than by the generic persistence
@@ -1329,9 +1329,6 @@ const SB_MOBILE_DEFAULT_QUICK_ACTIONS = Object.freeze([
     { type: 'tab', shellKey: 'characters', tabId: 'world-info', icon: 'fa-book-atlas', label: 'World Info' },
     { type: 'tab', shellKey: 'left', tabId: 'agents', icon: 'fa-robot', label: 'Agents' },
 ]);
-const SB_DESKTOP_DEFAULT_QUICK_ACTIONS = Object.freeze([
-    { type: 'tab', shellKey: 'characters', tabId: 'world-info', icon: 'fa-book-atlas', label: 'World Info' },
-]);
 // SillyBunny: the optional icons-only top bar does not pool every page into one strip. It expands
 // each section in place into that section's own pages, so Backend, Customize and Characters each
 // keep their anchor with their own pages in the same cluster, and each cluster stays readable as
@@ -1403,11 +1400,8 @@ const sbState = {
     initRetryTimer: 0,
     initRetryCount: 0,
     initObserver: null,
-    landingPageObserver: null,
-    landingPageSyncFrame: 0,
     inlineDrawerAutoClose: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.settingsDrawerAutoClose), false),
     theme: SB_SHELL_THEME,
-    frontendIcon: normalizeFrontendIcon(safeGetItem(SB_STORAGE_KEYS.frontendIcon)),
     surfaceTransparency: normalizeSurfaceTransparency(safeGetItem(SB_STORAGE_KEYS.surfaceTransparency)),
     paperTextureEnabled: normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.paperTextureEnabled), false),
     paperTextureOpacity: normalizePaperTextureOpacity(safeGetItem(SB_STORAGE_KEYS.paperTextureOpacity)),
@@ -1482,7 +1476,6 @@ const sbState = {
         quickActionSection: null,
         quickActionDivider: null,
     },
-    desktopQuickActions: [],
     mobileQuickActions: [],
     chatbar: {
         sidebar: null,
@@ -1547,21 +1540,6 @@ const sbState = {
     },
 };
 
-function normalizeFrontendIcon(iconId) {
-    const normalizedIconId = normalizeText(iconId);
-    return SB_FRONTEND_ICONS.some(icon => icon.id === normalizedIconId) ? normalizedIconId : SB_FRONTEND_ICON_DEFAULT;
-}
-
-function getFrontendIconConfig(iconId = sbState.frontendIcon) {
-    const normalizedIconId = normalizeFrontendIcon(iconId);
-    return SB_FRONTEND_ICONS.find(icon => icon.id === normalizedIconId) || SB_FRONTEND_ICONS[0];
-}
-
-function getFrontendIconSrc(iconId = sbState.frontendIcon, { absolute = true } = {}) {
-    const src = getFrontendIconConfig(iconId).src;
-    return absolute ? `/${src}` : src;
-}
-
 function normalizeTopbarLabelPart(value, fallback = '') {
     const fallbackValue = SB_TOPBAR_LABEL_PART_IDS.has(fallback) ? fallback : '';
     const normalizedValue = normalizeText(value);
@@ -1620,10 +1598,6 @@ function normalizeStoredBoolean(value, fallback = false) {
     }
 
     return fallback;
-}
-
-function getQuickActionState(mode) {
-    return mode === 'desktop' ? sbState.desktopQuickActions : sbState.mobileQuickActions;
 }
 
 function normalizeSurfaceTransparency(value) {
@@ -1749,10 +1723,6 @@ function getDefaultMobileQuickActions() {
     return normalizeMobileQuickActionList(SB_MOBILE_DEFAULT_QUICK_ACTIONS);
 }
 
-function getDefaultDesktopQuickActions() {
-    return normalizeMobileQuickActionList(SB_DESKTOP_DEFAULT_QUICK_ACTIONS);
-}
-
 function migrateLegacyMobileQuickAction(action) {
     if (!action || typeof action !== 'object') {
         return action;
@@ -1806,23 +1776,8 @@ function loadMobileQuickActions() {
     return nextActions;
 }
 
-function loadDesktopQuickActions() {
-    const storedActions = parseMobileQuickActionStorage(safeGetItem(SB_STORAGE_KEYS.desktopQuickActions));
-    if (storedActions) {
-        return storedActions;
-    }
-
-    const nextActions = getDefaultDesktopQuickActions();
-    safeSetItem(SB_STORAGE_KEYS.desktopQuickActions, JSON.stringify(nextActions));
-    return nextActions;
-}
-
 function saveMobileQuickActions() {
     safeSetItem(SB_STORAGE_KEYS.mobileQuickActions, JSON.stringify(sbState.mobileQuickActions));
-}
-
-function saveDesktopQuickActions() {
-    safeSetItem(SB_STORAGE_KEYS.desktopQuickActions, JSON.stringify(sbState.desktopQuickActions));
 }
 
 function getMobileQuickActionKey(action) {
@@ -1845,47 +1800,25 @@ function createMobileQuickActionFromMatch(match) {
     return normalizedMatch;
 }
 
-function setQuickActionsForMode(mode, actions, { persist = true } = {}) {
-    const normalizedActions = normalizeMobileQuickActionList(actions);
-
-    if (mode === 'desktop') {
-        sbState.desktopQuickActions = normalizedActions;
-
-        if (persist) {
-            saveDesktopQuickActions();
-        }
-
-        renderMobileQuickActionSettingsList('desktop');
-        refreshMobileQuickActionSearchResults('desktop');
-        return;
-    }
-
-    sbState.mobileQuickActions = normalizedActions;
+function setMobileQuickActions(actions, { persist = true } = {}) {
+    sbState.mobileQuickActions = normalizeMobileQuickActionList(actions);
 
     if (persist) {
         saveMobileQuickActions();
     }
 
-    renderMobileQuickActionSettingsList('mobile');
-    refreshMobileQuickActionSearchResults('mobile');
+    renderMobileQuickActionSettingsList();
+    refreshMobileQuickActionSearchResults();
     refreshMobileNavQuickActions();
 }
 
-function setMobileQuickActions(actions, options = {}) {
-    setQuickActionsForMode('mobile', actions, options);
-}
-
-function setDesktopQuickActions(actions, options = {}) {
-    setQuickActionsForMode('desktop', actions, options);
-}
-
-function addQuickActionFromMatch(mode, match) {
+function addQuickActionFromMatch(match) {
     const action = createMobileQuickActionFromMatch(match);
     if (!action) {
         return false;
     }
 
-    const currentActions = getQuickActionState(mode);
+    const currentActions = sbState.mobileQuickActions;
     if (currentActions.length >= SB_MOBILE_QUICK_ACTION_LIMIT) {
         return false;
     }
@@ -1895,16 +1828,16 @@ function addQuickActionFromMatch(mode, match) {
         return false;
     }
 
-    setQuickActionsForMode(mode, [...currentActions, action]);
+    setMobileQuickActions([...currentActions, action]);
     return true;
 }
 
-function removeQuickAction(mode, actionKey) {
-    setQuickActionsForMode(mode, getQuickActionState(mode).filter(action => getMobileQuickActionKey(action) !== actionKey));
+function removeQuickAction(actionKey) {
+    setMobileQuickActions(sbState.mobileQuickActions.filter(action => getMobileQuickActionKey(action) !== actionKey));
 }
 
-function setQuickActionIcon(mode, actionKey, iconClass) {
-    setQuickActionsForMode(mode, getQuickActionState(mode).map(action => {
+function setQuickActionIcon(actionKey, iconClass) {
+    setMobileQuickActions(sbState.mobileQuickActions.map(action => {
         if (getMobileQuickActionKey(action) !== actionKey) {
             return action;
         }
@@ -1916,8 +1849,8 @@ function setQuickActionIcon(mode, actionKey, iconClass) {
     }));
 }
 
-async function chooseQuickActionIcon(mode, actionKey) {
-    const action = getQuickActionState(mode).find(action => getMobileQuickActionKey(action) === actionKey);
+async function chooseQuickActionIcon(actionKey) {
+    const action = sbState.mobileQuickActions.find(action => getMobileQuickActionKey(action) === actionKey);
     const normalizedAction = normalizeMobileQuickAction(action);
 
     if (!normalizedAction || normalizedAction.type !== 'custom') {
@@ -1929,15 +1862,11 @@ async function chooseQuickActionIcon(mode, actionKey) {
         return;
     }
 
-    setQuickActionIcon(mode, actionKey, iconClass);
+    setQuickActionIcon(actionKey, iconClass);
 }
 
 function resetMobileQuickActions() {
     setMobileQuickActions(getDefaultMobileQuickActions());
-}
-
-function resetDesktopQuickActions() {
-    setDesktopQuickActions(getDefaultDesktopQuickActions());
 }
 
 function normalizeTopbarScale(value) {
@@ -1987,7 +1916,6 @@ function restorePersistedTopbarState() {
     sbState.bottomBarScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.bottomBarScale));
     sbState.desktopButtonScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.desktopButtonScale));
     sbState.mobileButtonScale = normalizeTopbarScale(safeGetItem(SB_STORAGE_KEYS.mobileButtonScale));
-    sbState.frontendIcon = normalizeFrontendIcon(safeGetItem(SB_STORAGE_KEYS.frontendIcon));
     sbState.topbarLabel.desktopParts = safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts) === null
         ? ['char']
         : normalizeTopbarLabelParts(safeGetItem(SB_STORAGE_KEYS.topbarLabelDesktopParts), []);
@@ -2001,7 +1929,6 @@ function restorePersistedTopbarState() {
     sbState.topbarIconsOnly.desktop = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.desktopTopbarIconsOnly), sbState.topbarIconsOnly.desktop);
     sbState.topbarIconsOnly.mobile = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.mobileTopbarIconsOnly), sbState.topbarIconsOnly.mobile);
     sbState.bottomChatBar.visible = normalizeStoredBoolean(safeGetItem(SB_STORAGE_KEYS.bottomChatBarVisible), sbState.bottomChatBar.visible);
-    sbState.desktopQuickActions = loadDesktopQuickActions();
     sbState.mobileQuickActions = loadMobileQuickActions();
 }
 
@@ -3495,42 +3422,6 @@ function applyShellTheme() {
     document.documentElement.dataset.sbTheme = SB_SHELL_THEME;
 }
 
-function applyFrontendIcon(iconId = sbState.frontendIcon) {
-    const normalizedIconId = normalizeFrontendIcon(iconId);
-    const iconController = window.SillyBunnyFrontendIcon;
-
-    if (iconController?.apply) {
-        iconController.apply(normalizedIconId);
-        return;
-    }
-
-    const iconSrc = getFrontendIconSrc(normalizedIconId);
-
-    document.documentElement.dataset.sbFrontendIcon = normalizedIconId;
-
-    for (const image of document.querySelectorAll('img[data-sb-frontend-icon]')) {
-        image.setAttribute('src', iconSrc);
-    }
-
-    for (const link of document.querySelectorAll('link[rel~="icon"]')) {
-        link.setAttribute('href', iconSrc);
-        link.setAttribute('type', 'image/png');
-    }
-}
-
-function setFrontendIconPreference(iconId, { persist = true } = {}) {
-    const nextIconId = normalizeFrontendIcon(iconId);
-
-    sbState.frontendIcon = nextIconId;
-
-    if (persist) {
-        safeSetItem(SB_STORAGE_KEYS.frontendIcon, nextIconId);
-    }
-
-    applyFrontendIcon(nextIconId);
-    updateThemePickerUi();
-}
-
 function setSurfaceTransparency(value, { persist = true } = {}) {
     const nextTransparency = normalizeSurfaceTransparency(value);
     const surfaceOpacity = Math.max(0, 1 - (nextTransparency / 100));
@@ -3908,6 +3799,10 @@ function getTopBarCharacterLabel(context = getSillyTavernContext()) {
 }
 
 function getDefaultTopBarLabel(context = getSillyTavernContext()) {
+    if (isHomeActive()) {
+        return t`Home`;
+    }
+
     return getTopBarCharacterLabel(context) || SB_IDLE_BRAND_LABEL;
 }
 
@@ -4041,15 +3936,21 @@ function getTopBarLabelPartText(partId, context = getSillyTavernContext()) {
     }
 }
 
+function recordRoleplayIfChatShown() {
+    if (getCurrentChatId() !== undefined) {
+        recordChatMode('roleplay');
+    }
+}
+
 function returnToChatSurface() {
     // Close every overlay surface without touching the active chat itself.
     window.dispatchEvent(new CustomEvent('sb:close-conversation-workspace'));
+    recordRoleplayIfChatShown();
     closeShell('left');
     closeShell('right');
     closeCharacterPanel();
     closeMobileNav();
     closeMobileChatTools();
-    queueLandingPageStateSync();
 }
 
 function bindTopBarTitle(title) {
@@ -4895,9 +4796,19 @@ function formatChatTokenEstimate(value) {
     return `~${tokens} tokens`;
 }
 
+/**
+ * A temporary chat has no file; its stand-in id is internal, so the chat bar shows a label instead.
+ * @param {string} chatName Chat id or file name
+ * @returns {string} Text to show for it
+ */
+function describeChatName(chatName) {
+    return isReservedChatName(chatName) ? t`Temporary Chat` : chatName;
+}
+
 function formatChatSelectorLabel(fileName, tokenEstimate = 0) {
     const tokenLabel = formatChatTokenEstimate(tokenEstimate);
-    return tokenLabel ? `${fileName} (${tokenLabel})` : fileName;
+    const displayName = describeChatName(fileName);
+    return tokenLabel ? `${displayName} (${tokenLabel})` : displayName;
 }
 
 function normalizeChatInfo(chatInfo) {
@@ -5374,7 +5285,7 @@ function populateChatSelector(select, chatFiles, chatContext, placeholder) {
     }
 
     if (currentValue && !uniqueChats.some(chat => chat.fileName === currentValue)) {
-        const option = createElement('option', { text: currentValue });
+        const option = createElement('option', { text: describeChatName(currentValue) });
         option.value = currentValue;
         option.selected = true;
         select.appendChild(option);
@@ -5396,7 +5307,7 @@ function createChatFileButton(chatFile, currentChatId, onSelect, { compact = fal
     button.classList.toggle('is-current', chatFile.fileName === currentChatId);
     button.innerHTML = `
         <div class="sb-chat-file-head">
-            <strong>${chatFile.fileName}</strong>
+            <strong>${describeChatName(chatFile.fileName)}</strong>
             <small>${dateLabel || ''}</small>
         </div>
         <span class="sb-chat-file-preview">${chatFile.preview}</span>
@@ -7648,6 +7559,7 @@ function setCharacterShellMode(mode) {
         }));
     } else {
         window.dispatchEvent(new CustomEvent('sb:close-conversation-workspace'));
+        recordRoleplayIfChatShown();
     }
 
     syncCharacterModeToggle();
@@ -8071,7 +7983,7 @@ function preloadPanelStylesheets(shellKey, tabId = null) {
 }
 
 function isLandingPageVisible() {
-    return isActuallyVisible(document.querySelector('.welcomePanel'));
+    return isHomeActive();
 }
 
 function syncHomeButtonState() {
@@ -8080,7 +7992,7 @@ function syncHomeButtonState() {
         return;
     }
 
-    const isHomeVisible = isLandingPageVisible();
+    const isHomeVisible = isHomeActive();
     setButtonPressed(homeButton, isHomeVisible);
     homeButton.classList.toggle('is-current', isHomeVisible);
 
@@ -8091,41 +8003,33 @@ function syncHomeButtonState() {
     }
 }
 
-function queueLandingPageStateSync() {
-    if (sbState.landingPageSyncFrame) {
+function handleHomeStateChanged() {
+    syncHomeButtonState();
+    updateTopBarBrand();
+
+    if (!isHomeActive()) {
         return;
     }
 
-    sbState.landingPageSyncFrame = window.requestAnimationFrame(() => {
-        sbState.landingPageSyncFrame = 0;
-        syncHomeButtonState();
-    });
+    closeMobileChatTools();
+    const composer = document.getElementById('form_sheld');
+    if (composer?.contains(document.activeElement)) {
+        document.activeElement.blur();
+    }
 }
 
-function bindLandingPageObserver() {
-    const chatRoot = document.getElementById('chat');
-    if (!(chatRoot instanceof HTMLElement)) {
-        return;
-    }
-
-    sbState.landingPageObserver?.disconnect();
-
-    const observer = new MutationObserver(() => {
-        queueLandingPageStateSync();
-    });
-
-    observer.observe(chatRoot, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style', 'hidden'],
-    });
-
-    sbState.landingPageObserver = observer;
-    queueLandingPageStateSync();
+function bindHomeState() {
+    document.addEventListener(HOME_STATE_CHANGED_EVENT, handleHomeStateChanged);
+    initHomeState();
+    syncHomeButtonState();
 }
 
 async function returnToLandingPage() {
+    // A temporary chat asks before anything closes, so Cancel leaves the page as it was.
+    if (!await leaveTemporaryChat()) {
+        return;
+    }
+
     window.dispatchEvent(new CustomEvent('sb:close-conversation-workspace'));
     closeShell('left');
     closeShell('right');
@@ -8134,7 +8038,6 @@ async function returnToLandingPage() {
     closeMobileChatTools();
 
     if (isLandingPageVisible()) {
-        queueLandingPageStateSync();
         document.getElementById('chat')?.scrollTo({
             top: 0,
             behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
@@ -8145,13 +8048,14 @@ async function returnToLandingPage() {
     const context = getSillyTavernContext();
 
     if (typeof context?.closeCurrentChat === 'function') {
-        await context.closeCurrentChat();
-        queueLandingPageStateSync();
+        // A chat that stays open after Conversation closed is a Roleplay chat.
+        if (!await context.closeCurrentChat()) {
+            recordRoleplayIfChatShown();
+        }
         return;
     }
 
     document.getElementById('option_close_chat')?.click();
-    queueLandingPageStateSync();
 }
 
 function syncProxyButtonState(proxyButton, sourceIcon) {
@@ -8563,7 +8467,7 @@ function buildTopBar() {
     updateShortcutButton('slot5');
     updateShortcutButton('slot6');
     syncTopbarLayoutState();
-    queueLandingPageStateSync();
+    syncHomeButtonState();
     scheduleCharacterToggleGhostSync();
     queueTopbarPageStateSync();
 }
@@ -11118,7 +11022,7 @@ function createMobileQuickActionIconElement(iconClass) {
     });
 }
 
-function createMobileQuickActionIconControl(action, actionKey, mode = 'mobile') {
+function createMobileQuickActionIconControl(action, actionKey) {
     const normalizedAction = normalizeMobileQuickAction(action);
     const iconClass = normalizedAction?.icon || SB_MOBILE_QUICK_ACTION_ICON_FALLBACK;
 
@@ -11133,7 +11037,7 @@ function createMobileQuickActionIconControl(action, actionKey, mode = 'mobile') 
         });
         button.appendChild(createMobileQuickActionIconElement(iconClass));
         button.addEventListener('click', () => {
-            void chooseQuickActionIcon(mode, actionKey);
+            void chooseQuickActionIcon(actionKey);
         });
         return button;
     }
@@ -11149,39 +11053,36 @@ function createMobileQuickActionIconControl(action, actionKey, mode = 'mobile') 
     return preview;
 }
 
-function updateMobileQuickActionSettingsStatus(mode = 'mobile') {
-    const currentActions = getQuickActionState(mode);
-    const status = document.getElementById(`sb-${mode}-quick-action-status`);
+function updateMobileQuickActionSettingsStatus() {
+    const currentActions = sbState.mobileQuickActions;
+    const status = document.getElementById('sb-mobile-quick-action-status');
     if (status instanceof HTMLElement) {
-        status.textContent = mode === 'desktop'
-            ? `${currentActions.length}/${SB_MOBILE_QUICK_ACTION_LIMIT} selected. This list controls the desktop side rail shortcuts.`
-            : `${currentActions.length}/${SB_MOBILE_QUICK_ACTION_LIMIT} selected. This list replaces the mobile quick shortcuts.`;
+        status.textContent = `${currentActions.length}/${SB_MOBILE_QUICK_ACTION_LIMIT} selected. This list replaces the mobile quick shortcuts.`;
     }
 
-    const resetButton = document.getElementById(`sb-${mode}-quick-action-reset`);
+    const resetButton = document.getElementById('sb-mobile-quick-action-reset');
     if (resetButton instanceof HTMLButtonElement) {
         const currentKeys = currentActions.map(getMobileQuickActionKey);
-        const defaultKeys = (mode === 'desktop' ? getDefaultDesktopQuickActions() : getDefaultMobileQuickActions()).map(getMobileQuickActionKey);
+        const defaultKeys = getDefaultMobileQuickActions().map(getMobileQuickActionKey);
         resetButton.disabled = currentKeys.length === defaultKeys.length
             && currentKeys.every((key, index) => key === defaultKeys[index]);
     }
 }
 
-function refreshMobileQuickActionSearchResults(mode = 'mobile') {
-    const searchInput = document.getElementById(`sb-${mode}-quick-action-search`);
-    const results = document.getElementById(`sb-${mode}-quick-action-results`);
+function refreshMobileQuickActionSearchResults() {
+    const searchInput = document.getElementById('sb-mobile-quick-action-search');
+    const results = document.getElementById('sb-mobile-quick-action-results');
 
     if (searchInput instanceof HTMLInputElement && results instanceof HTMLElement) {
-        renderMobileQuickActionResults(searchInput.value, results, mode);
+        renderMobileQuickActionResults(searchInput.value, results);
     }
 }
 
-async function renderMobileQuickActionResults(query, resultsElement, mode = 'mobile') {
+async function renderMobileQuickActionResults(query, resultsElement) {
     if (!(resultsElement instanceof HTMLElement)) {
         return;
     }
 
-    const modeLabel = mode === 'desktop' ? 'desktop' : 'mobile';
     const request = Symbol();
     sbSearchRenderRequests.set(resultsElement, request);
 
@@ -11207,7 +11108,7 @@ async function renderMobileQuickActionResults(query, resultsElement, mode = 'mob
         return;
     }
 
-    const currentActions = getQuickActionState(mode);
+    const currentActions = sbState.mobileQuickActions;
     const currentKeys = new Set(currentActions.map(getMobileQuickActionKey));
     for (const match of matches) {
         const action = createMobileQuickActionFromMatch(match);
@@ -11231,13 +11132,13 @@ async function renderMobileQuickActionResults(query, resultsElement, mode = 'mob
             attrs: {
                 type: 'button',
                 'aria-label': isAdded
-                    ? `${action.label} is already in ${modeLabel} Quick Actions`
-                    : `Add ${action.label} to ${modeLabel} Quick Actions`,
+                    ? `${action.label} is already in mobile Quick Actions`
+                    : `Add ${action.label} to mobile Quick Actions`,
             },
         });
 
         button.disabled = isAdded || isFull;
-        button.addEventListener('click', () => addQuickActionFromMatch(mode, match));
+        button.addEventListener('click', () => addQuickActionFromMatch(match));
 
         copy.append(title);
         // SillyBunny: synthetic settings destinations carry help independently of mounted controls.
@@ -11248,23 +11149,22 @@ async function renderMobileQuickActionResults(query, resultsElement, mode = 'mob
     }
 }
 
-function renderMobileQuickActionSettingsList(mode = 'mobile') {
-    updateMobileQuickActionSettingsStatus(mode);
+function renderMobileQuickActionSettingsList() {
+    updateMobileQuickActionSettingsStatus();
 
-    const list = document.getElementById(`sb-${mode}-quick-action-list`);
+    const list = document.getElementById('sb-mobile-quick-action-list');
     if (!(list instanceof HTMLElement)) {
         return;
     }
 
-    const modeLabel = mode === 'desktop' ? 'desktop' : 'mobile';
-    const currentActions = getQuickActionState(mode);
+    const currentActions = sbState.mobileQuickActions;
 
     list.replaceChildren();
 
     if (!currentActions.length) {
         list.appendChild(createElement('div', {
             className: 'sb-mobile-quick-action-empty',
-            text: `No ${modeLabel} Quick Actions selected. Add one from search or reset to defaults.`,
+            text: 'No mobile Quick Actions selected. Add one from search or reset to defaults.',
         }));
         return;
     }
@@ -11276,17 +11176,17 @@ function renderMobileQuickActionSettingsList(mode = 'mobile') {
         const title = createElement('strong', { text: action.label });
         const detail = createElement('small', { text: getMobileQuickActionContextLabel(action) });
         const controls = createElement('span', { className: 'sb-mobile-quick-action-controls' });
-        const iconControl = createMobileQuickActionIconControl(action, actionKey, mode);
+        const iconControl = createMobileQuickActionIconControl(action, actionKey);
         const removeButton = createElement('button', {
             className: 'menu_button sb-mobile-quick-action-remove',
             text: 'Remove',
             attrs: {
                 type: 'button',
-                'aria-label': `Remove ${action.label} from ${modeLabel} Quick Actions`,
+                'aria-label': `Remove ${action.label} from mobile Quick Actions`,
             },
         });
 
-        removeButton.addEventListener('click', () => removeQuickAction(mode, actionKey));
+        removeButton.addEventListener('click', () => removeQuickAction(actionKey));
 
         copy.append(title, detail);
         controls.append(iconControl, removeButton);
@@ -11295,24 +11195,19 @@ function renderMobileQuickActionSettingsList(mode = 'mobile') {
     }
 }
 
-function createMobileQuickActionSettingsGroup(mode = 'mobile') {
-    const isDesktop = mode === 'desktop';
-    const modeTitle = isDesktop ? 'Desktop' : 'Mobile';
-    const modeLabel = isDesktop ? 'desktop' : 'mobile';
+function createMobileQuickActionSettingsGroup() {
     const group = createElement('section', {
-        className: `sb-theme-slider-group sb-mobile-quick-actions-group sb-${mode}-quick-actions-group`,
+        className: 'sb-theme-slider-group sb-mobile-quick-actions-group',
     });
     const header = createElement('div', { className: 'sb-mobile-quick-action-header' });
     const heading = createElement('div', { className: 'sb-mobile-quick-action-heading' });
-    const title = createElement('strong', { text: `${modeTitle} Quick Actions` });
+    const title = createElement('strong', { text: 'Mobile Quick Actions' });
     const description = createElement('p', {
         className: 'sb-theme-slider-caption',
-        text: isDesktop
-            ? 'Choose the shortcuts shown below Customize in the desktop side rail. Defaults can be removed or restored.'
-            : 'Choose the shortcuts shown in the mobile quick drawer. Defaults can be removed or restored.',
+        text: 'Choose the shortcuts shown in the mobile quick drawer. Defaults can be removed or restored.',
     });
     const resetButton = createElement('button', {
-        id: `sb-${mode}-quick-action-reset`,
+        id: 'sb-mobile-quick-action-reset',
         className: 'menu_button sb-mobile-quick-action-reset',
         text: 'Reset to defaults',
         attrs: {
@@ -11321,42 +11216,42 @@ function createMobileQuickActionSettingsGroup(mode = 'mobile') {
     });
 
     const searchInput = createElement('input', {
-        id: `sb-${mode}-quick-action-search`,
+        id: 'sb-mobile-quick-action-search',
         className: 'text_pole sb-mobile-quick-action-search',
         attrs: {
             type: 'search',
             placeholder: 'Search settings or extensions...',
             autocomplete: 'off',
-            'aria-label': `Search settings and extensions to add as ${modeLabel} Quick Actions`,
+            'aria-label': 'Search settings and extensions to add as mobile Quick Actions',
         },
     });
     const results = createElement('div', {
-        id: `sb-${mode}-quick-action-results`,
+        id: 'sb-mobile-quick-action-results',
         className: 'sb-mobile-quick-action-results',
     });
     const list = createElement('div', {
-        id: `sb-${mode}-quick-action-list`,
+        id: 'sb-mobile-quick-action-list',
         className: 'sb-mobile-quick-action-list',
     });
     const status = createElement('p', {
-        id: `sb-${mode}-quick-action-status`,
+        id: 'sb-mobile-quick-action-status',
         className: 'sb-theme-slider-caption',
     });
 
     heading.append(title, description);
     header.append(heading, resetButton);
 
-    resetButton.addEventListener('click', isDesktop ? resetDesktopQuickActions : resetMobileQuickActions);
+    resetButton.addEventListener('click', resetMobileQuickActions);
 
     searchInput.addEventListener('input', event => {
         const input = event.currentTarget;
-        renderMobileQuickActionResults(input instanceof HTMLInputElement ? input.value : '', results, mode);
+        renderMobileQuickActionResults(input instanceof HTMLInputElement ? input.value : '', results);
     });
 
     group.append(header, searchInput, results, list, status);
-    renderMobileQuickActionResults('', results, mode);
+    renderMobileQuickActionResults('', results);
 
-    window.requestAnimationFrame(() => renderMobileQuickActionSettingsList(mode));
+    window.requestAnimationFrame(() => renderMobileQuickActionSettingsList());
     return group;
 }
 
@@ -11620,29 +11515,18 @@ function createPaperTextureSettingsGroup() {
     return group;
 }
 
-function createFrontendIconSettingsGroup() {
-    const group = createElement('section', {
-        className: 'ds-row sb-interface-settings-group sb-frontend-icon-group',
-    });
-    const header = createElement('div', { className: 'ds-row-text' });
-    const title = createElement('label', { className: 'ds-row-label', text: 'Frontend Icon', attrs: { for: 'sb-frontend-icon-select' } });
-    const description = createElement('small', {
-        className: 'ds-row-subtitle',
-        text: 'Choose which SillyBunny icon appears in the app chrome, splash screen, and Home panel.',
-    });
-    const suffix = createElement('div', { className: 'ds-row-suffix' });
-    const select = createElement('select', { id: 'sb-frontend-icon-select', className: 'ds-control-flex text_pole' });
+let splashPreferences = null;
 
-    header.append(title, description);
-
-    for (const icon of SB_FRONTEND_ICONS) {
-        select.appendChild(createElement('option', { text: icon.label, attrs: { value: icon.id } }));
-    }
-    select.value = sbState.frontendIcon;
-    select.addEventListener('change', () => setFrontendIconPreference(select.value));
-    suffix.appendChild(select);
-    group.append(header, suffix);
-    return group;
+/** The first call starts listening for settings events, so the drawer and the startup share one instance. */
+function getSplashPreferences() {
+    splashPreferences ??= initSplashPreferences({
+        eventSource,
+        eventTypes: event_types,
+        accountStorage,
+        storage: window.localStorage,
+        readReducedMotion: () => power_user.reduced_motion,
+    });
+    return splashPreferences;
 }
 
 function updateShortcutButton(side) {
@@ -11830,19 +11714,18 @@ function injectThemePicker() {
     const desktopBottomChatBarSettingsGroup = createBottomChatBarSettingsGroup('desktop');
     const mobileBottomChatBarSettingsGroup = createBottomChatBarSettingsGroup('mobile');
     const paperTextureSettingsGroup = createPaperTextureSettingsGroup();
-    const frontendIconSettingsGroup = createFrontendIconSettingsGroup();
+    const splashCharacterRow = createSplashCharacterRow(getSplashPreferences());
     const shortcutSettingsGroup = createShortcutSettingsGroup();
     const desktopGuidedGenerationsBarSettingsGroup = createGuidedGenerationsBarSettingsGroup('desktop');
     const mobileGuidedGenerationsBarSettingsGroup = createGuidedGenerationsBarSettingsGroup('mobile');
-    const desktopQuickActionSettingsGroup = createMobileQuickActionSettingsGroup('desktop');
     const mobileQuickActionSettingsGroup = createMobileQuickActionSettingsGroup();
     const desktopSettingsOutlet = document.getElementById('sb-desktop-settings-outlet');
     const mobileSettingsOutlet = document.getElementById('sb-mobile-settings-outlet');
     const interfaceSettingsGroup = createThemeSettingsDrawer({
         id: 'sb-interface-drawer',
         title: 'Interface',
-        description: 'Change the app icon and bottom chat bar size.',
-        content: [frontendIconSettingsGroup, surfaceSliderGroup, bottomBarSliderGroup],
+        description: 'Choose the splash character and adjust background visibility and the bottom bar size.',
+        content: [splashCharacterRow.row, surfaceSliderGroup, bottomBarSliderGroup],
     });
 
     getMessageStyleSelect()?.addEventListener('change', updateThemePickerUi);
@@ -11856,7 +11739,6 @@ function injectThemePicker() {
             desktopCompactModeSettingsGroup,
             desktopBottomChatBarSettingsGroup,
             desktopGuidedGenerationsBarSettingsGroup,
-            desktopQuickActionSettingsGroup,
         );
     }
 
@@ -11882,7 +11764,6 @@ function injectThemePicker() {
             desktopCompactModeSettingsGroup,
             desktopBottomChatBarSettingsGroup,
             desktopGuidedGenerationsBarSettingsGroup,
-            desktopQuickActionSettingsGroup,
         );
     }
 
@@ -11924,11 +11805,6 @@ function updateThemePickerUi() {
     const paperTextureEnabledInput = document.getElementById('sb-paper-texture-enabled-input');
     const paperTextureOpacityInput = document.getElementById('sb-paper-texture-opacity-input');
     const paperTextureOpacityValue = document.getElementById('sb-paper-texture-opacity-value');
-
-    const frontendIconSelect = document.getElementById('sb-frontend-icon-select');
-    if (frontendIconSelect instanceof HTMLSelectElement) {
-        frontendIconSelect.value = sbState.frontendIcon;
-    }
 
     if (sliderInput instanceof HTMLInputElement) {
         sliderInput.min = String(SB_SURFACE_TRANSPARENCY.min);
@@ -12145,7 +12021,7 @@ function createSearchIndex(tabState, { includeThemeCard = false } = {}) {
         '.sb-legacy-search-hidden',
         // Unwritten placeholder copy is not a setting.
         SB_SEARCH_PLACEHOLDER_SELECTOR,
-        ...(includeThemeCard ? ['.sb-mobile-quick-actions-group', '.sb-desktop-quick-actions-group'] : ['.sb-theme-card']),
+        ...(includeThemeCard ? ['.sb-mobile-quick-actions-group'] : ['.sb-theme-card']),
     ].join(', ');
     const { sections: subpageSections, headings: subpageHeadings } = getSubpageSearchRoots(searchRoot);
     const searchRoots = [searchRoot, ...subpageHeadings, ...subpageSections.keys()]
@@ -13129,6 +13005,10 @@ function buildShell(shellKey) {
         // third-party drawers and for the drawer-state code that looks the emptied section up.
         originalContent.classList.add('sb-legacy-settings-remainder');
         shellRoot.appendChild(originalContent);
+        watchStrayExtensionDrawers(
+            document.getElementById('user-settings-block-content'),
+            () => document.getElementById('extensions_settings2'),
+        );
 
         // Backgrounds is its own top-level drawer outside the settings block, so it is appended
         // separately rather than being part of the split.
@@ -14504,7 +14384,7 @@ async function refreshBottomChatSelect() {
     // Add placeholder option showing the current chat
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = currentChatName || 'No chat selected';
+    placeholder.textContent = describeChatName(currentChatName) || 'No chat selected';
     placeholder.selected = true;
     chatSelect.appendChild(placeholder);
 
@@ -14531,7 +14411,7 @@ async function refreshBottomChatSelect() {
         if (!chatNames.includes(currentChatName)) {
             const fallback = document.createElement('option');
             fallback.value = '';
-            fallback.textContent = currentChatName || 'No chat selected';
+            fallback.textContent = describeChatName(currentChatName) || 'No chat selected';
             fallback.selected = true;
             chatSelect.prepend(fallback);
         }
@@ -15205,7 +15085,6 @@ function initAll() {
     bindCharacterDrawerStateObserver();
     prewarmSettingsPageRoots();
     applyShellTheme();
-    setFrontendIconPreference(sbState.frontendIcon, { persist: false });
     setSurfaceTransparency(sbState.surfaceTransparency, { persist: false });
     setPaperTextureEnabled(sbState.paperTextureEnabled, { persist: false });
     setPaperTextureOpacity(sbState.paperTextureOpacity, { persist: false });
@@ -15220,7 +15099,11 @@ function initAll() {
     buildTopBar();
     // Must follow buildTopBar(): it rearranges the buttons that call creates.
     applyTopbarIconsOnlyPreference();
-    bindLandingPageObserver();
+    initChatModeMemory();
+    getSplashPreferences();
+    initRetiredKeys({ eventSource, eventTypes: event_types, accountStorage, storage: window.localStorage });
+    initBootMarks({ eventSource, eventTypes: event_types });
+    bindHomeState();
     buildBottomChatBar();
     // SillyBunny: user input ends the ⬇ scroll-to-bottom ladder so a mid-ladder flick is not snapped back.
     getChatScrollElement()?.addEventListener('wheel', cancelPendingBottomChatScroll, { passive: true });
@@ -15334,11 +15217,22 @@ function initAll() {
             closeAllDropdowns({ except: 'search' });
             setUniversalSearchOpenState(true, { focusInput });
         },
+        // Opens the menu and leaves it open; the toggle button itself would close a menu that is already open.
+        openModeMenu() {
+            if (!document.getElementById('sb-mode-menu')) {
+                openModeDropdown();
+            }
+        },
+        // Takes the user to a setting the way a search result does: opens the tab, shows the setting's category and pulses it.
+        revealSetting(shellKey, tabId, selector) {
+            const element = document.querySelector(selector);
+            if (!(element instanceof HTMLElement)) {
+                throw new Error(`Setting not found: ${selector}`);
+            }
+            revealSearchMatch(shellKey, { tabId, element });
+        },
         applyTheme() {
             applyShellTheme();
-        },
-        setFrontendIcon(iconId) {
-            setFrontendIconPreference(iconId);
         },
         setSurfaceTransparency(value) {
             setSurfaceTransparency(value);
@@ -15381,9 +15275,6 @@ function initAll() {
         },
         getTheme() {
             return sbState.theme;
-        },
-        getFrontendIcon() {
-            return sbState.frontendIcon;
         },
         getSurfaceTransparency() {
             return sbState.surfaceTransparency;
@@ -16115,8 +16006,53 @@ function getActiveChatMode() {
     return conversationState.conversationWorkspaceOpen ? 'conversation' : 'roleplay';
 }
 
+// Neither mode is active on Home, so the switcher shows the mode that chats open in.
+function getDisplayedChatMode() {
+    return isHomeActive() ? getLastChatMode() : getActiveChatMode();
+}
+
+let homeRoleplayResumePending = false;
+
+async function resumeRoleplayFromHome() {
+    if (homeRoleplayResumePending) {
+        return;
+    }
+
+    homeRoleplayResumePending = true;
+    let resumed = false;
+    try {
+        const { resumeLatestRoleplayChat } = await import('./welcome-screen.js');
+        resumed = await resumeLatestRoleplayChat({ canOpen: isHomeActive });
+    } catch (error) {
+        console.warn('Could not resume the latest Roleplay chat', error);
+    } finally {
+        homeRoleplayResumePending = false;
+    }
+
+    // The user may have chosen something else while the request ran.
+    if (!resumed && isHomeActive() && !isCharacterPanelOpen()) {
+        toggleCharacterPanel();
+    }
+}
+
+function enterChatMode(mode) {
+    if (!isHomeActive()) {
+        if (mode !== getActiveChatMode()) {
+            setCharacterShellMode(mode);
+        }
+        return;
+    }
+
+    if (mode === 'roleplay') {
+        void resumeRoleplayFromHome();
+        return;
+    }
+
+    setCharacterShellMode(mode);
+}
+
 function syncModeToggleButton() {
-    const mode = SB_CHAT_MODES.find(entry => entry.id === getActiveChatMode()) ?? SB_CHAT_MODES[0];
+    const mode = SB_CHAT_MODES.find(entry => entry.id === getDisplayedChatMode()) ?? SB_CHAT_MODES[0];
     const modeToggleBtn = document.getElementById('sb-mode-toggle');
     if (!(modeToggleBtn instanceof HTMLElement)) {
         return;
@@ -16163,8 +16099,7 @@ function closeModeDropdown({ restoreFocus = false } = {}) {
 
 // Ctrl+M stays a Roleplay ↔ Conversation toggle; from Creator it returns to Roleplay.
 function toggleChatMode() {
-    const next = getActiveChatMode() === 'roleplay' ? 'conversation' : 'roleplay';
-    setCharacterShellMode(next);
+    enterChatMode(getDisplayedChatMode() === 'roleplay' ? 'conversation' : 'roleplay');
 }
 
 function openModeDropdown() {
@@ -16173,7 +16108,7 @@ function openModeDropdown() {
         return;
     }
 
-    const activeMode = getActiveChatMode();
+    const activeMode = getDisplayedChatMode();
     const menu = createElement('div', {
         id: 'sb-mode-menu',
         attrs: {
@@ -16195,9 +16130,7 @@ function openModeDropdown() {
         item.innerHTML = `<i class="fa-solid ${mode.icon} sb-mode-menu-icon" aria-hidden="true"></i><span class="sb-mode-menu-label">${mode.label}</span><span class="sb-mode-menu-desc">${mode.description}</span><i class="fa-solid fa-check sb-mode-menu-check" aria-hidden="true"></i>`;
         item.addEventListener('click', () => {
             closeModeDropdown({ restoreFocus: true });
-            if (mode.id !== getActiveChatMode()) {
-                setCharacterShellMode(mode.id);
-            }
+            enterChatMode(mode.id);
         });
         menu.appendChild(item);
     }
@@ -16261,6 +16194,8 @@ function initModeToggle() {
     document.documentElement.dataset.sbModeToggleBound = 'true';
     window.addEventListener('sb:conversation-workspace-state-changed', syncModeToggleButton);
     window.addEventListener('sb:creator-workspace-state-changed', syncModeToggleButton);
+    document.addEventListener(HOME_STATE_CHANGED_EVENT, syncModeToggleButton);
+    document.addEventListener(CHAT_MODE_CHANGED_EVENT, syncModeToggleButton);
     syncModeToggleButton();
 }
 
@@ -16293,8 +16228,7 @@ function initSettingsKeyboardShortcuts() {
     document.documentElement.dataset.sbSettingsShortcutsBound = 'true';
 
     document.addEventListener('keydown', event => {
-        const isMac = navigator.platform?.toUpperCase().includes('MAC');
-        const ctrl = isMac ? event.metaKey : event.ctrlKey;
+        const ctrl = isApplePlatform() ? event.metaKey : event.ctrlKey;
         if (!ctrl || event.altKey) {
             return;
         }
@@ -16364,3 +16298,7 @@ if (ctx?.eventSource && ctx?.event_types) {
         }
     });
 }
+
+// F1 opens Help and Ctrl+? opens Keyboard Shortcuts once the app is ready. The other shell shortcuts
+// are bound in initSettingsKeyboardShortcuts().
+registerHelpKeys({ eventSource, eventTypes: event_types, openHelp, openShortcuts: openKeyboardShortcuts });

@@ -21,7 +21,10 @@ function entryRow(input, caption, subtitle) {
     return row;
 }
 
-/** Popup still creates, validates and collects custom inputs; only their presentation moves. */
+/**
+ * Popup still creates, validates and collects custom inputs; only their presentation moves.
+ * The rows are built in `onOpening`: `onOpen` waits for the opening animation, and the upstream form would show until then.
+ */
 export function utilityFormOptions({ title, mainLabel = null, clearContent = false } = {}) {
     return {
         tier: 'dialog',

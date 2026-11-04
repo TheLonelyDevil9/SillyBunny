@@ -144,6 +144,25 @@ test.describe('Persona editor', () => {
         for (const child of await legacy.all()) await expect(child).toBeHidden();
     });
 
+    test('the page size stays reachable after a size that fits every persona on one page', async ({ page }) => {
+        const extra = Array.from({ length: 8 }, (_, index) => `sb-page-size-${index}.png`);
+        for (const avatar of extra) sessions.get(page).createdAvatars.add(avatar);
+        await page.reload();
+        await waitForApp(page);
+        const editor = await openList(page);
+        const size = editor.getByLabel('Items per page');
+        await expect(size).toBeVisible();
+        const total = await page.evaluate(async () => (await (await fetch('/api/avatars/get', { method: 'POST', headers: (await import('./script.js')).getRequestHeaders() })).json()).length);
+
+        await size.selectOption('1000');
+        await expect(editor.getByRole('listitem')).toHaveCount(total);
+        await expect(size).toBeVisible();
+        await expect(editor.locator('.sb-list-pagination__next')).toBeHidden();
+
+        await size.selectOption('5');
+        await expect(editor.getByRole('listitem')).toHaveCount(5);
+    });
+
     test('Cancel reverts detached edits and Save preserves unknown descriptor keys in the settings payload', async ({ page }) => {
         const persona = await currentPersona(page);
         const unknown = { nested: ['extension-owned', { version: 7 }], enabled: true };
@@ -342,5 +361,15 @@ test.describe('Persona editor on mobile', () => {
         await expect.poll(() => savedSettings(page).findLast(payload => payload.power_user.persona_descriptions[persona.avatarId]?.depth === 23)?.power_user.persona_descriptions[persona.avatarId]).toMatchObject({ position: 4, depth: 23, role: 1 });
         await entry.getByRole('button', { name: 'Back', exact: true }).click();
         await expect(editor.getByRole('listitem', { name: persona.name, exact: true })).toBeInViewport();
+    });
+
+    test('text action buttons keep the 44px touch target', async ({ page }) => {
+        const persona = await currentPersona(page);
+        const entry = await openPersona(page, persona.avatarId);
+        const heights = await entry.locator('.menu_button:not(.sb-header-icon-button):not(.sb-status-page__action)').evaluateAll(
+            buttons => buttons.filter(button => button.getClientRects().length).map(button => parseFloat(getComputedStyle(button).minHeight)),
+        );
+        expect(heights.length).toBeGreaterThan(0);
+        for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
     });
 });

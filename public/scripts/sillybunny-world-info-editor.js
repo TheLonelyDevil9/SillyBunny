@@ -28,7 +28,7 @@ import {
 import { mountWorldInfoSettings } from './sillybunny-world-info-settings.js';
 import { mountWorldInfoEntry, worldInfoDraftKey } from './sillybunny-world-info-entry.js';
 
-const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261027a', id: 'deferred-world-info-editor-css' };
+const STYLESHEET = { href: 'css/sillybunny-world-info-editor.css?v=20261029a', id: 'deferred-world-info-editor-css' };
 const mountedEditors = new WeakMap();
 const itemKey = item => item.kind === 'settings' ? 'settings' : `entry:${item.uid}`;
 
@@ -425,7 +425,7 @@ export function mountWorldInfoEditor(container) {
         if (!await Popup.show.confirm(t`Delete world info entry with UID: ${uid}?`, t`This action is irreversible!`, {
             okButton: t`Delete`,
             defaultResult: POPUP_RESULT.NEGATIVE,
-            onOpen: popup => popup.okButton.classList.add('is-destructive'),
+            onOpening: popup => popup.okButton.classList.add('is-destructive'),
         })) return;
         if (state.data !== data) return;
         const result = await remove(deps, name, data, uid);
@@ -466,7 +466,7 @@ export function mountWorldInfoEditor(container) {
         if (!await Popup.show.confirm(`${t`lorum ipsum`} (${uids.length})`, t`This action is irreversible!`, {
             okButton: t`Delete`,
             defaultResult: POPUP_RESULT.NEGATIVE,
-            onOpen: popup => popup.okButton.classList.add('is-destructive'),
+            onOpening: popup => popup.okButton.classList.add('is-destructive'),
         })) return;
         if (state.data !== data) return;
         const targets = existingSelectedUids(uids);

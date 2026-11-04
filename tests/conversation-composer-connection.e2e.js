@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { fetchJsonOrSkip } from './helpers/route-fetch.js';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
@@ -27,8 +28,8 @@ async function openConversation(page, baseURL) {
             if (!data) return;
             const settings = JSON.parse(data.settings);
             settings.firstRun = false;
+            applyWelcomeSettings(settings);
             settings.power_user.auto_connect = false;
-            settings.extension_settings['quick-image-gen'] = { ...settings.extension_settings['quick-image-gen'], setupWizardSeen: true };
             data.request_compression = { ...data.request_compression, enabled: false };
             data.settings = JSON.stringify(settings);
             return route.fulfill({ json: data });
@@ -56,7 +57,7 @@ async function openConversation(page, baseURL) {
         const { openConversationWorkspaceForAvatar } = await import('/scripts/sillybunny-conversation.js');
         const { stopConversationAutoWorker } = await import('/scripts/sillybunny-conversation/auto-engine.js');
         const context = window.SillyTavern.getContext();
-        const character = context.characters.find(entry => /Bunny Guide|Seraphina/.test(entry?.name ?? ''));
+        const character = context.characters.find(entry => /Seraphina/.test(entry?.name ?? ''));
         if (!character?.avatar) {
             throw new Error('No bundled Conversation character found.');
         }
@@ -89,6 +90,7 @@ for (const width of [390, 1440]) {
         await input.fill('Unsent offline draft');
         await input.press('Enter');
         await expect(input).toHaveValue('Unsent offline draft');
+        await expect(page.locator('.toast', { hasText: 'Not connected to API!' })).toHaveCount(1);
         await page.evaluate(async () => {
             const { submitConversationInput } = await import('/scripts/sillybunny-conversation/attachments.js');
             await submitConversationInput();

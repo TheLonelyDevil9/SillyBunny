@@ -99,7 +99,7 @@ import { confirmMessageDeletion } from '../sillybunny-delete-confirm.js';
 import { openActionMenu } from '../sillybunny-action-menu.js';
 import { LAYOUT_MOBILE_QUERY } from '../sillybunny-editor/breakpoints.js';
 
-const CONVERSATION_STYLESHEET_HREF = 'css/sillybunny-conversation.css?v=20261027a';
+const CONVERSATION_STYLESHEET_HREF = 'css/sillybunny-conversation.css?v=20261104a';
 
 /**
  * Sizes the composer entry to its content. Border-box height must include the border that
@@ -1282,6 +1282,9 @@ export function openConversationWorkspaceForAvatar(avatar, { branchId = '', grou
         }, 100);
         return false;
     }
+
+    // Every way into a thread ends here, and Conversation opens no chat of the app, so Home hears about it from this event (Getting Started, step 3).
+    window.dispatchEvent(new CustomEvent('sb:conversation-thread-opened', { detail: { avatar: targetAvatar, groupId: targetGroupId } }));
 
     if (branchId) {
         setActiveConversationBranch(targetAvatar, String(branchId), { groupId: targetGroupId });

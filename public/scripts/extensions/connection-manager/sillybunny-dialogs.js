@@ -91,7 +91,7 @@ export function adaptProfileDeletion(root) {
     return {
         tier: 'dialog',
         title: t`Delete selected connection profiles?`,
-        onOpen(popup) { popup.okButton.classList.add('is-destructive'); },
+        onOpening(popup) { popup.okButton.classList.add('is-destructive'); },
         onClose() { releaseRowIds(root); },
     };
 }

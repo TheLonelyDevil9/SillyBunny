@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { gunzipSync } from 'node:zlib';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
+import { fetchJsonOrSkip } from './helpers/route-fetch.js';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 const persistenceRequests = new WeakMap();
 const groupDefinitionKeys = [
@@ -19,6 +21,16 @@ test.beforeEach(async ({ page }) => {
         const body = request.headers()['content-encoding'] === 'gzip'
             ? gunzipSync(request.postDataBuffer()) : request.postDataBuffer();
         requests.push({ ...JSON.parse(body.toString()), sbQaCreate: pathname.endsWith('/create') });
+    });
+    // Opening a bundled character asks to import its lorebook, and the prompt covers the editor. The save that would
+    // record the answer is stubbed below, so the prompt is turned off in the settings the page reads.
+    await page.route('**/api/settings/get', async (route) => {
+        const data = await fetchJsonOrSkip(route);
+        if (!data) return;
+        const settings = JSON.parse(data.settings);
+        settings.power_user.world_import_dialog = false;
+        applyWelcomeSettings(settings);
+        return route.fulfill({ json: { ...data, settings: JSON.stringify(settings) } });
     });
     // Keep all browser QA changes local to the editor draft.
     await page.route('**/api/settings/save', route => {
@@ -297,7 +309,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         const draftName = `${fixture.name}-unsaved-draft`;
         await page.locator('#rm_group_chat_name').fill(draftName);
         await row.getByRole('switch').uncheck();
-        await expect(page.locator('#sb_group_editor_dirty')).toBeVisible();
+        // On a narrow or touch screen the header collapses when the list scrolls, which Playwright does to reach the switch, so the marker is checked as state and not as pixels.
+        await expect(page.locator('#sb_group_editor_dirty')).not.toHaveAttribute('hidden');
         await flushLiveGroupMetadata(page);
         expect(persistenceRequests.get(page).map(payload => payload.name)).not.toContain(draftName);
         await row.locator('.ch_name').click();

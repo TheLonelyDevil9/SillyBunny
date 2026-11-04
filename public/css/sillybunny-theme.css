@@ -722,8 +722,7 @@ input[type="checkbox"].sb-switch {
     accent-color: var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor)));
 }
 
-.checkbox_label > input[type="checkbox"],
-input[type="checkbox"].sb-switch {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *) {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
@@ -748,8 +747,7 @@ input[type="checkbox"].sb-switch {
     transition: background-color var(--sb-transition-fast), border-color var(--sb-transition-fast), box-shadow var(--sb-transition-fast);
 }
 
-.checkbox_label > input[type="checkbox"]::after,
-input[type="checkbox"].sb-switch::after {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *)::after {
     content: '';
     position: absolute;
     inset-block-start: 3px;
@@ -762,33 +760,28 @@ input[type="checkbox"].sb-switch::after {
     transition: transform var(--sb-transition-fast), background-color var(--sb-transition-fast);
 }
 
-.checkbox_label > input[type="checkbox"]::before,
-input[type="checkbox"].sb-switch::before {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *)::before {
     content: none;
 }
 
-.checkbox_label > input[type="checkbox"]:checked,
-input[type="checkbox"].sb-switch:checked {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *):checked {
     border-color: var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor)));
     background: var(--color-primary, var(--sb-accent, var(--SmartThemeQuoteColor)));
 }
 
-.checkbox_label > input[type="checkbox"]:checked::after,
-input[type="checkbox"].sb-switch:checked::after {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *):checked::after {
     background: var(--sb-on-solid-accent, var(--SmartThemeCheckboxTickColor));
     transform: translateX(18px);
 }
 
 @media (hover: hover) {
-    .checkbox_label > input[type="checkbox"]:not(:checked):not(:disabled):hover,
-    input[type="checkbox"].sb-switch:not(:checked):not(:disabled):hover {
+    input[type="checkbox"]:is(.sb-switch, .checkbox_label > *):not(:checked):not(:disabled):hover {
         border-color: color-mix(in srgb, var(--SmartThemeBodyColor) 46%, transparent);
         background: color-mix(in srgb, var(--SmartThemeBodyColor) 20%, transparent);
     }
 }
 
-.checkbox_label > input[type="checkbox"]:focus-visible,
-input[type="checkbox"].sb-switch:focus-visible {
+input[type="checkbox"]:is(.sb-switch, .checkbox_label > *):focus-visible {
     outline: 2px solid var(--sb-focus-ring);
     outline-offset: 2px;
     box-shadow: none;
@@ -1103,10 +1096,10 @@ input[type="checkbox"].sb-switch.checkbox_disabled {
     }
 }
 
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button:not(.sb-status-page__action),
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button_icon:not(.sb-status-page__action),
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button:not(.sb-status-page__action),
-:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button_icon:not(.sb-status-page__action) {
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button:where(:not(.sb-status-page__action)),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller .menu_button_icon:where(:not(.sb-status-page__action)),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button:where(:not(.sb-status-page__action)),
+:root[data-sb-compact-mode='true'] .sb-shell-panel-scroller button.menu_button_icon:where(:not(.sb-status-page__action)) {
     min-height: 32px;
     padding: 6px 10px;
     border-radius: 10px;
@@ -1432,15 +1425,10 @@ select:where(:not([multiple]):not([size]):not(.select2-hidden-accessible)):focus
 }
 
 :is(.text_pole, select)[aria-invalid='true'] {
+    --sb-composer-focus-border: var(--sb-color-danger);
+    --sb-composer-focus-ring: inset 0 0 0 2px color-mix(in srgb, var(--sb-color-danger) 36%, transparent), 0 0 0 1px color-mix(in srgb, var(--sb-color-danger) 28%, transparent);
     border-color: color-mix(in srgb, var(--sb-color-danger) 72%, var(--sb-input-border));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sb-color-danger) 28%, transparent);
-}
-
-:is(.text_pole, select)[aria-invalid='true']:focus {
-    border-color: var(--sb-color-danger);
-    box-shadow:
-        inset 0 0 0 2px color-mix(in srgb, var(--sb-color-danger) 36%, transparent),
-        0 0 0 1px color-mix(in srgb, var(--sb-color-danger) 28%, transparent);
 }
 
 .select2-container--default.select2-container--focus .select2-selection--single,
@@ -1734,7 +1722,6 @@ select.text_pole:where(:not([multiple]):not([size]):not(.select2-hidden-accessib
     background: var(--sb-raised-bg) !important;
     color: var(--sb-muted-fg) !important;
     cursor: not-allowed;
-    pointer-events: none;
 }
 
 /*
@@ -6156,10 +6143,10 @@ body.reduced-motion *::after {
         font-size: var(--sb-type-control);
     }
 
-    .sb-shell-panel-scroller .menu_button:not(.sb-status-page__action),
-    .sb-shell-panel-scroller .menu_button_icon:not(.sb-status-page__action),
-    .sb-shell-panel-scroller button.menu_button:not(.sb-status-page__action),
-    .sb-shell-panel-scroller button.menu_button_icon:not(.sb-status-page__action) {
+    .sb-shell-panel-scroller .menu_button:where(:not(.sb-status-page__action)),
+    .sb-shell-panel-scroller .menu_button_icon:where(:not(.sb-status-page__action)),
+    .sb-shell-panel-scroller button.menu_button:where(:not(.sb-status-page__action)),
+    .sb-shell-panel-scroller button.menu_button_icon:where(:not(.sb-status-page__action)) {
         min-height: 38px;
         padding: 8px 12px;
         border-radius: 12px;
@@ -6605,10 +6592,7 @@ dialog.popup.sb-dialog--alert > .popup-body {
     background: var(--sb-layer-alert);
 }
 
-dialog.popup.sb-dialog--dialog {
-    background: var(--sb-layer-window);
-}
-
+dialog.popup.sb-dialog--dialog,
 dialog.popup.sb-dialog--window {
     background: var(--sb-layer-window);
 }
@@ -7386,6 +7370,10 @@ dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) .popup-content
     isolation: isolate;
 }
 
+.sb-dialog * {
+    text-shadow: none;
+}
+
 /* AdwAlertDialog: 300px preferred, 372px at most (600px with preferWide). */
 .sb-dialog--alert {
     width: max-content;
@@ -7406,14 +7394,14 @@ dialog.popup.sb-dialog:is(.sb-dialog--dialog, .sb-dialog--window) .popup-content
 
 /* AdwDialog follows its content, up to AdwPreferencesDialog's 640px. */
 .sb-dialog--dialog {
-    width: min(640px, 100%);
+    width: min(640px + var(--sb-dialog-aside, 0px), 100%);
     min-width: min(360px, 100%);
     max-height: min(90dvh, 100%);
 }
 
 /* The shell's large pop-out footprint (Tag Manager). */
 .sb-dialog--window {
-    width: min(max(640px, var(--sheldWidth, 64vw)), 100%);
+    width: min(max(640px, var(--sheldWidth, 64vw)) + var(--sb-dialog-aside, 0px), 100%);
     min-height: min(360px, 100%);
     height: fit-content;
     max-height: 90dvh;
@@ -7976,6 +7964,18 @@ dialog.popup.sb-dialog .popup-content .ds-pref-group-heading {
         border: 1px solid ButtonText;
     }
 
+    /* Forced colours have no error colour, so an invalid field gets a double border. Entry rows set their border with an id. */
+    :is(.text_pole, select)[aria-invalid='true'] {
+        border-style: double !important;
+        border-width: 3px !important;
+    }
+
+    /* A toast is told from the page by its shadow alone, which forced colours remove. */
+    #toast-container > div {
+        outline: 1px solid CanvasText;
+        outline-offset: -1px;
+    }
+
     /* Forced colours remove the fill that is a flat control's only edge. */
     :is(.menu_button, .sb-dialog__icon-button, .sb-dialog__close, .sb-dialog__back, .sb-action-menu-item, .sb-action-sheet-close, .sb-boolean-radio-option > span) {
         outline: 1px solid ButtonBorder;
@@ -8005,17 +8005,23 @@ dialog.popup.sb-dialog .popup-content .ds-pref-group-heading {
     }
 
     /* A switch thumb is a pseudo-element, which forced colours paint like the track. */
-    :is(.checkbox_label > input[type='checkbox'], input[type='checkbox'].sb-switch)::after {
+    input[type='checkbox']:is(.sb-switch, .checkbox_label > *)::after {
         background: ButtonText;
     }
 
-    :is(.checkbox_label > input[type='checkbox'], input[type='checkbox'].sb-switch):checked {
+    input[type='checkbox']:is(.sb-switch, .checkbox_label > *):checked {
         border-color: Highlight;
         background: Highlight;
     }
 
-    :is(.checkbox_label > input[type='checkbox'], input[type='checkbox'].sb-switch):checked::after {
+    input[type='checkbox']:is(.sb-switch, .checkbox_label > *):checked::after {
         background: HighlightText;
+    }
+
+    /* A checked track is Highlight, so the ring stands outside it in CanvasText. */
+    input[type='checkbox']:is(.sb-switch, .checkbox_label > *):focus-visible {
+        outline: 2px solid CanvasText !important;
+        outline-offset: 2px !important;
     }
 }
 

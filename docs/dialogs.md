@@ -39,6 +39,7 @@ Examples import from a file in `public/scripts/`. `openDialog(options)` returns 
 | `size` | `'fill'` | Window only. `'content'` follows the content; the height only grows while open. |
 | `className` | `''` | Added to the surface, or to the page when pushed. |
 | `responses` | `null` | `null` is immediate apply, with Close at the header end. |
+| `swipeToDismiss` | `true` | `false` removes the sheet's grab handle, so a drag neither closes the frame nor goes back a page. Read only by the call that opens the frame; a pushed page ignores it. |
 
 `responses` is an object; any non-null value shows Cancel, even `{}`:
 
@@ -50,12 +51,19 @@ Examples import from a file in `public/scripts/`. `openDialog(options)` returns 
 `canClose(reason)` returns a boolean or a promise; `false` keeps the frame open. Reasons: `'close'`,
 `'cancel'`, `'back'`, `'affirmative'` (any affirmative id), an extra response id, `'escape'`,
 `'scrim'`, `'swipe'` and `'programmatic'`. While an async check is pending, other close attempts are ignored.
+For a frame that must never end on a swipe, set `swipeToDismiss: false`. Refusing `'swipe'` in
+`canClose` also keeps the frame open, but the drag springs back and the handle still invites it.
 `initialFocus` is `() => HTMLElement`. Without it, focus goes to the search field or toggle, the
 first focusable body control, Cancel, and finally Close.
 
 `search` takes `onChange(query)`, `placeholder` and `label` (default "Search"), `debounce` (`0`),
 `collapsed` (hide the field until the toggle is used), `input` (adopt an existing input, returned on
-close), `escapeClearsFirst` and `onEscape(event)` (return `true` to take the key). `menu(trigger)`
+close), `escapeClearsFirst` and `onEscape(event)` (return `true` to take the key). `toggleLabel`
+(default "Search") is the accessible name and tooltip of the header search toggle. When another
+control in the same frame is also named "Search", give the toggle and `label` a more specific name
+that says what is searched. `ariaAutocomplete`, `ariaControls` and `enterKeyHint` set
+`aria-autocomplete`, `aria-controls` and `enterkeyhint` on the field, unless an adopted input already
+has them. `menu(trigger)`
 returns `openActionMenu` sections on every click. The ⋮ button is named `menuLabel`, or "Menu"; the
 menu title is `menuLabel`, or the page title.
 
@@ -109,10 +117,15 @@ if (response === 'delete') deleteTag();
 
 ## The Popup Options tier and title
 
-`Popup` takes three extra options: `tier` (`'alert'`, `'dialog'` or `'window'`, default `null`), `title`
-(default `null`) and `size` (`'fill'` or `'content'`, Window only). The constructor calls
-`framePopup`. `show()` calls `opened()` after `showModal()`, and the hide path calls `closing()` and
-`dispose()`. `onOpen` runs after the frame is built. `resolvePopupTier` decides in this order:
+`Popup` takes four extra options: `tier` (`'alert'`, `'dialog'` or `'window'`, default `null`), `title`
+(default `null`), `size` (`'fill'` or `'content'`, Window only) and `onOpening` (default `null`).
+The constructor calls `framePopup`. `show()` calls `opened()` after `showModal()`, and the hide path
+calls `closing()` and `dispose()`. `opened()` ends with `onOpening(popup)`, in the same task as
+`showModal()`, so it runs after the frame is built, if the popup has one, and before the first paint. An
+error it throws is logged, and the dialog still opens. `onOpen` runs after the opening animation.
+Reshape content, move controls and set classes in `onOpening`; keep reads of bounding rects and
+scrolling in `onOpen`, because the opening animation scales or slides the dialog. `resolvePopupTier`
+decides in this order:
 
 1. An explicit `tier`.
 2. CROP, `transparent` and image-zoom content keep their own frame.
@@ -146,13 +159,14 @@ An adapter takes the upstream markup and returns `Popup` options, as `utilityFor
    caption nodes into `.ds-row-label` with `moveCaption(target, source, options)` from `rows.js`. It
    copies `data-i18n` and removes the emptied source. `copyId`, `keepSource` and `stripColon`
    cover the adapters that need more.
-3. Reshape Popup-built controls in `onOpen(popup)`: move `popup.mainInput` into a row, then empty and
-   hide `popup.inputControls`. Popup still reads `inputResults` by id.
+3. Reshape Popup-built controls in `onOpening(popup)`: move `popup.mainInput` into a row, then empty
+   and hide `popup.inputControls`. Popup still reads `inputResults` by id. Code that measures or
+   scrolls stays in `onOpen(popup)`.
 4. In `onClose`, call `releaseRowIds(popup.content)` and `row.destroy()`. Destroying a select row
    puts the adopted select, and its select2 container, back where it was, so code that reads the
    select after the dialog resolves still finds it.
 5. For destructive confirmations, pass `defaultResult: POPUP_RESULT.NEGATIVE` and add `is-destructive`
-   to `popup.okButton`.
+   to `popup.okButton` in `onOpening`, so the button is red from the first frame.
 6. An edit to an upstream-origin call site needs a `SillyBunny:` marker and an entry in
    [upstream-touch-ledger.md](upstream-touch-ledger.md).
 
@@ -161,7 +175,7 @@ export function renameOptions() {
     return {
         tier: 'dialog',
         title: t`Rename`,
-        onOpen(popup) {
+        onOpening(popup) {
             const row = createEntryRow({ label: t`Name`, field: 'rename', input: popup.mainInput });
             popup.content.append(createPrefGroup({ field: 'rename-fields', rows: [row] }).section);
             popup.inputControls.style.display = 'none';
@@ -182,10 +196,14 @@ Pick rows by the hierarchy in [Selection Controls](../DESIGN.md#selection-contro
 | Four or more exclusive options | `createComboRow`, or `createSelectRow` over an adopted select |
 | Text, number, read-only | `createEntryRow` (`floating`, `secret`), `createSpinRow` (`normalize: false` keeps upstream validation), `createPropertyRow` |
 | Section, action | `createExpanderRow`, `createButtonRow` (`danger`), `createRow({ activatable: true })` |
-| Group of rows | `createPrefGroup({ title, subtitle, rows })`, then use `.section` |
+| Group of rows | `createPrefGroup({ title, subtitle, rows, headingLevel })`, then use `.section` |
 
 Every factory returns `{ row, setDisabled, setVisible, destroy }`, plus `control` when there is one.
 Value rows add `getValue()` and `setValue(value, { silent = true })`.
+
+A group title is an `h3` by default, which suits a group under a page's `h2`. When the heading above
+the group has another level, pass `headingLevel` (a whole number from 1 to 6) so the outline steps
+down one level at a time, for example `4` under an `h3`. Any other value throws a `RangeError`.
 
 ## Stacking and Pages
 
@@ -267,6 +285,15 @@ onClose })` in `side-panel.js`:
   goes through `closeTopmostSidePanelOnEscape(event)`.
 - Registered today: `floatingPrompt` (left), `cfgConfig` (left) and `logprobsViewer` (right) in
   `adapters/side-panels.js`, and `sb-chat-sidebar` (right) in `sillybunny-tabs.js`.
+
+## Content Beside the Main Column
+
+A Dialog or Window that shows something beside its main column, such as an illustration, is wider
+by that width, so the main column keeps the width its tier gives it. The tier width rules in
+`css/sillybunny-theme.css` add `--sb-dialog-aside`, and `sillybunny-editor/dialog-aside.js` sets and
+reads it (`writeDialogAside(surface, px)`, `readDialogAside(surface)`). A sheet ignores it, because
+its width is the screen. The width only grows while a window is open, so moving between pages never
+makes it narrower.
 
 ## Breakpoints
 

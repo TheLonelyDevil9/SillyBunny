@@ -10,16 +10,25 @@ export async function a11yShot(page, name) {
     await page.screenshot({ path: `${SHOT_DIRECTORY}/${name}.png` });
 }
 
+const SETTLE_LIMIT_MS = 1000;
+
 /**
  * Computed styles read right after a focus or media change can still be the start value of a CSS
  * transition. Wait for the transitions that are running, so the values are the resting ones.
+ *
+ * A transition on an element that is not painted, such as a tab button behind a modal, can reach its end
+ * without its `finished` promise ever resolving. A finished transition has nothing left to wait for, and a
+ * running one is waited for only up to `SETTLE_LIMIT_MS`, which is longer than a dialog transition.
  */
 export async function settleTransitions(page) {
-    await page.evaluate(() => Promise.all(
+    await page.evaluate(limit => Promise.all(
         document.getAnimations()
-            .filter(animation => animation instanceof window.CSSTransition)
-            .map(animation => animation.finished.catch(() => {})),
-    ));
+            .filter(animation => animation instanceof window.CSSTransition && animation.playState === 'running')
+            .map(animation => Promise.race([
+                animation.finished.catch(() => {}),
+                new Promise(resolve => setTimeout(resolve, limit)),
+            ])),
+    ), SETTLE_LIMIT_MS);
 }
 
 /**
@@ -38,6 +47,8 @@ export async function installProbes(page) {
             }
             return colour === 'transparent' ? 0 : 1;
         };
+        // The red, green and blue of a colour, so that a faint tint over the same hue counts as that hue.
+        const channelsOf = colour => colour.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).join(',');
         const isVisible = element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
         const nameOf = element => {
             const className = typeof element.className === 'string' ? element.className.trim().split(/\s+/)[0] : '';
@@ -46,10 +57,24 @@ export async function installProbes(page) {
         };
         const topVisible = selector => [...document.querySelectorAll(selector)].filter(isVisible).at(-1) ?? null;
         const outlineShown = style => style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0 && alphaOf(style.outlineColor) > 0;
-        const borderShown = style => ['Top', 'Right', 'Bottom', 'Left'].some(side => {
+        const sideShown = (style, side) => {
             const borderStyle = style[`border${side}Style`];
             return borderStyle !== 'none' && borderStyle !== 'hidden' && parseFloat(style[`border${side}Width`]) > 0 && alphaOf(style[`border${side}Color`]) > 0;
-        });
+        };
+        const borderShown = style => ['Top', 'Right', 'Bottom', 'Left'].some(side => sideShown(style, side));
+        // A link-styled button has no edge either. Its underline is what marks it, once forced colours drop the accent colour.
+        const isUnderlinedLink = control => getComputedStyle(control).textDecorationLine.includes('underline');
+        // A row of a boxed list has no edge of its own. The list's outline and the separator between neighbours bound it,
+        // as they do in libadwaita's high contrast. Each neighbour needs a line between it and the row, and the list needs an outline.
+        const isBoundedByList = row => {
+            if (!row.matches('.ds-row') || !row.parentElement) return false;
+            const listStyle = getComputedStyle(row.parentElement);
+            if (!borderShown(listStyle) && !outlineShown(listStyle)) return false;
+            const rows = [...row.parentElement.children].filter(sibling => sibling.matches('.ds-row') && isVisible(sibling));
+            const index = rows.indexOf(row);
+            const lineBetween = (upper, lower) => sideShown(getComputedStyle(upper), 'Bottom') || sideShown(getComputedStyle(lower), 'Top');
+            return (index === 0 || lineBetween(rows[index - 1], row)) && (index === rows.length - 1 || lineBetween(row, rows[index + 1]));
+        };
         const backdropOf = element => {
             for (let node = element.parentElement; node; node = node.parentElement) {
                 const colour = getComputedStyle(node).backgroundColor;
@@ -99,6 +124,8 @@ export async function installProbes(page) {
                     // A shadow ring is a zero-blur inset shadow. An outline beside it makes two rings.
                     insetRing: /0px 0px 0px [\d.]+px inset/.test(style.boxShadow),
                     outlineOnFill: outlineShown(style) && style.outlineColor === style.backgroundColor,
+                    // A ring that stands clear of the control lies on what is behind it, so it must differ from that.
+                    outlineOnBackdrop: outlineShown(style) && parseFloat(style.outlineOffset) > 0 && channelsOf(style.outlineColor) === channelsOf(backdropOf(segment ?? element)),
                     outlineDetail: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`,
                     shadowDetail: style.boxShadow.slice(0, 60),
                     fillDetail: style.backgroundColor,
@@ -120,7 +147,7 @@ export async function installProbes(page) {
                     if (!control) continue;
                     const style = getComputedStyle(control);
                     const filled = alphaOf(style.backgroundColor) > 0 && style.backgroundColor !== backdropOf(control);
-                    if (!outlineShown(style) && !borderShown(style) && !filled) {
+                    if (!outlineShown(style) && !borderShown(style) && !filled && !isBoundedByList(control) && !isUnderlinedLink(control)) {
                         report.controls.push(`${nameOf(control)} bg ${style.backgroundColor} border ${style.borderTopStyle} ${style.borderTopWidth}`);
                     }
                 }
@@ -162,15 +189,17 @@ export async function installProbes(page) {
             scale(rootSelector, ellipsizing) {
                 const root = topVisible(rootSelector);
                 const frame = root.getBoundingClientRect();
-                const report = { clipped: [], overlaps: [], responses: [], insideViewport: true, responseCount: 0 };
-                report.insideViewport = frame.left >= -0.5 && frame.right <= innerWidth + 0.5 && frame.top >= -0.5 && frame.bottom <= innerHeight + 0.5;
+                const report = { clipped: [], overlaps: [], responses: [], insideViewport: true, insideAcross: true, responseCount: 0 };
+                report.insideAcross = frame.left >= -0.5 && frame.right <= innerWidth + 0.5;
+                report.insideViewport = report.insideAcross && frame.top >= -0.5 && frame.bottom <= innerHeight + 0.5;
                 for (const node of root.querySelectorAll(LABELS)) {
                     if (!isVisible(node) || node.clientWidth <= 1 || node.closest('[inert]')) continue;
                     if (ellipsizing.some(selector => node.matches(selector))) continue;
                     const style = getComputedStyle(node);
-                    // Overflow that stays visible is not clipped: an icon glyph can overhang its box by a few pixels.
+                    // Overflow that stays visible is not clipped: an icon glyph can overhang its box by a few pixels, and a
+                    // display heading can overhang a line box that is shorter than its glyphs.
                     const clippedAcross = style.overflowX !== 'visible' && node.scrollWidth > node.clientWidth + 1;
-                    const clippedDown = node.scrollHeight > node.clientHeight + 1;
+                    const clippedDown = style.overflowY !== 'visible' && node.scrollHeight > node.clientHeight + 1;
                     if (clippedAcross || clippedDown) {
                         report.clipped.push(`${nameOf(node)} ${node.scrollWidth}x${node.scrollHeight} in ${node.clientWidth}x${node.clientHeight}`);
                     }

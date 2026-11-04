@@ -167,7 +167,7 @@ export function adaptExtensionsManager(source, {
     headerMenus.append(sortMenu, updateMenu);
 
     return {
-        // The row actions measure with `getBoundingClientRect()`, so they wait for the end of the opening scale.
+        // The row actions measure the rows. The opening animation scales the dialog, so they start in onOpen.
         onOpen: () => document.dispatchEvent(new CustomEvent('sillybunny:extensions-manager-open')),
         onOpening: popup => {
             const header = popup.dlg.querySelector('.sb-dialog__header');

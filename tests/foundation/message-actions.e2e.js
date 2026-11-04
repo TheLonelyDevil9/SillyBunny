@@ -1,15 +1,21 @@
 import { expect, test } from '@playwright/test';
+import { OPEN_ACTION_SHEET } from '../helpers/action-sheet.js';
 
 const LONG_NAME = 'Seraphina, Guardian of the Eldoria Forest, Keeper of the Moonlit Glade, Warden of the Silver Springs, and Protector of Every Quiet Path';
 const target = '#chat .mes[mesid="4"]';
 
 test.beforeEach(async ({ page, baseURL }) => {
+    // A settings save without a version token makes the app show an error toast, which can cover the control under test.
+    let settingsVersion = Date.now();
     await page.route('**/*', route => {
         const url = new URL(route.request().url());
         if (url.origin !== baseURL) {
             return route.abort();
         }
-        if (url.pathname === '/api/chats/save' || url.pathname === '/api/settings/save') {
+        if (url.pathname === '/api/settings/save') {
+            return route.fulfill({ json: { version: ++settingsVersion } });
+        }
+        if (url.pathname === '/api/chats/save') {
             return route.fulfill({ json: {} });
         }
         return route.continue();
@@ -25,7 +31,7 @@ async function seedChat(page, { longName = false } = {}) {
         if (!context.characters.length) {
             await context.getCharacters();
         }
-        const id = context.characters.findIndex(character => /Bunny Guide|Seraphina/.test(character?.name ?? ''));
+        const id = context.characters.findIndex(character => /Seraphina/.test(character?.name ?? ''));
         await context.selectCharacterById(id, { switchMenu: false });
     });
     await page.evaluate(() => document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close()));
@@ -45,7 +51,7 @@ async function seedChat(page, { longName = false } = {}) {
             });
         }
         await context.printMessages();
-    }, { name: longName ? LONG_NAME : 'Bunny Guide' });
+    }, { name: longName ? LONG_NAME : 'Seraphina' });
     await expect(page.locator(target)).toBeVisible();
     await page.locator(target).scrollIntoViewIfNeeded();
 }
@@ -56,7 +62,7 @@ function visibleRowButtons(page, selector) {
         .map(button => [...button.classList].find(name => /^(mes_|extraMesButtons)/.test(name) && name !== 'mes_button') ?? button.className));
 }
 
-const sheet = '.sb-action-sheet';
+const sheet = OPEN_ACTION_SHEET;
 const popover = '.sb-action-popover';
 
 function menuLabels(page, selector) {

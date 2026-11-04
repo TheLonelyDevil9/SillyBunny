@@ -274,7 +274,7 @@ Hex values are what the bundled Libadwaita and Libadwaita Light themes render. T
 ### Named Rules
 **The Signal Scarcity Rule.** Accent appears for action, selection, focus, or meaningful state. If removing it does not reduce comprehension, remove it.
 
-**The Theme Alias Rule.** New work consumes `SmartTheme*`, `color-*`, `sb-*`, spacing, and radius aliases. Do not hard-code a new color that bypasses saved user themes.
+**The Theme Alias Rule.** New work consumes `SmartTheme*`, `color-*`, `sb-*`, spacing, and radius aliases. Do not hard-code a new color that bypasses saved user themes. Deviation: an illustration's backdrop belongs to the artwork, so it keeps its own colour in every theme; it is dropped under forced colours and is never used for anything but the illustration.
 
 **The Contrast Rule.** Body and placeholder text target at least 4.5:1 contrast; large text targets at least 3:1. Muted text can be quiet, but never illegible. Colour is never the only carrier of information; pair it with text, an icon, or shape (HIG UI Styling). Surfaces stay usable under `prefers-contrast: more` and `forced-colors: active`.
 
@@ -327,7 +327,7 @@ Hex values are what the bundled Libadwaita and Libadwaita Light themes render. T
 - **Adaptive sizes (HIG Scaling & Adaptiveness):** Every layout works from `360×294px` (phone) up; the HIG's smallest supported desktop size is `1024×600px`. Content sits in containers with a maximum width so lines and controls do not spread apart on large windows; groups and lists have a minimum and a maximum width. Crossing a breakpoint never makes a control or icon disappear without a transition, and the same functions stay available at every width.
 - **Breakpoints:** Overlays become bottom sheets at `max-width: 450px` or `max-height: 360px`, the AdwDialog condition. The shell layout breakpoint is `768px`, because libadwaita leaves layout breakpoints to each app; it is not the overlay breakpoint. A mobile-only surface whose trigger exists only in the `768px` layout keeps its sheet tied to that breakpoint. Implementation: [docs/dialogs.md](docs/dialogs.md#breakpoints).
 - **Touch targets:** Interactive controls are at least `44px` on coarse pointers. On fine pointers, shell controls and close buttons may be `40px`, and menu rows `32px`. Target size follows `(pointer: coarse)`, not the viewport width. Deviation: libadwaita controls are `34px`; SillyBunny keeps larger targets for touch.
-- **Density:** Compact mode (`--sb-density-scale`) reduces row heights, padding, and message targets (to `40px` at the smallest) without changing hierarchy. Containers pad `12px`, `14px`, `16px`, or `18px` according to density.
+- **Density:** Compact mode (`--sb-density-scale`) reduces row heights, padding, and message targets (to `40px` at the smallest) without changing hierarchy. Containers pad `12px`, `14px`, `16px`, or `18px` according to density. Deviation: on a narrow phone, a pixel-art illustration's panel and the container around it may pad less (down to `8px` and `4px`) when that lets the art keep a whole pixel step (Illustrations).
 - **Mobile:** Preserve the same destinations, ordering, action names, and control shapes as desktop. Use safe-area-aware sheets, comfortable touch targets, and no hover-only discovery. Controls stay usable with the software keyboard open.
 
 ### Named Rules
@@ -344,6 +344,7 @@ All shadows mix `--SmartThemeShadowColor`, so themes control the ink.
 - **Dialog Shadow** (`--sb-shadow-dialog`): `0 0 14px 2px` and `0 0 5px 2px` at low shade alpha, plus the `1px` border and, in dark mode, a `1px` inner highlight. Dialogs and shell drawers.
 - **Dialog Backdrop** (`--sb-dialog-backdrop`): shade colour at about 50% (dark) or 14% (light). No backdrop blur.
 - **Toast Shadow** (`--sb-shadow-toast`): `0 1px 3px 1px` and `0 2px 6px 2px` at low shade alpha.
+- **Page Transition Shade:** while one page slides over another in a page stack, the covered page dims under shade colour that deepens as it is covered, to about half the Dialog Backdrop (25% dark, 7% light), and the sliding page casts a soft `56px` shadow from its leading edge. Both exist only while the page moves; no page carries them at rest, and reduced motion, which removes the slide, removes them too. This is libadwaita's navigation transition shade. Deviation: while a page slides, the dialog surface drops its Dialog Shadow and gets it back when the motion ends, because repainting the blurred shadow on every frame of the dialog's height change stalls WebKit.
 - **Focus Ring** (`--sb-focus-ring-inset`: `inset 0 0 0 2px` of `--sb-focus-ring`): The only focus treatment for buttons, tabs, and menu rows. Fields draw the same colour as their border plus a `1px` inset, which reads as the same `2px` ring (see Text Fields). Do not stack it with an outline or an outer ring. Checkboxes, radios, and ranges use a `2px` `--sb-focus-ring` outline with an offset instead. Under forced colours every focused element also draws a `Highlight` outline, because forced colours remove shadows. Deviation: the ring is about 55% accent rather than libadwaita's 50% to keep 3:1 against both tones.
 
 ### Flat Fill Vocabulary
@@ -392,13 +393,13 @@ Springs are sampled from libadwaita's AdwSpringAnimation into CSS `linear()` eas
 ### By Pattern
 - **Overlays:** Alert and Dialog open with the Dialog spring, scaling `0.8 → 1` and fading from the centre, and close clamped over 200ms to scale `0.9`. A Window opens with the Sheet spring (`0.96 → 1`) and fades to `0.98` over 200ms. Shell drawers use the Sheet spring with a fade and scale `0.96 → 1` from the trigger, and close with a 200ms fade and scale to `0.98`. Bottom sheets slide up with the Sheet spring and down to close. The backdrop fades with the surface.
 - **Popovers and menus:** 200ms fade and scale `0.96 → 1` from the trigger edge; close is a 150ms fade. Deviation: GTK4 popovers do not animate; SillyBunny keeps the short origin cue so the user sees what opened.
-- **Pages:** The Navigation spring (`334ms`) pushes and pops dialog pages and mobile section pages. A Popup page pops over 200ms with `--sb-ease-out-cubic`. A List → Split Editor list shrinks to a sidebar while the editor slides in from the right, with continuous compression, and reverses on close; picking another row swaps the editor content without replaying the slide.
+- **Pages:** The Navigation spring (`334ms`) pushes and pops dialog pages and mobile section pages, with the Page Transition Shade. A Popup page pops over 200ms with `--sb-ease-out-cubic`. A List → Split Editor list shrinks to a sidebar while the editor slides in from the right, with continuous compression, and reverses on close; picking another row swaps the editor content without replaying the slide.
 - **Toasts:** In over 300ms, sliding from their own height plus a fade. Out over 300ms with a fade and scale to `0.95`.
 - **Tabs and expanders:** Tabs and page sections crossfade over 200ms (AdwViewStack). Expanders reveal over 250ms; the chevron rotates over 200ms.
 - **Side panels:** The chat shifts over `--sb-transition` (`250ms`) when a panel docks or closes. The panel appears after the chat has settled.
 
 ### Named Rules
-**The State-Only Motion Rule.** Animate state, origin, and destination only. No decorative choreography, ambient loops, or hover lift.
+**The State-Only Motion Rule.** Animate state, origin, and destination only. No decorative choreography, ambient loops, or hover lift. Deviation: an illustration may move in place, such as a character who blinks or breathes, and a loading screen may animate its picture and line while it waits. The motion stays inside the illustration or the line, never moves layout, pauses while it is hidden, and stops under the Reduced Motion Rule, which shows the first frame (a loading line shows finished).
 
 **The Reduced Motion Rule.** `prefers-reduced-motion: reduce` or the Reduced Motion setting removes movement and scale. State changes become instant or a crossfade of 200ms or less. JS helpers are no-ops under reduced motion.
 
@@ -410,7 +411,7 @@ Patterns follow the HIG pattern groups. Sizes and corners come from Layout and S
 
 #### Dialogs
 - **Implementation:** [docs/dialogs.md](docs/dialogs.md) is the code reference for Alerts, Dialogs, Windows, pages, and side panels: the `openDialog` and `openAlert` APIs, the Popup hook, page chains, adapters, and a testing checklist. Read it before you build or change one.
-- **Tiers:** **Alert** is for messages, confirmations, one-field prompts, and at most one boolean option: `300px` preferred and `372px` maximum (`600px` when wide), content-sized and centred, with a centred heading and body. **Dialog** is for forms and action dialogs: `min(640px, 100% - 32px)` wide with a `360px` minimum, a header bar, and one scrolling body. **Window** is for lists, editors, and viewers: `min(max(640px, var(--sheldWidth)), 100% - 32px)` wide. Dialog and Window heights follow their content up to `90dvh`; a Window that fills (document viewers and editors) is `90dvh` tall. How a Popup picks its tier is in the implementation reference.
+- **Tiers:** **Alert** is for messages, confirmations, one-field prompts, and at most one boolean option: `300px` preferred and `372px` maximum (`600px` when wide), content-sized and centred, with a centred heading and body. **Dialog** is for forms and action dialogs: `min(640px, 100% - 32px)` wide with a `360px` minimum, a header bar, and one scrolling body. **Window** is for lists, editors, and viewers: `min(max(640px, var(--sheldWidth)), 100% - 32px)` wide. A Dialog or Window that shows something beside its content, such as an illustration, is wider by that width (`--sb-dialog-aside`). Dialog and Window heights follow their content up to `90dvh`; a Window that fills (document viewers and editors) is `90dvh` tall. How a Popup picks its tier is in the implementation reference.
 - **Surface:** An Alert uses the Dialog layer. A Dialog or Window uses the Window layer, as `AdwDialog` uses `window-bg`; a Window header uses Header bar, and the body of a document Window (a notes, editor, or output viewer) uses View. All three have a `1px` border, Dialog Shadow, and a Dialog Backdrop without blur.
 - **Headers:** Cancel comes first and the affirmative last, as in GNOME; custom responses sit between them. An explicit-action Dialog or Window puts Cancel at the header start and the affirmative action at the end, with no Close. An immediate-apply surface shows Close at the end. With three or more responses, other responses sit in a bottom bar aligned to the end. Responses use the primary and ghost button families; Close is a flat circle.
 - **Pages and stacking:** One Alert may open above any surface. A Dialog or Window opened over another becomes a page in the same frame, never a second visible frame, and the parent becomes inert. A pushed page shows Back at the start. With explicit responses, Cancel acts as Back and the affirmative stays at the end, with no Close; without them, Close sits at the end. Back and Esc pop one page. Close closes the whole frame one page at a time, from the top, and stops at a page that refuses to close. A page over a bottom sheet keeps the sheet's shape and grab handle, and a downward swipe on the handle pops the page.
@@ -469,6 +470,11 @@ Patterns follow the HIG pattern groups. Sizes and corners come from Layout and S
 - **Layering:** Docked panels sit over expression sprites and zoomed avatars. In visual-novel mode, the sprite area follows the chat's free area between panels.
 - **Keyboard:** Escape closes through the panel controller. Opening moves focus into the panel; closing returns it to its opener.
 
+#### Illustrations
+- **Pixel art:** drawn at a whole number of device pixels per art pixel (the screen scale rounded, at least 1), so a picture is the same size everywhere on one screen. Where no whole step fits, it is shrunk by a fraction and drawn smooth, never in uneven blocks.
+- **In a Dialog or Window:** beside the content when the content column keeps its minimum width (`360px`, scaled with the text size) and the illustration fits the window's height; the window then grows by the illustration's width and does not narrow while it is open. Otherwise above the content, at most 30% of the viewport height, and hidden when too little of the figure would show.
+- **Accessibility:** a decorative illustration is hidden from assistive technology (`aria-hidden`, `alt=""`) and takes no focus.
+
 ### Navigation
 
 #### Shell
@@ -522,7 +528,8 @@ Patterns follow the HIG pattern groups. Sizes and corners come from Layout and S
 #### Chips
 - **Style:** Compact rounded controls at `14px`, `6px 8px` padding, readable text, and a tonal background.
 - **State:** Enabled or selected chips use a 16% Accent tint and a status icon. Inactive chips remain legible and low emphasis.
-- **Use:** In-chat agent controls and metadata only; do not turn the bottom bar into a chip collection.
+- **Status chips:** A non-interactive chip that names a row's state in words, placed before the row's buttons. A positive or finished state (Installed, Enabled, Done) takes a 16% Success Green tint and a leading check in Success Green; any other state (Not installed, Skipped) takes an 8% body-colour tint and no icon. The text uses the strong contrast ink rather than the body colour, so it reaches 4.5:1 on the tint in every bundled theme, and the check reaches 3:1. The words always carry the state; colour and the check only reinforce it.
+- **Use:** In-chat agent controls and metadata, and status chips in list rows; do not turn the bottom bar into a chip collection.
 
 ### Feedback
 
@@ -578,7 +585,7 @@ The chat is the product's core, so its messages have their own pattern.
 - **Don't** present configuration sprawl, bottom bar bloat, or a dense control wall by default.
 - **Don't** interrupt active conversation with a modal for non-critical configuration; try inline or progressive alternatives first.
 - **Don't** rely on mystery meat navigation, hover-only discovery, desktop-only assumptions, tiny touch targets, or fragile iOS WebKit behavior.
-- **Don't** use generic SaaS polish, sterile upstream-clone blandness, or decorative motion without navigational purpose.
+- **Don't** use generic SaaS polish, sterile upstream-clone blandness, or decorative motion without navigational purpose, except an illustration moving in place (Motion).
 - **Don't** use gradient text, decorative glassmorphism, backdrop blur on shell layers, ambient accent glows, repeating stripe or grid backgrounds, identical repeated card grids, or sketchy illustrations.
 - **Don't** use `border-left` or `border-right` greater than `1px` as a colored accent.
 - **Don't** pair a `1px` border with a shadow of `16px` blur or more on a resting surface. Overlays may keep one border and one overlay shadow.

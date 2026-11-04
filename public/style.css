@@ -3,14 +3,15 @@
 @import url(css/animations.css);
 @import url(css/popup.css?v=20260803a);
 @import url(css/promptmanager.css?v=20260507a);
-@import url(css/loader.css);
+@import url(css/loader.css?v=20261105c);
 @import url(css/character-group-overlay.css);
 @import url(css/file-form.css);
 @import url(css/logprobs.css);
 @import url(css/accounts.css);
 @import url(css/tags.css);
 @import url(css/scrollable-button.css?v=20260517a);
-@import url(css/welcome.css?v=20261001a);
+/* SillyBunny: Home rules live in their own sheet */
+@import url(css/sillybunny-home.css?v=20261106a);
 @import url(css/data-maid.css);
 @import url(css/secrets.css);
 @import url(css/backgrounds.css?v=20260606a);
@@ -1693,6 +1694,8 @@ body.hideAllSwipeButtons :is(.swipe_left, .swipe_right),
     box-shadow: 0 0 5px var(--black50a);
 }
 
+/* SillyBunny: the logo files, and the earlier pixel logo that saved chats still show */
+img[src*="img/sillybunny/logo-"],
 img[src*="sillybunny-pixel-logo"] {
     object-fit: contain;
 }

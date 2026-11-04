@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { OPEN_ACTION_SHEET } from './helpers/action-sheet.js';
 import { fetchJsonOrSkip } from './helpers/route-fetch.js';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 
@@ -27,10 +29,10 @@ async function openConversation(page, baseURL) {
             if (!data) return;
             const settings = JSON.parse(data.settings);
             settings.firstRun = false;
+            applyWelcomeSettings(settings);
             settings.power_user.auto_connect = false;
             settings.power_user.reduced_motion = false;
             settings.extension_settings.sillybunny_conversation = {};
-            settings.extension_settings['quick-image-gen'] = { setupWizardSeen: true };
             data.request_compression = { ...data.request_compression, enabled: false };
             data.settings = JSON.stringify(settings);
             return route.fulfill({ json: data });
@@ -64,12 +66,12 @@ async function openConversation(page, baseURL) {
         const { renderConversationTimeline } = await import('/scripts/sillybunny-conversation/timeline-render.js');
         const { getSettings, saveSettings } = await import('/scripts/sillybunny-conversation/settings-store.js');
         const context = window.SillyTavern.getContext();
-        const character = context.characters.find(entry => /Bunny Guide|Seraphina/.test(entry?.name ?? ''));
+        const character = context.characters.find(entry => /Seraphina/.test(entry?.name ?? ''));
         if (!character?.avatar) throw new Error('No bundled Conversation character found.');
         openConversationWorkspaceForAvatar(character.avatar, { showToast: false });
         stopConversationAutoWorker();
         saveSettings(character.avatar, { ...getSettings(character.avatar), editable_messages: true });
-        appendConversationThreadMessage(character.avatar, { role: 'assistant', name: 'Bunny Guide', mes: text, extra: {} });
+        appendConversationThreadMessage(character.avatar, { role: 'assistant', name: 'Seraphina', mes: text, extra: {} });
         renderConversationTimeline();
     }, { text: MESSAGE_TEXT });
     const message = page.locator('.sb-conversation-message').filter({ hasText: MESSAGE_TEXT });
@@ -81,7 +83,7 @@ async function openConversation(page, baseURL) {
 async function openSheet(page, trigger) {
     await trigger.focus();
     await trigger.press('Enter');
-    const sheet = page.locator('.sb-action-sheet');
+    const sheet = page.locator(OPEN_ACTION_SHEET);
     await expect(sheet).toBeVisible();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('menu', { name: 'Message Actions' })).toBeVisible();

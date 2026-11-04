@@ -55,6 +55,7 @@ import {
 import { handleConversationSlashAction } from './timeline-slash-commands.js';
 import { getConversationActivityContext, maybePostDelayedReplyNotice, splitChatroomMessages, withTypingParticipant } from './typing.js';
 import { appendConversationMessage } from './message-writer.js';
+import { notifyNotConnected } from '../sillybunny-connection-notices.js';
 import {
     coalesceConversationQueueItems,
     createConversationMessageRevisionEntries,
@@ -748,7 +749,11 @@ export async function processSendQueue({ processItem = processQueuedConversation
 }
 
 export async function submitConversationInput() {
-    if (online_status === 'no_connection' || is_send_press || conversationState.conversationUploadActive) {
+    if (online_status === 'no_connection') {
+        notifyNotConnected();
+        return;
+    }
+    if (is_send_press || conversationState.conversationUploadActive) {
         return;
     }
 
@@ -867,6 +872,8 @@ export async function submitConversationInput() {
         clearConversationAttachmentInput();
         updateLastUserActivity(avatar, { branchId, groupId, personaId });
         scheduleInterfaceRefresh({ syncControls: false });
+        // Conversation mode has no MESSAGE_SENT, so Home hears about the first message here (Getting Started, step 4).
+        window.dispatchEvent(new CustomEvent('sb:conversation-user-message-sent'));
 
         const queuedText = text || attachmentContextParts.join('\n') || 'Sent an attachment.';
         const branchMessages = getConversationThread(avatar, { branchId, create: false, groupId, personaId });

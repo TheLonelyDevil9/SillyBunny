@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { protectMaintainerServer } from './helpers/maintainer-server.js';
 import { restoreAnimationSpeed, slowAnimations } from './helpers/animation-speed.js';
 import { fetchBodyOrSkip, fetchJsonOrSkip } from './helpers/route-fetch.js';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 /*
  * Every overlay bottom sheet that a sheet controller or the Conversation workspace builds has the
@@ -57,13 +58,13 @@ async function bootConversation(page, baseURL) {
             if (!data) return;
             const settings = JSON.parse(data.settings);
             settings.firstRun = false;
+            applyWelcomeSettings(settings);
             settings.power_user.auto_connect = false;
             settings.power_user.reduced_motion = false;
             // Visual Novel mode moves #sheld below the fold on a phone, which puts the sheet's handle
             // outside the viewport. WebKit does not deliver mouse events there, Chromium does.
             settings.power_user.waifuMode = false;
             settings.extension_settings.sillybunny_conversation = {};
-            settings.extension_settings['quick-image-gen'] = { setupWizardSeen: true };
             data.request_compression = { ...data.request_compression, enabled: false };
             data.settings = JSON.stringify(settings);
             return route.fulfill({ json: data });
@@ -81,7 +82,7 @@ async function bootConversation(page, baseURL) {
         const { stopConversationAutoWorker } = await import('/scripts/sillybunny-conversation/auto-engine.js');
         const { renderConversationTimeline } = await import('/scripts/sillybunny-conversation/timeline-render.js');
         const context = window.SillyTavern.getContext();
-        const character = context.characters.find(entry => /Bunny Guide|Seraphina/.test(entry?.name ?? ''));
+        const character = context.characters.find(entry => /Seraphina/.test(entry?.name ?? ''));
         if (!character?.avatar) throw new Error('No bundled Conversation character found.');
         openConversationWorkspaceForAvatar(character.avatar, { showToast: false });
         stopConversationAutoWorker();
@@ -207,7 +208,7 @@ const SURFACES = [
         async open(page) {
             await page.evaluate(async () => {
                 const { createAgentEditorProperties } = await import('/scripts/extensions/in-chat-agents/ui/agent-editor-properties.js');
-                await window.SillyBunnyAssets.loadStylesheetAsync('css/sillybunny-prompt-editor.css?v=20261027a', { id: 'deferred-prompt-editor-css' });
+                await window.SillyBunnyAssets.loadStylesheetAsync('css/sillybunny-prompt-editor.css?v=20261104a', { id: 'deferred-prompt-editor-css' });
                 window.qaSheet = { changes: [] };
                 const properties = createAgentEditorProperties({
                     categories: [['general', 'General']],
@@ -275,12 +276,14 @@ for (const surface of SURFACES) {
 
         test('a long swipe closes through the normal path and leaves the result unchanged', async ({ page, baseURL }) => {
             const { sheet, handle, trigger, unchanged } = await openSettled(surface, page, baseURL);
+            // The action-menu sheet and the popover form sheet leave the DOM once they have closed, so keep the element to read the drag state from.
+            const sheetNode = await sheet.elementHandle();
             await dragDown(page, handle, 300);
             await page.mouse.up();
 
             await expect(sheet).toBeHidden();
             expect(await unchanged()).toBe(true);
-            expect(await sheet.evaluate(node => node.style.transform)).toBe('');
+            expect(await sheetNode.evaluate(node => node.style.transform)).toBe('');
             await expect(trigger).toBeFocused();
         });
 
@@ -315,11 +318,12 @@ for (const surface of SURFACES) {
         test('under reduced motion a long swipe closes at once, clears the drag and restores focus', async ({ page, baseURL }) => {
             await page.emulateMedia({ reducedMotion: 'reduce' });
             const { sheet, handle, trigger, unchanged } = await openSettled(surface, page, baseURL, { reducedMotion: true });
+            const sheetNode = await sheet.elementHandle();
             await dragDown(page, handle, 300);
             await page.mouse.up();
 
             await expect(sheet).toBeHidden();
-            expect(await sheet.evaluate(node => node.style.transform)).toBe('');
+            expect(await sheetNode.evaluate(node => node.style.transform)).toBe('');
             expect(await unchanged()).toBe(true);
             await expect(trigger).toBeFocused();
         });

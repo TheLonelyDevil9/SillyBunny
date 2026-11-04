@@ -109,7 +109,7 @@ const preloadSource = tabsSource.slice(tabsSource.indexOf('function preloadPanel
 const personaStylesheets = [
     { href: 'css/sillybunny-editor-shell.css?v=20261028a', id: 'deferred-editor-shell-css' },
     { href: 'css/sillybunny-entity-list.css?v=20261105a', id: 'deferred-entity-list-css' },
-    { href: 'css/sillybunny-persona-editor.css?v=20261026a', id: 'deferred-persona-editor-css' },
+    { href: 'css/sillybunny-persona-editor.css?v=20261029a', id: 'deferred-persona-editor-css' },
     { href: 'css/sillybunny-persona-detail.css?v=20261018a', id: 'deferred-persona-detail-css' },
 ];
 let container;
@@ -838,6 +838,29 @@ describe('Persona editor shell', () => {
         await settle();
         expect(accountStorage.setItem).toHaveBeenCalledWith('Personas_PerPage', '10');
         expect(rowIds()).toHaveLength(10);
+    });
+
+    test('the size control stays after a size that fits every persona on one page, and hides within the smallest size', async () => {
+        await mount(7);
+        const nav = container.querySelector('.sb-list-pagination');
+        const size = container.querySelector('.sb-list-pagination__size');
+        expect(nav.hidden).toBe(false);
+
+        size.value = '10';
+        size.dispatchEvent(new Event('change', { bubbles: true }));
+        await settle();
+        expect(rowIds()).toHaveLength(7);
+        expect(nav.hidden).toBe(false);
+
+        size.value = '5';
+        size.dispatchEvent(new Event('change', { bubbles: true }));
+        await settle();
+        expect(rowIds()).toHaveLength(5);
+    });
+
+    test('the size control is hidden while the personas fit the smallest page size', async () => {
+        await mount(5);
+        expect(container.querySelector('.sb-list-pagination').hidden).toBe(true);
     });
 
     test('settings is first in the list menu and toggles back to its trigger', async () => {

@@ -94,6 +94,8 @@ import { getNanoGptServiceTiers, isNanoGptPayg, updateServiceTierOptions } from 
 import { customEndpointParametersOptions } from './sillybunny-editor/adapters/window-content-dialogs.js';
 import { hasTextOrArrayPayload, shouldRetainContextAtDepth, stripHtmlTagsFromContext, stripOocBlocksFromContext } from './ooc-blocks.js';
 import { checkPostInterceptChatBudget, shouldCheckPostInterceptChatBudget } from './openai-prompt-budget.js';
+// SillyBunny: Connect with an empty key marks the key field and says what is missing.
+import { flagMissingKey } from './sillybunny-connection-notices.js';
 import {
     buildChatCompletionPresetForSave,
     buildChatCompletionSamplingProfileKey,
@@ -123,6 +125,8 @@ import { applyClaudeModelParameterConstraints, applyKimiK3ModelParameterConstrai
 import { TOOL_CALL_RECURSE_LIMIT_DEFAULT, normalizeToolCallRecurseLimit } from './tool-call-recurse-limit.js';
 import { LINKAPI_ENDPOINT, getLinkApiRequestFormat } from './linkapi-utils.js';
 import { getKoboldCppChatState, refreshKoboldCppModels } from './sillybunny-koboldcpp-models.js';
+// SillyBunny: failed requests show the provider's own message and a hint instead of only the HTTP reason.
+import { createFailedResponseError, showRequestError, getFailureStatus } from './sillybunny-request-errors.js';
 import { IN_CHAT_AGENT_PROMPT_KEY_PREFIX, RUNTIME_AGENTS_IDENTIFIER, collectInChatAgentInspectionRecords, getInChatAgentContributionKind, isInChatAgentPromptIdentifier, trimOldestRetainedContribution } from './in-chat-agent-inspection.js';
 
 export {
@@ -2108,43 +2112,55 @@ function getChatCompletionErrorMessage(data, response) {
 }
 
 /**
+ * Shows a Chat Completion error body as a toast.
+ * @param {object} data Parsed response body
+ * @param {Response} response Fetch response
+ * @param {string} title Toast title
+ */
+function showChatCompletionError(data, response, title) {
+    // SillyBunny: the provider's message comes first, the HTTP reason only fills in when it said nothing.
+    showRequestError({
+        title,
+        status: getFailureStatus(response),
+        statusText: getChatCompletionErrorMessage(data, response),
+        body: data,
+    });
+}
+
+/**
  * Handles errors during streaming requests.
  * @param {Response} response
  * @param {string} decoded - response text or decoded stream data
  * @param {object} [options]
  * @param {boolean?} [options.quiet=false] Suppress toast messages
+ * @returns {boolean} True when the user was told about the error, so the caller knows whether it still has to.
  */
 export function tryParseStreamingError(response, decoded, { quiet = false } = {}) {
+    // SillyBunny: the three upstream branches share one toast path, and the return value tells the caller whether a toast was shown.
+    let reported = false;
     try {
         const data = JSON.parse(decoded);
 
         if (!data) {
-            return;
+            return reported;
         }
 
+        reported = Boolean(data.quota_error);
         checkQuotaError(data, { quiet });
         checkModerationError(data, { quiet });
 
         // these do not throw correctly (equiv to Error("[object Object]"))
         // if trying to fix "[object Object]" displayed to users, start here
 
-        if (data.error) {
-            !quiet && toastr.error(getChatCompletionErrorMessage(data, response), 'Chat Completion API');
-            throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
-        }
-
-        if (data.message) {
-            !quiet && toastr.error(data.message, 'Chat Completion API');
-            throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
-        }
-
-        if (data.detail) {
-            !quiet && toastr.error(getChatCompletionErrorMessage(data, response), 'Chat Completion API');
+        if (data.error || data.message || data.detail) {
+            !quiet && showChatCompletionError(data, response, 'Chat Completion API');
+            reported = !quiet;
             throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
         }
     } catch {
         // No JSON. Do nothing.
     }
+    return reported;
 }
 
 /**
@@ -6060,8 +6076,12 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, ca
     });
 
     if (!response.ok) {
-        tryParseStreamingError(response, await response.text());
-        throw new Error(`Got response status ${response.status}`);
+        const errorBody = await response.text();
+        // SillyBunny: bodies that are not JSON (proxy pages, plain text) used to fail without any message.
+        if (!tryParseStreamingError(response, errorBody)) {
+            showRequestError({ title: 'Chat Completion API', status: getFailureStatus(response), statusText: response.statusText, body: errorBody });
+        }
+        throw createFailedResponseError({ status: getFailureStatus(response), body: errorBody });
     }
     if (stream) {
         const eventStream = getEventSourceStream();
@@ -6108,7 +6128,8 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null, ca
 
         if (data.error) {
             const message = getChatCompletionErrorMessage(data, response);
-            toastr.error(message, t`API returned an error`);
+            // SillyBunny: the toast shows the provider's message and a hint.
+            showChatCompletionError(data, response, t`API returned an error`);
             throw new Error(message);
         }
 
@@ -9614,7 +9635,14 @@ async function onConnectButtonClick(e) {
         }
 
         if (!secret_state[config.key] && (!config.proxy || !oai_settings.reverse_proxy) && !config.keyless) {
-            console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
+            // SillyBunny: an empty key used to do nothing at all. Only a real click gets an answer, because auto-connect
+            // and profile changes click this button through jQuery's trigger(), which has no originalEvent. A keyboard
+            // click made with element.click() has one but is not trusted, so isTrusted would silence it.
+            if (e.originalEvent) {
+                flagMissingKey(document.querySelector(config.selector));
+            } else {
+                console.log(`No secret key saved for ${oai_settings.chat_completion_source}`);
+            }
             return;
         }
     }

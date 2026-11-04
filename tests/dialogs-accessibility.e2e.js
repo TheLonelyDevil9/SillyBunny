@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { dialog as archiveDialog, isCollapsed, rows, waitForDetail } from './helpers/chats-archive.js';
 import { a11yShot, expectSingleFocusRing, settleTransitions, tabUntil, walkTabOrder } from './helpers/dialog-accessibility.js';
-import { DESKTOP, SURFACES, TEXT_SCALE, bootMisc, openArchiveList, pressKey } from './helpers/dialog-accessibility-surfaces.js';
+import { DESKTOP, PHONE, SURFACES, TEXT_SCALE, bootHomeWithDeletedReisen, bootMisc, bootMiscWithChat, openArchiveList, pressKey } from './helpers/dialog-accessibility-surfaces.js';
 
 /**
  * Accessibility checks for the dialog frame, the Chat Archive, action-menu sheets and side panels:
@@ -25,6 +25,9 @@ import { DESKTOP, SURFACES, TEXT_SCALE, bootMisc, openArchiveList, pressKey } fr
 // Elements that shorten their text with an ellipsis on purpose (a title, or the value shown in a select row).
 // Everything else must show its full label.
 const ELLIPSIZING = ['.sb-dialog__title', '.sb-dialog__subtitle', '.ds-select-row__trigger'];
+
+// A control that the browser gives no name shows in the accessibility snapshot as its role alone, with at most its states after it.
+const UNNAMED_CONTROL = /^\s*- (?:button|link|textbox|searchbox|switch|checkbox|radio|combobox|slider|spinbutton|tab|menuitem|option)(?: \[[^\]]+\])*:?\s*$/;
 
 // --- Checks ---------------------------------------------------------------------------------------------
 
@@ -53,7 +56,10 @@ function focusProblems(stops, { forcedColours = false } = {}) {
     const hidden = shown
         .filter(stop => stop.outlineOnFill)
         .map(stop => `${stop.label} outline ${stop.outlineDetail} has the colour of its fill ${stop.fillDetail}`);
-    return [...missing, ...doubled, ...hidden];
+    const lost = shown
+        .filter(stop => stop.outlineOnBackdrop)
+        .map(stop => `${stop.label} outline ${stop.outlineDetail} has the colour of what is behind it`);
+    return [...missing, ...doubled, ...hidden, ...lost];
 }
 
 /** Tab through a modal until the focus wraps; through a panel until it leaves. */
@@ -73,15 +79,26 @@ async function expectTabStaysInside(page, surface) {
 }
 
 async function pressEscapeSteps(page, surface, context, opener) {
-    if (surface.pushPage) await surface.pushPage(page);
+    if (surface.pushPage) await surface.pushPage(page, context);
     for (const step of surface.escapes) {
-        await pressKey(page, 'Escape');
+        // A step names its own way out where Escape cannot be it, as on the last page of a first run.
+        await (step.act ? step.act(page, context) : pressKey(page, 'Escape'));
         if (step.closes) await expect(surface.isOpen(page)).toHaveCount(0);
         await step.check(page, context);
-        const target = step.closes ? opener : step.focus(page);
+        const target = step.closes ? opener : step.focus(page, context);
         const active = await page.evaluate(() => window.sbA11y.focusState('body'));
         await expect(target, `focus after Escape is on ${active.label ?? 'the document'}`).toBeFocused();
     }
+}
+
+/**
+ * Marks the test as an expected failure when the surface lists a product defect for this check and width, as
+ * `knownBugs: [{ check, widths?, why }]`. The run stays green, and the test turns red once the defect is fixed, which is
+ * the cue to delete the entry.
+ */
+function expectKnownBugs(surface, check, viewport) {
+    const known = (surface.knownBugs ?? []).filter(bug => bug.check === check && (!bug.widths || bug.widths.includes(viewport.width)));
+    test.fail(known.length > 0, known.map(bug => bug.why).join('; '));
 }
 
 for (const surface of SURFACES) {
@@ -98,13 +115,19 @@ for (const surface of SURFACES) {
                     if (!surface.modal) {
                         const forward = await walkSurface(page, surface);
                         expect(forward.leftRoot, 'Tab leaves a non-modal panel').toBe(true);
-                        await pressKey(page, 'Shift+Tab');
-                        expect((await focusStateOf(page, surface)).inside, 'Shift+Tab returns into the panel').toBe(true);
+                        // A page has a document stop after its last control, so the first Shift+Tab can land on the document.
+                        const stepsBack = surface.hasEscape === false ? 2 : 1;
+                        let returned = false;
+                        for (let step = 0; step < stepsBack && !returned; step++) {
+                            await pressKey(page, 'Shift+Tab');
+                            returned = (await focusStateOf(page, surface)).inside === true;
+                        }
+                        expect(returned, 'Shift+Tab returns into the panel').toBe(true);
                         return;
                     }
                     await expectTabStaysInside(page, surface);
                     if (surface.pushPage) {
-                        await surface.pushPage(page);
+                        await surface.pushPage(page, context);
                         const onPage = await focusStateOf(page, surface);
                         expect.soft(onPage.inside, `focus after the page is pushed is ${onPage.label ?? 'the document'}`).toBe(true);
                         await expectTabStaysInside(page, surface);
@@ -119,19 +142,41 @@ for (const surface of SURFACES) {
                     expect(focusProblems(stops)).toEqual([]);
                 });
 
-                test('keyboard: Escape closes or pops one level and focus returns to the opener', async ({ page, baseURL }) => {
-                    const context = await surface.boot(page, baseURL, viewport, { motion: false });
-                    const opener = await surface.open(page, context);
-                    await pressEscapeSteps(page, surface, context, opener);
-                    await expect(surface.isOpen(page)).toHaveCount(0);
-                });
+                if (surface.hasEscape !== false) {
+                    test('keyboard: Escape closes or pops one level and focus returns to the opener', async ({ page, baseURL }) => {
+                        const context = await surface.boot(page, baseURL, viewport, { motion: false });
+                        const opener = await surface.open(page, context);
+                        await pressEscapeSteps(page, surface, context, opener);
+                        await expect(surface.isOpen(page)).toHaveCount(0);
+                    });
+                }
 
-                test('keyboard with motion: Escape closes through the closing animation and focus returns', async ({ page, baseURL }) => {
-                    const context = await surface.boot(page, baseURL, viewport, { motion: true });
-                    const opener = await surface.open(page, context);
-                    await pressEscapeSteps(page, surface, context, opener);
-                    await expect(surface.isOpen(page)).toHaveCount(0);
-                });
+                if (surface.structure) {
+                    test('structure: the dialog has a role and a name that follows its page, is modal, and every control in it has a name', async ({ page, baseURL }) => {
+                        const context = await surface.boot(page, baseURL, viewport, { motion: false });
+                        await surface.open(page, context);
+                        for (const state of surface.states) {
+                            await state.enter(page, context);
+                            await settleTransitions(page);
+                            const dialog = page.locator(surface.rootSelector).last();
+                            await expect(dialog, `${state.name}: role`).toHaveRole(surface.structure.role ?? 'dialog');
+                            const expectedName = typeof state.title === 'function' ? await state.title(page, viewport) : state.title ?? surface.structure.name;
+                            await expect(dialog, `${state.name}: name`).toHaveAccessibleName(expectedName);
+                            expect(await dialog.evaluate(node => node.matches(':modal')), `${state.name}: modal`).toBe(true);
+                            const unnamed = (await dialog.ariaSnapshot()).split('\n').filter(line => UNNAMED_CONTROL.test(line)).map(line => line.trim());
+                            expect.soft(unnamed, `${state.name}: controls without a name`).toEqual([]);
+                        }
+                    });
+                }
+
+                if (surface.hasEscape !== false) {
+                    test('keyboard with motion: Escape closes through the closing animation and focus returns', async ({ page, baseURL }) => {
+                        const context = await surface.boot(page, baseURL, viewport, { motion: true });
+                        const opener = await surface.open(page, context);
+                        await pressEscapeSteps(page, surface, context, opener);
+                        await expect(surface.isOpen(page)).toHaveCount(0);
+                    });
+                }
 
                 if (surface.destructive) {
                     test('keyboard: Return with Cancel focused does not confirm', async ({ page, baseURL }) => {
@@ -170,6 +215,7 @@ for (const surface of SURFACES) {
                 });
 
                 test('forced colours: buttons, switches and the focus ring stay visible', async ({ page, baseURL }) => {
+                    expectKnownBugs(surface, 'forced-controls', viewport);
                     const context = await surface.boot(page, baseURL, viewport, { motion: false });
                     await page.emulateMedia({ forcedColors: 'active' });
                     await surface.open(page, context);
@@ -177,7 +223,8 @@ for (const surface of SURFACES) {
                         await state.enter(page, context);
                         await settleTransitions(page);
                         const report = await page.evaluate(([root, frame]) => window.sbA11y.forcedColours(root, frame), [surface.rootSelector, surface.frameSelector]);
-                        expect.soft(report.controls, `${state.name}: control boundaries or fills`).toEqual([]);
+                        const bounded = report.controls.filter(control => !surface.flatControls?.test(control));
+                        expect.soft(bounded, `${state.name}: control boundaries or fills`).toEqual([]);
                         expect.soft(report.selected, `${state.name}: selected segment`).toEqual([]);
                         const { stops } = await walkSurface(page, surface);
                         expect.soft(focusProblems(stops, { forcedColours: true }), `${state.name}: focus indicator`).toEqual([]);
@@ -185,6 +232,7 @@ for (const surface of SURFACES) {
                 });
 
                 test('200% text: no label is clipped', async ({ page, baseURL }) => {
+                    expectKnownBugs(surface, 'clipped-labels', viewport);
                     const context = await surface.boot(page, baseURL, viewport, { motion: false, fontScale: TEXT_SCALE });
                     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--fontScale').trim()), 'the app applied the text scale').toBe(String(TEXT_SCALE));
                     await surface.open(page, context);
@@ -204,9 +252,12 @@ for (const surface of SURFACES) {
                         await state.enter(page, context);
                         await settleTransitions(page);
                         const report = await page.evaluate(([root, ellipsizing]) => window.sbA11y.scale(root, ellipsizing), [surface.rootSelector, ELLIPSIZING]);
-                        expect.soft(report.insideViewport, `${state.name}: frame inside the viewport`).toBe(true);
+                        // A page scrolls, so only its width has to fit the viewport.
+                        expect.soft(surface.scrolls ? report.insideAcross : report.insideViewport, `${state.name}: frame inside the viewport`).toBe(true);
                         expect.soft(report.overlaps, `${state.name}: overlapping header controls`).toEqual([]);
-                        expect.soft(report.responseCount, `${state.name}: responses found`).toBeGreaterThan(0);
+                        if (surface.hasResponses !== false) {
+                            expect.soft(report.responseCount, `${state.name}: responses found`).toBeGreaterThan(0);
+                        }
                         expect.soft(report.responses, `${state.name}: responses visible`).toEqual([]);
                         const last = await page.evaluate(selector => window.sbA11y.lastContent(selector), surface.rootSelector);
                         expect.soft(last.problems, `${state.name}: last content reachable`).toEqual([]);
@@ -217,6 +268,68 @@ for (const surface of SURFACES) {
         }
     });
 }
+
+// Restore is a button of the card, not a dialog, so it is checked here with the same probes as the surfaces above.
+test.describe('The Restore button of a deleted assistant card', () => {
+    const CARD = '#chat > .welcomePanel .sbHomeCard[data-sb-home-key="assistant-reisen"]';
+    const restoreOf = page => page.locator(`${CARD} .sbHomeFootButton`);
+
+    for (const viewport of [DESKTOP, PHONE]) {
+        test.describe(`${viewport.width}×${viewport.height}`, () => {
+            test('keyboard: Tab reaches it, it shows one focus ring, and Enter restores the card and keeps the focus on it', async ({ page, baseURL }) => {
+                await bootHomeWithDeletedReisen(page, baseURL, viewport, { motion: false });
+                const restore = restoreOf(page);
+                await expect(restore).toHaveAccessibleName('Restore Reisen');
+                await restore.focus();
+                await pressKey(page, 'Shift+Tab');
+                const { stops } = await walkTabOrder(page, CARD, { untilOutside: true });
+                expect(insideOnly(stops).map(stop => stop.label), 'the controls Tab reaches in the card').toHaveLength(1);
+                expect(focusProblems(stops)).toEqual([]);
+                await restore.focus();
+
+                await pressKey(page, 'Enter');
+
+                await expect(page.locator(`${CARD} .sbHomeCardOpen`)).toBeEnabled();
+                await expect(page.locator(`${CARD} .sbHomeFootButton`)).toHaveCount(2);
+                await expect(page.locator(`${CARD} .sbHomeFootButton`).first(), 'the focus stays on the card').toBeFocused();
+            });
+
+            test('forced colours: the button, the card and its text stay visible, and the focus ring too', async ({ page, baseURL }) => {
+                await bootHomeWithDeletedReisen(page, baseURL, viewport, { motion: false });
+                await page.emulateMedia({ forcedColors: 'active' });
+                await restoreOf(page).focus();
+                await pressKey(page, 'Shift+Tab');
+                await a11yShot(page, `forced-colours-restore-${viewport.width}`);
+
+                const report = await page.evaluate(selector => window.sbA11y.forcedColours(selector, selector), CARD);
+                const { stops } = await walkTabOrder(page, CARD, { untilOutside: true });
+
+                // The footer buttons of a card are flat on purpose: the label and the icon carry the button, and the card's own
+                // boundary and the focus ring below bound it. So the check of control boundaries, which holds a dialog button
+                // to a border or a fill, is not made here.
+                expect.soft(report.frame, 'card boundary').toEqual([]);
+                expect.soft(report.text, 'transparent text').toEqual([]);
+                expect(insideOnly(stops).length, 'focusable stops in the card').toBe(1);
+                expect.soft(focusProblems(stops, { forcedColours: true }), 'focus indicator').toEqual([]);
+            });
+
+            test('200% text: the label is not clipped and the button stays inside the card', async ({ page, baseURL }) => {
+                await bootHomeWithDeletedReisen(page, baseURL, viewport, { motion: false, fontScale: TEXT_SCALE });
+                await a11yShot(page, `text-200-restore-${viewport.width}`);
+
+                const report = await page.evaluate(([root, ellipsizing]) => window.sbA11y.scale(root, ellipsizing), [CARD, ELLIPSIZING]);
+                const inside = await restoreOf(page).evaluate((button, root) => {
+                    const box = button.getBoundingClientRect();
+                    const card = document.querySelector(root).getBoundingClientRect();
+                    return box.left >= card.left && box.right <= card.right + 1 && box.bottom <= card.bottom + 1;
+                }, CARD);
+
+                expect.soft(report.clipped, 'clipped labels').toEqual([]);
+                expect(inside, 'the button is inside the card').toBe(true);
+            });
+        });
+    }
+});
 
 test.describe('One focus ring on a .menu_button', () => {
     test('the Editor Presets button shows one ring, not an outline beside the shared ring', async ({ page, baseURL }) => {
@@ -235,7 +348,7 @@ test.describe('Forced colours keep a focus indicator on controls that hide their
         // forced-colours palette, so its emulation leaves the outline transparent.
         // eslint-disable-next-line playwright/no-skipped-test -- an engine gap, not a pending test
         test.skip(browserName === 'webkit', 'WebKit does not repaint a transparent outline in forced colours');
-        await bootMisc(page, baseURL, DESKTOP, { motion: false });
+        await bootMiscWithChat(page, baseURL, DESKTOP, { motion: false });
         await page.emulateMedia({ forcedColors: 'active' });
         const indicatorOf = control => control.evaluate(element => {
             const style = getComputedStyle(element);
@@ -311,7 +424,7 @@ test.describe('Enter on a real button', () => {
     });
 
     test('an element that is only an .interactable still activates once', async ({ page, baseURL }) => {
-        await bootMisc(page, baseURL, DESKTOP, { motion: false });
+        await bootMiscWithChat(page, baseURL, DESKTOP, { motion: false });
         const trigger = page.locator('#options_button');
         await expect(trigger).toHaveJSProperty('tagName', 'DIV');
         await page.evaluate(() => {

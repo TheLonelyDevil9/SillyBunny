@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { selectSampleCharacter } from '../chat-scroll-regression-helpers.js';
 import { protectMaintainerServer } from '../helpers/maintainer-server.js';
 
 const layerTwoControls = [
@@ -93,11 +94,6 @@ test('desktop Characters settings page opens from its top-bar trigger', async ({
     await page.goto('/');
     await page.waitForFunction(() => typeof window.SillyBunnyShell?.openTab === 'function' && !document.querySelector('#preloader'));
 
-    const setupWizard = page.locator('#qig-setup-wizard');
-    if (await setupWizard.isVisible().catch(() => false)) {
-        await setupWizard.locator('.qig-close-btn').click({ force: true });
-        await expect(setupWizard).toBeHidden({ timeout: 5000 });
-    }
     await page.evaluate(() => document.body.classList.remove('reduced-motion'));
 
     await page.locator('#sb-character-toggle').click();
@@ -281,6 +277,8 @@ test('mobile settings page and chat tools use WAAPI motion with reduced-motion f
     await page.locator('#sb-settings-close').click();
     await expect(settingsPage).toHaveAttribute('hidden');
 
+    // The chat chip belongs to the composer, which Home does not have.
+    await selectSampleCharacter(page);
     await page.locator('.sb-bottom-chat-chip').click();
     const sheet = page.locator('#sb-bottom-chat-sheet');
     const surface = await sheet.elementHandle();

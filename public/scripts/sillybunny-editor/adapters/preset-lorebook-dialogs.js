@@ -53,7 +53,7 @@ export function presetChoicesOptions(root, { deletion = false } = {}) {
     return {
         tier: 'dialog',
         ...(deletion ? { title: t`Delete selected` } : {}),
-        onOpen(popup) {
+        onOpening(popup) {
             if (deletion) popup.okButton.classList.add('is-destructive');
         },
         // Callers read the adopted checkboxes after show() resolves; do not remove the rows here.

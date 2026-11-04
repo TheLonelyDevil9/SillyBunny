@@ -564,6 +564,104 @@ describe('Popup frame adapter', () => {
         }
     });
 
+    test('opened() ends with the onOpening handler, after the frame is built and the default focus is set', () => {
+        setupDialogMedia();
+        const calls = [];
+        const value = popupDom({ contentHtml: '<h3>Title</h3>' });
+        value.setAutoFocus = () => calls.push('focus');
+        value.onOpening = popupArgument => calls.push({
+            popup: popupArgument === value,
+            framed: popupArgument.dlg.classList.contains('sb-dialog--dialog'),
+            header: popupArgument.dlg.querySelector(':scope > .sb-dialog__header') !== null,
+            handle: popupArgument.dlg.querySelector(':scope > .sb-dialog__handle') !== null,
+            presentation: popupArgument.dlg.dataset.presentation,
+        });
+        const frame = framePopup(value, { tier: 'dialog' });
+        value.dlg.showModal();
+        expect(calls).toEqual([]);
+        frame.opened();
+        expect(calls).toEqual(['focus', { popup: true, framed: true, header: true, handle: true, presentation: 'floating' }]);
+        frame.dispose();
+    });
+
+    test('opened() measures a content-sized Window again after the handler made it shorter', () => {
+        setupDialogMedia();
+        const animationFrame = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => {
+            callback();
+            return 0;
+        });
+        const value = popupDom({ type: POPUP_TYPE.TEXT });
+        let height = 400;
+        Object.defineProperty(value.dlg, 'offsetHeight', { configurable: true, get: () => height });
+        value.onOpening = () => { height = 300; };
+        const frame = framePopup(value, { tier: 'window', size: 'content' });
+        try {
+            value.dlg.showModal();
+            frame.opened();
+            expect(value.dlg.style.minHeight).toBe('300px');
+        } finally {
+            frame.dispose();
+            animationFrame.mockRestore();
+        }
+    });
+
+    test('a throwing handler is logged, and the transitions that it started still end', () => {
+        setupDialogMedia();
+        const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const transition = { transitionProperty: 'background-color', finish: jest.fn() };
+            const value = popupDom();
+            value.dlg.getAnimations = jest.fn(() => [transition]);
+            value.onOpening = () => { throw new TypeError('adapter failed'); };
+            const frame = framePopup(value, { tier: 'dialog' });
+            value.dlg.showModal();
+            frame.opened();
+            expect(error).toHaveBeenCalledTimes(1);
+            expect(transition.finish).toHaveBeenCalledTimes(1);
+            frame.dispose();
+        } finally {
+            error.mockRestore();
+        }
+    });
+
+    test('the transitions that onOpening starts end at once, and other animations keep running', () => {
+        setupDialogMedia();
+        const transition = { transitionProperty: 'background-color', finish: jest.fn() };
+        const animation = { animationName: 'pop-in', finish: jest.fn() };
+        const value = popupDom();
+        value.dlg.getAnimations = jest.fn(() => [transition, animation]);
+        value.onOpening = jest.fn();
+        const frame = framePopup(value, { tier: 'dialog' });
+        value.dlg.showModal();
+        frame.opened();
+        expect(value.dlg.getAnimations).toHaveBeenCalledWith({ subtree: true });
+        expect(transition.finish).toHaveBeenCalledTimes(1);
+        expect(animation.finish).not.toHaveBeenCalled();
+        frame.dispose();
+
+        const plain = popupDom();
+        plain.dlg.getAnimations = jest.fn(() => [transition]);
+        const plainFrame = framePopup(plain, { tier: 'dialog' });
+        plain.dlg.showModal();
+        plainFrame.opened();
+        expect(plain.dlg.getAnimations).not.toHaveBeenCalled();
+        plainFrame.dispose();
+    });
+
+    test('opened() also calls the handler of a popup that keeps its own frame', () => {
+        setupDialogMedia();
+        const value = popupDom({ type: POPUP_TYPE.TEXT });
+        value.dlg.classList.add('transparent_dialogue_popup');
+        value.onOpening = jest.fn();
+        const frame = framePopup(value);
+        value.dlg.showModal();
+        frame.opened();
+        expect(value.dlg.classList.contains('sb-dialog')).toBe(false);
+        expect(value.onOpening).toHaveBeenCalledTimes(1);
+        expect(value.onOpening).toHaveBeenCalledWith(value);
+        frame.dispose();
+    });
+
     test('teardown lets hosted layers close before any surviving cached layers are released', () => {
         setupDialogMedia();
         const value = popupDom();
