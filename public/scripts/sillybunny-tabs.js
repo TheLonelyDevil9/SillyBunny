@@ -16007,8 +16007,10 @@ function getActiveChatMode() {
 }
 
 // Neither mode is active on Home, so the switcher shows the mode that chats open in.
+// Creator covers Home without ending it, so it is the active mode there.
 function getDisplayedChatMode() {
-    return isHomeActive() ? getLastChatMode() : getActiveChatMode();
+    const activeMode = getActiveChatMode();
+    return isHomeActive() && activeMode !== 'creator' ? getLastChatMode() : activeMode;
 }
 
 let homeRoleplayResumePending = false;
@@ -16036,7 +16038,7 @@ async function resumeRoleplayFromHome() {
 }
 
 function enterChatMode(mode) {
-    if (!isHomeActive()) {
+    if (!isHomeActive() || getActiveChatMode() === 'creator') {
         if (mode !== getActiveChatMode()) {
             setCharacterShellMode(mode);
         }
