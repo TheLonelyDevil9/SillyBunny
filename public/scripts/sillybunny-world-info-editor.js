@@ -329,7 +329,7 @@ export function mountWorldInfoEditor(container) {
         const action = (label, glyph, id, danger = false) => menuItem(label, glyph, () => clickTransport(id), danger, !state.data);
         menu(trigger, state.name ?? t`World Info`, [
             [menuItem(t`Global Settings`, 'gear', toggleSettings)],
-            [menuItem(t`lorum ipsum`, 'link', () => openUsedByPicker(trigger), false, !state.name)], // HUMAN: replace — Used by book action.
+            [menuItem(t`Used By…`, 'link', () => openUsedByPicker(trigger), false, !state.name)],
             [menuItem(t`Select`, 'check-double', () => selection.enter(null, trigger), false, !state.name || !Object.keys(state.data?.entries ?? {}).length)],
             [action(t`Rename World Info`, 'pencil', 'world_popup_name_button'), action(t`Duplicate World Info`, 'copy', 'world_duplicate'), action(t`Export World Info`, 'file-export', 'world_popup_export')],
             [action(t`Batch Import Embedded Lorebooks`, 'cubes-stacked', 'world_batch_import_embedded'), action(t`Fill empty Memo/Titles with Keywords`, 'notes-medical', 'world_backfill_memos'), action(t`Apply current sorting as Order`, 'arrow-down-9-1', 'world_apply_current_sorting'), action(t`Refresh`, 'arrows-rotate', 'world_refresh')],
@@ -344,7 +344,7 @@ export function mountWorldInfoEditor(container) {
         const relations = { primary: t`Primary Lorebook`, extra: t`Additional Lorebooks`, persona: t`Persona` };
         picker = openPicker({
             trigger,
-            title: t`lorum ipsum`, // HUMAN: replace — Used by picker title.
+            title: t`Used By`,
             emptyText: t`No results`,
             items: users.map(user => ({
                 value: user.value, label: user.label,
@@ -366,8 +366,7 @@ export function mountWorldInfoEditor(container) {
         const options = [...(sort?.options ?? [])].filter(option => !option.hidden);
         menu(trigger, filterButton.getAttribute('aria-label'), [
             {
-                // HUMAN: replace — Show section title.
-                title: t`lorum ipsum`,
+                title: t`Show`,
                 items: viewButtons.map(control => ({
                     ...menuItem(translate(control.textContent.trim()), 'list', () => control.click()),
                     kind: 'radio',
@@ -375,8 +374,7 @@ export function mountWorldInfoEditor(container) {
                 })),
             },
             {
-                // HUMAN: replace — Sort by section title.
-                title: t`lorum ipsum`,
+                title: t`Sort By`,
                 items: options.map(option => ({
                     ...menuItem(translate(option.textContent.trim()), 'arrow-down-wide-short', () => {
                         sort.value = option.value;
@@ -623,8 +621,7 @@ export function mountWorldInfoEditor(container) {
         const total = allEntries.length;
         const active = allEntries.filter(entry => !entry.disable).length;
         if (selection?.isActive) selection.select(existingSelectedUids());
-        // HUMAN: replace — entry-count and active-count subtitle labels.
-        bookSubtitle.textContent = `${total} ${t`lorum ipsum`} · ${active} ${t`lorum ipsum`}`;
+        bookSubtitle.textContent = total === 1 ? t`${total} entry · ${active} active` : t`${total} entries · ${active} active`;
         listStatus.hidden = Boolean(state.data && entries.length);
         entriesHeading.hidden = !listStatus.hidden;
         entryBox.hidden = !listStatus.hidden;
@@ -638,10 +635,9 @@ export function mountWorldInfoEditor(container) {
                 ],
             });
         } else if (!entries.length) {
-            // HUMAN: replace — empty-book title; a filtered nonempty book instead shows No results.
             showStatus(listStatus, {
                 icon: total ? 'magnifying-glass' : 'book-open',
-                title: total ? t`No results` : t`lorum ipsum`, compact: true,
+                title: total ? t`No Results` : t`No Entries`, compact: true,
                 actions: total ? [] : [{ label: t`New Entry`, primary: true, onActivate: () => run(() => clickTransport('world_popup_new')) }],
             });
         }

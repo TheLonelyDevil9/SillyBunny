@@ -33,21 +33,27 @@ The tables below are generated from the generation log. They list each model's i
 |---|---|---|---|---|---|---|---|
 | gemini | gemini-3-pro-image-preview | 1 | 2026-11-01 | 2026-11-01 | 0 | $0.35 | - |
 | gemini | gemini-nano-banana-2.1 | 5 | 2026-11-01 | 2026-11-01 | 0 | $0.90 | - |
-| local | compose-scene | 17 | 2026-11-01 | 2026-11-01 | 8 | - | $0.00 |
+| local | breath-frames | 56 | 2026-11-02 | 2026-11-04 | 0 | - | $0.00 |
+| local | build-card | 2 | 2026-11-04 | 2026-11-04 | 0 | - | $0.00 |
+| local | compose-scene | 20 | 2026-11-01 | 2026-11-04 | 8 | - | $0.00 |
+| local | export-motion | 68 | 2026-11-04 | 2026-11-04 | 0 | - | $0.00 |
 | local | github-assets | 14 | 2026-11-04 | 2026-11-04 | 0 | - | $0.00 |
 | local | icons | 26 | 2026-11-04 | 2026-11-04 | 0 | - | $0.00 |
-| local | pixel-snap | 66 | 2026-11-01 | 2026-11-04 | 37 | - | $0.00 |
-| local | rim-recolour | 48 | 2026-11-01 | 2026-11-01 | 13 | - | $0.00 |
+| local | pixel-snap | 87 | 2026-11-01 | 2026-11-04 | 54 | - | $0.00 |
+| local | retouch | 3 | 2026-11-04 | 2026-11-04 | 0 | - | $0.00 |
+| local | rim-recolour | 53 | 2026-11-01 | 2026-11-04 | 15 | - | $0.00 |
+| local | splash-frames | 40 | 2026-11-04 | 2026-11-04 | 21 | - | $0.00 |
+| local | splash-hand-fix | 1 | 2026-11-03 | 2026-11-03 | 0 | - | $0.00 |
 | local | vectorize | 14 | 2026-11-01 | 2026-11-01 | 4 | - | $0.00 |
 | openai | gpt-image-2.5-flare-h | 1 | 2026-11-01 | 2026-11-01 | 0 | $0.40 | - |
-| openai | gpt-image-2.5-sunburst-h | 364 | 2026-11-01 | 2026-11-03 | 8 | $51.80 | $7.20 |
+| openai | gpt-image-2.5-sunburst-h | 432 | 2026-11-01 | 2026-11-04 | 8 | $61.00 | $9.20 |
 
 | Fact | Value |
 |---|---|
 | Log | log/generations.jsonl |
-| Reference images attached | 621 |
-| Total charged | $53.45 |
-| Total estimated, not yet measured | $7.20 |
+| Reference images attached | 970 |
+| Total charged | $62.65 |
+| Total estimated, not yet measured | $9.20 |
 
 ### Current approvals
 
@@ -97,7 +103,6 @@ The tables below are generated from the generation log. They list each model's i
 | pixel/welcome-persona-tewi.png | pixel-snap | d6572fdde4c87825 |
 | pixel/hero-duo-reisen.png | pixel-snap | d2d102def3fad79c |
 | pixel/hero-duo-tewi.png | pixel-snap | a032addcbbcc7571 |
-| pixel/hero-duo-night-reisen.png | pixel-snap | dbc2f629e6944e54 |
 | pixel/hero-duo-night-tewi.png | pixel-snap | f91c2f829366914a |
 | pixel/splash-both-reisen.png | pixel-snap | 2c808d4a2ada67c0 |
 | pixel/splash-both-tewi.png | pixel-snap | 758b3ceaf59fa520 |
@@ -109,8 +114,6 @@ The tables below are generated from the generation log. They list each model's i
 | pixel/night-star-12.png | pixel-snap | 0f12f538ce36956c |
 | pixel/night-star-18.png | pixel-snap | 4f0b985df705aa9b |
 | pixel/night-star-8.png | pixel-snap | f0227f5d12fc8ab0 |
-| pixel/hero-duo-night.png | compose-scene | 5ddba172ccbfd32a |
-| pixel/hero-duo.png | compose-scene | 56264c68917e834b |
 | pixel/splash-both.png | compose-scene | 3a31482b395a1f6d |
 | pixel/welcome-both.png | compose-scene | 2d497764720e1b73 |
 | pixel/social-welcome.png | pixel-snap | 31a1d0e32a63d040 |
@@ -123,10 +126,53 @@ The tables below are generated from the generation log. They list each model's i
 | pixel/backdrop-mansion-day-banner.png | pixel-snap | 9bd8c4c86e75c783 |
 | pixel/backdrop-mansion-day-social.png | pixel-snap | b2d9da391491adc7 |
 | pixel/backdrop-mansion-night-banner.png | pixel-snap | a4806dbc8e0f8a51 |
+| card-reisen.png | rim-recolour | ab7c4d7fa9821435 |
+| pixel/hero-duo-reisen--half.png | pixel-snap | 8cec84d6f0bc54f9 |
+| pixel/hero-duo-reisen--closed.png | pixel-snap | b08972fea22879f3 |
+| pixel/hero-duo-tewi--half.png | pixel-snap | c11986d236315f68 |
+| pixel/hero-duo-tewi--closed.png | pixel-snap | 694e839f2e932878 |
+| pixel/welcome-both-reisen--half.png | pixel-snap | a8e5bcdc230e541f |
+| pixel/welcome-both-reisen--closed.png | pixel-snap | 91f5397258d1cd50 |
+| pixel/welcome-both-tewi--half.png | pixel-snap | 8617c9f3bfd401a8 |
+| pixel/welcome-both-tewi--closed.png | pixel-snap | 6655a23e6232d930 |
+| card-tewi.png | rim-recolour | 1225a2a4e66ff29b |
+| pixel/day-sun.png | pixel-snap | 4227d0d93b055ae0 |
+| pixel/day-cloud-35.png | pixel-snap | 7abeb6b54d1cc98d |
+| pixel/day-cloud-21.png | pixel-snap | d9ba951a80dc5ff4 |
+| pixel/scene-leaves-18.png | pixel-snap | 564e8cff9ebfe85c |
+| pixel/scene-leaves-16.png | pixel-snap | 321db7235d8e3fb4 |
+| pixel/scene-leaves-17.png | pixel-snap | 3ed1728471c29e2d |
+| pixel/scene-leaves-15.png | pixel-snap | a6014b4b9d6dfcd2 |
+| pixel/hero-duo.png | compose-scene | 818d5d45dd1a258f |
+| pixel/splash3-tewi--raised.png | splash-frames | 0d29f1dbe6de9c37 |
+| pixel/splash3-tewi--windup.png | splash-frames | 38e182f17218e945 |
+| pixel/splash3-tewi--swing.png | splash-frames | f9647f265d70dbae |
+| pixel/splash3-tewi--mid.png | splash-frames | 7023ab6ff893987a |
+| pixel/splash3-tewi--strike.png | splash-frames | cdfef1841a651e03 |
+| pixel/splash3-tewi--rebound.png | splash-frames | fcfb01c28b6972d6 |
+| pixel/splash3-tewi--hoist.png | splash-frames | 14290f82c8a9cd3b |
+| pixel/splash3-reisen--raised.png | splash-frames | 5a743bea17ff44f4 |
+| pixel/splash3-reisen--idle.png | splash-frames | 1563f31ff94f2535 |
+| pixel/splash3-reisen--rise.png | splash-frames | 4c685ddd00b84f36 |
+| pixel/splash3-reisen--inhale.png | splash-frames | 07c3c3a85d9f63e3 |
+| pixel/splash3-reisen--call.png | splash-frames | 47c3f4b0d79462dc |
+| pixel/splash3-reisen--hold.png | splash-frames | 84e0dd6080c800f4 |
+| pixel/splash3-reisen--lower.png | splash-frames | 3e60db51fc4f5ba8 |
+| pixel/splash3-both--write-a.png | splash-frames | 8e8c972a8788f7c1 |
+| pixel/splash3-both--write-b.png | splash-frames | 75124019597569c6 |
+| pixel/splash3-both--write-c.png | splash-frames | e033af63e9dfb5b3 |
+| pixel/splash3-both--lean-a.png | splash-frames | 3c07d9926575d8f1 |
+| pixel/splash3-both--lean-b.png | splash-frames | 16e86578c7576ad6 |
+| pixel/splash3-both--sigh.png | splash-frames | dd5d3586c10c8377 |
+| pixel/splash3-both--resume.png | splash-frames | 163e66c1b5bd1071 |
+| pixel/hero-duo-night-reisen.png | pixel-snap | c83ec368f31c6969 |
+| pixel/hero-duo-night-reisen--half.png | pixel-snap | b249d4eb085f6c0f |
+| pixel/hero-duo-night-reisen--closed.png | pixel-snap | 8675215c9c22e2e2 |
+| pixel/hero-duo-night.png | compose-scene | f9b52a57efc605cd |
 
-Superseded approvals (history): 40 (0936fee3 -> 865ebf9f, 7dc7ff2d -> 92924be1, 9b48358e -> 2795ed66, 92924be1 -> 6063c87e, ed20db74 -> 877b98da, 758fd49a -> 29409083, 29409083 -> 8fda287e, d3b60b7b -> 15a30c6f, e0b718ef -> 95b33a9e, 04fb7477 -> 9b293839, 4494ac9b -> 6f721a0b, c1a53329 -> a91a7e2a, e6492c50 -> 9c23bd36, 9329c6de -> a7e8510d, 8e9a6171 -> 6077d325, a5c1d826 -> ef9b5594, e1245726 -> 54523c95, deaa1915 -> 0791c10b, d253f22f -> 353f37ba, ad4625da -> 8e8d51b9, d75c6a83 -> d7800378, 85994317 -> 2c572d22, 6d393ee8 -> 9ea402f6, ba01225c -> 63facca5, 804aeaba -> 833b9051, 54523c95 -> ac8f6a1e, 0eca4383 -> e6492c50, 5a8c6685 -> deaa1915, 6077d325 -> 40b991bb, 61ae5f93 -> 01467705, d47af0f9 -> 65c9acf5, 7857a7d9 -> f05d898d, 468ab45d -> b72395bd, 9c23bd36 -> 8dfe73c3, ef9b5594 -> bc8ea8db, afd7869b -> 5a8c6685, 2c572d22 -> 9be6ceec, 15a30c6f -> ca329447, 353f37ba -> 969567dd, d7800378 -> 0218df3e).
+Superseded approvals (history): 46 (0936fee3 -> 865ebf9f, 7dc7ff2d -> 92924be1, 9b48358e -> 2795ed66, 92924be1 -> 6063c87e, ed20db74 -> 877b98da, 758fd49a -> 29409083, 29409083 -> 8fda287e, d3b60b7b -> 15a30c6f, e0b718ef -> 95b33a9e, 04fb7477 -> 9b293839, 4494ac9b -> 6f721a0b, c1a53329 -> a91a7e2a, e6492c50 -> 9c23bd36, 9329c6de -> a7e8510d, 8e9a6171 -> 6077d325, a5c1d826 -> ef9b5594, e1245726 -> 54523c95, deaa1915 -> 0791c10b, d253f22f -> 353f37ba, ad4625da -> 8e8d51b9, d75c6a83 -> d7800378, 85994317 -> 2c572d22, 6d393ee8 -> 9ea402f6, ba01225c -> 63facca5, 804aeaba -> 833b9051, 54523c95 -> ac8f6a1e, 0eca4383 -> e6492c50, 5a8c6685 -> deaa1915, 6077d325 -> 40b991bb, 61ae5f93 -> 01467705, d47af0f9 -> 65c9acf5, 7857a7d9 -> f05d898d, 468ab45d -> b72395bd, 9c23bd36 -> 8dfe73c3, ef9b5594 -> bc8ea8db, afd7869b -> 5a8c6685, 2c572d22 -> 9be6ceec, 15a30c6f -> ca329447, 353f37ba -> 969567dd, d7800378 -> 0218df3e, dbc2f629 -> c83ec368, 5ddba172 -> 85ff5915, 56264c68 -> 818d5d45, 6940a407 -> b249d4eb, 3d06386a -> 8675215c, 85ff5915 -> f9b52a57).
 
-### Tools (checked 2026-11-04)
+### Tools (checked 2026-11-05)
 
 | Tool | Version |
 |---|---|
