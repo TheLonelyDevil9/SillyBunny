@@ -8,7 +8,6 @@ import PNGtext from 'png-chunk-text';
 import extract from 'png-chunks-extract';
 
 import { read as readCardImage } from '../src/character-card-parser.js';
-import { MANIFEST_FILE_NAME } from '../src/sillybunny-managed-content.js';
 import { setConfigFilePath } from '../src/util.js';
 import { TavernCardValidator } from '../src/validator/TavernCardValidator.js';
 
@@ -20,6 +19,7 @@ globalThis.DATA_ROOT = 'data-root';
 setConfigFilePath(path.join(repoRoot, 'default', 'config.yaml'));
 const { CONTENT_TYPES, PRESET_CONTENT_TYPES, getDefaultPresets, getGlobalTargetByType, getUserTargetByType } = await import('../src/endpoints/content-manager.js');
 const { isValidWorldInfoData } = await import('../src/endpoints/worldinfo.js');
+const { MANIFEST_FILE_NAME } = await import('../src/sillybunny-managed-content.js');
 
 // Each property reads back as its own name. A resolved target then shows which directory a type installs to.
 const directoryNames = new Proxy({}, { get: (_target, name) => String(name) });
@@ -389,6 +389,7 @@ describe('bundled content index', () => {
         const filenames = readIndex().map(entry => entry.filename);
         const unlisted = listFiles(contentDirectory)
             .map(file => path.relative(contentDirectory, file).split(path.sep).join('/'))
+            // The managed content manifest describes bundled files for updates and is not content that the index installs.
             .filter(file => file !== 'index.json' && file !== MANIFEST_FILE_NAME)
             .filter(file => !filenames.some(filename => file === filename || file.startsWith(`${filename}/`)));
         expect(unlisted).toEqual([]);

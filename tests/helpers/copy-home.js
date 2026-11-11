@@ -5,6 +5,7 @@ export const HOME_COPY = Object.freeze({
     heroFork: 'SillyBunny is our opinionated fork of SillyTavern. Your characters, chats, presets, and extensions should all be compatible.',
     heroGreeting: 'Lucky you, stopping by! Pick a character and let\'s get started.',
     tileGettingStarted: 'Are you new? Did you need a refresher? We\'ve prepared a checklist for you to follow.',
+    tileGettingStartedDone: 'All done! Open me once more to check off your list.',
     tileHelp: 'Want some extra help? Consult our help handbook at any time.',
     helpIntro: 'Welcome to our handbook. ...I know I\'m not the greatest at explaining things in simple terms, but I\'ll try my best to make this as easy as possible for you! Please select a category.',
     tileExtras: 'Goodies I found just for you!',
@@ -13,6 +14,9 @@ export const HOME_COPY = Object.freeze({
     gettingStartedIntroDone: 'You did it! Everything\'s set up. Start a chat whenever you\'re ready, and come find me in your Home screen if anything puzzles you.',
     toastDone: 'Well done! That step is finished.',
     toastNext: 'is next, whenever you\'re ready.',
+    toastFinished: 'Congrats, you\'ve completed every step I\'ve given you! You can dismiss it in Home whenever you\'d like.',
+    hideGettingStarted: 'Hide Getting Started',
+    hideGettingStartedCaption: 'You can bring it back from the Home menu.',
     recentEmptyHead: 'Oops! You don\'t have any chats yet. Unlucky you.',
     recentEmptyBody: 'Make sure to actually start one with any character, or say hello to Reisen or me first. Nothing will show here otherwise!',
     recentFilterEmptyHead: 'No Matching Chats',
@@ -29,6 +33,13 @@ export const STEP_BODIES = Object.freeze({
     preset: 'A preset shapes how replies are written: their length, writing style, and rules. Of course, you can skip this and stick to the defaults if you\'d like - we\'ve provided a few to get you started!',
     character: 'A character card holds a character\'s personality and their written scenario. Feel free to import a card you like, or open a chat with a character you already have, like Tewi or me!',
     chat: 'Well done! Now you can send your first message! Roleplay is the traditional way to interact with your character, following their greeting and scenario. Conversation is a direct, messenger-style chat.',
+});
+
+/** The line of a finished step, by step id. Step 3 has three, by the kind of card (`CHARACTER_DONE_LINES`). */
+export const STEP_DONE_LINES = Object.freeze({
+    connect: 'We\'re connected! Your model is ready to write replies whenever you are.',
+    preset: 'Good choice! Your replies follow this preset now, and you can switch any time.',
+    chat: 'Your first message is sent! I can\'t wait to see where your chats go.',
 });
 
 /** The line of a finished step 3, by the kind of card that finished it. */

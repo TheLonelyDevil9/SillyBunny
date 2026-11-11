@@ -52,9 +52,10 @@ const card = avatar => makeCharacterCard(avatar, NAMES[avatar] ?? avatar);
  * @param {import('@playwright/test').Page} page
  * @param {{ library: string[], accountStorage?: Record<string, string>, lastMode?: 'roleplay' | 'conversation', exact?: boolean }} options
  *   `exact` drops the characters that the data root holds, so the picker lists the library of the test and nothing else.
+ *   `recent` is what the server lists as Recent Chats, one entry per row: `{ file_name, avatar, last_mes, mes, chat_items, file_size }`.
  */
-async function boot(page, { library, accountStorage = {}, lastMode = 'roleplay', exact = false }) {
-    const world = { library: new Set(library), chatSaves: [], lastChats: [] };
+async function boot(page, { library, accountStorage = {}, lastMode = 'roleplay', exact = false, missingThumbnails = [], recent = null }) {
+    const world = { library: new Set(library), chatSaves: [], lastChats: [], thumbnailRequests: [] };
     const bundled = [REISEN, TEWI, NAHIDA];
 
     page.on('request', (request) => {
@@ -70,7 +71,18 @@ async function boot(page, { library, accountStorage = {}, lastMode = 'roleplay',
     for (const avatar of library) {
         registerFixtureChat(page, { avatar, name: NAMES[avatar] ?? avatar, chat: `qa-${avatar}` });
     }
-    await page.route('**/thumbnail?*', route => route.fulfill({ contentType: 'image/png', body: THUMBNAIL }));
+    // The server answers 404 when it cannot make a thumbnail, and a card of a character that was deleted meanwhile is the same.
+    await page.route('**/thumbnail?*', (route) => {
+        const url = new URL(route.request().url());
+        world.thumbnailRequests.push(url.search);
+        if (missingThumbnails.includes(url.searchParams.get('file'))) {
+            return route.fulfill({ status: 404, body: '' });
+        }
+        return route.fulfill({ contentType: 'image/png', body: THUMBNAIL });
+    });
+    if (recent) {
+        await page.route('**/api/chats/recent', route => route.fulfill({ json: recent }));
+    }
     await page.route('**/api/characters/all', async (route) => {
         if (exact) return route.fulfill({ json: [...world.library].map(card) });
         const real = await fetchJsonOrSkip(route);
@@ -91,6 +103,44 @@ async function boot(page, { library, accountStorage = {}, lastMode = 'roleplay',
     await expect(page.locator(HOME)).toBeAttached({ timeout: STARTUP_TIMEOUT });
     return world;
 }
+
+/** Records every source that a picture of a card is given, with the card that holds it, from the page's first script, so one that is replaced a moment later is still seen. Read it from `window.qaCardSources`. */
+const recordCardSources = page => page.addInitScript(() => {
+    window.qaCardSources = [];
+    const record = (node) => {
+        for (const image of node instanceof HTMLImageElement ? [node] : (node instanceof Element ? node.querySelectorAll('img') : [])) {
+            const card = image.closest('.sbHomeCard');
+            if (card && image.closest('.sbHomeArt')) window.qaCardSources.push({ card: card.dataset.sbHomeKey, src: image.getAttribute('src') });
+        }
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+        new MutationObserver((records) => {
+            for (const entry of records) {
+                record(entry.type === 'attributes' ? entry.target : null);
+                entry.addedNodes.forEach(record);
+            }
+        }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+    }, { once: true });
+});
+
+/** Records every source that a picture of a Recent Chats row is given, with the avatar of the row, from the page's first script. Read it from `window.qaRowSources`. */
+const recordRowSources = page => page.addInitScript(() => {
+    window.qaRowSources = [];
+    const record = (node) => {
+        for (const image of node instanceof HTMLImageElement ? [node] : (node instanceof Element ? node.querySelectorAll('img') : [])) {
+            const row = image.closest('.recentChat');
+            if (row && image.closest('.avatar')) window.qaRowSources.push({ avatar: row.dataset.avatar, src: image.getAttribute('src') });
+        }
+    };
+    document.addEventListener('DOMContentLoaded', () => {
+        new MutationObserver((records) => {
+            for (const entry of records) {
+                record(entry.type === 'attributes' ? entry.target : null);
+                entry.addedNodes.forEach(record);
+            }
+        }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+    }, { once: true });
+});
 
 const currentChat = page => page.evaluate(async () => (await import('/script.js')).getCurrentChatId());
 const currentAvatar = page => page.evaluate(async () => {
@@ -143,38 +193,115 @@ for (const { name, portrait, options } of VIEWPORTS) {
                 }
             });
 
-            test('show the thumbnail of the card for the pointer character, and a placeholder box for Reisen and Tewi', async ({ page }) => {
+            test('show the thumbnail of their own card on every card: Reisen, Tewi and the pointer character', async ({ page }) => {
                 await boot(page, { library: [...BOTH, 'Alice.png'], accountStorage: { assistant: 'Alice.png' } });
+                const thumbnailOf = avatar => page.evaluate(async file => (await import('/script.js')).getMobileThumbnailUrl('avatar', file), avatar);
 
-                await expect(cardOf(page, 'assistant-own').locator('.sbHomeArt[data-sb-art-placeholder="row-pointer"] img')).toHaveAttribute('src', /file=Alice\.png/);
-                await expect.poll(() => cardOf(page, 'assistant-own').locator('.sbHomeArt img').evaluate(image => image.complete && image.naturalWidth)).toBeGreaterThan(0);
-                await expect(cardOf(page, 'assistant-reisen').locator('.sbHomeArt[data-sb-art-placeholder="row-reisen"]')).toBeVisible();
-                await expect(cardOf(page, 'assistant-reisen').locator('img')).toHaveCount(0);
+                for (const [key, avatar, art] of [['assistant-reisen', REISEN, 'row-reisen'], ['assistant-tewi', TEWI, 'row-tewi'], ['assistant-own', 'Alice.png', 'row-pointer']]) {
+                    const image = cardOf(page, key).locator(`.sbHomeArt[data-sb-art-placeholder="${art}"] img`);
+                    await expect(image, key).toHaveAttribute('src', await thumbnailOf(avatar));
+                    await expect.poll(() => image.evaluate(node => node.complete && node.naturalWidth), key).toBeGreaterThan(0);
+                }
 
-                // Every portrait has the box of the placeholder of Reisen: the one pixel scale of the screen, the same corners, and a thumbnail that covers it.
+                // Every portrait has the same box: the one pixel scale of the screen, the same corners, and a thumbnail that covers it, cropped alike.
                 const boxes = await page.locator(`${HOME} .sbHomeCard:not(.sbHomeCard--choose) .sbHomeArt`).evaluateAll(nodes => nodes.map((node) => {
                     const box = node.getBoundingClientRect();
                     const image = node.querySelector('img');
-                    const imageBox = image?.getBoundingClientRect();
+                    // The layout size, which the zoom of Tewi's picture does not change; the next test reads the zoomed rectangle.
+                    const imageBox = { width: image.offsetWidth, height: image.offsetHeight };
                     return {
                         art: node.dataset.sbArtPlaceholder,
                         size: [Math.round(box.width), Math.round(box.height)],
                         radius: getComputedStyle(node).borderTopLeftRadius,
-                        rendering: [getComputedStyle(node).imageRendering, image ? getComputedStyle(image).imageRendering : 'auto'],
-                        image: imageBox ? { size: [Math.round(imageBox.width), Math.round(imageBox.height)], fit: getComputedStyle(image).objectFit } : null,
+                        rendering: [getComputedStyle(node).imageRendering, getComputedStyle(image).imageRendering],
+                        image: { size: [Math.round(imageBox.width), Math.round(imageBox.height)], fit: getComputedStyle(image).objectFit, position: getComputedStyle(image).objectPosition },
                     };
                 }));
-                const reisen = boxes.find(box => box.art === 'row-reisen');
-                expect(reisen.size).toEqual([portrait, portrait]);
+                expect(boxes.map(box => box.art)).toEqual(['row-reisen', 'row-tewi', 'row-pointer']);
+                const pointer = boxes.find(box => box.art === 'row-pointer');
+                expect(pointer.size).toEqual([portrait, portrait]);
                 for (const box of boxes) {
-                    expect(box.size, `${box.art} box`).toEqual(reisen.size);
-                    expect(box.radius, `${box.art} corners`).toBe(reisen.radius);
+                    expect(box.size, `${box.art} box`).toEqual(pointer.size);
+                    expect(box.radius, `${box.art} corners`).toBe(pointer.radius);
                     // The portraits are smooth pictures: they are scaled with the smooth filter, not drawn as pixel art.
                     expect(box.rendering, `${box.art} is not drawn as pixel art`).toEqual(['auto', 'auto']);
+                    expect(box.image, `${box.art} picture`).toEqual({ size: pointer.size, fit: 'cover', position: pointer.image.position });
                 }
-                const pictures = boxes.filter(box => box.image);
-                expect(pictures.map(box => box.art)).toEqual(['row-pointer']);
-                expect(pictures.map(box => box.image)).toEqual([{ size: reisen.size, fit: 'cover' }]);
+            });
+
+            test('zoom the picture of Tewi in on her face inside the box that clips it, and leave Reisen and the pointer character as the box crops them', async ({ page }) => {
+                await boot(page, { library: [...BOTH, 'Alice.png'], accountStorage: { assistant: 'Alice.png' } });
+                const read = key => cardOf(page, key).locator('.sbHomeArt').evaluate((box) => {
+                    const image = box.querySelector('img');
+                    const rect = (node) => {
+                        const { left, top, width, height } = node.getBoundingClientRect();
+                        return { left, top, width, height };
+                    };
+                    return {
+                        inline: { transform: image.style.transform, origin: image.style.transformOrigin },
+                        computed: { transform: getComputedStyle(image).transform, origin: getComputedStyle(image).transformOrigin },
+                        box: rect(box),
+                        image: rect(image),
+                        overflow: getComputedStyle(box).overflow,
+                        radius: getComputedStyle(box).borderTopLeftRadius,
+                    };
+                });
+                for (const key of ['assistant-reisen', 'assistant-tewi', 'assistant-own']) {
+                    await expect.poll(() => cardOf(page, key).locator('.sbHomeArt img').evaluate(node => node.complete && node.naturalWidth), key).toBeGreaterThan(0);
+                }
+
+                const reisen = await read('assistant-reisen');
+                const tewi = await read('assistant-tewi');
+                const pointer = await read('assistant-own');
+
+                expect(tewi.inline).toEqual({ transform: 'scale(1.22)', origin: '50% 22%' });
+                expect(tewi.computed.transform).toBe('matrix(1.22, 0, 0, 1.22, 0, 0)');
+                const [originX, originY] = tewi.computed.origin.split(' ').map(Number.parseFloat);
+                expect(originX).toBeCloseTo(portrait * 0.5, 0);
+                expect(originY).toBeCloseTo(portrait * 0.22, 0);
+                for (const [key, other] of [['Reisen', reisen], ['the pointer character', pointer]]) {
+                    expect(other.inline, key).toEqual({ transform: '', origin: '' });
+                    expect(other.computed.transform, key).toBe('none');
+                    expect(other.image.width, key).toBeCloseTo(portrait, 0);
+                }
+
+                // The box keeps its size and corners and still clips: the zoomed picture is larger than the box, covers it on every side, and never changes the box.
+                for (const [key, entry] of [['Reisen', reisen], ['Tewi', tewi], ['the pointer character', pointer]]) {
+                    expect(entry.box.width, `${key} box`).toBeCloseTo(portrait, 0);
+                    expect(entry.box.height, `${key} box`).toBeCloseTo(portrait, 0);
+                    expect(entry.radius, `${key} corners`).toBe(pointer.radius);
+                    expect(entry.overflow, `${key} clips`).toBe('hidden');
+                }
+                expect(tewi.image.width).toBeCloseTo(portrait * 1.22, 0);
+                expect(tewi.image.height).toBeCloseTo(portrait * 1.22, 0);
+                expect(tewi.image.left).toBeLessThanOrEqual(tewi.box.left);
+                expect(tewi.image.top).toBeLessThanOrEqual(tewi.box.top);
+                expect(tewi.image.left + tewi.image.width).toBeGreaterThanOrEqual(tewi.box.left + tewi.box.width);
+                expect(tewi.image.top + tewi.image.height).toBeGreaterThanOrEqual(tewi.box.top + tewi.box.height);
+                // Scaled about 50% 22%: the zoom grows the picture 11% to each side and 4.84% above, so her eyes stay put in the box relative to the crop.
+                expect(tewi.image.left - tewi.box.left).toBeCloseTo(-0.11 * portrait, 0);
+                expect(tewi.image.top - tewi.box.top).toBeCloseTo(-0.0484 * portrait, 0);
+            });
+
+            test('show no art name as text: a box that has no picture is empty, and so is every other', async ({ page }) => {
+                await boot(page, { library: [REISEN, 'Alice.png'], accountStorage: { assistant: 'Alice.png' } });
+                await expect(cardOf(page, 'assistant-reisen').locator('.sbHomeArt img')).toHaveCount(1);
+
+                const shown = await page.evaluate(() => {
+                    const panel = document.querySelector('#chat > .welcomePanel');
+                    const boxes = [...panel.querySelectorAll('[data-sb-art-placeholder]')];
+                    return {
+                        names: boxes.map(box => box.dataset.sbArtPlaceholder),
+                        text: panel.innerText,
+                        withText: boxes.filter(box => box.textContent.trim() !== '').map(box => box.dataset.sbArtPlaceholder),
+                    };
+                });
+
+                expect(shown.names).toEqual(expect.arrayContaining(['row-reisen', 'row-tewi', 'row-pointer']));
+                expect(shown.withText).toEqual([]);
+                for (const artName of shown.names) {
+                    expect(shown.text, artName).not.toContain(artName);
+                }
             });
 
             test('keep the box of their art once a window has opened, because the art rules of a window stay inside the window', async ({ page }) => {
@@ -199,12 +326,72 @@ for (const { name, portrait, options } of VIEWPORTS) {
                 await boot(page, { library: BOTH });
 
                 for (const key of ['assistant-reisen', 'assistant-tewi']) {
-                    await expect(cardOf(page, key).locator('button')).toHaveCount(4);
-                    for (const control of await cardOf(page, key).locator('button').all()) {
+                    await expect(cardOf(page, key).locator('button:not(.sbHomeCardConnect)')).toHaveCount(4);
+                    for (const control of await cardOf(page, key).locator('button:not(.sbHomeCardConnect)').all()) {
                         await expect(control, key).toBeEnabled();
                     }
                     await expect(cardOf(page, key).locator('[data-sb-stub]')).toHaveCount(0);
                 }
+            });
+        });
+
+        test.describe('the thumbnails', () => {
+            const thumbnailUrl = avatar => `/thumbnail?type=avatar&file=${encodeURIComponent(avatar)}&preset=mobile`;
+
+            test('are the small mobile preset at every viewport: each picture of a card is given its own mobile file, and no other', async ({ page }) => {
+                // Other surfaces ask for the same avatars at the desktop preset, such as the rows of the Characters drawer, so the requests of the page say nothing about a card. What a card's picture is given does.
+                await recordCardSources(page);
+                const world = await boot(page, { library: [...BOTH, 'Alice.png'], accountStorage: { assistant: 'Alice.png' } });
+                const cards = [['assistant-reisen', REISEN], ['assistant-tewi', TEWI], ['assistant-own', 'Alice.png']];
+
+                for (const [key, avatar] of cards) {
+                    await expect(cardOf(page, key).locator('.sbHomeArt img'), key).toHaveAttribute('src', thumbnailUrl(avatar));
+                }
+                const sources = await page.evaluate(() => window.qaCardSources);
+                for (const [key, avatar] of cards) {
+                    expect([...new Set(sources.filter(entry => entry.card === key).map(entry => entry.src))], key).toEqual([thumbnailUrl(avatar)]);
+                    expect(world.thumbnailRequests, key).toContain(`?type=avatar&file=${encodeURIComponent(avatar)}&preset=mobile`);
+                }
+            });
+
+            test('of the Recent Chats rows are the small mobile preset too: a bundled assistant, a character of the library, and no row is ever given the full-size file', async ({ page }) => {
+                await recordRowSources(page);
+                const rows = [[REISEN, 'Assistant Reisen'], [TEWI, 'Assistant Tewi'], ['Alice.png', 'Alice']];
+                await boot(page, {
+                    library: [...BOTH, 'Alice.png'],
+                    recent: rows.map(([avatar], index) => ({ file_name: `qa-${avatar}.jsonl`, avatar, last_mes: Date.now() - index * 60_000, mes: `Preview ${index}`, chat_items: 3, file_size: '1kb' })),
+                });
+
+                for (const [avatar, name] of rows) {
+                    await expect(page.locator(`${HOME} .recentChat[data-avatar="${avatar}"] .avatar img`), name).toHaveAttribute('src', thumbnailUrl(avatar));
+                }
+                const sources = await page.evaluate(() => window.qaRowSources);
+                for (const [avatar, name] of rows) {
+                    expect([...new Set(sources.filter(entry => entry.avatar === avatar).map(entry => entry.src))], name).toEqual([thumbnailUrl(avatar)]);
+                }
+            });
+
+            test('are the same in the picker', async ({ page }) => {
+                await boot(page, { library: [...BOTH, 'Alice.png'], exact: true });
+
+                await overlayOf(cardOf(page, 'assistant-own')).click();
+
+                await expect(hosts(page)).toBeVisible();
+                await expect(hosts(page).locator('img.sbAssistantPickerThumb')).toHaveAttribute('src', thumbnailUrl('Alice.png'));
+            });
+
+            test('leave the box of a card whose thumbnail cannot be made empty, with no picture and no text', async ({ page }) => {
+                const world = await boot(page, { library: [...BOTH, 'Alice.png'], accountStorage: { assistant: 'Alice.png' }, missingThumbnails: [TEWI, 'Alice.png'] });
+
+                await expect.poll(() => world.thumbnailRequests.filter(search => search.includes(`file=${TEWI}`)).length).toBeGreaterThan(0);
+                for (const [key, art] of [['assistant-tewi', 'row-tewi'], ['assistant-own', 'row-pointer']]) {
+                    const box = cardOf(page, key).locator(`.sbHomeArt[data-sb-art-placeholder="${art}"]`);
+                    await expect(box, key).toBeVisible();
+                    await expect(box.locator('img'), key).toHaveCount(0);
+                    await expect(box, key).toHaveText('');
+                    expect(await box.evaluate(node => getComputedStyle(node).backgroundColor), key).not.toBe('rgba(0, 0, 0, 0)');
+                }
+                await expect(cardOf(page, 'assistant-reisen').locator('.sbHomeArt img')).toHaveCount(1);
             });
         });
 
@@ -219,6 +406,20 @@ for (const { name, portrait, options } of VIEWPORTS) {
                 await expect(menuOf(tewi)).toHaveCount(0);
                 await expect(tewi.locator('.sbHomeCardFooter > *')).toHaveCount(2);
                 await expect(overlayOf(cardOf(page, 'assistant-reisen'))).toBeEnabled();
+            });
+
+            test('shows a tinted box of the size of the portraits, with no picture and no text, in place of its art', async ({ page }) => {
+                await boot(page, { library: [REISEN] });
+                await expect(overlayOf(cardOf(page, 'assistant-reisen'))).toBeEnabled();
+                const art = cardOf(page, 'assistant-tewi').locator('.sbHomeArt[data-sb-art-placeholder="row-tewi"]');
+
+                await expect(art).toBeVisible();
+                await expect(art).toHaveAttribute('aria-hidden', 'true');
+                await expect(art).toHaveText('');
+                await expect(art.locator('img')).toHaveCount(0);
+                const box = await art.boundingBox();
+                expect([Math.round(box.width), Math.round(box.height)]).toEqual([portrait, portrait]);
+                expect(await art.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
             });
 
             sizeFreeTest('is insensitive in the same way when the account recorded that the card was deleted', async ({ page }) => {
@@ -418,9 +619,17 @@ for (const { name, portrait, options } of VIEWPORTS) {
                 // Home turns off a moment after the workspace opens, and a layout change closes an open menu.
                 await expect(page.locator('#sheld')).not.toHaveAttribute('data-sb-home', 'on');
 
-                // The workspace covers Home, so the menu button of the card is pressed through the page.
-                await menuOf(cardOf(page, 'assistant-tewi')).dispatchEvent('click');
-                await page.getByRole('menuitem', { name: 'New Chat in Roleplay' }).click();
+                // The workspace focuses its input twice as it opens, the second time about 100 ms later, and the input already
+                // has focus after the first. A popover menu closes when focus leaves it, so one opened in between closes
+                // at once, as on a phone's sheet it would not. Nothing on the page says the second focus is done, so the
+                // test does what a person does when the menu vanishes: it opens the menu again.
+                await expect(async () => {
+                    if (await page.getByRole('menu').count() === 0) {
+                        // The workspace covers Home, so the menu button of the card is pressed through the page.
+                        await menuOf(cardOf(page, 'assistant-tewi')).dispatchEvent('click');
+                    }
+                    await page.getByRole('menuitem', { name: 'New Chat in Roleplay' }).click({ timeout: 1_000 });
+                }, 'the Assistant Menu stays open once the workspace has taken focus').toPass({ timeout: 20_000 });
 
                 await expect.poll(async () => (await conversationOf(page, REISEN)).open).toBe(false);
                 await expect.poll(() => currentAvatar(page)).toBe(TEWI);
@@ -477,7 +686,7 @@ for (const { name, portrait, options } of VIEWPORTS) {
                 await expect(own.locator('.sbHomeCardName')).toHaveText('Alice');
                 await expect(own.locator('.sbHomeCardSub')).toHaveText(SUBTITLES.pointer);
                 await expect(own.locator('.sbHomeArt[data-sb-art-placeholder="row-pointer"] img')).toHaveAttribute('src', /file=Alice\.png/);
-                await expect(own.locator('button')).toHaveCount(4);
+                await expect(own.locator('button:not(.sbHomeCardConnect)')).toHaveCount(4);
                 await expect(own.locator('.sbHomeFootLabel')).toHaveText(['Start New Chat', 'Temporary Chat']);
                 await expect(menuOf(own)).toHaveCount(1);
                 await expect(own.locator('.sbHomeChooseIcon')).toHaveCount(0);

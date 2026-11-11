@@ -14,7 +14,7 @@ Pure refactors, styling and bug fixes that restore documented behaviour need no 
 
 ## How it is built
 
-- **Entries.** There are 78 entries, `A0` to `A77`. An entry's `comment` starts with its id (`A13 Temperature`), and its `uid` is the same number.
+- **Entries.** There are 80 entries, `A0` to `A79`. An entry's `comment` starts with its id (`A13 Temperature`), and its `uid` is the same number.
 - **The overview.** `A0` is the only constant entry. It describes SillyBunny as a whole: what it is, the shell, and the two chat modes. Every other entry is triggered by its keys.
 - **Keys.** Keys are specific phrases a user would type ("temperature setting", "reply randomness"), never a common word of their own ("chat", "model", "preset"), which would pull the entry into most prompts. The test keeps a list of words that are not allowed as keys.
 - **Help topics.** `extensions.sb_topic` lists the ids of the Help topics an entry covers (`public/scripts/sillybunny-help/topics.js`). Every Help topic must be covered by at least one entry, and an entry may only name topics that exist.
@@ -32,7 +32,6 @@ Pure refactors, styling and bug fixes that restore documented behaviour need no 
 3. If you removed a feature, add its name to `REMOVED_NAMES` in the test so it cannot come back.
 4. Rebuild the managed manifest:
    - **After the Lexicon has shipped in a release:** run `node scripts/build-managed-manifest.js default/content`. The Lexicon's version goes up by one and its old fingerprint is kept, so users whose copy is unedited get the new one on the next start (their old copy is backed up), and users who edited theirs keep it and see it as modified, with Restore.
-   - **Before it has shipped:** keep it at version 1 with no earlier fingerprints. Remove the `world` item from `default/content/sillybunny-managed.json`, then run `node scripts/build-managed-manifest.js default/content "world:SillyBunny Lexicon.json"`.
 5. Run the tests below.
 
 ## Tests

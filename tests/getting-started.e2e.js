@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { openQuietChatForSmoke, selectSampleCharacter } from './chat-scroll-regression-helpers.js';
 import { testSetup } from './frontend/frontent-test-utils.js';
-import { CHARACTER_DONE_LINES, HOME_COPY } from './helpers/copy-home.js';
+import { CHARACTER_DONE_LINES, HOME_COPY, STEP_BODIES, STEP_DONE_LINES } from './helpers/copy-home.js';
 import { installFixtureChats } from './helpers/fixture-chats.js';
 import { captureAccountStorageSaves, gettingStartedValue, savedGettingStarted, stubGettingStarted } from './helpers/getting-started-state.js';
 import { protectMaintainerServer, showToasts } from './helpers/maintainer-server.js';
@@ -26,6 +26,14 @@ const progressOf = page => tile(page).locator('.sbHomeTileSub');
 const toasts = page => page.locator('#toast-container .toast', { has: page.locator('.sbHomeToast') });
 const hosts = page => page.locator('dialog.sb-dialog-host:not([closing])');
 const rowOf = (host, title) => host.locator('.ds-row', { hasText: title });
+const helpTile = page => page.locator('#chat > .welcomePanel .sbHomeTile[data-sb-home-key="help"]');
+const iconOf = page => tile(page).locator('.sbHomeTileIcon > i');
+const lineOf = page => tile(page).locator('.sbHomeTileLine');
+const hideButton = host => host.getByRole('button', { name: HOME_COPY.hideGettingStarted, exact: true });
+
+/** Three steps resolved: the signal of a message, the last step, finishes the checklist. */
+const ONE_LEFT = gettingStartedValue({ steps: { connect: 'done', preset: 'skipped', character: 'done' } });
+const FINISHED = gettingStartedValue({ steps: { connect: 'done', preset: 'skipped', character: 'done', chat: 'done' } });
 
 async function expectHome(page) {
     await expect(page.locator('#sheld')).toHaveAttribute('data-sb-home', 'on', { timeout: STARTUP_TIMEOUT });
@@ -80,6 +88,24 @@ async function openWindow(page) {
     return host;
 }
 
+async function chooseDisplayMode(page, label) {
+    await menuButton(page).click();
+    await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+}
+
+/** Opens Welcome from the Home menu and walks to its last page, which lists the places Home has tiles for. */
+async function openWhatsNext(page) {
+    await menuButton(page).click();
+    await page.getByRole('menuitem', { name: 'Show Welcome', exact: true }).click();
+    const host = hosts(page);
+    await expect(host).toBeVisible();
+    const shown = host.locator('.sb-dialog__page:not([hidden]):not(.is-underlay):not(.is-leaving)');
+    await shown.getByRole('button', { name: 'Next', exact: true }).click();
+    await shown.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(shown.locator('.sb-dialog__title')).toHaveText('What’s Next');
+    return shown;
+}
+
 /**
  * Boots Home with a stored checklist (by default shown with every step open) or with none (`value: null`, an account
  * from before Getting Started). The saved connection and the library of the account do not reach the test.
@@ -100,6 +126,7 @@ async function bootHome(page, { value, firstRun } = {}) {
 for (const { name, options, checksColours } of VIEWPORTS) {
     test.describe(`Getting Started signals at ${name}`, () => {
         test.use(options);
+        const isMobile = Boolean(options.isMobile);
         // Only the tests that measure a row or a toast use `test`; the rest do not depend on the size.
         const sizeFreeTest = sizeFreeTestFor(test, options.viewport);
 
@@ -172,6 +199,27 @@ for (const { name, options, checksColours } of VIEWPORTS) {
                 expect(tint.a).toBeGreaterThan(quiet.a);
             });
 
+            sizeFreeTest('shows the done line of steps 1, 2 and 4, and keeps the description of a skipped step', async ({ page }) => {
+                await bootHome(page, { value: gettingStartedValue({ steps: { connect: 'done', preset: 'done', character: 'skipped', chat: 'done' } }) });
+                const host = await openWindow(page);
+
+                await expect(rowOf(host, 'Connect a Model').locator('.ds-row-subtitle')).toHaveText(STEP_DONE_LINES.connect);
+                await expect(rowOf(host, 'Set Up a Preset').locator('.ds-row-subtitle')).toHaveText(STEP_DONE_LINES.preset);
+                await expect(rowOf(host, 'Start Chatting').locator('.ds-row-subtitle')).toHaveText(STEP_DONE_LINES.chat);
+                await expect(rowOf(host, 'Get a Character Card').locator('.ds-row-subtitle')).toHaveText(STEP_BODIES.character);
+            });
+
+            sizeFreeTest('swaps the line of a step for its done line when the step is finished while the window is open', async ({ page }) => {
+                await bootHome(page);
+                const host = await openWindow(page);
+                const line = rowOf(host, 'Connect a Model').locator('.ds-row-subtitle');
+                await expect(line).toHaveText(STEP_BODIES.connect);
+
+                await emit(page, 'ONLINE_STATUS_CHANGED', 'valid');
+
+                await expect(line).toHaveText(STEP_DONE_LINES.connect);
+            });
+
             test('follows a step that is finished while the window is open, and the check keeps its place in the row', async ({ page }) => {
                 await bootHome(page);
                 const host = await openWindow(page);
@@ -193,9 +241,13 @@ for (const { name, options, checksColours } of VIEWPORTS) {
             });
 
             if (checksColours) {
-                test('keeps the Done chip, the Skipped chip and the check readable in the dark theme, the light theme and every bundled theme', async ({ page }) => {
+                test('keeps the Done chip, the Skipped chip and the check readable in the dark theme, the light theme and every bundled theme', async ({ page, browserName }) => {
+                    // eslint-disable-next-line playwright/no-slowed-test -- an engine speed difference, not a test to fix later
+                    test.slow(browserName === 'webkit', 'Switching and reading every bundled theme takes WebKit about three times as long as Chromium');
                     await bootHome(page, { value: gettingStartedValue({ steps: STATES.steps }) });
                     const host = await openWindow(page);
+                    // The window focuses its first button, which WebKit draws with a focus ring on the pixels that sit under the chip.
+                    await page.evaluate(() => document.activeElement?.blur());
                     const readings = [];
 
                     for (const theme of BUNDLED_THEME_NAMES) {
@@ -290,7 +342,9 @@ for (const { name, options, checksColours } of VIEWPORTS) {
         });
 
         test.describe('a preset', () => {
-            sizeFreeTest('that the app applies without a gesture of the user does not finish Set Up a Preset', async ({ page }) => {
+            sizeFreeTest('that the app applies without a gesture of the user does not finish Set Up a Preset', async ({ page, browserName }) => {
+                // eslint-disable-next-line playwright/no-skipped-test -- an engine gap, not a pending test
+                test.skip(browserName !== 'chromium', 'Only the Chrome DevTools Protocol can run a script without a gesture of the user');
                 await bootHome(page);
 
                 await emitWithoutGesture(page, 'PRESET_CHANGED', { apiId: 'openai', name: 'Default' });
@@ -413,31 +467,257 @@ for (const { name, options, checksColours } of VIEWPORTS) {
             await expect(progressOf(page)).toHaveText('1 of 4');
         });
 
-        sizeFreeTest('the signal that finishes the last step shows no toast, and the tile goes', async ({ page }) => {
-            await bootHome(page, { value: gettingStartedValue({ steps: { connect: 'done', preset: 'skipped', character: 'done' } }) });
-            await expect(progressOf(page)).toHaveText('3 of 4');
-            const messageId = await addUserMessage(page);
+        test.describe('once every step is resolved', () => {
+            const finishWithMessage = async (page) => {
+                const messageId = await addUserMessage(page);
+                await emit(page, 'MESSAGE_SENT', messageId);
+            };
 
-            await emit(page, 'MESSAGE_SENT', messageId);
+            sizeFreeTest('the signal that finishes the last step shows the final toast, and the tile stays', async ({ page }) => {
+                await bootHome(page, { value: ONE_LEFT });
+                await expect(progressOf(page)).toHaveText('3 of 4');
 
-            await expect(tile(page)).toHaveCount(0);
-            await expect(toasts(page)).toHaveCount(0);
+                await finishWithMessage(page);
+
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect(tile(page)).toBeVisible();
+                await expect(toasts(page)).toHaveCount(1);
+                await expect(toasts(page)).toHaveClass(/toast-success/);
+                await expect(toasts(page).locator('.toast-title')).toHaveText('Getting Started');
+                await expect(toasts(page).locator('[data-sb-home-toast="finished"]')).toHaveText(HOME_COPY.toastFinished);
+                await expect(toasts(page).getByRole('button')).toHaveText(['×', 'Show Me']);
+                await expect(toasts(page).locator('[data-sb-copy-placeholder]')).toHaveCount(0);
+            });
+
+            sizeFreeTest('the final toast is not shown again by a signal for a step that was done already', async ({ page }) => {
+                await bootHome(page, { value: FINISHED });
+
+                await finishWithMessage(page);
+
+                await expect(toasts(page)).toHaveCount(0);
+            });
+
+            test('Show Me on the final toast opens the finished window, with Hide Getting Started under Reisen\'s line', async ({ page }) => {
+                await bootHome(page, { value: ONE_LEFT });
+                await finishWithMessage(page);
+
+                await toasts(page).getByRole('button', { name: 'Show Me', exact: true }).click();
+
+                const host = hosts(page);
+                await expect(host).toBeVisible();
+                await expect(toasts(page)).toHaveCount(0);
+                await expect(host.locator('.sb-dialog__subtitle')).toHaveText('4 of 4');
+                await expect(host.locator('.sbArtLine')).toHaveText(HOME_COPY.gettingStartedIntroDone);
+                await expect(hideButton(host)).toBeVisible();
+                await expect(hideButton(host)).toHaveAccessibleDescription(HOME_COPY.hideGettingStartedCaption);
+                await expect(host.locator('.sbGettingStartedHideCaption')).toHaveText(HOME_COPY.hideGettingStartedCaption);
+                const boxes = await Promise.all([host.locator('.sbArtLine'), hideButton(host), host.locator('.sbGettingStartedHideCaption'), host.locator('.ds-row').first()].map(node => node.boundingBox()));
+                expect(boxes[0].y + boxes[0].height, 'the button is under the line').toBeLessThanOrEqual(boxes[1].y);
+                expect(boxes[1].y + boxes[1].height, 'the caption is under the button').toBeLessThanOrEqual(boxes[2].y);
+                expect(boxes[2].y + boxes[2].height, 'the list is under the caption').toBeLessThanOrEqual(boxes[3].y);
+                await expect(host.locator('.menu_button_primary'), 'the window has one suggested action').toHaveCount(1);
+                const look = await hideButton(host).evaluate(button => ({
+                    height: button.getBoundingClientRect().height,
+                    fill: getComputedStyle(button).backgroundColor,
+                }));
+                expect(look.fill, 'a solid fill, not the transparent fill of a flat button').not.toBe('rgba(0, 0, 0, 0)');
+                expect(look.height).toBeGreaterThanOrEqual(isMobile ? 44 : 38);
+            });
+
+            sizeFreeTest('the tile has the check in Success Green and the finished line, and keeps both after a reload', async ({ page, browserName }) => {
+                const captured = await bootHome(page, { value: ONE_LEFT });
+                await expect(iconOf(page)).toHaveClass(/fa-list-check/);
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStarted);
+                await finishWithMessage(page);
+
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(iconOf(page)).not.toHaveClass(/fa-list-check/);
+                await expect(iconOf(page)).toHaveAttribute('aria-hidden', 'true');
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect(tile(page)).toHaveAccessibleDescription(`${HOME_COPY.tileGettingStartedDone} 4 of 4`);
+                const [success, check] = await Promise.all([
+                    resolveColor(page, await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--sb-color-success'))),
+                    iconOf(page).evaluate(node => getComputedStyle(node).color).then(color => resolveColor(page, color)),
+                ]);
+                expect(check).toEqual(success);
+                await expect.poll(() => savedGettingStarted(captured), { timeout: SAVE_TIMEOUT }).toMatchObject({ hidden: false, steps: { chat: 'done' } });
+                const stored = JSON.stringify(savedGettingStarted(captured));
+
+                await stubGettingStarted(page, { value: stored, bundledCardsOnly: true });
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                await page.waitForFunction('document.getElementById("preloader") === null', undefined, { timeout: STARTUP_TIMEOUT });
+                await testSetup.waitForAppReady({ page });
+                await showToasts(page);
+                await expectHome(page);
+
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect(toasts(page), `a reload of a finished checklist shows no toast (${browserName})`).toHaveCount(0);
+            });
+
+            sizeFreeTest('Compact shows the check and 4 of 4, and hides the line', async ({ page }) => {
+                await bootHome(page, { value: FINISHED });
+
+                await chooseDisplayMode(page, 'Compact');
+
+                await expect(tile(page)).toBeVisible();
+                await expect(iconOf(page)).toBeVisible();
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(lineOf(page)).toBeHidden();
+                await expect(progressOf(page)).toBeVisible();
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect(tile(page)).toHaveAccessibleDescription('4 of 4');
+
+                await chooseDisplayMode(page, 'Full');
+
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStartedDone);
+            });
+
+            sizeFreeTest('Hide Getting Started removes the tile, closes the window and gives focus to the Help tile, and the Home menu brings the finished tile back', async ({ page }) => {
+                const captured = await bootHome(page, { value: FINISHED });
+                const host = await openWindow(page);
+
+                await hideButton(host).click();
+
+                await expect(hosts(page)).toHaveCount(0);
+                await expect(tile(page)).toHaveCount(0);
+                await expect(helpTile(page)).toBeFocused();
+                await expect(page.locator('#chat > .welcomePanel .sbHomeTile')).toHaveCount(2);
+                await expect.poll(() => savedGettingStarted(captured), { timeout: SAVE_TIMEOUT }).toMatchObject({ hidden: true, hiddenBy: 'auto' });
+
+                await showGettingStartedFromMenu(page);
+
+                await expect(tile(page)).toBeVisible();
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect.poll(() => savedGettingStarted(captured), { timeout: SAVE_TIMEOUT }).toMatchObject({ hidden: false });
+                expect(savedGettingStarted(captured).hiddenBy).toBeUndefined();
+                await expect(page.locator('#chat > .welcomePanel .sbHomeTile')).toHaveCount(3);
+            });
+
+            sizeFreeTest('Hide Getting Started from the window of the final toast also lands on the Help tile', async ({ page }) => {
+                await bootHome(page, { value: ONE_LEFT });
+                await finishWithMessage(page);
+                await toasts(page).getByRole('button', { name: 'Show Me', exact: true }).click();
+                const host = hosts(page);
+                await expect(hideButton(host)).toBeVisible();
+
+                await hideButton(host).click();
+
+                await expect(hosts(page)).toHaveCount(0);
+                await expect(tile(page)).toHaveCount(0);
+                await expect(helpTile(page)).toBeFocused();
+            });
+
+            sizeFreeTest('finishing with Skip in the window shows no toast, offers Hide Getting Started, and un-skipping takes it away', async ({ page }) => {
+                await bootHome(page, { value: ONE_LEFT });
+                const host = await openWindow(page);
+                await expect(hideButton(host)).toHaveCount(0);
+                const skip = rowOf(host, 'Start Chatting').getByRole('button', { name: 'Skip', exact: true });
+
+                await skip.click();
+
+                await expect(host.locator('.sb-dialog__subtitle')).toHaveText('4 of 4');
+                await expect(hideButton(host)).toBeVisible();
+                await expect(toasts(page)).toHaveCount(0);
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(host.locator('.sbArtLine')).toHaveText(HOME_COPY.gettingStartedIntroDone);
+
+                await skip.click();
+
+                await expect(host.locator('.sb-dialog__subtitle')).toHaveText('3 of 4');
+                await expect(hideButton(host)).toHaveCount(0);
+                await expect(iconOf(page)).toHaveClass(/fa-list-check/);
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStarted);
+                await expect(toasts(page)).toHaveCount(0);
+            });
+
+            sizeFreeTest('a signal that finishes the last step while Getting Started is hidden shows no toast, and the account shows the finished tile later', async ({ page }) => {
+                await bootHome(page, { value: gettingStartedValue({ hidden: true, hiddenBy: 'account', steps: { connect: 'done', preset: 'skipped', character: 'done' } }) });
+
+                await finishWithMessage(page);
+
+                await expect(tile(page)).toHaveCount(0);
+                await expect(toasts(page)).toHaveCount(0);
+                await showGettingStartedFromMenu(page);
+                await expect(progressOf(page)).toHaveText('4 of 4');
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+            });
+
+            sizeFreeTest('a checklist that the earlier auto-hide hid stays hidden, and Show Getting Started shows its finished tile', async ({ page }) => {
+                await bootHome(page, { value: gettingStartedValue({ hidden: true, hiddenBy: 'auto', steps: { connect: 'done', preset: 'skipped', character: 'done', chat: 'done' } }) });
+
+                await expect(tile(page)).toHaveCount(0);
+                await showGettingStartedFromMenu(page);
+
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(progressOf(page)).toHaveText('4 of 4');
+            });
+
+            sizeFreeTest('a finished checklist that is shown starts with the finished tile', async ({ page }) => {
+                await bootHome(page, { value: FINISHED });
+
+                await expect(iconOf(page)).toHaveClass(/fa-circle-check/);
+                await expect(lineOf(page)).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(toasts(page)).toHaveCount(0);
+            });
+
+            sizeFreeTest('the What’s Next row of Welcome has the check and the finished line, and follows the state while it is open', async ({ page }) => {
+                await bootHome(page, { value: ONE_LEFT });
+                const next = await openWhatsNext(page);
+                const row = next.locator('[data-sb-welcome-destination="getting-started"]');
+                await expect(row.locator('.sbWelcomeRowIcon')).toHaveClass(/fa-list-check/);
+                await expect(row.locator('.ds-row-subtitle')).toHaveText(HOME_COPY.tileGettingStarted);
+
+                await page.evaluate(async () => {
+                    const { getSharedGettingStartedState } = await import('/scripts/sillybunny-home/getting-started.js');
+                    getSharedGettingStartedState().setSkipped('chat', true);
+                });
+
+                await expect(row.locator('.sbWelcomeRowIcon')).toHaveClass(/fa-circle-check/);
+                await expect(row.locator('.sbWelcomeRowIcon')).toHaveAttribute('aria-hidden', 'true');
+                await expect(row.locator('.ds-row-subtitle')).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(row.locator('.sbWelcomeRowProgress')).toHaveText('4 of 4');
+                const [success, check] = await Promise.all([
+                    resolveColor(page, await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--sb-color-success'))),
+                    row.locator('.sbWelcomeRowIcon').evaluate(node => getComputedStyle(node).color).then(color => resolveColor(page, color)),
+                ]);
+                expect(check).toEqual(success);
+            });
+
+            sizeFreeTest('What’s Next opened while every step is resolved lists the finished Getting Started row, and the rows after it', async ({ page }) => {
+                await bootHome(page, { value: FINISHED });
+
+                const next = await openWhatsNext(page);
+
+                await expect(next.locator('[data-sb-welcome-destination] .ds-row-label')).toHaveText(['Getting Started', 'Help', 'Bundled Extras']);
+                await expect(next.locator('[data-sb-welcome-destination="getting-started"] .ds-row-subtitle')).toHaveText(HOME_COPY.tileGettingStartedDone);
+                await expect(next.locator('[data-sb-welcome-destination="getting-started"] .sbWelcomeRowProgress')).toHaveText('4 of 4');
+            });
         });
 
-        sizeFreeTest('un-skipping after the auto-hide brings the tile back', async ({ page }) => {
-            const captured = await bootHome(page, { value: gettingStartedValue({ steps: { connect: 'skipped', preset: 'skipped', character: 'skipped' } }) });
-            const host = await openWindow(page);
-
-            await rowOf(host, 'Start Chatting').getByRole('button', { name: 'Skip', exact: true }).click();
+        sizeFreeTest('un-skipping a step of a checklist that Hide Getting Started hid brings the tile back', async ({ page }) => {
+            const captured = await bootHome(page, { value: gettingStartedValue({ steps: { connect: 'skipped', preset: 'skipped', character: 'skipped', chat: 'skipped' } }) });
+            await page.evaluate(async () => {
+                const { getSharedGettingStartedState } = await import('/scripts/sillybunny-home/getting-started.js');
+                getSharedGettingStartedState().hideFinished();
+            });
             await expect(tile(page)).toHaveCount(0);
             await expect.poll(() => savedGettingStarted(captured)?.hiddenBy, { timeout: SAVE_TIMEOUT }).toBe('auto');
-            await rowOf(host, 'Start Chatting').getByRole('button', { name: 'Skip', exact: true }).click();
+
+            await page.evaluate(async () => {
+                const { getSharedGettingStartedState } = await import('/scripts/sillybunny-home/getting-started.js');
+                getSharedGettingStartedState().setSkipped('chat', false);
+            });
 
             await expect(progressOf(page)).toHaveText('3 of 4');
             await expect.poll(() => savedGettingStarted(captured)?.hidden, { timeout: SAVE_TIMEOUT }).toBe(false);
         });
 
-        sizeFreeTest('what the app saved comes back after a reload, and a preset load of the first moments does not count', async ({ page }) => {
+        sizeFreeTest('what the app saved comes back after a reload, and a preset load of the first moments does not count', async ({ page, browserName }) => {
             const captured = await bootHome(page);
             await emit(page, 'ONLINE_STATUS_CHANGED', 'valid');
             await expect(progressOf(page)).toHaveText('1 of 4');
@@ -452,6 +732,9 @@ for (const { name, options, checksColours } of VIEWPORTS) {
             await expectHome(page);
             await expect(progressOf(page)).toHaveText('1 of 4');
 
+            // Only the Chrome DevTools Protocol can run a script without a gesture of the user.
+            // eslint-disable-next-line playwright/no-conditional-in-test
+            if (browserName !== 'chromium') return;
             await emitWithoutGesture(page, 'PRESET_CHANGED', { apiId: 'openai', name: 'Default' });
 
             await expect(progressOf(page)).toHaveText('1 of 4');

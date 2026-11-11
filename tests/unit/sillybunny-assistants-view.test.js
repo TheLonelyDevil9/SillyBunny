@@ -90,7 +90,42 @@ describe('a card with a file', () => {
         const { panel } = render([AVAILABLE_REISEN]);
         const card = cardOf(panel, 'assistant-reisen');
 
-        expect([...card.querySelectorAll('button')].map(button => button.disabled)).toEqual([false, false, false, false]);
+        expect([...card.querySelectorAll('button:not(.sbHomeCardConnect)')].map(button => button.disabled)).toEqual([false, false, false, false]);
+    });
+
+    test('has a Connect a Model button after the card button and the subtitle, outside what the card button is described by', () => {
+        const { panel } = render([AVAILABLE_REISEN]);
+        const card = cardOf(panel, 'assistant-reisen');
+        const connect = card.querySelector('.sbHomeCardConnect');
+
+        expect(connect.tagName).toBe('BUTTON');
+        expect(connect.type).toBe('button');
+        expect(connect.textContent).toBe('Connect a Model');
+        expect(connect.disabled).toBe(false);
+        expect(card.querySelector('.sbHomeCardSub').contains(connect)).toBe(false);
+        expect(connect.previousElementSibling).toBe(card.querySelector('.sbHomeCardSub'));
+        expect(overlay(card).compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(overlay(card).getAttribute('aria-describedby')).toBe(card.querySelector('.sbHomeCardSub').id);
+        expect(connect.id).not.toBe(overlay(card).getAttribute('aria-describedby'));
+    });
+
+    test('has it on the card of a chosen character as well', () => {
+        const { panel } = render([AVAILABLE_REISEN, POINTER]);
+
+        expect(cardOf(panel, 'assistant-own').querySelectorAll('.sbHomeCardConnect')).toHaveLength(1);
+    });
+
+    test('opens Backend, Connections from the Connect a Model button, and starts no chat', () => {
+        const openTab = jest.fn();
+        window.SillyBunnyShell = { openTab };
+        const { panel, actions } = render([AVAILABLE_REISEN]);
+
+        cardOf(panel, 'assistant-reisen').querySelector('.sbHomeCardConnect').click();
+
+        expect(openTab).toHaveBeenCalledWith('left', 'connections');
+        expect(actions.newChat).not.toHaveBeenCalled();
+        expect(actions.temporaryChat).not.toHaveBeenCalled();
+        delete window.SillyBunnyShell;
     });
 
     test('opens a new chat from the card button and from Start New Chat', () => {
@@ -174,6 +209,12 @@ describe.each([['missing', MISSING_TEWI], ['deleted', DELETED_TEWI]])('a card wh
 
         expect(actions.newChat).not.toHaveBeenCalled();
         expect(actions.temporaryChat).not.toHaveBeenCalled();
+    });
+
+    test('has no Connect a Model button, because it has no chat to open', () => {
+        const { panel } = render([card]);
+
+        expect(cardOf(panel, 'assistant-tewi').querySelector('.sbHomeCardConnect')).toBeNull();
     });
 
     test('says so to assistive technology through the disabled buttons alone', () => {
@@ -324,12 +365,46 @@ describe('a card with an update from the managed content', () => {
 });
 
 describe('the art of a card', () => {
-    test('is a placeholder box for an assistant that has no picture yet', () => {
-        const { panel } = render([AVAILABLE_REISEN]);
+    test('is the thumbnail of the card of a bundled assistant that has one, drawn as the pointer card is', () => {
+        const { panel } = render([{ ...AVAILABLE_REISEN, art: { name: 'row-reisen', avatar: 'default_AssistantReisen.png' } }]);
 
         const art = cardOf(panel, 'assistant-reisen').querySelector('.sbHomeCardArt .sbHomeArt');
         expect(art.dataset.sbArtPlaceholder).toBe('row-reisen');
+        expect(art.querySelector('img').getAttribute('src')).toBe('/thumb/default_AssistantReisen.png');
+        expect(art.textContent).toBe('');
+    });
+
+    test('is zoomed by the framing of the card, on the picture alone, and a card with no framing has no inline transform', () => {
+        const framed = { ...AVAILABLE_REISEN, id: 'tewi', key: 'assistant-tewi', art: { name: 'row-tewi', avatar: 'default_AssistantTewi.png', framing: { zoom: 1.22, origin: '50% 22%' } } };
+        const { panel } = render([framed, { ...AVAILABLE_REISEN, art: { name: 'row-reisen', avatar: 'default_AssistantReisen.png' } }, POINTER]);
+
+        const imageOf = key => cardOf(panel, key).querySelector('.sbHomeArt img');
+        expect(imageOf('assistant-tewi').style.transform).toBe('scale(1.22)');
+        expect(imageOf('assistant-tewi').style.transformOrigin).toBe('50% 22%');
+        expect(cardOf(panel, 'assistant-tewi').querySelector('.sbHomeArt').getAttribute('style')).toBeNull();
+        expect(imageOf('assistant-reisen').getAttribute('style')).toBeNull();
+        expect(imageOf('assistant-own').getAttribute('style')).toBeNull();
+    });
+
+    test('is the empty box again when the thumbnail fails to load, as the server answers 404 for a card it cannot make one of', () => {
+        const { panel } = render([POINTER]);
+        const art = cardOf(panel, 'assistant-own').querySelector('.sbHomeCardArt .sbHomeArt');
+
+        art.querySelector('img').dispatchEvent(new Event('error'));
+
         expect(art.querySelector('img')).toBeNull();
+        expect(art.textContent).toBe('');
+        expect(art.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    test.each([['missing', MISSING_TEWI], ['deleted', DELETED_TEWI]])('is a box with no text and no picture for a card that is %s', (_state, card) => {
+        const { panel } = render([card]);
+
+        const art = cardOf(panel, 'assistant-tewi').querySelector('.sbHomeCardArt .sbHomeArt');
+        expect(art.dataset.sbArtPlaceholder).toBe('row-tewi');
+        expect(art.getAttribute('aria-hidden')).toBe('true');
+        expect(art.querySelector('img')).toBeNull();
+        expect(art.textContent).toBe('');
     });
 
     test('is the thumbnail of the card of the character when the model gives an avatar', () => {
@@ -372,6 +447,7 @@ describe('the third slot with no character chosen', () => {
         const card = choose();
 
         expect(card.querySelectorAll('button')).toHaveLength(1);
+        expect(card.querySelector('.sbHomeCardConnect')).toBeNull();
         expect(overlay(card).getAttribute('aria-label')).toBe('Choose Assistant');
         expect(overlay(card).getAttribute('aria-describedby')).toBe(card.querySelector('.sbHomeCardSub').id);
         expect(overlay(card).getAttribute('aria-haspopup')).toBe('dialog');

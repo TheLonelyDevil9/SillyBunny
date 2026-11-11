@@ -4,6 +4,7 @@ import { protectMaintainerServer } from './helpers/maintainer-server.js';
 import { sizeFreeTestFor } from './helpers/matrix.js';
 import { contrastOf, over, resolveColor, TEXT_CONTRAST } from './helpers/page-contrast.js';
 import { fetchBodyOrSkip } from './helpers/route-fetch.js';
+import { settledRead } from './helpers/settled-read.js';
 import { stubTheme } from './helpers/theme-stub.js';
 
 test.use({ serviceWorkers: 'block' });
@@ -35,13 +36,21 @@ async function holdBoot(page) {
     return release;
 }
 
+/**
+ * The picture of the splash: the box of its loop once the loop is in the page, otherwise the still. A playing loop hides
+ * the still under its own pictures, so a wait for the still alone times out when the loop starts first.
+ */
+function splashPicture(page) {
+    return page.locator('#preloader .sb-boot-loop, #preloader .sb-boot-mascot').first();
+}
+
 async function openSplash(page, { variant, reducedMotionMirror = false }) {
     await page.addInitScript(({ chosen, mirror }) => {
         localStorage.setItem('sb-splash-character', chosen);
         if (mirror) localStorage.setItem('sb-reduced-motion', 'true');
     }, { chosen: variant, mirror: reducedMotionMirror });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#preloader .sb-boot-mascot')).toBeVisible({ timeout: STARTUP_TIMEOUT });
+    await expect(splashPicture(page)).toBeVisible({ timeout: STARTUP_TIMEOUT });
 }
 
 function readMascot(page) {
@@ -564,8 +573,9 @@ for (const { name, options } of VIEWPORTS) {
             await expect(select).toHaveValue('random');
             await expect(row.locator('.ds-row-subtitle')).toHaveText(SETTINGS_COPY.splashSubtitle);
             await expect(row.locator('.ds-row-subtitle')).not.toHaveAttribute('data-sb-copy-placeholder', /.*/);
-            const fitsBeside = await row.evaluate(node => node.getBoundingClientRect().right <= document.documentElement.clientWidth + 1);
-            expect(fitsBeside).toBe(true);
+            // The sheet slides in from the side, so the row is read once it has stopped moving.
+            const edge = await settledRead(page, () => row.evaluate(node => ({ right: node.getBoundingClientRect().right, width: document.documentElement.clientWidth })));
+            expect(edge.right).toBeLessThanOrEqual(edge.width + 1);
         });
 
         sizeFreeTest('choosing a character stores it in this browser and in the account, and the next start shows it', async ({ page }) => {
@@ -670,7 +680,7 @@ test.describe('Splash colours', () => {
 
         releaseBoot = await holdBoot(page);
         await page.goto('/', { waitUntil: 'domcontentloaded' });
-        await expect(page.locator('#preloader .sb-boot-mascot')).toBeVisible({ timeout: STARTUP_TIMEOUT });
+        await expect(splashPicture(page)).toBeVisible({ timeout: STARTUP_TIMEOUT });
         await expect(page.locator('.sb-boot-line-text')).not.toBeEmpty();
 
         const colours = await readSplashColours(page);

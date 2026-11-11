@@ -15201,7 +15201,7 @@ function initAll() {
         openTab(shellKey, tabId, options = {}) {
             if (shellKey === 'characters') {
                 openCharacterPanelTab(tabId, options);
-                // SillyBunny: persona bridges await mounting and reveal mobile content - see docs/ui-migration.md
+                // SillyBunny: bridges await the atomic reveal, not just module mounting — see docs/ui-migration.md
                 if (['persona', 'world-info', 'import'].includes(tabId)) {
                     if (isMobileViewport()) setSettingsMobileContentView(true);
                     return characterPanelRevealPromise;

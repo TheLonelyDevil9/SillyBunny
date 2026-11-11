@@ -3,6 +3,7 @@ import { getLastChatMode } from '../sillybunny-chat-mode-memory.js';
 import { createArtPlaceholder } from './art.js';
 import { getAssistantSubtitle } from './assistant-copy.js';
 import { buildAssistantMenuSections, openAssistantMenu } from './menu.js';
+import { openShellTarget } from './shell-targets.js';
 
 function createElement(tag, className, text) {
     const element = document.createElement(tag);
@@ -105,19 +106,33 @@ function createCardAction({ name, title, disabled, subtitleId, onActivate }) {
     return button;
 }
 
-function createCardText({ name, titleId, subtitleId, subtitle: subtitleText }) {
+/**
+ * Opens Backend, Connections. The button is always in the card and the stylesheet shows it only while the app is offline
+ * (`data-sb-connection`), so a connection that changes needs no new render of Home. It is not part of what the card
+ * button is described by, and a press on it starts no chat.
+ */
+function createConnectButton() {
+    const button = createElement('button', 'sbHomeCardConnect', t`Connect a Model`);
+    button.type = 'button';
+    button.addEventListener('click', () => void openShellTarget('connections'));
+    return button;
+}
+
+function createCardText({ name, titleId, subtitleId, subtitle: subtitleText, connect = false }) {
     const text = createElement('div', 'sbHomeCardText');
     const title = createElement('strong', 'sbHomeCardName', name);
     title.id = titleId;
     const subtitle = createElement('span', 'sbHomeCardSub', subtitleText);
     subtitle.id = subtitleId;
     text.append(title, subtitle);
+    if (connect) {
+        text.append(createConnectButton());
+    }
     return text;
 }
 
 /**
- * The art is a box that stands where artwork will go, unless the card of the character is the art: then the box holds
- * its thumbnail.
+ * The art is the thumbnail of the card of the character, in a box. A card that has no file has the box alone.
  */
 function createCardArt({ art }, getThumbnailUrl) {
     const box = createElement('div', 'sbHomeCardArt');
@@ -128,6 +143,12 @@ function createCardArt({ art }, getThumbnailUrl) {
         image.src = getThumbnailUrl(art.avatar);
         image.alt = '';
         image.decoding = 'async';
+        if (art.framing) {
+            image.style.transform = `scale(${art.framing.zoom})`;
+            image.style.transformOrigin = art.framing.origin;
+        }
+        // The server answers 404 when it cannot make a thumbnail, and a broken picture would draw its own frame in the box.
+        image.addEventListener('error', () => image.remove(), { once: true });
         picture.replaceChildren(image);
     }
     box.append(picture);
@@ -135,7 +156,8 @@ function createCardArt({ art }, getThumbnailUrl) {
 }
 
 /**
- * A card whose file is missing or deleted has nothing to open, so its card button is disabled and it shows no menu. When
+ * A card whose file is missing or deleted has nothing to open, so its card button is disabled, it shows no menu and no
+ * Connect a Model button, because that button is a hint for a chat the card cannot start. When
  * its bundled file can be restored, Restore is the one control of its footer, in place of the two chat buttons. The card
  * of the third slot has two more menu items, which change which character it is.
  */
@@ -187,7 +209,7 @@ function createAssistantCard(card, panel, { actions, getThumbnailUrl, openPicker
             onActivate: () => void actions.newChat(card),
         }),
         createCardArt(card, getThumbnailUrl),
-        createCardText({ name: card.name, titleId, subtitleId, subtitle: getAssistantSubtitle(card.id) }),
+        createCardText({ name: card.name, titleId, subtitleId, subtitle: getAssistantSubtitle(card.id), connect: !disabled }),
         footer,
     );
     return element;

@@ -1011,13 +1011,20 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
             await expect(tiles(page).first()).toHaveAttribute('data-sb-home-key', 'getting-started');
         });
 
-        sizeFreeTest('the tile row never holds a Getting Started tile that every step has resolved', async ({ page }) => {
+        sizeFreeTest('a Getting Started tile that every step has resolved stays in the row until Hide Getting Started removes it', async ({ page }) => {
             await chooseMode(page, 'full');
 
             await page.evaluate(async () => {
                 const { getSharedGettingStartedState } = await import('/scripts/sillybunny-home/getting-started.js');
                 const state = getSharedGettingStartedState();
                 ['connect', 'preset', 'character', 'chat'].forEach(id => state.setSkipped(id, true));
+            });
+
+            await expect(tiles(page)).toHaveCount(3);
+            await expect(tile(page, 'getting-started').locator('.sbHomeTileSub')).toHaveText('4 of 4');
+            await page.evaluate(async () => {
+                const { getSharedGettingStartedState } = await import('/scripts/sillybunny-home/getting-started.js');
+                getSharedGettingStartedState().hideFinished();
             });
 
             await expect(tiles(page)).toHaveCount(2);
@@ -1071,7 +1078,7 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
                 await expect(card.locator('.sbHomeFootButton i.fa-plus')).toHaveCount(1);
                 await expect(card.locator('.sbHomeFootButton i.fa-hourglass-half')).toHaveCount(1);
                 await expect(card.locator('.sbHomeRowMenu i.fa-ellipsis-vertical')).toHaveCount(1);
-                await expect(card.locator('button')).toHaveCount(4);
+                await expect(card.locator('button:not(.sbHomeCardConnect)')).toHaveCount(4);
             }
             const border = await assistantCard(page, 'Reisen').locator('.sbHomeCardFooter').evaluate(footer => getComputedStyle(footer).borderTopWidth);
             expect(border).toBe('1px');
@@ -1096,12 +1103,12 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
             }
         });
 
-        sizeFreeTest('Tab visits the card button, Start New Chat, Temporary Chat and the menu in that order', async ({ page }) => {
+        sizeFreeTest('Tab visits the card button, Connect a Model while offline, Start New Chat, Temporary Chat and the menu in that order', async ({ page }) => {
             await chooseMode(page, 'full');
             const card = assistantCard(page, 'Tewi');
 
             await card.locator('.sbHomeCardOpen').focus();
-            for (const control of [card.locator('.sbHomeFootButton').nth(0), card.locator('.sbHomeFootButton').nth(1), card.locator('.sbHomeRowMenu')]) {
+            for (const control of [card.locator('.sbHomeCardConnect'), card.locator('.sbHomeFootButton').nth(0), card.locator('.sbHomeFootButton').nth(1), card.locator('.sbHomeRowMenu')]) {
                 await page.keyboard.press('Tab');
                 await expect(control).toBeFocused();
             }
@@ -1420,8 +1427,7 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
                     scrollbarWidthStyle: getComputedStyle(row).scrollbarWidth,
                 };
                 buttons[buttons.length - 1].focus();
-                const focusedScroll = row.scrollLeft;
-                return { before, narrow, focusedScroll, count: buttons.length };
+                return { before, narrow, count: buttons.length };
             });
 
             expect(filters.count).toBe(4);
@@ -1431,7 +1437,8 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
             expect(filters.narrow.scrolls).toBe(true);
             expect(filters.narrow.scrollbarHeight).toBeLessThanOrEqual(0);
             expect(filters.narrow.scrollbarWidthStyle).toBe('none');
-            expect(filters.focusedScroll, 'keyboard focus scrolls the row').toBeGreaterThan(0);
+            // Chromium scrolls the focused button into view inside focus(); WebKit does it in a later rendering update.
+            await expect.poll(() => page.locator('.welcomePanel .welcomeRecentTabs').evaluate(row => row.scrollLeft), { message: 'keyboard focus scrolls the row' }).toBeGreaterThan(0);
         });
 
         test('the filters stay inside the Recent Chats heading row', async ({ page }) => {
@@ -1567,7 +1574,8 @@ for (const { name, options } of matrixViewports(VIEWPORTS, [DESKTOP, PHONE, SMAL
                 const box = page.locator(`.welcomePanel ${artSelector(id)}`);
                 await expect(box).toBeVisible();
                 await expect(box).toHaveAttribute('aria-hidden', 'true');
-                await expect(box).toHaveText(id);
+                await expect(box).toHaveText('');
+                await expect(box.locator('img')).toHaveCount(1);
                 const rect = await measure(page, `.welcomePanel ${artSelector(id)}`);
                 expect([id, Math.round(rect.width), Math.round(rect.height)]).toEqual([id, width, height]);
             }
@@ -2149,8 +2157,12 @@ for (const { name, options } of WIDE_VIEWPORTS) {
                     'row-tewi': [64 * scale, 64 * scale],
                     'choose-icon': [64 * scale, 64 * scale],
                 });
-                // The card portraits are smooth pictures, so they are not drawn as pixel art.
-                expect(await page.locator('.welcomePanel [data-sb-art-placeholder="row-reisen"]').evaluate(node => getComputedStyle(node).imageRendering)).toBe('auto');
+                // The card portraits are smooth pictures, so they are not drawn as pixel art. The picture is what is sampled, so it is the picture that is read.
+                for (const art of ['row-reisen', 'row-tewi']) {
+                    const picture = page.locator(`.welcomePanel [data-sb-art-placeholder="${art}"] img`);
+                    await expect(picture, art).toHaveCount(1);
+                    expect(await picture.evaluate(node => getComputedStyle(node).imageRendering), art).toBe('auto');
+                }
             });
         }
     });

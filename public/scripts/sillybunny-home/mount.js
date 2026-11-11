@@ -12,6 +12,7 @@ import { fitHomeHeader } from './header-fit.js';
 import { chooseHeroArt } from './hero-art.js';
 import { openHomeMenu } from './menu.js';
 import { getVisibleRegions, parseDisplayMode } from './modes.js';
+import { beginPanelLifetime } from './panel-lifetime.js';
 import { describeTiles, mountTiles } from './tiles-view.js';
 // The APP_READY listener that opens Welcome has to exist before that event fires, so it is imported here, at load, and not on the first render of Home.
 import './welcome-boot.js';
@@ -125,14 +126,21 @@ function mountMenuButton(panel, { getDisplayMode, setDisplayMode, openRecentChat
 
 /**
  * Fills a rendered Home panel: the hero art for the time of day, version, external links, menu, tiles, assistants,
- * empty states and the display mode.
+ * empty states and the display mode. The observers and the subscription that follow the panel stop when it leaves
+ * `#chat` or when the next panel is mounted.
  * @param {HTMLElement} panel The `.welcomePanel` root, before or after it is attached.
  * @param {HomeContext} context
  * @returns {{ remountAssistants: () => void }} `remountAssistants` makes the cards again from the context, for a status
  *   that arrived after the panel was mounted. It keeps the focus on the control that had it.
  */
 export function mountHome(panel, context) {
-    panel.querySelector('[data-sb-home-region="hero"]')?.prepend(createHeroArt(chooseHeroArt(new Date())));
+    const lifetime = beginPanelLifetime(panel);
+    const heroRegion = panel.querySelector('[data-sb-home-region="hero"]');
+    if (heroRegion) {
+        const hero = createHeroArt(chooseHeroArt(new Date()));
+        lifetime.keep('hero', hero.stop);
+        heroRegion.prepend(hero.panel);
+    }
     panel.querySelectorAll('[data-sb-home-version]').forEach((node) => {
         node.textContent = getVersionLabel(context.version);
     });
@@ -144,13 +152,13 @@ export function mountHome(panel, context) {
     mountEmptyStateArt(panel);
     mountFilteredEmptyState(panel);
     mountMenuButton(panel, context, gettingStarted);
-    mountTiles(panel, {
+    lifetime.keep('tiles', mountTiles(panel, {
         state: gettingStarted,
         onRowChanged: () => applyDisplayMode(panel, panel.dataset.homePanelMode),
         openGettingStarted,
         openBundledExtras,
         openHelp,
-    });
+    }));
     const { getPickerEntries, getThumbnailUrl, setPointer } = context.assistants;
     const mountCards = () => {
         mountAssistants(panel, {
@@ -158,10 +166,10 @@ export function mountHome(panel, context) {
             openPicker: () => openAssistantPicker({ getEntries: getPickerEntries, getThumbnailUrl, choose: setPointer }),
             removeAssistant: () => setPointer(null),
         });
-        fitCardFooters(panel);
+        lifetime.keep('footers', fitCardFooters(panel));
     };
     mountCards();
-    fitHomeHeader(panel);
+    lifetime.keep('header', fitHomeHeader(panel));
     applyDisplayMode(panel, context.getDisplayMode());
 
     return {
