@@ -230,15 +230,15 @@ test.describe('KoboldCpp model switch', () => {
 });
 
 test.describe('KoboldCpp model switcher on a narrow screen', () => {
-    // Narrow screens keep the native select, because Select2 replaces it only on wider screens.
     test.use({ viewport: { width: 390, height: 844 } });
 
     test('the model select and the picker have accessible names', async ({ page, baseURL }) => {
         await connectKoboldCpp(page, baseURL);
 
-        const select = page.locator('#koboldcpp_model');
-        await expect(select).toHaveAccessibleName('KoboldCpp Model');
-        await expect(select).toHaveAccessibleDescription('Models load with KoboldCpp\'s default settings, or its --baseconfig file when set. Configs (.kcpps, .kcppt) load their own settings.');
+        // The row hides the select from assistive technology, so its trigger carries the name and the description.
+        const trigger = page.locator('.ds-select-row', { has: page.locator('#koboldcpp_model') }).locator('.ds-select-row__trigger');
+        await expect(trigger).toHaveAccessibleName(/^KoboldCpp Model/);
+        await expect(trigger).toHaveAccessibleDescription('Models load with KoboldCpp\'s default settings, or its --baseconfig file when set. Configs (.kcpps, .kcppt) load their own settings.');
 
         const result = page.evaluate(() => window.SillyTavern.getContext().executeSlashCommandsWithOptions('/kcpp-model'));
         const picker = page.getByRole('dialog').filter({ hasText: 'Load a KoboldCpp model' });
@@ -255,8 +255,8 @@ test.describe('KoboldCpp model switcher on a narrow screen', () => {
     test('the Chat Completion model select has the same accessible name and description', async ({ page, baseURL }) => {
         await connectKoboldCpp(page, baseURL, 'chat');
 
-        const select = page.locator('#koboldcpp_chat_model');
-        await expect(select).toHaveAccessibleName('KoboldCpp Model');
-        await expect(select).toHaveAccessibleDescription('Models load with KoboldCpp\'s default settings, or its --baseconfig file when set. Configs (.kcpps, .kcppt) load their own settings.');
+        const trigger = page.locator('.ds-select-row', { has: page.locator('#koboldcpp_chat_model') }).locator('.ds-select-row__trigger');
+        await expect(trigger).toHaveAccessibleName(/^KoboldCpp Model/);
+        await expect(trigger).toHaveAccessibleDescription('Models load with KoboldCpp\'s default settings, or its --baseconfig file when set. Configs (.kcpps, .kcppt) load their own settings.');
     });
 });
