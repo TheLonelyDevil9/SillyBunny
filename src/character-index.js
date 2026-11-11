@@ -46,6 +46,19 @@ function openDatabase(filePath) {
 }
 
 /**
+ * @param {any} database bun:sqlite or node:sqlite database
+ * @param {string} sql SQL statements to run
+ */
+function runSql(database, sql) {
+    // bun:sqlite marks exec as a deprecated alias of run, and node:sqlite has no run.
+    if (isBunRuntime()) {
+        database.run(sql);
+    } else {
+        database.exec(sql);
+    }
+}
+
+/**
  * @param {any} error Error from the SQLite driver
  * @returns {boolean}
  */
@@ -134,6 +147,11 @@ export class CharacterIndex {
      * @param {string} data Card data
      */
     set(filePath, fileStat, data) {
+        // Node.js 22 returns a stored TEXT value only up to its first NUL character, so the index would return a cut-off card.
+        if (data.includes('\0')) {
+            return;
+        }
+
         const statements = this.#getStatements();
         if (!statements) {
             return;
@@ -213,7 +231,7 @@ export class CharacterIndex {
                     statements.delete.run(directory, fileName);
                 }
             }
-            this.#database.exec('PRAGMA incremental_vacuum');
+            runSql(this.#database, 'PRAGMA incremental_vacuum');
         } catch (error) {
             this.#handleError(error);
         }
@@ -270,8 +288,8 @@ export class CharacterIndex {
         this.close();
         this.#deleteFiles();
         this.#connect();
-        this.#database.exec(SCHEMA);
-        this.#database.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+        runSql(this.#database, SCHEMA);
+        runSql(this.#database, `PRAGMA user_version = ${SCHEMA_VERSION}`);
         this.#prepareStatements();
     }
 
@@ -280,7 +298,7 @@ export class CharacterIndex {
         this.#database = openDatabase(this.filePath);
         // WAL with synchronous=NORMAL does not flush the file on every write. A power loss can drop the newest
         // entries, but cannot corrupt the database. auto_vacuum works only if it is set before the table is created.
-        this.#database.exec('PRAGMA busy_timeout = 1000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL');
+        runSql(this.#database, 'PRAGMA busy_timeout = 1000; PRAGMA auto_vacuum = INCREMENTAL; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL');
     }
 
     /**
@@ -314,7 +332,12 @@ export class CharacterIndex {
      * @param {any} error Error from the SQLite driver or the file system
      */
     #handleError(error) {
-        console.warn('Character index error. Cards are read from their files until the server restarts:', error);
+        // Node.js older than 22.13 throws this code when openDatabase() loads node:sqlite.
+        if (error?.code === 'ERR_UNKNOWN_BUILTIN_MODULE') {
+            console.warn('The character cache needs Node.js 22.13 or newer, so cards are read from their files.');
+        } else {
+            console.warn('Character index error. Cards are read from their files until the server restarts:', error);
+        }
         this.close();
         this.#enabled = false;
         if (isCorruptionError(error)) {

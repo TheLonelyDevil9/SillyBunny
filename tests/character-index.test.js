@@ -8,7 +8,9 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import '../src/fetch-patch.js';
+import { isBunRuntime } from '../src/runtime.js';
 import { setConfigFilePath } from '../src/util.js';
+import { createCardPng, createV1Card, createV2Card } from './util/card-corpus.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const originalWorkingDirectory = process.cwd();
@@ -25,6 +27,9 @@ setConfigFilePath(path.join(repoRoot, 'default', 'config.yaml'));
 
 const { CharacterIndex } = await import('../src/character-index.js');
 const { characterIndex, router: charactersRouter } = await import('../src/endpoints/characters.js');
+const describeOnBun = isBunRuntime() ? describe : describe.skip;
+// Bun loads bun:sqlite, so the node:sqlite load that fails on Node.js older than 22.13 never runs there.
+const describeOnNode = isBunRuntime() ? describe.skip : describe;
 
 afterAll(() => {
     globalThis.DATA_ROOT = originalDataRoot;
@@ -88,6 +93,15 @@ describe('character index', () => {
         expect(index.get(cardPath, stat)).toBeUndefined();
     });
 
+    test('does not keep a card whose text has a NUL character', () => {
+        const cardPath = writeFile(path.join(tempRoot, 'characters', 'Alice.png'), 'alice');
+        const stat = fs.statSync(cardPath);
+
+        index.set(cardPath, stat, 'alice\0data');
+
+        expect(index.get(cardPath, stat)).toBeUndefined();
+    });
+
     test('pruneDirectory removes the cards that are not in the directory listing', () => {
         const firstDirectory = path.join(tempRoot, 'first-user', 'characters');
         const secondDirectory = path.join(tempRoot, 'second-user', 'characters');
@@ -147,6 +161,10 @@ describe('character index', () => {
 
         expect(index.get(cardPath, stat)).toBeUndefined();
         expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            'Character index error. Cards are read from their files until the server restarts:',
+            expect.objectContaining({ stack: expect.any(String) }),
+        );
     });
 
     test('does not create a database file when it is disabled', () => {
@@ -159,6 +177,50 @@ describe('character index', () => {
         expect(disabledIndex.get(cardPath, stat)).toBeUndefined();
         expect(fs.existsSync(disabledIndex.filePath)).toBe(false);
     });
+
+    describeOnBun('under Bun', () => {
+        test('runs its SQL without the exec method that bun:sqlite deprecates', async () => {
+            const { Database } = await import('bun:sqlite');
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            jest.spyOn(Database.prototype, 'exec').mockImplementation(() => {
+                throw new Error('exec is not available');
+            });
+            const cardPath = writeFile(path.join(tempRoot, 'characters', 'Alice.png'), 'alice');
+            const stat = fs.statSync(cardPath);
+
+            index.set(cardPath, stat, 'alice data');
+
+            expect(index.get(cardPath, stat)).toBe('alice data');
+            expect(warn).not.toHaveBeenCalled();
+        });
+    });
+
+    describeOnNode('on Node.js', () => {
+        test('names the Node.js minimum without a stack when node:sqlite cannot be loaded', () => {
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const loadSqlite = jest.fn(() => {
+                throw Object.assign(new Error('No such built-in module: node:sqlite'), { code: 'ERR_UNKNOWN_BUILTIN_MODULE' });
+            });
+            jest.mock('node:sqlite', loadSqlite);
+            try {
+                const cardPath = writeFile(path.join(tempRoot, 'characters', 'Alice.png'), 'alice');
+                const stat = fs.statSync(cardPath);
+
+                index.set(cardPath, stat, 'alice data');
+
+                expect(warn.mock.calls).toEqual([['The character cache needs Node.js 22.13 or newer, so cards are read from their files.']]);
+
+                index.set(cardPath, stat, 'alice data');
+
+                expect(index.get(cardPath, stat)).toBeUndefined();
+                expect(warn).toHaveBeenCalledTimes(1);
+                expect(loadSqlite).toHaveBeenCalledTimes(1);
+                expect(fs.existsSync(index.filePath)).toBe(false);
+            } finally {
+                jest.unmock('node:sqlite');
+            }
+        });
+    });
 });
 
 describe('character routes with the index', () => {
@@ -166,10 +228,14 @@ describe('character routes with the index', () => {
     let directories;
     let server;
     let tempRoot;
+    let uploadsDirectory;
+    let upload;
 
     beforeAll(async () => {
         tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sillybunny-character-index-routes-'));
         globalThis.DATA_ROOT = tempRoot;
+        uploadsDirectory = path.join(tempRoot, '_uploads');
+        fs.mkdirSync(uploadsDirectory);
         const userRoot = path.join(tempRoot, 'index-test-user');
         directories = {
             root: userRoot,
@@ -193,6 +259,11 @@ describe('character routes with the index', () => {
                 profile: { handle: 'index-test-user' },
                 directories,
             };
+            next();
+        });
+        // The server's upload middleware sets request.file, so this sets the file that the test wrote.
+        app.use('/api/characters/import', (request, _response, next) => {
+            request.file = upload;
             next();
         });
         app.use('/api/characters', charactersRouter);
@@ -248,6 +319,23 @@ describe('character routes with the index', () => {
         expect(await listCharacters()).toEqual([]);
         expect(characterIndex.get(cardPath, editedStat)).toBeUndefined();
         expect(warn).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['V1', createV1Card],
+        ['V2', createV2Card],
+    ])('forgets the entry of an uploaded card that imports as %s', async (_version, createCard) => {
+        jest.spyOn(console, 'info').mockImplementation(() => {});
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        const uploadPath = writeFile(path.join(uploadsDirectory, 'upload'), createCardPng(createCard()));
+        const uploadStat = fs.statSync(uploadPath);
+        upload = { destination: uploadsDirectory, filename: 'upload' };
+
+        const response = await postJson('/api/characters/import', { file_type: 'png' });
+
+        expect(await response.json()).toEqual({ file_name: expect.any(String) });
+        expect(fs.existsSync(uploadPath)).toBe(false);
+        expect(characterIndex.get(uploadPath, uploadStat)).toBeUndefined();
     });
 
     async function listCharacters() {

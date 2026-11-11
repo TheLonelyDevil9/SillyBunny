@@ -110,6 +110,7 @@ export const characterIndex = new CharacterIndex({ enabled: useDiskCache });
  * @returns {string} - Cache key
  */
 function getCacheKey(inputFile, fileStat) {
+    // SillyBunny: the caller passes the metadata that it already read, so the key and the index lookup use one stat call.
     return fileStat ? `${inputFile}-${fileStat.mtimeMs}` : inputFile;
 }
 
@@ -121,6 +122,7 @@ function getCacheKey(inputFile, fileStat) {
  */
 async function readCharacterData(inputFile, inputFormat = 'png') {
     recoverFileWriteSync(inputFile);
+    // SillyBunny: read the metadata before the card is parsed, because the index keeps the card under this metadata and a later read can belong to a newer version of the file.
     const fileStat = fs.statSync(inputFile, { throwIfNoEntry: false });
     const cacheKey = getCacheKey(inputFile, fileStat);
     if (memoryCache.has(cacheKey)) {
@@ -1120,6 +1122,8 @@ async function importFromJson(uploadPath, { request }, preservedFileName) {
  */
 async function importFromPng(uploadPath, { request }, preservedFileName) {
     const imgData = await readCharacterData(uploadPath);
+    // SillyBunny: the import deletes the upload, so drop the index entry that reading it stored, because only the startup prune would remove it.
+    characterIndex.delete(uploadPath);
     if (imgData === undefined) throw new Error('Failed to read character data');
 
     let jsonData = JSON.parse(imgData);
