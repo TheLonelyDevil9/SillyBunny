@@ -70,16 +70,6 @@ async function readActiveChat(page) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {string} optionId
- */
-async function chooseDropdownEntry(page, optionId) {
-    const dropdown = page.locator('#char-management-dropdown');
-    const index = await dropdown.locator('option').evaluateAll((options, id) => options.findIndex(option => option.id === id), optionId);
-    await dropdown.selectOption({ index });
-}
-
-/**
- * @param {import('@playwright/test').Page} page
  * @param {string} tagName
  * @param {{ activeAvatar: string, otherAvatar: string }} fixtures
  */
@@ -196,21 +186,28 @@ for (const profile of PROFILES) {
                 await expect(page.locator('#tagList .tag', { hasText: tagName })).toBeVisible();
                 expect(await readTagOwners(page, tagName, fixtures)).toEqual({ other: true, active: false });
 
-                await chooseDropdownEntry(page, 'set_character_world');
+                await page.locator('#sb_character_editor_more').click();
+                await page.getByRole('menuitem', { name: 'Link to World Info', exact: true }).click();
                 const worldPopup = page.locator('dialog[open]').filter({ has: page.locator('.character_extra_world_info_selector') });
                 const bookIndex = await page.evaluate(async bookName => (await import('/scripts/world-info.js')).world_names.indexOf(bookName), fixtures.bookName);
                 expect(bookIndex).toBeGreaterThanOrEqual(0);
+                // The popup binds its change handlers when the opening animation ends.
+                await expect(worldPopup).not.toHaveAttribute('opening');
                 // On desktop, select2 covers the native select. The popup reads the native select in its change handler.
                 await worldPopup.locator('.character_extra_world_info_selector').evaluate((select, value) => {
                     $(select).val([value]).trigger('change');
                 }, String(bookIndex));
-                await worldPopup.locator('.popup-button-ok').click();
+                await worldPopup.locator('.sb-dialog__close').click();
+                // A closing popup stays modal until its animation ends, and a fill on the page behind it is lost.
+                await expect(worldPopup).toHaveCount(0);
                 expect(await readAuxiliaryBooks(page, fixtures)).toEqual({ other: [fixtures.bookName], active: [] });
 
-                // The editor opens on the Information tab, and the description field belongs to the Definitions tab.
-                await page.locator('#sb_character_editor_tab_definitions').click();
                 await page.locator('#description_textarea').fill(`Edited ${suffix}`);
-                await page.evaluate(async () => (await import('/script.js')).flushCharacterSaveDebounced());
+                // On phones the editor hides its header, and Save with it, while the sheet is scrolled down.
+                await page.locator('#form_create .sb-editor-sheet__content').evaluate(content => { content.scrollTop = 0; });
+                await page.locator('#sb_character_editor_save').click();
+                // Save is also disabled while the save request runs, so wait for Cancel, which is disabled only when no unsaved change is left.
+                await expect(page.locator('#sb_character_editor_cancel')).toBeDisabled();
                 expect(await readDescriptions(page, fixtures)).toEqual({ other: `Edited ${suffix}`, active: `Editor Active ${suffix} description` });
                 expect(await readActiveChat(page)).toEqual(activeChat);
 
