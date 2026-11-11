@@ -165,7 +165,6 @@ describe('Conversation extension media integration', () => {
         const settings = { sd: {
             source: 'novel', model: 'nai-diffusion-4-5-full', sampler: 'k_euler', scheduler: 'karras',
             steps: 23, scale: 6, width: 832, height: 1216, seed: 42,
-            novel_precise_reference: { enabled: false, references: [] },
             prompt_prefix: 'photo of {{char}}', negative_prompt: 'blur',
             character_prompts: { conversation: 'blue eyes', roleplay: 'wrong character' },
             character_negative_prompts: { conversation: 'hat' },
