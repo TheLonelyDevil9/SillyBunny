@@ -1,4 +1,5 @@
 import { NOVELAI_IMAGE_MODELS, isNovelAIV5Model, normalizeNovelAIImageParameters } from "../../novelai-image-models.js";
+// SillyBunny divergence: NovelAI Precise Reference shares its request checks and editor with Image Generation.
 import { buildNovelAIPreciseReferenceParameters } from "../../novelai-precise-reference.js";
 import { mountNovelAIPreciseReferenceEditor } from "../../novelai-precise-reference-ui.js";
 import { createModelCatalogRefresher, fetchModelCatalog, getModelCatalogRequest, getRoutewayModelSizes, LIVE_MODEL_PROVIDERS, modelSuggestions, QIG_MODEL_INPUTS } from "./lib/model-catalogs.js";
@@ -223,6 +224,7 @@ import {
 } from "./lib/world-info-context.js";
 import {
     captureRegenerationReferences,
+    // SillyBunny divergence: copies of NovelAI Precise Reference state must not share reference objects.
     cloneNovelAIPreciseReferenceState,
     normalizeInjectInsertMode,
     parseContextualFilterSelection,
@@ -1142,6 +1144,7 @@ const defaultSettings = {
     naiModel: "nai-diffusion-4-5-curated",
     naiProxyUrl: "",
     naiProxyKey: "",
+    // SillyBunny divergence: NovelAI Precise Reference starts off, with no reference images.
     naiPreciseReference: { enabled: false, references: [] },
     // OpenAI GPT Image
     gptImageKey: "",
@@ -2298,6 +2301,7 @@ const CUSTOM_API_RECIPE_KEYS = [
 
 const PROVIDER_KEYS = {
     pollinations: ["pollinationsKey", "pollinationsModel"],
+    // SillyBunny divergence: NovelAI configurations keep their Precise References.
     novelai: ["naiKey", "naiModel", "naiProxyUrl", "naiProxyKey", "naiPreciseReference"],
     gptimage: ["gptImageKey", "gptImageModel", "gptImageProxyUrl", "gptImageProxyKey", "gptImageQuality", "gptImageFormat", "gptImageBackground", "gptImageModeration"],
     arliai: ["arliKey", "arliModel"],
@@ -7827,6 +7831,8 @@ function getNovelAISampler(sampler, isV3OrNewer) {
 }
 
 async function genNovelAI(prompt, negative, s, signal, options = {}) {
+    // SillyBunny divergence: check Precise References before any request, and refuse them
+    // for OpenAI-compatible proxies, which cannot carry them.
     const references = s.naiPreciseReference?.enabled ? s.naiPreciseReference.references : [];
     const preciseReferenceParameters = buildNovelAIPreciseReferenceParameters(s.naiModel, references);
     if (references?.length && s.naiProxyUrl && isNovelAICompatibleProxyUrl(s.naiProxyUrl)) {
@@ -14261,6 +14267,7 @@ async function regenerateImage(effectiveRequest = lastEffectiveRequest, returnFo
         customApiRefImages: [],
         nanobananaRefImages: [],
         nanogptRefImages: [],
+        // SillyBunny divergence: regeneration sends only the Precise References kept from the original run.
         naiPreciseReference: { enabled: false, references: [] },
         localRefImage: "",
         a1111ControlNetImage: "",
@@ -15855,6 +15862,7 @@ function getCurrentRefImages(s) {
     if (s.provider === "custom") return s.customApiRefImages || [];
     if (s.provider === "nanobanana") return s.nanobananaRefImages || [];
     if (s.provider === "nanogpt") return s.nanogptRefImages || [];
+    // SillyBunny divergence: a character override saves the whole NovelAI Precise Reference state.
     if (s.provider === "novelai") return cloneNovelAIPreciseReferenceState(s.naiPreciseReference);
     if (s.provider === "local") return s.localRefImage || "";
     return [];
@@ -15871,6 +15879,7 @@ function cloneCharScopedState(s = getSettings()) {
         customApiRefImages: [...(s.customApiRefImages || [])],
         nanobananaRefImages: [...(s.nanobananaRefImages || [])],
         nanogptRefImages: [...(s.nanogptRefImages || [])],
+        // SillyBunny divergence: global and character states also hold the NovelAI Precise References.
         naiPreciseReference: cloneNovelAIPreciseReferenceState(s.naiPreciseReference),
         localRefImage: s.localRefImage || "",
     };
@@ -15889,6 +15898,7 @@ function applyCharScopedStateToGenerationSettings(settings, state) {
             settings[key] = [...(state[key] || [])];
         }
     }
+    // SillyBunny divergence: NovelAI Precise References follow the state like the reference image lists.
     if (Object.prototype.hasOwnProperty.call(state, "naiPreciseReference")) {
         settings.naiPreciseReference = cloneNovelAIPreciseReferenceState(state.naiPreciseReference);
     }
@@ -15902,6 +15912,7 @@ function clearCharacterReferenceSettings(settings) {
     settings.customApiRefImages = [];
     settings.nanobananaRefImages = [];
     settings.nanogptRefImages = [];
+    // SillyBunny divergence: clear the NovelAI Precise References with the other reference images.
     settings.naiPreciseReference = { enabled: false, references: [] };
     settings.localRefImage = "";
 }
@@ -15948,6 +15959,7 @@ function getScopedCharacterGenerationSettings(baseSettings, context) {
     if (settings.provider === "custom") settings.customApiRefImages = referenceList;
     if (settings.provider === "nanobanana") settings.nanobananaRefImages = referenceList;
     if (settings.provider === "nanogpt") settings.nanogptRefImages = referenceList;
+    // SillyBunny divergence: scoped NovelAI runs use the character's Precise Reference state.
     if (settings.provider === "novelai") settings.naiPreciseReference = cloneNovelAIPreciseReferenceState(references);
     if (settings.provider === "local") settings.localRefImage = typeof references === "string" ? references : "";
     return settings;
@@ -15980,6 +15992,7 @@ function applyCharScopedState(state, s = getSettings(), { forcePrompt = false } 
     s.customApiRefImages = [...(state.customApiRefImages || [])];
     s.nanobananaRefImages = [...(state.nanobananaRefImages || [])];
     s.nanogptRefImages = [...(state.nanogptRefImages || [])];
+    // SillyBunny divergence: apply the NovelAI Precise References of the state and refresh their editor.
     s.naiPreciseReference = cloneNovelAIPreciseReferenceState(state.naiPreciseReference);
     s.localRefImage = state.localRefImage || "";
 
@@ -16035,6 +16048,11 @@ function getGlobalConfigurationSettings(s = getSettings()) {
         nanobananaRefImages: Array.isArray(base.nanobananaRefImages) ? [...base.nanobananaRefImages] : [...(s.nanobananaRefImages || [])],
         nanogptRefImages: Array.isArray(base.nanogptRefImages) ? [...base.nanogptRefImages] : [...(s.nanogptRefImages || [])],
         localRefImage: typeof base.localRefImage === "string" ? base.localRefImage : (s.localRefImage || ""),
+        // SillyBunny divergence: Precise References come from the in-memory base only during an override,
+        // because the saved base copy does not change on edits and can be older than the live value.
+        naiPreciseReference: cloneNovelAIPreciseReferenceState(charSettingsOverrideApplied && charSettingsBaseState
+            ? charSettingsBaseState.naiPreciseReference
+            : s.naiPreciseReference),
     };
 }
 
@@ -16516,6 +16534,8 @@ async function performLoadCharSettings(isCurrent) {
     const hasSettings = !!settingsRecord;
     const refRecord = normalizeCharacterReferenceRecord(getCharacterStoreRecord(charRefImages, storageKey) || normalizedRefRecord, s.provider);
     const refs = getCharacterProviderReferences(refRecord, s.provider);
+    // SillyBunny divergence: characters also keep a NovelAI Precise Reference state.
+    // A saved state is an object and applies even when it is off.
     const hasRefs = s.provider === "novelai" ? !!refRecord.naiPreciseReference : (typeof refs === "string" ? !!refs : refs.length > 0);
     const hasStoredRefs = hasCharacterReferenceOverrides(refRecord);
     const hasOverride = hasSettings || hasStoredRefs;
@@ -17718,6 +17738,7 @@ const DYNAMIC_PROVIDER_SELECT_IDS = new Set([
     "qig-a1111-cn-model",
 ]);
 
+// SillyBunny divergence: the Precise Reference editor is kept on its container, so a rebuilt panel mounts a new one.
 function refreshNaiPreciseReferenceEditor() {
     const container = document.getElementById("qig-nai-precise-reference");
     if (!container) return;
@@ -17888,6 +17909,7 @@ function refreshProviderInputs(provider, { updateProviderVisibility = true } = {
     }
 
     // Update reference images display
+    // SillyBunny divergence: the Precise Reference editor shows the settings only when it refreshes.
     if (provider === "novelai") refreshNaiPreciseReferenceEditor();
     if (provider === "proxy") {
         normalizeProxyChatImageSettings(s, s);
@@ -17978,6 +18000,7 @@ function updateProviderUI() {
     if (sizeCustomEl) sizeCustomEl.style.display = "grid";
     if (naiResolutionEl) naiResolutionEl.style.display = isNai ? "block" : "none";
     if (isNai) {
+        // SillyBunny divergence: refresh the Precise Reference editor when the NovelAI section shows.
         refreshNaiPreciseReferenceEditor();
         const changed = normalizeSize(s);
         syncSizeInputs(s.width, s.height);
@@ -20026,6 +20049,7 @@ function createUI() {
     bind("qig-nai-key", "naiKey");
     bind("qig-nai-model", "naiModel", false, false, () => {
         updateGenerationCapabilitiesUI();
+        // SillyBunny divergence: the Precise Reference editor in the NovelAI section shows whether the model accepts references.
         refreshNaiPreciseReferenceEditor();
     });
     bind("qig-nai-proxy-url", "naiProxyUrl");

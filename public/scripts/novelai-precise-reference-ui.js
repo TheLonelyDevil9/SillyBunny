@@ -77,6 +77,7 @@ export function mountNovelAIPreciseReferenceEditor(container, { getState, onChan
         const enabled = document.createElement('input');
         enabled.type = 'checkbox';
         enabled.checked = current.enabled;
+        enabled.disabled = busy;
         enabled.addEventListener('change', () => {
             save({ ...state(), enabled: enabled.checked });
             refresh();
@@ -121,6 +122,8 @@ export function mountNovelAIPreciseReferenceEditor(container, { getState, onChan
                 if (container.isConnected && state().references === originalReferences) {
                     const latest = state();
                     save({ ...latest, references: [...latest.references, ...prepared] });
+                } else {
+                    error = 'The images were not added because the references changed while they were prepared. Add them again.';
                 }
             } catch (cause) {
                 error = cause.message;
@@ -155,6 +158,7 @@ export function mountNovelAIPreciseReferenceEditor(container, { getState, onChan
                 type.add(new Option(text, value));
             }
             type.value = reference.type;
+            type.disabled = busy;
             type.addEventListener('change', () => updateReference(index, 'type', type.value));
             controls.append(createLabel('Reference type', type));
             for (const [field, text] of [['strength', 'Strength'], ['fidelity', 'Fidelity']]) {
@@ -164,12 +168,14 @@ export function mountNovelAIPreciseReferenceEditor(container, { getState, onChan
                 range.max = '1';
                 range.step = '0.05';
                 range.value = String(reference[field]);
+                range.disabled = busy;
                 range.setAttribute('aria-label', `${text} for reference ${index + 1}`);
                 const number = document.createElement('input');
                 number.type = 'number';
                 number.className = 'text_pole';
                 number.step = 'any';
                 number.value = String(reference[field]);
+                number.disabled = busy;
                 const label = createLabel(text, number);
                 label.className = 'nai-precise-reference-value';
                 const onInput = (source, target) => {
