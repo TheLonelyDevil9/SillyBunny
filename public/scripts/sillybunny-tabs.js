@@ -7572,11 +7572,14 @@ function setCharacterShellMode(mode) {
 // Creator opens a saved card in the editor without selecting its chat; the avatar is
 // consumed by the next in-place editor activation.
 let pendingCharacterEditorAvatar = null;
+let characterEditorOpenPromise = null;
 
 function openCharacterPanelTab(tabId, { avatar = null } = {}) {
     // SillyBunny: Characters lives in the full-screen settings page.
     const normalizedTabId = normalizeCharacterPanelTab(tabId);
     pendingCharacterEditorAvatar = normalizedTabId === 'editor' ? avatar : null;
+    // The bridge returns this. Some requests do not reach the editor activation that sets it.
+    characterEditorOpenPromise = null;
     if (isSettingsPageHosting('characters')) {
         activateSettingsTab('characters', normalizedTabId);
         return;
@@ -7607,7 +7610,7 @@ function activateCharacterPanelTabInPlace(tabId) {
         setCharacterPanelMenuType(panel, 'character_edit');
         const avatar = pendingCharacterEditorAvatar;
         pendingCharacterEditorAvatar = null;
-        void openCharacterEditorTab(avatar);
+        characterEditorOpenPromise = openCharacterEditorTab(avatar);
     } else if (normalizedTabId === 'world-info') {
         setCharacterPanelMenuType(panel, 'world-info');
         openCharacterWorldInfoTab();
@@ -15216,6 +15219,10 @@ function initAll() {
                 if (tabId === 'characters' || tabId === 'groups') {
                     if (isMobileViewport()) setSettingsMobileContentView(true);
                     return characterListViewPromise;
+                }
+                if (tabId === 'editor') {
+                    if (isMobileViewport()) setSettingsMobileContentView(true);
+                    return characterEditorOpenPromise;
                 }
                 return;
             }

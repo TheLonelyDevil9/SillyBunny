@@ -176,6 +176,8 @@ for (const profile of PROFILES) {
 
                 await expect(page.locator('#form_create')).toHaveAttribute('actiontype', 'editcharacter');
                 await expect(page.locator('#avatar_url_pole')).toHaveValue(fixtures.otherAvatar);
+                // On phones the settings page shows its tab list or one page, and the editor page can stay out of view.
+                await expect(page.locator('#sb_character_editor_header')).toBeInViewport();
                 expect(await readActiveChat(page)).toEqual(activeChat);
                 for (const selector of CURRENT_CHAT_CONTROLS) {
                     await expect(page.locator(selector)).toBeHidden();
