@@ -18414,14 +18414,15 @@ jQuery(async function () {
     $('#form_create').on('submit', (e) => createOrEditCharacter(e.originalEvent));
 
     $('#delete_button').on('click', async function () {
-        if (this_chid === undefined || !characters[this_chid]) {
+        const avatar = characters[getCharacterEditorId()]?.avatar;
+        if (!avatar) {
             toastr.warning('No character selected.');
             return;
         }
 
         // SillyBunny: share the confirmed single-character delete flow with
         // list actions without changing the upstream delete API — see docs/ui-migration.md
-        await deleteCharacterById(this_chid);
+        await deleteCharacterById(avatar);
     });
 
     //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////
