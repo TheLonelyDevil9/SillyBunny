@@ -4,6 +4,9 @@ import { CARD_FIELDS, projectDescription } from './model.js';
 
 let store;
 let operationQueue = Promise.resolve();
+// Each browser tab runs its own copy of this module against the same records. A stored updatedAt that differs
+// from the one this tab last loaded or wrote means that another tab wrote the record after this tab.
+const seenStamps = new Map();
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isCounter = value => Number.isSafeInteger(value) && value >= 0;
 const isSource = value => value === null || (typeof value === 'string' && value.length > 0);
@@ -35,6 +38,17 @@ function invalid(rawDraft) {
     const error = new Error('The stored Creator draft is malformed or uses an unsupported version. Download it or explicitly discard it before saving a replacement.');
     error.rawDraft = rawDraft;
     return error;
+}
+
+function newerElsewhere(rawDraft) {
+    // The storage notice appends the full stop.
+    const error = new Error('Another tab saved a newer copy of this draft, so this tab did not overwrite it. Download this draft to keep it, or reload to continue with the newer copy');
+    error.rawDraft = rawDraft;
+    return error;
+}
+
+function seenByThisTab(key, record) {
+    return seenStamps.has(key) && seenStamps.get(key) === record.updatedAt;
 }
 
 function validDescription(value) {
@@ -120,9 +134,13 @@ export function loadDraft(sourceAvatar) {
     const key = keyFor(sourceAvatar);
     return enqueue(async () => {
         const raw = await database().getItem(key);
-        if (raw === null || raw === undefined) return null;
+        if (raw === null || raw === undefined) {
+            seenStamps.delete(key);
+            return null;
+        }
         validateRecord(raw, sourceAvatar);
         const draft = snapshotRecord(raw);
+        seenStamps.set(key, raw.updatedAt);
         if (draft.generationRunning) {
             draft.generationRunning = false;
             draft.generationInterrupted = true;
@@ -137,14 +155,49 @@ export function saveDraft(draft) {
     const snapshot = snapshotRecord(draft);
     return enqueue(async () => {
         const existing = await database().getItem(key);
-        if (existing !== null && existing !== undefined) validateRecord(existing, snapshot.sourceAvatar);
+        if (existing !== null && existing !== undefined) {
+            validateRecord(existing, snapshot.sourceAvatar);
+            if (!seenByThisTab(key, existing)) throw newerElsewhere(existing);
+        }
         await database().setItem(key, snapshot);
+        seenStamps.set(key, snapshot.updatedAt);
     });
 }
 
 export function discardDraft(sourceAvatar) {
     const key = keyFor(sourceAvatar);
-    return enqueue(() => database().removeItem(key));
+    return enqueue(async () => {
+        await database().removeItem(key);
+        seenStamps.delete(key);
+    });
+}
+
+/** Re-keys the stored draft of a renamed card. A draft that is already stored under the new identity stays as it is. */
+export function moveDraft(oldAvatar, newAvatar) {
+    const from = keyFor(oldAvatar);
+    const to = keyFor(newAvatar);
+    return enqueue(async () => {
+        const raw = await database().getItem(from);
+        if (raw === null || raw === undefined) return;
+        validateRecord(raw, oldAvatar);
+        const occupant = await database().getItem(to);
+        if (occupant !== null && occupant !== undefined) return;
+        await database().setItem(to, { ...snapshotRecord(raw), sourceAvatar: newAvatar });
+        await database().removeItem(from);
+        if (seenStamps.has(from)) seenStamps.set(to, seenStamps.get(from));
+        seenStamps.delete(from);
+    });
+}
+
+/** Unlike discardDraft, keeps a record that another tab wrote after this tab last loaded or wrote it. */
+export function discardDraftIfSeen(sourceAvatar) {
+    const key = keyFor(sourceAvatar);
+    return enqueue(async () => {
+        const existing = await database().getItem(key);
+        if (existing !== null && existing !== undefined && !seenByThisTab(key, existing)) return;
+        await database().removeItem(key);
+        seenStamps.delete(key);
+    });
 }
 
 export function flushDraftSaves() {

@@ -10,12 +10,14 @@ const styleCss = readFileSync(path.join(repoRoot, 'public', 'style.css'), 'utf8'
 const characterEditorCss = readFileSync(path.join(repoRoot, 'public', 'css', 'sillybunny-character-editor.css'), 'utf8').replace(/\r\n/g, '\n');
 const listCss = readFileSync(path.join(repoRoot, 'public', 'css', 'sillybunny-character-list.css'), 'utf8').replace(/\r\n/g, '\n');
 
-function getRuleBody(cssSource, selector) {
+function getRuleBodies(cssSource, selector) {
     const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const matches = [...cssSource.matchAll(new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`, 'gs'))];
-    const match = matches.at(-1);
 
-    return match?.groups?.body ?? '';
+    return [...cssSource.matchAll(new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`, 'gs'))].map(match => match.groups.body);
+}
+
+function getRuleBody(cssSource, selector) {
+    return getRuleBodies(cssSource, selector).at(-1) ?? '';
 }
 
 describe('mobile character editor css', () => {

@@ -67,13 +67,14 @@
     <!-- SillyBunny: the mobile surface stylesheet cache key tracks its fork-owned responsive rules. -->
     <link rel="stylesheet" type="text/css" href="css/sillybunny-paper-theme.css?v=20261102a" media="(max-width: 768px)">
     <!-- SillyBunny: keep the Characters shell cache key aligned with its fork-owned stylesheet edits. -->
+    <!-- SillyBunny: the character shell and the Creator workspace need these sheets at boot. A new v= string on a changed sheet stops browsers from using a cached copy. -->
     <link rel="stylesheet" type="text/css" href="css/sillybunny-tabs.css?v=20261104i">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-character-creator.css?v=20260930a">
     <!-- SillyBunny: entity lists and tag filters load after startup; the group editor activates them on open. -->
     <link rel="preload" as="style" href="css/sillybunny-entity-list.css?v=20261105a" data-sb-deferred-style data-sb-media="all">
     <!-- SillyBunny: the Characters/Groups list activates this deferred stylesheet on first mount. Keep this version aligned with the runtime loader URLs. -->
     <link rel="preload" as="style" href="css/sillybunny-character-list.css?v=20261027a" data-sb-deferred-style data-sb-media="all">
-    <link rel="stylesheet" type="text/css" href="css/sillybunny-mobile-shell.css?v=20261104h" media="(max-width: 768px)">
+    <link rel="stylesheet" type="text/css" href="css/sillybunny-mobile-shell.css?v=20261111a" media="(max-width: 768px)">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-mobile-navigation.css?v=20261001e">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-message-actions.css?v=20261027a">
     <link rel="stylesheet" type="text/css" href="css/sillybunny-character-editor.css?v=20261017a">
@@ -6869,6 +6870,7 @@
                                  Do not reintroduce them here: duplicate IDs make getElementById return
                                  the first match in document order, which would be the hidden copy. -->
                         </div>
+                        <!-- SillyBunny: the Creator module enables this button for a saved card in the editor and opens that card in the Creator. -->
                         <button id="sb_character_creator_polish" class="menu_button menu_button_icon" type="button" disabled>
                             <i class="fa-solid fa-pen-ruler" aria-hidden="true"></i>
                             <span>Polish in Creator</span>
@@ -9445,6 +9447,7 @@
     <script type="module" src="script.js"></script>
     <script type="module" src="scripts/sillybunny-tabs.js"></script>
     <script type="module" src="scripts/sillybunny-conversation.js"></script>
+    <!-- SillyBunny: the Creator module registers its open event and the Polish button handler on APP_READY, so it loads at boot. -->
     <script type="module" src="scripts/sillybunny-character-creator.js"></script>
     <script>
         window.addEventListener('load', (event) => {

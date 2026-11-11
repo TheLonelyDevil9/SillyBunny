@@ -59,7 +59,7 @@ import {
 import { escapeRegex } from './util/escape-regex.js';
 import { flashHighlight, showFontAwesomePicker } from './utils.js';
 import { extension_settings } from './extensions.js';
-import { changePanelApiVisibility, characters, displayVersion, flushCharacterSaveDebounced, getCurrentChatId, getOneCharacter, getThumbnailUrl, parseAvatarSource, refreshCsrfToken, select_selected_character, saveSettingsDebounced, this_chid } from '../script.js';
+import { changePanelApiVisibility, characters, displayVersion, flushCharacterSaveDebounced, getCurrentChatId, getOneCharacter, getThumbnailUrl, parseAvatarSource, refreshCsrfToken, select_selected_character, unshallowCharacter, saveSettingsDebounced, this_chid } from '../script.js';
 import { addLanguagesToDropdown, t, translate } from './i18n.js';
 import { isAdmin, syncUserControls } from './user.js';
 import {
@@ -7626,8 +7626,15 @@ async function openCharacterEditorTab(avatar = null) {
 
     // Creator can open a saved card without selecting its chat.
     if (avatar) {
-        const index = characters.findIndex(character => character.avatar === avatar);
-        if (index < 0) {
+        const findCard = () => characters.findIndex(character => character.avatar === avatar);
+        let index = findCard();
+        if (index >= 0) {
+            // With lazy loading the roster holds shallow cards, and a save from a shallow form empties the fields that
+            // the card lacks. The roster can change while the full card loads, so look the card up again after the load.
+            await unshallowCharacter(index).catch(error => console.warn('Failed to refresh character before opening editor.', error));
+            index = findCard();
+        }
+        if (index < 0 || characters[index].shallow) {
             showCharacterEditorEmptyState();
             return false;
         }
