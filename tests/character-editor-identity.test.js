@@ -93,7 +93,7 @@ function createDom() {
             clone: () => self,
             get: () => undefined,
         };
-        for (const name of ['html', 'addClass', 'removeClass', 'toggleClass', 'trigger', 'empty', 'remove', 'append', 'select2']) {
+        for (const name of ['html', 'addClass', 'removeClass', 'toggleClass', 'trigger', 'empty', 'remove', 'append', 'select2', 'each']) {
             self[name] = () => self;
         }
         return self;
@@ -178,10 +178,16 @@ function createEditor({ thisChid = String(ACTIVE), selectedGroup = null } = {}) 
         getOneCharacter: jest.fn(async () => {}),
         processDroppedFiles: jest.fn(async () => {}),
         importFromExternalUrl: jest.fn(async () => {}),
+        beginCharacterEditorLoad: jest.fn(),
+        loadCharacterEditorGreetings: jest.fn(),
+        openCharacterEditorSession: jest.fn(),
+        openCharacterEditorCreateSession: jest.fn(),
+        lorebookSelectOptions: () => ({}),
     });
     context.getContext = () => ({ characters: context.characters, characterId: context.this_chid });
     load(context, 'scripts/utils.js', ['compareIgnoreCaseAndAccents', 'equalsIgnoreCaseAndAccents', 'onlyUnique', 'normalizeArray', 'getCharaFilename']);
     load(context, 'scripts/world-info.js', ['charSetAuxWorlds', 'updateAuxBooks']);
+    load(context, 'scripts/sillybunny-temporary-chat-state.js', ['current', 'isTemporaryChat', 'reassertReservedChatName', 'getStoredChatName']);
     load(context, 'scripts/tags.js', ['getTag', 'getTagKey', 'getInlineListSelector', 'getTagKeyForEntity', 'addTagToMap', 'removeTagFromMap', 'addTagsToEntity', 'removeTagFromEntity', 'selectTag', 'onTagRemoveClick', 'applyTagsOnCharacterSelect']);
     load(context, 'script.js', ['setMenuType', 'setCharacterId', 'getCharacterEditorId', 'select_rm_create', 'select_selected_character', 'openCharacterWorldPopup', 'openCharacterChat', 'unshallowCharacter']);
     return { context, dom };
