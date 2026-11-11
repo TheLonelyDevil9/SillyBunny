@@ -57,6 +57,7 @@ const MODE_ELEMENTS = {
  * @property {number|null} contextSize Context size of the loaded model
  * @property {boolean} vision Whether the loaded model accepts images
  * @property {boolean} audio Whether the loaded model accepts audio
+ * @property {string} serverUrl KoboldCpp API URL that reported this state
  */
 
 /** @type {Record<SwitcherMode, SwitcherState|null>} */
@@ -237,7 +238,7 @@ async function fetchSwitcherState(serverUrl) {
             headers: getRequestHeaders(),
             body: JSON.stringify({ api_server: serverUrl }),
         });
-        return response.ok ? await response.json() : null;
+        return response.ok ? { ...await response.json(), serverUrl } : null;
     } catch (error) {
         console.error('Could not get the KoboldCpp model list', error);
         return null;
@@ -267,10 +268,13 @@ export async function refreshKoboldCppModels(mode = 'text') {
 }
 
 /**
- * @returns {SwitcherState|null} What KoboldCpp reported at the last Chat Completion status check
+ * @returns {SwitcherState|null} What KoboldCpp reported at the last Chat Completion status check, or null when that was for another URL
  */
 export function getKoboldCppChatState() {
-    return switcherStates.chat;
+    const state = switcherStates.chat;
+    // A new URL takes effect before the next status check, and a status check during a model switch does not replace
+    // the state. Without this check, the old server's model name would key the new server's counts in the token cache.
+    return state?.serverUrl === getServerUrl('chat') ? state : null;
 }
 
 /**
@@ -292,8 +296,12 @@ export async function countKoboldCppChatTokens(messages) {
     }
 
     // Roles and names count as well, in place of the chat template tokens that KoboldCpp puts around each message.
+    // Media parts stay out, because their base64 data would count as far more tokens than the model spends on them.
     const text = messages
-        .flatMap(message => Object.values(message))
+        .flatMap(message => Object.entries(message))
+        .flatMap(([key, value]) => key === 'content' && Array.isArray(value)
+            ? value.filter(part => part?.type === 'text').map(part => part.text)
+            : [value])
         .map(value => typeof value === 'string' ? value : JSON.stringify(value))
         .join('\n\n');
 
