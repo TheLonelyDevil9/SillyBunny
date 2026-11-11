@@ -9,6 +9,7 @@ import {
     resultCheckStatus,
     setOnlineStatus,
     startStatusLoading,
+    stopStatusLoading,
 } from '../script.js';
 import { t } from './i18n.js';
 import { chat_completion_sources, getStatusOpen, oai_settings } from './openai.js';
@@ -43,7 +44,7 @@ const MODE_ELEMENTS = {
 /**
  * @typedef {object} SwitcherEntry
  * @property {string} name Option string exactly as KoboldCpp listed it
- * @property {'model'|'config'|'action'} type Entry kind
+ * @property {'model'|'config'|'action'} type
  */
 
 /**
@@ -51,6 +52,7 @@ const MODE_ELEMENTS = {
  * @property {number} admin 0 when admin mode is off, 1 when it is on, 2 when it also needs the admin password
  * @property {SwitcherEntry[]} entries Entries KoboldCpp can load
  * @property {string|null} loadedModel Loaded model as KoboldCpp reports it, "inactive" when no model is loaded
+ * @property {string[]} loadedFiles Model entries that match the loaded model name. Several can match, because KoboldCpp drops the folder and some characters from that name.
  * @property {string|null} loadedFile Entry of the loaded model, when one matches
  * @property {number|null} contextSize Context size of the loaded model
  * @property {boolean} vision Whether the loaded model accepts images
@@ -140,6 +142,10 @@ function isAlreadyLoaded(state, name) {
     return name === state?.loadedFile || (name === 'unload_model' && state?.loadedModel === 'inactive');
 }
 
+function getNoFilesHint() {
+    return t`KoboldCpp listed no files. Check the folder set with --admindir.`;
+}
+
 /**
  * @param {SwitcherState|null} state Switcher state
  * @returns {string} Why KoboldCpp offers nothing to load, or an empty string when it offers entries
@@ -154,7 +160,7 @@ function getUnavailableReason(state) {
     if (!state.entries.length) {
         return state.admin === 2
             ? t`KoboldCpp needs its admin password. Enter it as the API key above, then click Connect.`
-            : t`KoboldCpp listed no files. Check the folder set with --admindir.`;
+            : getNoFilesHint();
     }
     return '';
 }
@@ -210,7 +216,10 @@ function renderModelSelect(mode) {
             select.append(group);
         }
         select.value = state.loadedFile ?? '';
-        hint = t`Models load with KoboldCpp's default settings. Configs (.kcpps) load their saved settings.`;
+        // KoboldCpp always lists its two actions, so an --admindir folder without model or config files lists only them.
+        hint = state.entries.some(entry => entry.type !== 'action')
+            ? t`Models load with KoboldCpp's default settings, or its --baseconfig file when set. Configs (.kcpps, .kcppt) load their own settings.`
+            : getNoFilesHint();
     }
 
     $(select).trigger('change.select2');
@@ -324,14 +333,15 @@ async function requestLoad(serverUrl, name) {
  * @param {string} serverUrl KoboldCpp API URL
  * @param {number} requestedAt Time of the load request, in milliseconds
  * @param {AbortSignal|null} signal Stops the wait when aborted
+ * @param {() => boolean} isStopped Stops the wait when it returns true
  * @returns {Promise<'restarted'|'timeout'|'cancelled'>} How the wait ended
  */
-async function waitForRestart(serverUrl, requestedAt, signal) {
+async function waitForRestart(serverUrl, requestedAt, signal, isStopped) {
     let wentOffline = false;
 
     while (Date.now() - requestedAt < SWITCH_TIMEOUT_MS) {
         await delay(POLL_INTERVAL_MS);
-        if (signal?.aborted) {
+        if (signal?.aborted || isStopped()) {
             return 'cancelled';
         }
 
@@ -366,28 +376,44 @@ async function waitForRestart(serverUrl, requestedAt, signal) {
 /**
  * @param {string} name Entry that was loaded
  * @param {SwitcherState|null} state Switcher state after the restart
- * @returns {boolean} False when KoboldCpp reports a different model than the entry asked for
+ * @returns {boolean} False when KoboldCpp reports a different model than the entry asked for, or no model after a config or the launch model
  */
 function reportLoaded(name, state) {
     const title = t`KoboldCpp`;
-    const loadedModel = state?.loadedModel;
-    const loadedName = state?.loadedFile ?? loadedModel?.replace(/^koboldcpp\//, '');
+    // A config that crashes the worker makes KoboldCpp relaunch its launch arguments, so the model that KoboldCpp
+    // reports is the only sign of what a config or the launch model loaded.
+    const isConfigOrLaunch = name === 'initial_model' || /\.kcpp[st]$/i.test(name);
+
+    if (!state || (isConfigOrLaunch && !state.loadedModel)) {
+        toastr.warning(t`KoboldCpp restarted, but SillyBunny could not read which model it loaded. Click Connect to check.`, title, { timeOut: 10000 });
+        return true;
+    }
+
+    const loadedModel = state.loadedModel;
+    const reportedName = loadedModel?.replace(/^koboldcpp\//, '');
+    const loadedName = state.loadedFile ?? reportedName;
 
     if (name === 'unload_model' && loadedModel && loadedModel !== 'inactive') {
         toastr.warning(t`KoboldCpp restarted with ${loadedName} still loaded.`, title, { timeOut: 10000 });
         return false;
     }
-    if (/\.gguf$/i.test(name) && loadedModel && state?.loadedFile !== name) {
+    if (/\.gguf$/i.test(name) && loadedModel && !state.loadedFiles.includes(name)) {
         toastr.warning(loadedModel === 'inactive'
             ? t`KoboldCpp restarted without a model instead of loading ${name}. Check the KoboldCpp console for load errors.`
             : t`KoboldCpp restarted with ${loadedName} instead of ${name}. Check the KoboldCpp console for load errors.`, title, { timeOut: 10000 });
         return false;
     }
+    if (isConfigOrLaunch) {
+        if (loadedModel === 'inactive') {
+            toastr.warning(t`KoboldCpp restarted without a model. Check the KoboldCpp console for load errors.`, title, { timeOut: 10000 });
+            return false;
+        }
+        toastr.success(t`KoboldCpp restarted with ${reportedName}.`, title);
+        return true;
+    }
 
     if (name === 'unload_model') {
         toastr.success(t`Model unloaded.`, title);
-    } else if (name === 'initial_model') {
-        toastr.success(t`Launch model reloaded.`, title);
     } else {
         toastr.success(t`Loaded ${name}.`, title);
     }
@@ -398,11 +424,13 @@ function reportLoaded(name, state) {
  * Asks KoboldCpp to load an entry and waits until it has restarted.
  * @param {string} name Entry name as KoboldCpp listed it
  * @param {SwitcherMode} mode Connection mode whose URL and dropdown to use
+ * @param {import('./slash-commands/SlashCommandAbortController.js').SlashCommandAbortSignal} [scriptSignal] Signal of the script that runs /kcpp-model, which stops the wait when aborted
  * @returns {Promise<boolean>} Whether KoboldCpp restarted with the entry loaded, as far as its reports show
  */
-async function switchKoboldCppModel(name, mode) {
+async function switchKoboldCppModel(name, mode, scriptSignal) {
     const title = t`KoboldCpp`;
     const serverUrl = getServerUrl(mode);
+    const isUrlChanged = () => getServerUrl(mode) !== serverUrl;
     const isActive = isActiveConnection(mode);
 
     if (!serverUrl) {
@@ -436,7 +464,7 @@ async function switchKoboldCppModel(name, mode) {
             if (isActive) {
                 setOnlineStatus('no_connection');
             }
-            outcome = await waitForRestart(serverUrl, requestedAt, signal);
+            outcome = await waitForRestart(serverUrl, requestedAt, signal, () => Boolean(scriptSignal?.aborted) || isUrlChanged());
         } else {
             outcome = 'rejected';
         }
@@ -454,9 +482,18 @@ async function switchKoboldCppModel(name, mode) {
             switcherStates[mode] = null;
         }
         renderModelSelect(mode);
-        // The Cancel button already resets the connection status.
         if (isActive && outcome !== 'cancelled') {
             resultCheckStatus();
+        }
+        // The Cancel button aborts the status check and then resets the connection status itself. A new API, type
+        // or URL, or a stopped script, also ends the wait, and without this call it can leave the Connect buttons
+        // disabled.
+        if (isActive && outcome === 'cancelled' && !(signal?.aborted && isActiveConnection(mode))) {
+            stopStatusLoading();
+        }
+        // A KoboldCpp status check does not update the list while the switch waits, so the list for the new URL loads here.
+        if (isActiveConnection(mode) && isUrlChanged()) {
+            void refreshKoboldCppModels(mode);
         }
         switch (outcome) {
             case 'rejected':
@@ -490,23 +527,24 @@ async function switchKoboldCppModel(name, mode) {
 /**
  * @param {SwitcherEntry[]} entries Switcher entries
  * @param {string} query Entry name, file name, label, or part of one
- * @returns {{ name: string|null, matches: number }} Matching entry, and how many entries contain the query
+ * @returns {{ name: string|null, matches: number }} The one matching entry, or null when no entry or several entries match, and how many entries match
  */
 function findEntry(entries, query) {
+    const named = entries.find(entry => entry.name === query);
+    if (named) {
+        return { name: named.name, matches: 1 };
+    }
+
     const needle = query.toLowerCase();
     const getNames = (/** @type {SwitcherEntry} */ entry) => {
         const fileName = entry.name.split(/[\\/]/).pop() ?? entry.name;
         return [entry.name, fileName, fileName.replace(/\.[^.]+$/, ''), getEntryLabel(entry.name)].map(name => name.toLowerCase());
     };
 
-    const exact = entries.find(entry => getNames(entry).includes(needle));
-    if (exact) {
-        return { name: exact.name, matches: 1 };
-    }
-
-    // A wrong guess costs a full model reload, so a partial name has to match exactly one entry.
-    const partial = entries.filter(entry => getNames(entry).some(name => name.includes(needle)));
-    return { name: partial.length === 1 ? partial[0].name : null, matches: partial.length };
+    // A wrong guess costs a full model reload, so a name or a part of one has to match exactly one entry.
+    const exact = entries.filter(entry => getNames(entry).includes(needle));
+    const matches = exact.length ? exact : entries.filter(entry => getNames(entry).some(name => name.includes(needle)));
+    return { name: matches.length === 1 ? matches[0].name : null, matches: matches.length };
 }
 
 /**
@@ -523,6 +561,7 @@ async function pickEntry(state) {
     search.type = 'search';
     search.classList.add('text_pole');
     search.placeholder = t`Search...`;
+    search.setAttribute('aria-label', search.placeholder);
     content.append(heading, search);
 
     for (const [type, label] of getEntryGroups()) {
@@ -539,6 +578,7 @@ async function pickEntry(state) {
         for (const entry of entries) {
             const item = document.createElement('div');
             item.classList.add('menu_button', 'menu_button_icon', 'wide100p', 'justifyLeft');
+            item.setAttribute('role', 'button');
             item.tabIndex = 0;
             item.dataset.entry = entry.name;
             item.dataset.group = type;
@@ -546,6 +586,8 @@ async function pickEntry(state) {
                 const icon = document.createElement('i');
                 icon.classList.add('fa-solid', 'fa-circle-check', 'toggleEnabled');
                 icon.title = t`Loaded`;
+                icon.setAttribute('role', 'img');
+                icon.setAttribute('aria-label', icon.title);
                 item.append(icon);
             }
             const text = document.createElement('span');
@@ -606,11 +648,11 @@ async function pickEntry(state) {
 }
 
 /**
- * @param {object} _args Named arguments
+ * @param {{ _abortController?: import('./slash-commands/SlashCommandAbortController.js').SlashCommandAbortController }} args Named arguments
  * @param {string} value Entry to load; opens the picker when empty
  * @returns {Promise<string>} Name of the loaded entry, or an empty string
  */
-async function koboldCppModelCallback(_args, value) {
+async function koboldCppModelCallback(args, value) {
     const title = t`KoboldCpp`;
     const mode = getCommandMode();
     const serverUrl = getServerUrl(mode);
@@ -657,7 +699,7 @@ async function koboldCppModelCallback(_args, value) {
     if (isAlreadyLoaded(state, name)) {
         return name;
     }
-    return await switchKoboldCppModel(name, mode) ? name : '';
+    return await switchKoboldCppModel(name, mode, args._abortController?.signal) ? name : '';
 }
 
 /**

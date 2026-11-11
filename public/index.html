@@ -3000,12 +3000,12 @@
                                     <small data-i18n="Example: http://127.0.0.1:5001">Example: http://127.0.0.1:5001</small>
                                     <input id="koboldcpp_api_url_text" class="text_pole wide100p" value="" autocomplete="off" data-server-history="koboldcpp">
                                 </div>
-                                <!-- SillyBunny: KoboldCpp admin-mode model switcher, filled by sillybunny-koboldcpp-models.js. -->
+                                <!-- SillyBunny: KoboldCpp in admin mode can switch models, so this select lists the files it can load. sillybunny-koboldcpp-models.js fills it. -->
                                 <div class="flex1">
-                                    <h4>
+                                    <h4 id="koboldcpp_model_heading">
                                         <span data-i18n="KoboldCpp Model">KoboldCpp Model</span>
                                     </h4>
-                                    <select id="koboldcpp_model">
+                                    <select id="koboldcpp_model" aria-labelledby="koboldcpp_model_heading" aria-describedby="koboldcpp_model_hint">
                                         <option value="" data-i18n="-- Connect to the API --">
                                             -- Connect to the API --
                                         </option>
