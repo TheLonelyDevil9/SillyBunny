@@ -540,7 +540,7 @@ function renderBrief() {
     section.append(profileLabel);
     if (!hasProfile()) section.append(node('p', 'sb-creator-note', 'Generation needs a saved Chat Completion or Text Completion profile. You can still edit every section manually.'));
     const connectionActions = node('div', 'sb-creator-actions');
-    connectionActions.append(action('Configure connections', () => window.SillyBunnyShell?.openTab('left', 'api'), { lock: true }), action('Refresh profiles', render, { lock: true }));
+    connectionActions.append(action('Configure connections', () => window.SillyBunnyShell?.openTab('left', 'connections'), { lock: true }), action('Refresh profiles', render, { lock: true }));
     section.append(connectionActions);
     section.append(action('Ask clarifying questions', () => generate(['questions']), { generate: true }));
     if (questions) section.append(node('pre', 'sb-creator-text', questions));
