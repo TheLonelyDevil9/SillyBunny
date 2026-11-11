@@ -9,7 +9,7 @@ import { sync as commandExistsSync } from 'command-exists';
 import { simpleGit } from 'simple-git';
 
 // SillyBunny: share the APK runtime gate between Server Tools update paths.
-import { ANDROID_APP_UPDATE_REQUIRED, checkAndroidAppGate } from '../android-app-gate.js';
+import { ANDROID_APP_UPDATE_REQUIRED, checkAndroidAppGate, getAndroidAppGitOptions } from '../android-app-gate.js';
 import { APP_NAME, formatRuntimeLabel, isBunRuntime, isNativeTermuxEnvironment } from '../runtime.js';
 import {
     getBranchDisplayNames,
@@ -56,6 +56,7 @@ const GIT_OPTIONS = Object.freeze({
     // socket handle and keeps the port bound across the restart (#710,
     // oven-sh/bun#36936).
     config: ['gc.auto=0', 'maintenance.auto=false'],
+    ...getAndroidAppGitOptions(),
 });
 const RESTART_RESPONSE_DELAY_MS = 200;
 const CHAT_COMPLETION_CONFIG_DEFAULTS = Object.freeze({
@@ -1107,7 +1108,7 @@ router.post('/update', requireAdminMiddleware, async (_request, response) => {
         const androidAppGate = await checkAndroidAppGate(git, { ref: repository.trackingBranch, branch: repository.branch });
         if (androidAppGate.blocked) {
             if (stashed) {
-                stashPopWarning = await restoreAutoStash(git);
+                stashPopWarning = await restoreAutoStash(git, { reason: 'after the Android app update gate stopped the update' });
             }
             return response.status(409).json({
                 error: 'TODO(copy)',
@@ -1250,8 +1251,10 @@ router.post('/switch-branch', requireAdminMiddleware, async (request, response) 
         // SillyBunny: gate the resolved APK branch before either checkout path.
         const androidAppGate = await checkAndroidAppGate(git, { ref: remoteBranch || branch, branch: currentBranch });
         if (androidAppGate.blocked) {
-            if (hasLocalChanges && autoStash) {
-                await restoreAutoStash(git);
+            const stashed = hasLocalChanges && autoStash;
+            let stashPopWarning = null;
+            if (stashed) {
+                stashPopWarning = await restoreAutoStash(git, { reason: 'after the Android app update gate stopped the branch switch' });
             }
             return response.status(409).json({
                 error: 'TODO(copy)',
@@ -1260,6 +1263,8 @@ router.post('/switch-branch', requireAdminMiddleware, async (request, response) 
                 installed: androidAppGate.installed,
                 reason: androidAppGate.reason,
                 branch,
+                stashed,
+                stashPopWarning,
             });
         }
 
