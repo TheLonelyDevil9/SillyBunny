@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { applyWelcomeSettings } from './helpers/welcome-dialog.js';
 
 test.use({ serviceWorkers: 'block', contextOptions: { reducedMotion: 'reduce' } });
 test.setTimeout(90000);
@@ -64,6 +65,7 @@ async function connectKoboldCpp(page, baseURL, mode = 'text') {
             const data = await response.json();
             const settings = JSON.parse(data.settings);
             settings.firstRun = false;
+            applyWelcomeSettings(settings);
             settings._version = version;
             settings.main_api = mode === 'chat' ? 'openai' : 'textgenerationwebui';
             settings.power_user = { ...settings.power_user, auto_connect: false };
