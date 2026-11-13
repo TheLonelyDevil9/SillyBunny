@@ -94,6 +94,28 @@ describe('Data & Security settings split', () => {
     });
 });
 
+describe('Messages settings order', () => {
+    let previousCSS;
+    beforeAll(() => {
+        previousCSS = globalThis.CSS;
+        globalThis.CSS = { ...previousCSS, escape: value => String(value) };
+    });
+    afterAll(() => {
+        globalThis.CSS = previousCSS;
+    });
+
+    test('places Markdown Engine directly below Auto-fix Markdown in Message Display', () => {
+        const split = splitAuthoredSettings();
+        expect(split.missing).toEqual([]);
+
+        const rows = [...split.messages.querySelector('[data-sb-category="message-display"] > .sb-settings-category-body').children];
+        const autoFix = split.messages.querySelector('#auto_fix_generated_markdown').closest('.checkbox_label');
+        const engine = split.messages.querySelector('#markdown_engine').parentElement;
+        expect(rows).toContain(autoFix);
+        expect(rows.indexOf(engine)).toBe(rows.indexOf(autoFix) + 1);
+    });
+});
+
 describe('Account popup', () => {
     test('leaves Settings Snapshots and Download Backup to Data & Security', () => {
         const templateHtml = readFileSync(path.join(repoRoot, 'public', 'scripts', 'templates', 'userProfile.html'), 'utf8');
