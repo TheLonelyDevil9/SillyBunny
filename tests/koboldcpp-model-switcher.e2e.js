@@ -176,6 +176,22 @@ test.describe('KoboldCpp model switch', () => {
         await expectNoMorePolls(page, polls);
     });
 
+    test('the Chat Completion reconnect after a change of the main API lists the KoboldCpp models once the wait ends', async ({ page, baseURL }) => {
+        const polls = await connectKoboldCpp(page, baseURL);
+        await page.evaluate(url => Object.assign(window.SillyTavern.getContext().chatCompletionSettings, {
+            chat_completion_source: 'koboldcpp',
+            koboldcpp_url: url,
+        }), OLD_URL);
+        await startSwitch(page, polls);
+
+        await page.locator('#main_api').selectOption('openai');
+
+        await expect(page.locator('.toast', { hasText: STOPPED_WAITING })).toBeVisible();
+        await expect(page.locator('#koboldcpp_chat_model')).toHaveValue('alpha.gguf');
+        await expectConnectEnabled(page);
+        await expectNoMorePolls(page, polls);
+    });
+
     test('a Text Completion type without a URL stops the wait and enables Connect again', async ({ page, baseURL }) => {
         const polls = await connectKoboldCpp(page, baseURL);
         await startSwitch(page, polls);
@@ -208,6 +224,44 @@ test.describe('KoboldCpp model switch', () => {
         await page.locator('#api_button_openai').click();
 
         await expect(page.locator('#koboldcpp_chat_model')).toHaveValue('gamma.gguf');
+        await expectNoMorePolls(page, polls);
+    });
+
+    test('the reconnect after a change of the Chat Completion source keeps Cancel until it answers', async ({ page, baseURL }) => {
+        const polls = await connectKoboldCpp(page, baseURL, 'chat');
+        let answerStatus;
+        const statusAnswer = new Promise(resolve => {
+            answerStatus = resolve;
+        });
+        await page.route('**/api/backends/chat-completions/status', async route => {
+            await statusAnswer;
+            await route.fulfill({ json: { data: [] } });
+        });
+        await page.evaluate(() => {
+            window.SillyTavern.getContext().chatCompletionSettings.custom_url = 'http://127.0.0.1:5003/v1';
+        });
+        await startSwitch(page, polls, 'chat');
+
+        await page.locator('#chat_completion_source').selectOption('custom');
+
+        await expect(page.locator('.toast', { hasText: STOPPED_WAITING })).toBeVisible();
+        await expect(page.locator('#api_button_openai')).toHaveClass(/\bdisabled\b/);
+        await expect(page.locator('#api_button_openai ~ .api_loading')).toBeVisible();
+        answerStatus();
+        await expectConnectEnabled(page);
+        await expectNoMorePolls(page, polls);
+    });
+
+    test('Connect right after Cancel lists the loaded model in Chat Completion once the wait ends', async ({ page, baseURL }) => {
+        const polls = await connectKoboldCpp(page, baseURL, 'chat');
+        await startSwitch(page, polls, 'chat');
+
+        await page.locator('#api_button_openai ~ .api_loading').click();
+        await page.locator('#api_button_openai').click();
+
+        await expect(page.locator('.toast', { hasText: STOPPED_WAITING })).toBeVisible();
+        await expect(page.locator('#koboldcpp_chat_model')).toHaveValue('alpha.gguf');
+        await expectConnectEnabled(page);
         await expectNoMorePolls(page, polls);
     });
 
