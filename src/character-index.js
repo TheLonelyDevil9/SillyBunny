@@ -12,6 +12,8 @@ const require = createRequire(import.meta.url);
 const SCHEMA_VERSION = 1;
 const SQLITE_CORRUPT = 11;
 const SQLITE_NOTADB = 26;
+// Rows per transaction when many cards are stored at once, so a cold start commits once per batch instead of once per card.
+const SET_BATCH_SIZE = 200;
 
 const SCHEMA = `CREATE TABLE characters (
     directory TEXT NOT NULL,
@@ -27,6 +29,7 @@ const STATEMENTS = {
     set: 'INSERT OR REPLACE INTO characters (directory, file_name, size, mtime, data) VALUES (?, ?, ?, ?, ?)',
     delete: 'DELETE FROM characters WHERE directory = ? AND file_name = ?',
     listDirectory: 'SELECT file_name FROM characters WHERE directory = ?',
+    listDirectoryEntries: 'SELECT file_name, size, mtime, data FROM characters WHERE directory = ?',
     listAll: 'SELECT directory, file_name FROM characters',
 };
 
@@ -141,14 +144,49 @@ export class CharacterIndex {
     }
 
     /**
+     * Reads every stored card of a directory with one query, for callers that read all cards of the directory.
+     * @param {string} directory Characters directory
+     * @returns {Map<string, { size: number, mtimeMs: number, data: string }>} Stored cards by file name. A card is
+     * current only while its file has this size and modification time. Empty if the index is off.
+     */
+    getDirectoryEntries(directory) {
+        const entries = new Map();
+        const statements = this.#getStatements();
+        if (!statements) {
+            return entries;
+        }
+
+        try {
+            for (const row of statements.listDirectoryEntries.all(path.resolve(directory))) {
+                entries.set(row.file_name, { size: Number(row.size), mtimeMs: row.mtime, data: row.data });
+            }
+            return entries;
+        } catch (error) {
+            this.#handleError(error);
+            return new Map();
+        }
+    }
+
+    /**
      * @param {string} filePath Card file path
      * @param {fs.Stats} fileStat Card file metadata, read before the card was parsed. Metadata read after parsing can
      * belong to a newer version of the file than the data, and the index would then return the old data for it.
      * @param {string} data Card data
      */
     set(filePath, fileStat, data) {
+        this.setMany([{ filePath, fileStat, data }]);
+    }
+
+    /**
+     * Stores many cards, committing up to 200 at a time. Each batch runs synchronously, so a transaction never stays
+     * open while other code runs.
+     * @param {{ filePath: string, fileStat: fs.Stats, data: string }[]} entries Cards to store, with the metadata
+     * that was read before each card was parsed
+     */
+    setMany(entries) {
         // Node.js 22 returns a stored TEXT value only up to its first NUL character, so the index would return a cut-off card.
-        if (data.includes('\0')) {
+        const storable = entries.filter(entry => !entry.data.includes('\0'));
+        if (!storable.length) {
             return;
         }
 
@@ -157,10 +195,36 @@ export class CharacterIndex {
             return;
         }
 
-        try {
-            statements.set.run(...getEntryKey(filePath), fileStat.size, fileStat.mtimeMs, data);
-        } catch (error) {
-            this.#handleError(error);
+        if (storable.length === 1) {
+            const [{ filePath, fileStat, data }] = storable;
+            try {
+                statements.set.run(...getEntryKey(filePath), fileStat.size, fileStat.mtimeMs, data);
+            } catch (error) {
+                this.#handleError(error);
+            }
+            return;
+        }
+
+        for (let start = 0; start < storable.length; start += SET_BATCH_SIZE) {
+            try {
+                runSql(this.#database, 'BEGIN IMMEDIATE');
+                try {
+                    for (const { filePath, fileStat, data } of storable.slice(start, start + SET_BATCH_SIZE)) {
+                        statements.set.run(...getEntryKey(filePath), fileStat.size, fileStat.mtimeMs, data);
+                    }
+                    runSql(this.#database, 'COMMIT');
+                } catch (error) {
+                    try {
+                        runSql(this.#database, 'ROLLBACK');
+                    } catch {
+                        // SQLite rolls back by itself after some errors, and #handleError closes the database anyway.
+                    }
+                    throw error;
+                }
+            } catch (error) {
+                this.#handleError(error);
+                return;
+            }
         }
     }
 
