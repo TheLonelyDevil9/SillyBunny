@@ -1069,7 +1069,11 @@ export function migrateConversationLocalStorage() {
         return;
     }
     if (store.localStorageMigrated) {
-        clearLegacyConversationUnreadStorage();
+        if (!store.unreadStorageCleaned) {
+            clearLegacyConversationUnreadStorage();
+            store.unreadStorageCleaned = true;
+            persistConversationStore();
+        }
         return;
     }
 
@@ -1134,5 +1138,6 @@ export function migrateConversationLocalStorage() {
 
     store.localStorageMigrated = true;
     clearLegacyConversationUnreadStorage();
+    store.unreadStorageCleaned = true;
     persistConversationStore();
 }
