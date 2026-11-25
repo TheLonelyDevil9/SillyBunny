@@ -533,9 +533,11 @@ export function createBackendPanelsController({
         }
         // SillyBunny: the Prompt Manager may mount late, so restore the complete Chat Completions order on every update.
         if (range instanceof HTMLElement) {
+            // SillyBunny: the Presets module adds the groups for the choice sets and the dependent sets between the upstream ones.
             const openAIReadingOrder = [
                 'sb-openai-budget', 'sb-openai-names-behavior', 'sb-openai-continue-postfix', 'sb-openai-names', 'sb-openai-prefill', 'sb-openai-request',
                 'sb-openai-function-calling', 'sb-openai-inline-media', 'sb-openai-request-images', 'sb-openai-request-reasoning', 'sb-openai-reasoning-tags',
+                'sb-openai-prompt-caching',
             ];
             const orderedGroups = openAIReadingOrder
                 .map(id => root.querySelector(`#${id}`))

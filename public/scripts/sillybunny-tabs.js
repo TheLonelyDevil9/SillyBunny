@@ -309,6 +309,10 @@ function revealBackendGroup(tabId, groupId) {
 const backendPagesContext = {
     revealGroup: revealBackendGroup,
     templateMenuSections: holder => backendPanelsController?.getPresetMenuSections(holder, false, { master: false }) ?? [],
+    refreshPresets() {
+        const prompting = getShellState('left')?.tabs.get('prompting');
+        if (prompting?.panel instanceof HTMLElement) updatePromptingPanel(prompting.panel);
+    },
 };
 
 /**
@@ -7053,7 +7057,7 @@ function updatePromptingPanel(panel) {
         backendPanelsController.updatePromptingPanel(panel);
         return;
     }
-    void loadBackendPanelsController().then(panels => panels.updatePromptingPanel(panel)).catch(() => {});
+    void loadBackendPanelsController().then(panels => panels.updatePromptingPanel(panel)).catch(error => console.error('[SillyBunny] Could not load Prompting panel:', error));
 }
 
 function getImporterState() {
