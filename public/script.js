@@ -357,7 +357,8 @@ import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMess
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
 import { initQuickContextSizeEnhancer } from './scripts/quick-context-size-enhancer.js';
-import { applyStreamDomPatch, applyStreamFadeIn } from './scripts/util/stream-fadein.js';
+// SillyBunny: wire incremental block formatter alongside stream DOM patching and tail-only fade-in.
+import { applyStreamDomPatch, applyStreamFadeIn, createIncrementalBlockFormatter } from './scripts/util/stream-fadein.js';
 import { formatTokenCounterText, getPositiveTokenCount, updateReasoningTokenAccounting } from './scripts/reasoning-token-accounting.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
@@ -2765,7 +2766,8 @@ function applyStreamingVisibleWrite(messageId, {
         // SillyBunny: only format the surviving frame write, after checking its message/run ownership.
         const formattedText = formatText();
         if (shouldUseStreamFadeIn) {
-            applyStreamFadeIn(messageTextDom, formattedText, { bypassFadeIn });
+            // SillyBunny: forward isFinal so final render collapses temporary .text_segment spans for full DOM parity.
+            applyStreamFadeIn(messageTextDom, formattedText, { bypassFadeIn, isFinal });
         } else if (!isFinal) {
             applyStreamDomPatch(messageTextDom, formattedText);
         } else {
@@ -6735,6 +6737,9 @@ class StreamingProcessor {
         /** @type {string?} Latest reasoning received from the stream, applied on UI ticks */
         this.pendingReasoning = null;
         this.streamingRenderDurationMs = 0;
+        // SillyBunny: per-stream incremental block formatting cache (cleared on finish/stop/error/context change).
+        this.incrementalBlockFormatter = null;
+        this.incrementalBlockFormatterKey = null;
     }
 
     #isCurrent(messageId = this.messageId, allowStopped = false) {
@@ -6892,14 +6897,17 @@ class StreamingProcessor {
         if (!this.#isCurrent(messageId)) return;
         const isImpersonate = this.type == 'impersonate';
         const isContinue = this.type == 'continue';
+        // SillyBunny: pass measured renderDurationMs so iOS WebKit engages adaptive DOM-work reduction on slow frames.
         const shouldReduceStreamingWork = shouldReduceStreamingDomWork(globalThis.navigator, {
             iosEnabled: power_user.ios_webkit_reduce_streaming_work,
             androidEnabled: power_user.android_reduce_streaming_work,
+            renderDurationMs: this.streamingRenderDurationMs,
         });
         const shouldReduceIntermediateStreamingWork = !isFinal && shouldReduceStreamingWork;
         const shouldBypassStreamingFadeIn = shouldReduceStreamingDomWork(globalThis.navigator, {
             iosEnabled: power_user.ios_webkit_disable_stream_fade_in,
             androidEnabled: power_user.android_disable_stream_fade_in,
+            renderDurationMs: this.streamingRenderDurationMs,
         });
         const shouldUseMobileStreamingPin = !isImpersonate && shouldGuardMobileChatScroll();
         const shouldPinMobileBottom = shouldUseMobileStreamingPin && shouldPinMobileChatToBottom();
@@ -6979,11 +6987,15 @@ class StreamingProcessor {
             }
 
             const isAndroidStreamingPreview = isAndroidStreamingPlatform(globalThis.navigator);
+            // SillyBunny: wire iOS WebKit adaptive plain-text preview fallback when frame render cost exceeds budget.
+            const isIOSWebKitPreview = typeof isIOSWebKitPlatform === 'function' && isIOSWebKitPlatform(globalThis.navigator);
             const shouldUseAndroidBasicMarkdown = power_user.android_streaming_basic_markdown && isAndroidStreamingPreview;
             const shouldUsePlainTextPreview = shouldUsePlainTextStreamingPreview({
                 isFinal,
                 isReducedDomWork: shouldReduceIntermediateStreamingWork,
                 isAndroidPlatform: isAndroidStreamingPreview,
+                isIOSWebKit: isIOSWebKitPreview,
+                renderDurationMs: this.streamingRenderDurationMs,
                 isImpersonate,
                 useBasicMarkdown: shouldUseAndroidBasicMarkdown,
             });
@@ -6993,6 +7005,15 @@ class StreamingProcessor {
                 && shouldUseAndroidBasicMarkdown;
 
             const { name, is_system, is_user } = chat[messageId];
+            // SillyBunny: reuse sanitized HTML of settled prefix blocks during live streaming; run full-document pass on isFinal.
+            const formatKey = `${messageId}\0${name}\0${is_system ? 1 : 0}\0${is_user ? 1 : 0}`;
+            if (this.incrementalBlockFormatterKey !== formatKey) {
+                this.incrementalBlockFormatter?.reset?.();
+                this.incrementalBlockFormatter = typeof createIncrementalBlockFormatter === 'function'
+                    ? createIncrementalBlockFormatter(block => messageFormatting(block, name, is_system, is_user, messageId, {}, false))
+                    : null;
+                this.incrementalBlockFormatterKey = formatKey;
+            }
             const formatText = () => {
                 const preparedPreview = shouldUsePlainTextPreview || shouldUseBasicMarkdown
                     ? prepareMessageDisplayText(processedText, name, is_system, is_user, messageId, false)
@@ -7000,8 +7021,8 @@ class StreamingProcessor {
                 const previewText = preparedPreview?.mes ?? processedText;
                 const markdownText = isFinal ? processedText : balanceStreamingMarkdown(processedText);
 
-                return shouldUsePlainTextPreview || shouldUseBasicMarkdown
-                    ? formatMobileStreamingPreview(
+                if (shouldUsePlainTextPreview || shouldUseBasicMarkdown) {
+                    return formatMobileStreamingPreview(
                         shouldUseBasicMarkdown ? balanceStreamingMarkdown(previewText) : previewText,
                         {
                             useBasicMarkdown: shouldUseBasicMarkdown,
@@ -7009,8 +7030,14 @@ class StreamingProcessor {
                             converter,
                             sanitizeHtml: sanitizeMessageHtml,
                         },
-                    )
-                    : messageFormatting(markdownText, name, is_system, is_user, messageId, {}, false);
+                    );
+                }
+
+                if (this.incrementalBlockFormatter) {
+                    return this.incrementalBlockFormatter.format(markdownText, { isFinal });
+                }
+
+                return messageFormatting(markdownText, name, is_system, is_user, messageId, {}, false);
             };
             const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken, currentReasoningTokens);
             this.#queueStreamingVisibleWrite({
@@ -7070,6 +7097,7 @@ class StreamingProcessor {
         // SillyBunny: the reply is finished, so the server must no longer replace this message.
         delete this.message?.extra?.[GENERATION_PLACEHOLDER_KEY];
         await this.onProgressStreaming(messageId, text, true);
+        this.incrementalBlockFormatter?.reset?.();
         if (!this.#isCurrent(messageId)) return;
         const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
         const message = chat[messageId];
@@ -7152,6 +7180,7 @@ class StreamingProcessor {
         this.abortController.abort();
         this.isStopped = true;
         this.isFinished = true;
+        this.incrementalBlockFormatter?.reset?.();
 
         this.markUIGenStopped({ emitGenerationEnded: false, emitGenerationStopped: true });
 
@@ -7184,6 +7213,7 @@ class StreamingProcessor {
 
         this.isStopped = true;
         this.isCancelled = true;
+        this.incrementalBlockFormatter?.reset?.();
         this.abortController.abort();
     }
 
@@ -7195,6 +7225,7 @@ class StreamingProcessor {
      * @returns {Promise<void>}
      */
     async finalizeStoppedMessage() {
+        this.incrementalBlockFormatter?.reset?.();
         const messageId = this.messageId;
         if (this.type === 'impersonate' || messageId < 0 || !this.#isOriginMessage(messageId)) return;
         // SillyBunny: the user stopped the reply, so the server must no longer replace this message.
