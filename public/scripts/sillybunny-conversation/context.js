@@ -1047,6 +1047,8 @@ export function resetCharacterConversationBranches(avatar, { groupId = getConver
     persistConversationStore();
 }
 
+const UNREAD_STORAGE_CLEANED_KEY = 'sillybunny_conv_unread_cleaned_v1';
+
 export function clearLegacyConversationUnreadStorage() {
     if (typeof localStorage === 'undefined') {
         return 0;
@@ -1069,10 +1071,19 @@ export function migrateConversationLocalStorage() {
         return;
     }
     if (store.localStorageMigrated) {
-        if (!store.unreadStorageCleaned) {
+        let unreadStorageCleaned = false;
+        try {
+            unreadStorageCleaned = localStorage.getItem(UNREAD_STORAGE_CLEANED_KEY) === '1';
+        } catch {
+            unreadStorageCleaned = false;
+        }
+        if (!unreadStorageCleaned) {
             clearLegacyConversationUnreadStorage();
-            store.unreadStorageCleaned = true;
-            persistConversationStore();
+            try {
+                localStorage.setItem(UNREAD_STORAGE_CLEANED_KEY, '1');
+            } catch {
+                // Ignore storage write failures in private/quota-limited contexts.
+            }
         }
         return;
     }
@@ -1138,6 +1149,10 @@ export function migrateConversationLocalStorage() {
 
     store.localStorageMigrated = true;
     clearLegacyConversationUnreadStorage();
-    store.unreadStorageCleaned = true;
+    try {
+        localStorage.setItem(UNREAD_STORAGE_CLEANED_KEY, '1');
+    } catch {
+        // Ignore storage write failures in private/quota-limited contexts.
+    }
     persistConversationStore();
 }
