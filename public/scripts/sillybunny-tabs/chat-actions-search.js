@@ -115,8 +115,6 @@ export function createChatActionsSearchController({
     scrollElementIntoManagedView,
     SB_CHAT_SEARCH_MARK_SELECTOR,
     SB_CHATBAR_SEARCH_DEBOUNCE,
-    getChatFilesForContext: injectedGetChatFilesForContext = null,
-    invalidateChatFilesCache: injectedInvalidateChatFilesCache = null,
 }) {
     function describeChatName(chatName) {
         return isReservedChatName(chatName) ? t`Temporary Chat` : chatName;
@@ -143,6 +141,7 @@ export function createChatActionsSearchController({
         };
     }
 
+    // The fetchers return null for a failed request and an array for an answer, so a character with no chats is not retried.
     async function fetchCharacterChatFiles(chatContext) {
         const avatarUrl = chatContext.character?.avatar;
 
@@ -153,7 +152,7 @@ export function createChatActionsSearchController({
         try {
             const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
             if (!headers) {
-                return [];
+                return null;
             }
 
             const response = await fetch('/api/characters/chats', {
@@ -163,19 +162,19 @@ export function createChatActionsSearchController({
             });
 
             if (!response.ok) {
-                return [];
+                return null;
             }
 
             const data = await response.json();
             if (typeof data === 'object' && data?.error === true) {
-                return [];
+                return null;
             }
 
             const chats = Array.isArray(data) ? data : Object.values(data ?? {});
             return sortChatFiles(chats.map(normalizeChatInfo).filter(chat => chat.fileName));
         } catch (error) {
             console.error('Failed to fetch character chats', error);
-            return [];
+            return null;
         }
     }
 
@@ -189,7 +188,7 @@ export function createChatActionsSearchController({
         try {
             const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
             if (!headers) {
-                return [];
+                return null;
             }
 
             const chats = await Promise.all(groupChats.map(async chatId => {
@@ -218,22 +217,95 @@ export function createChatActionsSearchController({
             return sortChatFiles(chats.filter(chat => chat?.fileName));
         } catch (error) {
             console.error('Failed to fetch group chats', error);
-            return [];
+            return null;
         }
     }
 
-    async function getChatFilesForContext(chatContext = getChatUiContext(), options = {}) {
-        if (typeof injectedGetChatFilesForContext === 'function') {
-            return injectedGetChatFilesForContext(chatContext, options);
-        }
+    // SillyBunny: the chat sidebar, bottom picker, and mass delete share one cached list per character or group.
+    const sbChatFilesCache = {
+        key: '',
+        files: null,
+        fetchedAt: 0,
+        promise: null,
+        promiseKey: '',
+        generation: 0,
+        stale: false,
+    };
 
+    function getChatFilesCacheKey(chatContext) {
+        if (chatContext.group) {
+            const chats = Array.isArray(chatContext.group.chats) ? chatContext.group.chats : [];
+            return `group:${chatContext.group.id}:${chats.length}`;
+        }
+        return `character:${chatContext.character?.avatar ?? ''}`;
+    }
+
+    function invalidateChatFilesCache() {
+        sbChatFilesCache.generation += 1;
+        sbChatFilesCache.key = '';
+        sbChatFilesCache.files = null;
+        sbChatFilesCache.fetchedAt = 0;
+        sbChatFilesCache.promise = null;
+        sbChatFilesCache.promiseKey = '';
+        sbChatFilesCache.stale = false;
+    }
+
+    function markChatFilesCacheStale() {
+        sbChatFilesCache.stale = sbChatFilesCache.files !== null;
+    }
+
+    function isChatFilesCacheStale() {
+        return sbChatFilesCache.stale;
+    }
+
+    function invalidateChatFilesCacheIfOlderThan(ageMs) {
+        if (sbChatFilesCache.files !== null && Date.now() - sbChatFilesCache.fetchedAt > ageMs) {
+            invalidateChatFilesCache();
+        }
+    }
+
+    async function loadChatFilesForContext(chatContext, { force = false, refreshStale = false } = {}) {
         if (!chatContext.canBrowseChats) {
-            return [];
+            return { ok: true, files: [] };
         }
 
-        return chatContext.group
-            ? fetchGroupChatFiles(chatContext)
-            : fetchCharacterChatFiles(chatContext);
+        const key = getChatFilesCacheKey(chatContext);
+        if (force || (refreshStale && sbChatFilesCache.stale)) {
+            invalidateChatFilesCache();
+        }
+
+        if (sbChatFilesCache.key === key && sbChatFilesCache.files !== null) {
+            return { ok: true, files: [...sbChatFilesCache.files] };
+        }
+
+        if (!sbChatFilesCache.promise || sbChatFilesCache.promiseKey !== key) {
+            const generation = sbChatFilesCache.generation;
+            const request = (chatContext.group ? fetchGroupChatFiles(chatContext) : fetchCharacterChatFiles(chatContext))
+                .then(files => {
+                    if (sbChatFilesCache.generation === generation && Array.isArray(files)) {
+                        sbChatFilesCache.key = key;
+                        sbChatFilesCache.files = files;
+                        sbChatFilesCache.fetchedAt = Date.now();
+                        sbChatFilesCache.stale = false;
+                    }
+                    return files;
+                })
+                .finally(() => {
+                    if (sbChatFilesCache.promise === request) {
+                        sbChatFilesCache.promise = null;
+                        sbChatFilesCache.promiseKey = '';
+                    }
+                });
+            sbChatFilesCache.promise = request;
+            sbChatFilesCache.promiseKey = key;
+        }
+
+        const files = await sbChatFilesCache.promise;
+        return Array.isArray(files) ? { ok: true, files: [...files] } : { ok: false, files: [] };
+    }
+
+    async function getChatFilesForContext(chatContext = getChatUiContext(), options = {}) {
+        return (await loadChatFilesForContext(chatContext, options)).files;
     }
 
     async function openChatById(chatId) {
@@ -278,7 +350,7 @@ export function createChatActionsSearchController({
         } catch {
             return;
         }
-        injectedInvalidateChatFilesCache?.();
+        invalidateChatFilesCache();
         scheduleChatbarRefresh(120);
     }
 
@@ -302,7 +374,7 @@ export function createChatActionsSearchController({
         }
 
         await chatContext.context?.executeSlashCommandsWithOptions?.('/delchat');
-        injectedInvalidateChatFilesCache?.();
+        invalidateChatFilesCache();
         scheduleChatbarRefresh(150);
     }
 
@@ -331,7 +403,7 @@ export function createChatActionsSearchController({
             }
 
             await autoLabelCurrentChat();
-            injectedInvalidateChatFilesCache?.();
+            invalidateChatFilesCache();
             scheduleBottomChatBarRefresh(160);
         } catch (error) {
             console.error('[SillyBunny] Failed to auto-name current chat.', error);
@@ -410,7 +482,7 @@ export function createChatActionsSearchController({
             }
 
             globalThis.toastr?.success?.(`Deleted ${names.length} chat(s)`, 'Mass delete chats');
-            injectedInvalidateChatFilesCache?.();
+            invalidateChatFilesCache();
             scheduleBottomChatBarRefresh(160);
             scheduleChatbarRefresh(160);
             await chatModule.displayPastChats?.();
@@ -841,7 +913,12 @@ export function createChatActionsSearchController({
         describeChatName,
         formatChatSelectorLabel,
         normalizeChatInfo,
+        loadChatFilesForContext,
         getChatFilesForContext,
+        invalidateChatFilesCache,
+        markChatFilesCacheStale,
+        isChatFilesCacheStale,
+        invalidateChatFilesCacheIfOlderThan,
         openChatById,
         handleRenameChat,
         handleDeleteChat,

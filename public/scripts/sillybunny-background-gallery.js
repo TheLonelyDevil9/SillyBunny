@@ -983,7 +983,7 @@ async function start() {
         menu.hidden = !isGlobalTab();
         syncScrollbar();
     };
-    $('#bg_tabs').on('tabsactivate', syncTab);
+    if (typeof globalThis.$ === 'function') globalThis.$('#bg_tabs').on('tabsactivate', syncTab);
     syncTab();
     syncSortState();
     await stylesReady;

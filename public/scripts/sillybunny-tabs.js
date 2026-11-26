@@ -217,8 +217,6 @@ function loadChatActionsSearchController() {
                 scrollElementIntoManagedView,
                 SB_CHAT_SEARCH_MARK_SELECTOR,
                 SB_CHATBAR_SEARCH_DEBOUNCE,
-                getChatFilesForContext,
-                invalidateChatFilesCache,
             });
             return chatActionsSearchController;
         })
@@ -4530,199 +4528,29 @@ function formatChatSelectorLabel(fileName, tokenEstimate = 0) {
     return tokenLabel ? `${displayName} (${tokenLabel})` : displayName;
 }
 
-function normalizeChatInfo(chatInfo) {
-    const rawFileName = chatInfo?.file_name ?? chatInfo?.id ?? chatInfo?.chat_id ?? chatInfo ?? '';
-    const fileName = normalizeChatFileName(rawFileName);
-
-    return {
-        fileName,
-        preview: formatChatPreview(chatInfo?.mes ?? chatInfo?.preview ?? chatInfo?.message ?? ''),
-        lastMessage: chatInfo?.last_mes ?? chatInfo?.updated_at ?? chatInfo?.create_date ?? '',
-        sortTimestamp: getChatSortTimestamp(chatInfo?.last_mes ?? chatInfo?.updated_at ?? chatInfo?.create_date ?? ''),
-        chatItems: Number(chatInfo?.chat_items ?? chatInfo?.message_count ?? 0) || 0,
-        tokenEstimate: Number(chatInfo?.token_estimate ?? chatInfo?.tokenEstimate ?? 0) || 0,
-        fileSize: String(chatInfo?.file_size ?? '').trim(),
-    };
-}
-
-function sortChatFiles(files) {
-    return [...files].sort((left, right) => {
-        if (right.sortTimestamp !== left.sortTimestamp) {
-            return right.sortTimestamp - left.sortTimestamp;
-        }
-
-        return left.fileName.localeCompare(right.fileName);
-    });
-}
-
-// The fetchers return null for a failed request and an array for an answer, so a character with no chats is not retried.
-async function fetchCharacterChatFiles(chatContext) {
-    const avatarUrl = chatContext.character?.avatar;
-
-    if (!avatarUrl) {
-        return [];
-    }
-
-    try {
-        const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
-        if (!headers) {
-            return null;
-        }
-
-        const response = await fetch('/api/characters/chats', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ avatar_url: avatarUrl }),
-        });
-
-        if (!response.ok) {
-            return null;
-        }
-
-        const data = await response.json();
-        if (typeof data === 'object' && data?.error === true) {
-            return null;
-        }
-
-        const chats = Array.isArray(data) ? data : Object.values(data ?? {});
-        return sortChatFiles(chats.map(normalizeChatInfo).filter(chat => chat.fileName));
-    } catch (error) {
-        console.error('Failed to fetch character chats', error);
-        return null;
-    }
-}
-
-async function fetchGroupChatFiles(chatContext) {
-    const groupChats = Array.isArray(chatContext.group?.chats) ? chatContext.group.chats : [];
-
-    if (!groupChats.length) {
-        return [];
-    }
-
-    try {
-        const headers = await getAuthorizedRequestHeadersOrNull(2000, chatContext.context);
-        if (!headers) {
-            return null;
-        }
-
-        const chats = await Promise.all(groupChats.map(async chatId => {
-            try {
-                const response = await fetchWithCsrfRetry('/api/chats/group/info', () => ({
-                    method: 'POST',
-                    headers: getRequestHeadersFromContext(chatContext.context),
-                    body: JSON.stringify({ id: chatId }),
-                }), { refreshCsrfToken });
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        return null;
-                    }
-
-                    return normalizeChatInfo({ file_name: chatId });
-                }
-
-                const chatInfo = normalizeChatInfo(await response.json());
-                return chatInfo.fileName ? chatInfo : normalizeChatInfo({ file_name: chatId });
-            } catch {
-                return normalizeChatInfo({ file_name: chatId });
-            }
-        }));
-
-        return sortChatFiles(chats.filter(chat => chat?.fileName));
-    } catch (error) {
-        console.error('Failed to fetch group chats', error);
-        return null;
-    }
-}
-
-// SillyBunny: the chat sidebar, the bottom picker and mass delete read one shared list per character or group. It is
-// fetched once however many of them ask at the same time, and fetched again only after an event that changes which chats
-// exist. A message changes only the current chat's preview and size, so it marks the list stale for the next reader that
-// opens it instead of fetching it for every reply.
 const SB_CHAT_FILES_FOCUS_STALE_MS = 30_000;
-const sbChatFilesCache = {
-    key: '',
-    files: null,
-    fetchedAt: 0,
-    promise: null,
-    promiseKey: '',
-    generation: 0,
-    stale: false,
+const sbChatFilesCacheBindings = {
     boundEventSource: null,
     boundWindow: null,
 };
 
-function getChatFilesCacheKey(chatContext) {
-    if (chatContext.group) {
-        const chats = Array.isArray(chatContext.group.chats) ? chatContext.group.chats : [];
-        return `group:${chatContext.group.id}:${chats.length}`;
-    }
-    return `character:${chatContext.character?.avatar ?? ''}`;
-}
-
 function invalidateChatFilesCache() {
-    sbChatFilesCache.generation += 1;
-    sbChatFilesCache.key = '';
-    sbChatFilesCache.files = null;
-    sbChatFilesCache.fetchedAt = 0;
-    sbChatFilesCache.promise = null;
-    sbChatFilesCache.promiseKey = '';
-    sbChatFilesCache.stale = false;
+    chatActionsSearchController?.invalidateChatFilesCache();
 }
 
 function markChatFilesCacheStale() {
-    sbChatFilesCache.stale = sbChatFilesCache.files !== null;
+    chatActionsSearchController?.markChatFilesCacheStale();
 }
 
 function invalidateChatFilesCacheIfOlderThan(ageMs) {
-    if (sbChatFilesCache.files !== null && Date.now() - sbChatFilesCache.fetchedAt > ageMs) {
-        invalidateChatFilesCache();
-    }
+    chatActionsSearchController?.invalidateChatFilesCacheIfOlderThan(ageMs);
 }
 
-/**
- * @param {ReturnType<typeof getChatUiContext>} chatContext
- * @param {{ force?: boolean, refreshStale?: boolean }} [options] `refreshStale` fetches a list a message marked stale
- * @returns {Promise<{ ok: boolean, files: ReturnType<typeof normalizeChatInfo>[] }>}
- */
-async function loadChatFilesForContext(chatContext, { force = false, refreshStale = false } = {}) {
+async function loadChatFilesForContext(chatContext, options = {}) {
     if (!chatContext.canBrowseChats) {
         return { ok: true, files: [] };
     }
-
-    const key = getChatFilesCacheKey(chatContext);
-    if (force || (refreshStale && sbChatFilesCache.stale)) {
-        invalidateChatFilesCache();
-    }
-
-    if (sbChatFilesCache.key === key && sbChatFilesCache.files !== null) {
-        return { ok: true, files: [...sbChatFilesCache.files] };
-    }
-
-    if (!sbChatFilesCache.promise || sbChatFilesCache.promiseKey !== key) {
-        const generation = sbChatFilesCache.generation;
-        const request = (chatContext.group ? fetchGroupChatFiles(chatContext) : fetchCharacterChatFiles(chatContext))
-            .then(files => {
-                if (sbChatFilesCache.generation === generation && Array.isArray(files)) {
-                    sbChatFilesCache.key = key;
-                    sbChatFilesCache.files = files;
-                    sbChatFilesCache.fetchedAt = Date.now();
-                    sbChatFilesCache.stale = false;
-                }
-                return files;
-            })
-            .finally(() => {
-                if (sbChatFilesCache.promise === request) {
-                    sbChatFilesCache.promise = null;
-                    sbChatFilesCache.promiseKey = '';
-                }
-            });
-        sbChatFilesCache.promise = request;
-        sbChatFilesCache.promiseKey = key;
-    }
-
-    const files = await sbChatFilesCache.promise;
-    return Array.isArray(files) ? { ok: true, files: [...files] } : { ok: false, files: [] };
+    return (await loadChatActionsSearchController()).loadChatFilesForContext(chatContext, options);
 }
 
 async function getChatFilesForContext(chatContext = getChatUiContext(), options = {}) {
@@ -4731,15 +4559,15 @@ async function getChatFilesForContext(chatContext = getChatUiContext(), options 
 
 function bindChatFilesCacheInvalidation(eventSource, eventTypes) {
     const win = globalThis.window;
-    if (win && typeof win.addEventListener === 'function' && sbChatFilesCache.boundWindow !== win) {
-        sbChatFilesCache.boundWindow = win;
+    if (win && typeof win.addEventListener === 'function' && sbChatFilesCacheBindings.boundWindow !== win) {
+        sbChatFilesCacheBindings.boundWindow = win;
         win.addEventListener('sb:chat-list-mutated', invalidateChatFilesCache);
     }
 
-    if (sbChatFilesCache.boundEventSource === eventSource) {
+    if (sbChatFilesCacheBindings.boundEventSource === eventSource) {
         return;
     }
-    sbChatFilesCache.boundEventSource = eventSource;
+    sbChatFilesCacheBindings.boundEventSource = eventSource;
 
     const listEvents = [
         eventTypes.CHAT_CREATED,
@@ -5208,7 +5036,7 @@ async function refreshChatbarState({ refreshStale = false } = {}) {
         const chatNames = files.map(chat => chat.fileName);
 
         if (chatContext.chatId && !chatNames.includes(chatContext.chatId)) {
-            files.unshift(normalizeChatInfo(chatContext.chatId));
+            files.unshift(chatActions.normalizeChatInfo(chatContext.chatId));
         }
 
         chatActions.renderChatFiles(listRoot, files, chatContext.chatId, {
@@ -9876,7 +9704,7 @@ function buildBottomChatBar() {
         void openChatById(chatSelect.value);
     });
     const refreshStaleChatSelect = () => {
-        if (sbChatFilesCache.stale) {
+        if (chatActionsSearchController?.isChatFilesCacheStale()) {
             scheduleBottomChatBarRefresh(0, { refreshStale: true });
         }
     };

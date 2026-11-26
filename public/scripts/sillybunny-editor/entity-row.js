@@ -12,6 +12,7 @@ const overflowWidthCache = new Map();
 let tagStripObserver = null;
 let tagStripObserverConstructor = null;
 let fontRefitFrame = 0;
+let stripPruneFrame = 0;
 let fontListenerBound = false;
 const slotClasses = {
     row: ['ds-entity-row'],
@@ -147,6 +148,14 @@ function pruneDisconnectedStrips() {
             unobserveStrip(container);
         }
     }
+}
+
+function scheduleStripPrune() {
+    if (stripPruneFrame || typeof requestAnimationFrame !== 'function') return;
+    stripPruneFrame = requestAnimationFrame(() => {
+        stripPruneFrame = 0;
+        pruneDisconnectedStrips();
+    });
 }
 
 /**
@@ -342,6 +351,7 @@ export function limitTagChips(container, { max = 3, fit = true, allNames } = {})
     observedStripRefs.add(ref);
     stripFinalizers?.register(container, ref, container);
     tagStripObserver.observe(container);
+    scheduleStripPrune();
 }
 
 /**
