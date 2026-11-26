@@ -718,6 +718,7 @@ let offscreenChatMessageTracker = null;
 const chatMessageResizeStates = new Map();
 const pendingChatMessageResizeBlocks = new Set();
 let pendingChatMessageResizeFrame = 0;
+let pendingChatMessageResizeViewportRefreshFrame = 0;
 let chatMessageResizeDeliveryViewportState = null;
 
 let dialogueResolve = null;
@@ -2090,10 +2091,11 @@ async function getExistingCharacterChats(characterId, fileName = '') {
         return [];
     }
 
+    // SillyBunny: request simple metadata so chat selection does not read and parse every chat file on the server.
     const response = await fetch('/api/characters/chats', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify({ avatar_url: character.avatar, file_name: fileName }),
+        body: JSON.stringify({ avatar_url: character.avatar, file_name: fileName, simple: true }),
     });
 
     if (!response.ok) {
@@ -2199,10 +2201,11 @@ export async function deleteCharacterChatByName(characterId, fileName) {
     }
 
     if (fileName === character.chat) {
+        // SillyBunny: use simple listing so deleting one chat does not trigger parallel full-file reads of all remaining chats.
         const chatsResponse = await fetch('/api/characters/chats', {
             method: 'POST',
             headers: getRequestHeaders(),
-            body: JSON.stringify({ avatar_url: character.avatar }),
+            body: JSON.stringify({ avatar_url: character.avatar, simple: true }),
         });
         const chats = Object.values(await chatsResponse.json());
         chats.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)));
@@ -2798,9 +2801,14 @@ function getObservedElementHeight(element, entry = null) {
 }
 
 function captureChatMessageResizeViewportState() {
+    const isNearBottom = isChatScrolledNearBottom();
+    // SillyBunny: skip visible anchor scanning while pinned near the bottom during active streaming.
+    const anchor = isNearBottom && streamingProcessor && !streamingProcessor.isFinished
+        ? null
+        : captureVisibleChatMessageAnchor();
     return {
-        anchor: captureVisibleChatMessageAnchor(),
-        isNearBottom: isChatScrolledNearBottom(),
+        anchor,
+        isNearBottom,
     };
 }
 
@@ -2826,7 +2834,7 @@ function captureChatMessageResizeState(element, entry = null, viewportState = ca
     };
 }
 
-function refreshChatMessageResizeState(element, metadata, entry = null, viewportState = undefined) {
+function refreshChatMessageResizeState(element, metadata, entry = null, viewportState = captureChatMessageResizeDeliveryViewportState()) {
     if (!metadata) {
         return;
     }
@@ -2839,16 +2847,28 @@ function refreshObservedChatMessageResizeViewportStates() {
         return;
     }
 
-    const viewportState = captureChatMessageResizeViewportState();
+    // SillyBunny: coalesce high-frequency scroll events to one viewport capture per animation frame.
+    if (pendingChatMessageResizeViewportRefreshFrame) {
+        return;
+    }
 
-    for (const [element, metadata] of chatMessageResizeStates) {
-        if (!element.isConnected) {
-            unobserveChatMessageResizeBlock(element);
-            continue;
+    pendingChatMessageResizeViewportRefreshFrame = requestAnimationFrame(() => {
+        pendingChatMessageResizeViewportRefreshFrame = 0;
+        if (chatMessageResizeStates.size === 0) {
+            return;
         }
 
-        Object.assign(metadata, viewportState);
-    }
+        const viewportState = captureChatMessageResizeViewportState();
+
+        for (const [element, metadata] of chatMessageResizeStates) {
+            if (!element.isConnected) {
+                unobserveChatMessageResizeBlock(element);
+                continue;
+            }
+
+            Object.assign(metadata, viewportState);
+        }
+    });
 }
 
 function isActiveStreamingMessageResizeBlock(element) {
@@ -3009,6 +3029,10 @@ function disposeChatMessageResizeObserver() {
     if (pendingChatMessageResizeFrame) {
         cancelAnimationFrame(pendingChatMessageResizeFrame);
         pendingChatMessageResizeFrame = 0;
+    }
+    if (pendingChatMessageResizeViewportRefreshFrame) {
+        cancelAnimationFrame(pendingChatMessageResizeViewportRefreshFrame);
+        pendingChatMessageResizeViewportRefreshFrame = 0;
     }
 
     pendingChatMessageResizeBlocks.clear();
@@ -5843,6 +5867,9 @@ export function substituteParamsExtended(content, additionalMacro = {}, postProc
  * @param {(x: string) => string} [postProcessFn] - Post-processing function for each substituted macro.
  * @returns {string} The string with substituted parameters.
  */
+// SillyBunny: fast check for legacy angle-bracket macros so plain strings skip environment construction and regex loops.
+const LEGACY_ANGLE_MACRO_PATTERN = /<(?:USER|BOT|CHAR|GROUP|CHARIFNOTGROUP)>/i;
+
 export function substituteParamsLegacy(content, _name1, _name2, _original, _group, _replaceCharacterCard = true, additionalMacro = {}, postProcessFn = (x) => x) {
     if (!content) {
         return '';
@@ -5859,6 +5886,11 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
             dynamicMacros: additionalMacro ?? {},
             postProcessFn: postProcessFn ?? ((x) => x),
         });
+    }
+
+    // SillyBunny: plain strings with no curly or legacy angle-bracket macros cannot change during evaluation.
+    if (typeof content === 'string' && !content.includes('{{') && !(content.includes('<') && LEGACY_ANGLE_MACRO_PATTERN.test(content))) {
+        return content;
     }
 
     // Try to roughly detect experimental macro features to show the onboarding if needed.
@@ -6011,6 +6043,11 @@ export function substituteParams(content, options = {}) {
     // Keep the new macro engine behind a feature switch for now
     if (!power_user?.experimental_macro_engine) {
         return substituteParamsLegacy(content, options.name1Override, options.name2Override, options.original, options.groupOverride, options.replaceCharacterCard, options.dynamicMacros, options.postProcessFn);
+    }
+
+    // SillyBunny: skip building the macro environment and lexing plain text when no macro syntax or custom processor applies.
+    if (MacroEngine.canFastReturnPlainText(content)) {
+        return content;
     }
 
     const ctx = /** @type {import('./scripts/macros/engine/MacroEnvBuilder.js').MacroEnvRawContext} */ ({
@@ -7167,11 +7204,16 @@ class StreamingProcessor {
         if (this.type !== 'swipe' && this.type !== 'impersonate') {
             if (Array.isArray(chat[messageId].swipes) && chat[messageId].swipes.length === 1 && chat[messageId].swipe_id === 0) {
                 chat[messageId].swipes[0] = chat[messageId].mes;
+                // SillyBunny: avoid deep-cloning message.extra on every intermediate stream tick; finalize syncs the full clone.
+                const existingSwipeInfo = chat[messageId].swipe_info[0];
+                const shouldDeepClone = !existingSwipeInfo || this.isFinished || this.isStopped || this.isCancelled;
                 chat[messageId].swipe_info[0] = {
                     'send_date': chat[messageId].send_date,
                     'gen_started': chat[messageId].gen_started,
                     'gen_finished': chat[messageId].gen_finished,
-                    'extra': structuredClone(chat[messageId].extra),
+                    'extra': shouldDeepClone
+                        ? structuredClone(chat[messageId].extra)
+                        : { ...(chat[messageId].extra ?? {}) },
                 };
             }
         }
@@ -9211,6 +9253,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 itemizedPrompts[itemizedIndex] = additionalPromptStuff;
             } else {
                 itemizedPrompts.push(additionalPromptStuff);
+                // SillyBunny: keep only the latest prompt snapshots inline so extracted VM test harnesses need no extra import.
+                if (itemizedPrompts.length > 50) {
+                    itemizedPrompts.splice(0, itemizedPrompts.length - 50);
+                }
             }
 
             console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
@@ -18834,8 +18880,13 @@ jQuery(async function () {
             for (let i = (chat.length - 1); i >= this_del_mes; i--) {
                 deleteItemizedPromptForMessage(i);
             }
-            chatElement.find(`.mes[mesid="${this_del_mes}"]`).nextAll('div').remove();
-            chatElement.find(`.mes[mesid="${this_del_mes}"]`).remove();
+            const firstDeleted = chatElement.find(`.mes[mesid="${this_del_mes}"]`);
+            const followingDeleted = firstDeleted.nextAll('div');
+            // SillyBunny: detach resize observers before bulk message removal so detached DOM nodes are not retained.
+            unobserveChatMessageResize(firstDeleted);
+            unobserveChatMessageResize(followingDeleted);
+            followingDeleted.remove();
+            firstDeleted.remove();
             chat.length = this_del_mes;
             chat_metadata.tainted = true;
             // SillyBunny: this shrink is the user's own deletion, not an accidental overwrite.

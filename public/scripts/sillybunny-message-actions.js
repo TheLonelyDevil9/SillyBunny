@@ -264,36 +264,64 @@ function normalizeExtrasOrder(extras) {
 }
 
 /** Places dividers between non-empty sections and hides them once the row wraps. */
-function layoutExpandedRow(mes) {
-    const row = getRow(mes);
-    if (!row || !isRowExpanded(mes)) {
+function layoutExpandedRows(messages) {
+    // Separate DOM writes and geometry reads across the whole batch to avoid per-row reflows.
+    const entries = [];
+    for (const mes of messages) {
+        if (!mes.isConnected) {
+            continue;
+        }
+        const row = getRow(mes);
+        if (!row || !isRowExpanded(mes)) {
+            continue;
+        }
+        row.querySelectorAll(`.${DIVIDER_CLASS}`).forEach(divider => divider.remove());
+        const extras = row.querySelector(':scope > .extraMesButtons');
+        if (extras) {
+            normalizeExtrasOrder(extras);
+        }
+        entries.push({ row, extras, items: [] });
+    }
+    if (!entries.length) {
         return;
     }
-    row.querySelectorAll(`.${DIVIDER_CLASS}`).forEach(divider => divider.remove());
-    const extras = row.querySelector(':scope > .extraMesButtons');
-    if (extras) {
-        normalizeExtrasOrder(extras);
-    }
-    const items = [
-        ...(extras ? [...extras.children] : []),
-        ...[...row.children].filter(child => child !== extras),
-    ].filter(element => element instanceof HTMLElement && element.getClientRects().length > 0);
 
-    let previousSection = -1;
-    for (const element of items) {
-        const section = TRAILING_CLASSES.some(name => element.classList.contains(name)) ? TRAILING_SECTION : sectionOf(element);
-        if (previousSection >= 0 && section !== previousSection) {
-            element.before(createDivider());
+    for (const entry of entries) {
+        const { row, extras } = entry;
+        entry.items = [
+            ...(extras ? [...extras.children] : []),
+            ...[...row.children].filter(child => child !== extras),
+        ].filter(element => element instanceof HTMLElement && element.getClientRects().length > 0);
+    }
+
+    for (const { row, items } of entries) {
+        let previousSection = -1;
+        for (const element of items) {
+            const section = TRAILING_CLASSES.some(name => element.classList.contains(name)) ? TRAILING_SECTION : sectionOf(element);
+            if (previousSection >= 0 && section !== previousSection) {
+                element.before(createDivider());
+            }
+            previousSection = section;
         }
-        previousSection = section;
+        row.removeAttribute(WRAPPED_ATTRIBUTE);
     }
 
-    row.removeAttribute(WRAPPED_ATTRIBUTE);
-    const first = items[0];
-    const last = items.at(-1);
-    if (first && last && first !== last && Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().top) > 2) {
+    const wrappedRows = [];
+    for (const { row, items } of entries) {
+        const first = items[0];
+        const last = items.at(-1);
+        if (first && last && first !== last && Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().top) > 2) {
+            wrappedRows.push(row);
+        }
+    }
+
+    for (const row of wrappedRows) {
         row.setAttribute(WRAPPED_ATTRIBUTE, '');
     }
+}
+
+function layoutExpandedRow(mes) {
+    layoutExpandedRows([mes]);
 }
 
 function scheduleLayout(mes) {
@@ -308,7 +336,7 @@ function scheduleLayout(mes) {
         layoutFrame = 0;
         const batch = [...pendingLayout];
         pendingLayout.clear();
-        batch.filter(item => item.isConnected).forEach(layoutExpandedRow);
+        layoutExpandedRows(batch);
     });
 }
 
@@ -717,14 +745,27 @@ function initializeDeleteCount(chat) {
     if (!bar || !count) {
         return;
     }
+    let chatObserved = false;
     const update = () => {
         if (bar.style.display === 'block') {
             count.textContent = t`${chat.querySelectorAll(':scope > .mes.selected').length} selected`;
         }
     };
-    // Upstream marks the rows with a class when one is chosen, and opens the bar by writing its style.
-    new MutationObserver(update).observe(chat, { subtree: true, attributes: true, attributeFilter: ['class'] });
-    new MutationObserver(update).observe(bar, { attributes: true, attributeFilter: ['style'] });
+    const chatObserver = new MutationObserver(update);
+    const syncObservation = () => {
+        const active = bar.style.display === 'block';
+        if (active && !chatObserved) {
+            // Upstream marks rows with a class when chosen, so observe #chat only while delete mode is open.
+            chatObserver.observe(chat, { subtree: true, attributes: true, attributeFilter: ['class'] });
+            chatObserved = true;
+            update();
+        } else if (!active && chatObserved) {
+            chatObserver.disconnect();
+            chatObserved = false;
+        }
+    };
+    new MutationObserver(syncObservation).observe(bar, { attributes: true, attributeFilter: ['style'] });
+    syncObservation();
 }
 
 export function initializeMessageActions() {
