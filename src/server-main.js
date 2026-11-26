@@ -49,7 +49,8 @@ import {
 } from './users.js';
 
 import getWebpackServeMiddleware from './middleware/webpack-serve.js';
-import { FRONTEND_ASSET_PREFIX, rewriteFrontendHtml } from './frontend-assets.js';
+// SillyBunny: serve RAM-cached rewritten index.html and hashed /frontend-assets/ when frontend build is enabled.
+import { FRONTEND_ASSET_PREFIX, readRewrittenFrontendHtml } from './frontend-assets.js';
 import { getFrontendAssetMiddleware, setPublicAssetHeaders, shouldServeFrontendAssets } from './middleware/frontend-assets.js';
 // SillyBunny: dynamic compression with loopback bypass plus bounded static compressed LRU.
 import getResponseCompressionMiddleware, { createCompressedStaticMiddleware } from './middleware/response-compression.js';
@@ -394,12 +395,12 @@ app.get('/', restartCacheClear, cacheBuster.middleware, (request, response) => {
         return response.redirect(redirectUrl);
     }
 
+    // SillyBunny: return RAM-cached rewritten index.html (with importmap and hashed asset URLs) when active.
     if (isFrontendAssetServingActive()) {
         const indexPath = path.join(serverDirectory, 'public', 'index.html');
-        const indexHtml = safeReadFileSync(indexPath);
         response.type('html');
         response.set('Cache-Control', 'no-cache');
-        return response.send(rewriteFrontendHtml(indexHtml));
+        return response.send(readRewrittenFrontendHtml(indexPath));
     }
 
     response.set('Cache-Control', 'no-cache');

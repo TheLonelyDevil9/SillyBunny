@@ -16,13 +16,22 @@ function getAbsoluteAssetUrl(href) {
     }
 }
 
+// SillyBunny: match deferred stylesheet links by their original data-sb-source-href when HTML rewriting hashes hrefs.
+function stripUrlQuery(url) {
+    return String(url).split(/[?#]/)[0];
+}
+
 function matchesLinkHref(link, absoluteHref) {
     const candidates = [
         link.getAttribute('href') ? link.href : '',
         link.getAttribute('data-sb-href') || '',
         link.getAttribute('data-sb-source-href') || '',
     ];
-    return candidates.some(candidate => candidate && getAbsoluteAssetUrl(candidate) === absoluteHref);
+    if (candidates.some(candidate => candidate && getAbsoluteAssetUrl(candidate) === absoluteHref)) {
+        return true;
+    }
+    const sourceHref = link.getAttribute('data-sb-source-href') || '';
+    return Boolean(sourceHref && stripUrlQuery(getAbsoluteAssetUrl(sourceHref)) === stripUrlQuery(absoluteHref));
 }
 
 function findStylesheetLink(absoluteHref, id = '') {

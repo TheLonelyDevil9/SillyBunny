@@ -11,10 +11,12 @@ import { serverDirectory } from './src/server-directory.js';
 const color = chalk;
 const moduleRequire = createRequire(import.meta.url);
 
-const BUN_LIB_BUNDLE_SIGNATURE = 'bun-no-minify-v1';
-const PUBLIC_LIB_CONFIG_SIGNATURE = 'chevrotain-esm-alias-moment-locales-v2';
+// SillyBunny: cache signatures and input hashing cover Bun pre-minified aliases, slim hljs, and UI moment locales.
+const BUN_LIB_BUNDLE_SIGNATURE = 'bun-premin-vendors-v3';
+const PUBLIC_LIB_CONFIG_SIGNATURE = 'slim-hljs-moment-ui-locales-v3';
 const WEBPACK_CACHE_KEEP_COUNT = 3;
 const PUBLIC_LIB_FILENAME = 'lib.js';
+const REGIONAL_MOMENT_LOCALES = ['en-au', 'en-ca', 'en-gb', 'pt-br'];
 const FALLBACK_UI_MOMENT_LOCALES = [
     'ar-sa', 'ar', 'zh-cn', 'zh-tw', 'zh', 'nl', 'de', 'fr',
     'is', 'it', 'ja', 'ko', 'pt', 'ru', 'es', 'uk', 'vi', 'th',
@@ -243,32 +245,6 @@ export function buildPublicLibMinimizer({
     ];
 }
 
-// SillyBunny: public/scripts/utils.js and reasoning.js pass getCurrentLocale() to moment.locale(), so retain UI locales from lang.json and strip the rest.
-function getSupportedMomentLocalePattern() {
-    const codes = new Set(['en-gb', 'en-au', 'en-ca', 'pt-br']);
-    try {
-        const langListPath = path.join(serverDirectory, 'public', 'locales', 'lang.json');
-        const langs = JSON.parse(fs.readFileSync(langListPath, 'utf8'));
-        if (Array.isArray(langs)) {
-            for (const entry of langs) {
-                const code = typeof entry?.lang === 'string' ? entry.lang.trim().toLowerCase() : '';
-                if (!code) {
-                    continue;
-                }
-                codes.add(code);
-                codes.add(code.split('-')[0]);
-            }
-        }
-    } catch {
-        for (const fallback of FALLBACK_UI_MOMENT_LOCALES) {
-            codes.add(fallback);
-        }
-    }
-
-    const escaped = [...codes].map(code => code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    return new RegExp(`^\\./(${escaped.join('|')})(\\.js)?$`);
-}
-
 function hashFileIfPresent(hasher, filePath) {
     if (!fs.existsSync(filePath)) {
         hasher.update(`${filePath}:missing`);
@@ -282,8 +258,10 @@ function hashFileIfPresent(hasher, filePath) {
 function getPublicLibInputsSignature() {
     const hasher = crypto.createHash('sha256');
 
-    hashFileIfPresent(hasher, path.join(serverDirectory, 'public', 'lib.js'));
+    // SillyBunny: invalidate cached /lib.js when webpack config or UI locale catalog changes.
+    hashFileIfPresent(hasher, path.join(serverDirectory, 'webpack.config.js'));
     hashFileIfPresent(hasher, path.join(serverDirectory, 'public', 'locales', 'lang.json'));
+    hashFileIfPresent(hasher, path.join(serverDirectory, 'public', 'lib.js'));
     hashFileIfPresent(hasher, path.join(serverDirectory, 'package.json'));
     hashFileIfPresent(hasher, path.join(serverDirectory, 'package-lock.json'));
     hashFileIfPresent(hasher, path.join(serverDirectory, 'bun.lock'));
@@ -437,6 +415,84 @@ export function prunePublicLibCache({ forceDist = false, currentCacheVersion = u
     pruneWebpackCache(webpackRoot, cacheVersion, { keepCount });
 }
 
+// SillyBunny: resolve optional pre-minified vendor builds for Bun where Webpack/Terser minification is disabled.
+function resolveOptionalVendorAlias(relativePath) {
+    const absolutePath = path.resolve(serverDirectory, 'node_modules', relativePath);
+    return fs.existsSync(absolutePath) ? absolutePath : false;
+}
+
+function getVendorResolveAliases({ usePreminified = false } = {}) {
+    // Use Chevrotain's bundled ESM build to avoid Windows + Bun walking lodash-es source files.
+    const chevrotainFallback = path.resolve(serverDirectory, 'node_modules/chevrotain/lib/chevrotain.mjs');
+
+    if (!usePreminified) {
+        return {
+            chevrotain$: chevrotainFallback,
+        };
+    }
+
+    // SillyBunny: alias large vendor libraries to their official pre-minified browser bundles on Bun,
+    // leaving moment on its modular entry so ContextReplacementPlugin preserves all UI locales.
+    const candidates = {
+        chevrotain$: 'chevrotain/lib/chevrotain.min.mjs',
+        handlebars$: 'handlebars/dist/handlebars.min.js',
+        lodash$: 'lodash/lodash.min.js',
+        showdown$: 'showdown/dist/showdown.min.js',
+        localforage$: 'localforage/dist/localforage.min.js',
+    };
+    const aliases = {};
+    for (const [specifier, relativePath] of Object.entries(candidates)) {
+        const resolved = resolveOptionalVendorAlias(relativePath);
+        if (resolved) {
+            aliases[specifier] = resolved;
+        }
+    }
+    if (!aliases.chevrotain$) {
+        aliases.chevrotain$ = chevrotainFallback;
+    }
+    return aliases;
+}
+
+// SillyBunny: derive the kept moment locales from public/locales/lang.json plus regional English/Portuguese
+// so localized timestamps and reasoning durations keep working while unused locales are pruned.
+function getSupportedMomentLocaleRegExp() {
+    const momentLocaleDir = path.join(serverDirectory, 'node_modules', 'moment', 'locale');
+    const langCatalogPath = path.join(serverDirectory, 'public', 'locales', 'lang.json');
+    const keptLocales = new Set(REGIONAL_MOMENT_LOCALES);
+
+    try {
+        const catalog = JSON.parse(fs.readFileSync(langCatalogPath, 'utf8'));
+        if (Array.isArray(catalog)) {
+            for (const entry of catalog) {
+                const rawLang = typeof entry?.lang === 'string' ? entry.lang.trim().toLowerCase() : '';
+                if (!rawLang) {
+                    continue;
+                }
+                if (fs.existsSync(path.join(momentLocaleDir, `${rawLang}.js`))) {
+                    keptLocales.add(rawLang);
+                    continue;
+                }
+                const baseLang = rawLang.split('-')[0];
+                if (baseLang && fs.existsSync(path.join(momentLocaleDir, `${baseLang}.js`))) {
+                    keptLocales.add(baseLang);
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to read public/locales/lang.json for moment locale pruning; keeping fallback locale set.', error);
+        for (const fallback of FALLBACK_UI_MOMENT_LOCALES) {
+            keptLocales.add(fallback);
+        }
+    }
+
+    const escaped = Array.from(keptLocales)
+        .filter(locale => fs.existsSync(path.join(momentLocaleDir, `${locale}.js`)))
+        .sort()
+        .map(locale => locale.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    return new RegExp(`^(?:\\.\\/)?(?:${escaped.join('|')})(?:\\.js)?$`);
+}
+
 /**
  * Get the Webpack configuration for the public/lib.js file.
  * 1. Docker has got cache and the output file pre-baked.
@@ -471,18 +527,16 @@ export default function getPublicLibConfig({ forceDist = false, pruneCache = fal
         devtool: false,
         watch: false,
         resolve: {
-            alias: {
-                // Use Chevrotain's bundled ESM build to avoid Windows + Bun walking lodash-es source files.
-                chevrotain$: path.resolve(serverDirectory, 'node_modules/chevrotain/lib/chevrotain.mjs'),
-            },
+            alias: getVendorResolveAliases({ usePreminified: !minimize }),
         },
         module: {},
         plugins: [
+            // SillyBunny: keep only the moment locales used by SillyBunny's UI plus regional English/Portuguese.
             {
                 apply(compiler) {
                     new compiler.webpack.ContextReplacementPlugin(
                         /moment(?:[/\\]dist)?[/\\]locale$/,
-                        getSupportedMomentLocalePattern(),
+                        getSupportedMomentLocaleRegExp(),
                     ).apply(compiler);
                 },
             },
