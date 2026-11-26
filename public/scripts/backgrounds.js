@@ -139,6 +139,8 @@ let lazyLoadObserver = null;
  * @type {Array<{filename: string, isAnimated: boolean}>}
  */
 let cachedSystemBackgrounds = [];
+let systemBackgroundsLoaded = false;
+let inFlightBackgroundsPromise = null;
 
 export let background_settings = {
     name: '__transparent.png',
@@ -769,6 +771,9 @@ function selectSystemBackground(file, bypassGlobalLock = false) {
 const autoBgPrompt = 'Ignore previous instructions and choose a location ONLY from the provided list that is the most suitable for the current scene. Do not output any other text:\n{0}';
 
 async function autoBackgroundCommand() {
+    if (!systemBackgroundsLoaded && cachedSystemBackgrounds.length === 0) {
+        await ensureBackgroundsLoaded();
+    }
     // SillyBunny: the choices come from the server's list, because a collapsed folder builds no thumbnails to read titles from.
     const options = cachedSystemBackgrounds
         .map(img => ({ element: { click: () => selectSystemBackground(img.filename) }, text: getFriendlyBackgroundTitle(img.filename).trim() }))
@@ -885,24 +890,46 @@ function renderChatBackgrounds(backgrounds) {
 }
 
 export async function getBackgrounds() {
-    const response = await fetch('/api/backgrounds/all', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({}),
-    });
-    if (response.ok) {
-        const { images, config } = await response.json();
-        Object.assign(THUMBNAIL_CONFIG, config);
-        cachedSystemBackgrounds = images;
-
-        // SillyBunny: folders load first, so the gallery module has the index when it draws the sections.
-        await loadFolders();
-
-        await preloadImageMetadata();
-
-        renderSystemBackgrounds(cachedSystemBackgrounds);
-        highlightSelectedBackground();
+    // SillyBunny: coalesce concurrent loads and fetch folder + image metadata in parallel.
+    if (inFlightBackgroundsPromise) {
+        return inFlightBackgroundsPromise;
     }
+
+    inFlightBackgroundsPromise = (async () => {
+        const response = await fetch('/api/backgrounds/all', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({}),
+        });
+        if (response.ok) {
+            const { images, config } = await response.json();
+            Object.assign(THUMBNAIL_CONFIG, config);
+            cachedSystemBackgrounds = images;
+
+            await Promise.all([
+                loadFolders(),
+                preloadImageMetadata(),
+            ]);
+
+            renderSystemBackgrounds(cachedSystemBackgrounds);
+            highlightSelectedBackground();
+            systemBackgroundsLoaded = true;
+        }
+    })().finally(() => {
+        inFlightBackgroundsPromise = null;
+    });
+
+    return inFlightBackgroundsPromise;
+}
+
+export function ensureBackgroundsLoaded() {
+    if (inFlightBackgroundsPromise) {
+        return inFlightBackgroundsPromise;
+    }
+    if (systemBackgroundsLoaded) {
+        return Promise.resolve();
+    }
+    return getBackgrounds();
 }
 
 /**
@@ -1476,6 +1503,9 @@ export function initBackgrounds() {
  * @returns {Array<{bgfile: string, select: () => void}>}
  */
 export function getBackgroundTargets() {
+    if (!systemBackgroundsLoaded && cachedSystemBackgrounds.length === 0) {
+        void ensureBackgroundsLoaded();
+    }
     const built = Array.from(document.querySelectorAll('.bg_example'), element => ({ bgfile: element.getAttribute('bgfile') ?? '', select: () => element.click() }));
     const builtSystem = new Set(Array.from(document.querySelectorAll('#bg_menu_content .bg_example'), element => element.getAttribute('bgfile')));
     const unbuilt = cachedSystemBackgrounds
@@ -1492,6 +1522,9 @@ export function getBackgroundTargets() {
  */
 export function attachBackgroundGallery(host) {
     galleryHost = host;
+    if (!systemBackgroundsLoaded && cachedSystemBackgrounds.length === 0) {
+        void ensureBackgroundsLoaded();
+    }
     return {
         getImages: () => cachedSystemBackgrounds,
         getFolderIndex: () => folderIndex,
