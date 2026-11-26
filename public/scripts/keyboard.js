@@ -39,6 +39,23 @@ if (CSS.supports('selector(:has(*))')) {
     interactableSelectors.push('#extensionsMenu div:has(.extensionsMenuExtensionButton):not(.extension_container)');
 }
 
+/** Number of built-in selectors; anything pushed after this index came from registerInteractableType. */
+const builtInSelectorCount = interactableSelectors.length;
+
+// SillyBunny: streaming rewrites message prose many times a second. The chrome selectors above never match
+// inside prose, so prose only needs the generic markers (code-copy buttons carry `.interactable`) plus any
+// selector an extension registered, which may target controls it injects into a message.
+const PROSE_SELECTOR = '.mes_text, .mes_reasoning';
+const proseCoreSelectors = ['.interactable', '.custom_interactable', '.menu_button'];
+let proseInteractableSelector = null;
+
+function getProseInteractableSelector() {
+    if (proseInteractableSelector === null) {
+        proseInteractableSelector = [...proseCoreSelectors, ...interactableSelectors.slice(builtInSelectorCount)].join(', ');
+    }
+    return proseInteractableSelector;
+}
+
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';
 export const CUSTOM_INTERACTABLE_CONTROL_CLASS = 'custom_interactable';
 
@@ -89,6 +106,21 @@ function classChangeAffectsDescendants(oldValue, element) {
     return false;
 }
 
+const PROSE_FORMATTING_TAGS = new Set([
+    'SPAN', 'P', 'EM', 'STRONG', 'B', 'I', 'U', 'Q', 'BR',
+    'SMALL', 'SUB', 'SUP', 'DEL', 'S', 'MARK', 'CODE', 'LI', 'BLOCKQUOTE',
+]);
+
+function isProseInteractiveCandidate(node) {
+    if (node.classList.contains(INTERACTABLE_CONTROL_CLASS)
+        || node.classList.contains(CUSTOM_INTERACTABLE_CONTROL_CLASS)
+        || node.classList.contains('menu_button')
+        || node.classList.contains('scroll-reset-container')) {
+        return true;
+    }
+    return interactableSelectors.length > builtInSelectorCount && node.matches(getProseInteractableSelector());
+}
+
 /**
  * An observer that will check if any new interactables or scroll reset containers are added to the body
  * @type {MutationObserver}
@@ -100,14 +132,36 @@ const observer = new MutationObserver(mutations => {
     const subtreeChanged = new Set();
     const selfOnlyChanged = new Set();
     for (const mutation of mutations) {
+        const target = mutation.target;
+        const inProse = target instanceof Element && target.closest(PROSE_SELECTOR) !== null;
         if (mutation.type === 'childList') {
-            mutation.addedNodes.forEach(node => node instanceof Element && subtreeChanged.add(node));
-        } else if (mutation.type === 'attributes' && mutation.attributeName === 'class' && mutation.target instanceof Element) {
+            for (const node of mutation.addedNodes) {
+                if (!(node instanceof Element)) continue;
+                if (inProse) {
+                    // SillyBunny: skip streaming text/span churn inside .mes_text/.mes_reasoning while still
+                    // initializing explicitly interactive nodes (e.g. .code-copy.interactable) and container widgets.
+                    if (isProseInteractiveCandidate(node)) {
+                        subtreeChanged.add(node);
+                    } else if (node.childElementCount > 0 && !PROSE_FORMATTING_TAGS.has(node.tagName)) {
+                        subtreeChanged.add(node);
+                    }
+                    continue;
+                }
+                if (node.matches(PROSE_SELECTOR) && node.childElementCount === 0) continue;
+                subtreeChanged.add(node);
+            }
+        } else if (mutation.type === 'attributes' && mutation.attributeName === 'class' && target instanceof Element) {
+            if (inProse
+                && !isProseInteractiveCandidate(target)
+                && !target.classList.contains(DISABLED_CONTROL_CLASS)
+                && !target.classList.contains(NOT_FOCUSABLE_CONTROL_CLASS)) {
+                continue;
+            }
             // SillyBunny: only rescan descendants when a class affecting descendant focusability or selector ancestry changed.
-            if (mutation.target.childElementCount > 0 && classChangeAffectsDescendants(mutation.oldValue, mutation.target)) {
-                subtreeChanged.add(mutation.target);
+            if (target.childElementCount > 0 && classChangeAffectsDescendants(mutation.oldValue, target)) {
+                subtreeChanged.add(target);
             } else {
-                selfOnlyChanged.add(mutation.target);
+                selfOnlyChanged.add(target);
             }
         }
     }
@@ -132,6 +186,11 @@ const observer = new MutationObserver(mutations => {
  */
 function handleNodeChange(node, scanDescendants = true) {
     if (node.nodeType === Node.ELEMENT_NODE && node instanceof Element) {
+        if (node.closest(PROSE_SELECTOR)) {
+            handleProseNodeChange(node);
+            return;
+        }
+
         // Handle keyboard interactables
         if (isKeyboardInteractable(node)) {
             makeKeyboardInteractable(node);
@@ -152,6 +211,34 @@ function handleNodeChange(node, scanDescendants = true) {
 }
 
 /**
+ * Cheap path for nodes inside message prose: avoids scanning leaf nodes and uses one combined query for subtrees.
+ * @param {Element} node
+ */
+function handleProseNodeChange(node) {
+    if (node.childElementCount === 0) {
+        if (node.classList.contains('scroll-reset-container')) {
+            applyScrollResetBehavior(node);
+        }
+        if (isProseInteractiveCandidate(node) && !node.classList.contains('scroll-reset-container')) {
+            makeKeyboardInteractable(node);
+        } else if (node.matches(getProseInteractableSelector())) {
+            makeKeyboardInteractable(node);
+        }
+        return;
+    }
+
+    const selector = getProseInteractableSelector();
+    const interactables = Array.from(node.querySelectorAll(selector));
+    if (node.matches(selector)) interactables.unshift(node);
+    if (interactables.length) makeKeyboardInteractable(...interactables);
+
+    if (node.classList.contains('scroll-reset-container')) {
+        applyScrollResetBehavior(node);
+    }
+    if (node.firstElementChild) initializeScrollResetBehaviors(node);
+}
+
+/**
  * Registers an interactable class (for example for an extension) and makes it keyboard interactable.
  * Optionally apply the 'not_focusable' and 'disabled' classes if needed.
  *
@@ -164,6 +251,7 @@ export function registerInteractableType(interactableSelector, { disabledByDefau
     interactableSelectors.push(interactableSelector);
     combinedInteractableSelector = null;
     descendantAffectingClasses = null;
+    proseInteractableSelector = null;
 
     const interactables = document.querySelectorAll(interactableSelector);
 

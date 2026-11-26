@@ -406,6 +406,9 @@ export const ReasoningState = {
  * This class is used inside the {@link StreamingProcessor} to manage reasoning states and UI updates.
  */
 export class ReasoningHandler {
+    // SillyBunny: enforce at most one active lazy-render toggle listener per <details> element across handler instances.
+    /** @type {WeakMap<HTMLDetailsElement, { handler: ReasoningHandler, listener: () => void }>} */
+    static #activeToggleListeners = new WeakMap();
     /** @type {boolean} True if the model supports reasoning, but hides the reasoning output */
     #isHiddenReasoningModel;
     /** @type {boolean} True if the handler is currently handling a manual parse of reasoning blocks */
@@ -424,6 +427,17 @@ export class ReasoningHandler {
     #lastRenderedReasoningText = null;
     /** @type {HTMLElement?} Content element that received the last rendered reasoning text */
     #lastRenderedReasoningDom = null;
+    /** @type {boolean} Whether the last rendered reasoning body already ran its final non-streaming pass */
+    #lastRenderedReasoningIsFinal = false;
+    // SillyBunny: track deferred closed-reasoning renders so collapsed <details> panels skip live DOM work.
+    /** @type {boolean} Whether unrendered reasoning content is waiting for expand or finish */
+    #hasPendingReasoningRender = false;
+    /** @type {number?} Message ID associated with the pending reasoning render */
+    #pendingRenderMessageId = null;
+    /** @type {HTMLDetailsElement?} Details element currently bound with a lazy-render toggle listener */
+    #boundToggleDetails = null;
+    /** @type {(() => void)?} Bound toggle listener reference */
+    #boundToggleListener = null;
 
     /**
      * @param {Date?} [timeStarted=null] - When the generation started
@@ -471,6 +485,7 @@ export class ReasoningHandler {
         this.#lastRegexedReasoning = null;
         this.#lastRenderedReasoningText = null;
         this.#lastRenderedReasoningDom = null;
+        this.#lastRenderedReasoningIsFinal = false;
     }
 
     /**
@@ -543,6 +558,10 @@ export class ReasoningHandler {
             this.#lastRegexedReasoning = null;
             this.#lastRenderedReasoningText = null;
             this.#lastRenderedReasoningDom = null;
+            this.#lastRenderedReasoningIsFinal = false;
+            this.#hasPendingReasoningRender = false;
+            this.#pendingRenderMessageId = null;
+            this.#detachToggleListener();
         }
 
         this.updateDom(messageId);
@@ -777,31 +796,29 @@ export class ReasoningHandler {
         const hasReasoningContent = Boolean(String(rawReasoning ?? '').trim());
         setDatasetProperty(this.messageReasoningDetailsDom, 'hasContent', hasReasoningContent ? 'true' : null);
 
-        // SillyBunny: mobile browsers can force-reload under reasoning-heavy streams if we
-        // format and morph a growing hidden reasoning block on every live tick, and completed
-        // reasoning must not re-format and morphdom on every subsequent prose tick.
-        const reasoning = trimSpaces(this.reasoningDisplayText ?? this.reasoning);
-        const reasoningBodyUnchanged = this.#lastRenderedReasoningDom === this.messageReasoningContentDom
-            && this.#lastRenderedReasoningText === reasoning;
-        if (shouldRenderReasoning && !reasoningBodyUnchanged) {
-            // SillyBunny: throttle live reasoning DOM work on reduced platforms so large
-            // hidden reasoning blocks do not cause aggressive repaint or reload loops.
-            const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
-
-            if (power_user.stream_fade_in) {
-                applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning, {
-                    bypassFadeIn: shouldReduceStreamingDomWork(navigatorRef, {
-                        iosEnabled: power_user.ios_webkit_disable_stream_fade_in,
-                        androidEnabled: power_user.android_disable_stream_fade_in,
-                    }),
+        // SillyBunny: universal zero-work closed reasoning skips formatting while <details> is collapsed during active thinking,
+        // and completed reasoning skips duplicate formatting on subsequent prose ticks inside #renderReasoningBody.
+        if (shouldRenderReasoning) {
+            ReasoningHandler.#detachAnyToggleListener(this.messageReasoningDetailsDom);
+            this.#detachToggleListener();
+            if (hasReasoningContent || this.messageReasoningContentDom.childNodes.length > 0) {
+                this.#renderReasoningBody(messageId, now, navigatorRef, {
+                    isFinal: this.state !== ReasoningState.Thinking,
                 });
             } else {
-                applyStreamDomPatch(this.messageReasoningContentDom, displayReasoning);
+                this.#hasPendingReasoningRender = false;
+                setDatasetProperty(this.messageReasoningDetailsDom, 'reasoningPendingRender', null);
             }
-
-            this.#lastRenderedReasoningText = reasoning;
-            this.#lastRenderedReasoningDom = this.messageReasoningContentDom;
-            this.#lastReasoningDomRenderAt = now;
+        } else if (hasReasoningContent) {
+            this.#hasPendingReasoningRender = true;
+            this.#pendingRenderMessageId = messageId;
+            setDatasetProperty(this.messageReasoningDetailsDom, 'reasoningPendingRender', 'true');
+            this.#ensureToggleListener(messageId);
+        } else {
+            this.#hasPendingReasoningRender = false;
+            setDatasetProperty(this.messageReasoningDetailsDom, 'reasoningPendingRender', null);
+            ReasoningHandler.#detachAnyToggleListener(this.messageReasoningDetailsDom);
+            this.#detachToggleListener();
         }
 
         // Update tooltip for hidden reasoning edit
@@ -820,6 +837,132 @@ export class ReasoningHandler {
     }
 
     /**
+     * Detaches any active lazy-render toggle listener currently registered on `details`.
+     * @param {HTMLDetailsElement?} details
+     */
+    static #detachAnyToggleListener(details) {
+        if (!details) {
+            return;
+        }
+        const active = ReasoningHandler.#activeToggleListeners.get(details);
+        if (active) {
+            if (typeof details.removeEventListener === 'function') {
+                details.removeEventListener('toggle', active.listener);
+            }
+            ReasoningHandler.#activeToggleListeners.delete(details);
+            if (active.handler.#boundToggleDetails === details) {
+                active.handler.#boundToggleDetails = null;
+                active.handler.#boundToggleListener = null;
+            }
+        }
+    }
+
+    /**
+     * Detaches this handler's lazy-render toggle listener if currently attached.
+     * @param {HTMLDetailsElement?} [details]
+     */
+    #detachToggleListener(details = this.#boundToggleDetails) {
+        if (!details) {
+            return;
+        }
+        const active = ReasoningHandler.#activeToggleListeners.get(details);
+        if (active && active.handler === this) {
+            if (typeof details.removeEventListener === 'function') {
+                details.removeEventListener('toggle', active.listener);
+            }
+            ReasoningHandler.#activeToggleListeners.delete(details);
+        } else if (this.#boundToggleDetails === details && this.#boundToggleListener && typeof details.removeEventListener === 'function') {
+            details.removeEventListener('toggle', this.#boundToggleListener);
+        }
+        if (this.#boundToggleDetails === details) {
+            this.#boundToggleDetails = null;
+            this.#boundToggleListener = null;
+        }
+    }
+
+    /**
+     * Renders the latest reasoning body into `.mes_reasoning` and clears any pending marker.
+     * @param {number} messageId Message ID
+     * @param {number} [now] Current timestamp
+     * @param {Navigator} [navigatorRef] Navigator reference
+     * @param {object} [options]
+     * @param {boolean} [options.isFinal=false] Whether reasoning has finished and spans should collapse
+     */
+    #renderReasoningBody(messageId, now = Date.now(), navigatorRef = globalThis.navigator, { isFinal = false } = {}) {
+        const reasoning = trimSpaces(this.reasoningDisplayText ?? this.reasoning);
+        const reasoningBodyUnchanged = this.#lastRenderedReasoningDom === this.messageReasoningContentDom
+            && this.#lastRenderedReasoningText === reasoning
+            && (!isFinal || this.#lastRenderedReasoningIsFinal);
+        if (!reasoningBodyUnchanged) {
+            const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
+
+            if (power_user.stream_fade_in) {
+                applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning, {
+                    bypassFadeIn: shouldReduceStreamingDomWork(navigatorRef, {
+                        iosEnabled: power_user.ios_webkit_disable_stream_fade_in,
+                        androidEnabled: power_user.android_disable_stream_fade_in,
+                    }),
+                    isFinal,
+                });
+            } else {
+                applyStreamDomPatch(this.messageReasoningContentDom, displayReasoning);
+            }
+
+            this.#lastRenderedReasoningText = reasoning;
+            this.#lastRenderedReasoningDom = this.messageReasoningContentDom;
+            this.#lastRenderedReasoningIsFinal = isFinal;
+            this.#lastReasoningDomRenderAt = now;
+        }
+        this.#hasPendingReasoningRender = false;
+        setDatasetProperty(this.messageReasoningDetailsDom, 'reasoningPendingRender', null);
+        ReasoningHandler.#detachAnyToggleListener(this.messageReasoningDetailsDom);
+        this.#detachToggleListener();
+    }
+
+    /**
+     * Attaches a `toggle` listener to the current `<details>` element ONLY while deferred
+     * reasoning content is pending, superseding any stale listener from prior handlers.
+     * @param {number} messageId Message ID
+     */
+    #ensureToggleListener(messageId) {
+        const details = this.messageReasoningDetailsDom;
+        this.#pendingRenderMessageId = messageId;
+
+        if (!this.#hasPendingReasoningRender || !details || typeof details.addEventListener !== 'function') {
+            return;
+        }
+
+        const existing = ReasoningHandler.#activeToggleListeners.get(details);
+        if (existing?.handler === this) {
+            return;
+        }
+
+        ReasoningHandler.#detachAnyToggleListener(details);
+        this.#detachToggleListener();
+
+        const onToggle = () => {
+            if (!details.open || !this.#hasPendingReasoningRender) {
+                return;
+            }
+            if (ReasoningHandler.#activeToggleListeners.get(details)?.handler !== this) {
+                return;
+            }
+            const targetMessageId = this.#pendingRenderMessageId ?? Number(this.messageDom?.getAttribute('mesid'));
+            if (!Number.isFinite(targetMessageId)) {
+                return;
+            }
+            this.#renderReasoningBody(targetMessageId, Date.now(), globalThis.navigator, {
+                isFinal: this.state !== ReasoningState.Thinking,
+            });
+        };
+
+        details.addEventListener('toggle', onToggle);
+        ReasoningHandler.#activeToggleListeners.set(details, { handler: this, listener: onToggle });
+        this.#boundToggleDetails = details;
+        this.#boundToggleListener = onToggle;
+    }
+
+    /**
      * Finds and caches reasoning-related DOM elements for the given message.
      *
      * @param {number} messageId - The ID of the message to cache the DOM elements for
@@ -827,7 +970,12 @@ export class ReasoningHandler {
     #checkDomElements(messageId) {
         // Make sure we reset dom elements if we are checking for a different message (shouldn't happen, but be sure)
         if (this.messageDom !== null && this.messageDom.getAttribute('mesid') !== messageId.toString()) {
+            // SillyBunny: clear cached reasoning child references and toggle binding when switching messages.
+            this.#detachToggleListener();
             this.messageDom = null;
+            this.messageReasoningDetailsDom = null;
+            this.messageReasoningContentDom = null;
+            this.messageReasoningHeaderDom = null;
         }
 
         // Cache the DOM elements once

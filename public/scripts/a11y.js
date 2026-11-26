@@ -121,6 +121,8 @@ const a11yRules = {
 };
 const a11yRuleEntries = Object.entries(a11yRules);
 const a11ySelector = a11yRuleEntries.map(([selector]) => selector).join(', ');
+// SillyBunny: streaming rewrites message prose many times a second.
+const PROSE_SELECTOR = '.mes_text, .mes_reasoning';
 let accessibilityObserver = null;
 
 /**
@@ -159,8 +161,14 @@ function setAccessibilityObserver() {
         const addedElements = new Set();
         for (const mutation of mutationsList) {
             if (mutation.type === 'childList') {
+                // SillyBunny: skip streaming prose churn inside .mes_text / .mes_reasoning;
+                // .mes chrome additions (.mes_button, .swipe_left, .swipe_right, etc.) sit outside prose.
+                if (mutation.target instanceof Element && mutation.target.closest(PROSE_SELECTOR)) {
+                    continue;
+                }
                 for (const addedNode of mutation.addedNodes) {
                     if (addedNode instanceof Element && addedNode.nodeType === Node.ELEMENT_NODE) {
+                        if (addedNode.matches(PROSE_SELECTOR)) continue;
                         addedElements.add(addedNode);
                     }
                 }
