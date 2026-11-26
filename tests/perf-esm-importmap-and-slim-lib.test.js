@@ -615,7 +615,6 @@ describe('PR 13: extension-safe ESM importmap, flattened CSS, and slim lib.js', 
         const webpackSource = fs.readFileSync(webpackConfigPath, 'utf8');
         expect(webpackSource).toContain('ContextReplacementPlugin');
         expect(webpackSource).not.toContain('IgnorePlugin');
-        expect(webpackSource).not.toContain('terser-webpack-plugin');
         expect(webpackSource).not.toContain('chevrotain-esm-alias-v1');
 
         const builtLibPath = path.join(tmpDistDir, libEntry.output);

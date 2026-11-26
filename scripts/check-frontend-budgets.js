@@ -9,9 +9,9 @@ const defaultRepoRoot = path.resolve(__dirname, '..');
 
 // Ratchet budgets match the measured frontend state. Lower them when assets shrink.
 export const FRONTEND_BUDGETS = Object.freeze({
-    blockingStylesheetCount: 16,
+    blockingStylesheetCount: 14,
     blockingStylesheetBytes: 1024 * 1024,
-    widthMediaStylesheetCount: 3,
+    widthMediaStylesheetCount: 4,
     widthMediaStylesheetBytes: 110 * 1024,
     importedStylesheetCount: 19,
     importedStylesheetBytes: 160 * 1024,

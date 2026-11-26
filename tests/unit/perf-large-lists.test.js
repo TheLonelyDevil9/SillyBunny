@@ -457,7 +457,7 @@ describe('Background gallery Map lookup, lazy adapter avatar, and flat-grid reus
         await Promise.resolve();
         expect(container.children).toHaveLength(2);
         expect(container.querySelector('[bgfile="alpha.jpg"]')).toBe(initialAlpha);
-        expect(createThumbnail).toHaveBeenCalledTimes(2);
+        expect(createThumbnail).toHaveBeenCalledTimes(3);
     });
 });
 

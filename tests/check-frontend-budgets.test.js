@@ -46,7 +46,7 @@ describe('frontend static asset and CSS hazard budgets', () => {
             errors: [],
             blockingStylesheets: Array.from({ length: 17 }, (_, i) => ({ href: `a${i}.css`, size: 10 })),
             blockingStylesheetBytes: FRONTEND_BUDGETS.blockingStylesheetBytes + 1,
-            widthMediaStylesheets: Array.from({ length: 4 }, (_, i) => ({ href: `m${i}.css`, size: 10 })),
+            widthMediaStylesheets: Array.from({ length: FRONTEND_BUDGETS.widthMediaStylesheetCount + 1 }, (_, i) => ({ href: `m${i}.css`, size: 10 })),
             widthMediaStylesheetBytes: FRONTEND_BUDGETS.widthMediaStylesheetBytes + 1,
             importedStylesheets: Array.from({ length: 20 }, (_, i) => ({ href: `i${i}.css`, size: 10 })),
             importedStylesheetBytes: FRONTEND_BUDGETS.importedStylesheetBytes + 1,

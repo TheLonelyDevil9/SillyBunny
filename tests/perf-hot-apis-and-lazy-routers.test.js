@@ -1572,7 +1572,7 @@ describe('PR6 hot APIs media & extension optimizations', () => {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' },
             });
             expect(firefoxNoBust.status).toBe(200);
-            expect(firefoxNoBust.headers.get('cache-control')).toBe('must-understand, no-store');
+            expect(firefoxNoBust.headers.get('cache-control')).toBe('no-cache');
 
             const firefoxWithBust = await fetch(`${baseUrl}/thumbnail?type=avatar&file=${file}&t=1700000000000`, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0' },

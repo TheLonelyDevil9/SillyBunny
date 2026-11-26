@@ -147,9 +147,9 @@ describe('PR 7 shell boot diet & topbar layout', () => {
 
     test('defers PromptEditor, ConnectionsPanel, In-Chat Agents, and BackgroundGallery at boot', () => {
         const editorSource = extractFunctionSource(tabsSource, 'buildEditorPanel');
-        expect(editorSource).toContain('let mounted = false;');
-        expect(editorSource).toContain('ensureReady: async () =>');
-        expect(editorSource).toContain('initializePromptEditor(column');
+        expect(editorSource).toContain('loadBackendPanelsController()');
+        expect(editorSource).toContain('ensureReady: ensureEditorReady');
+        expect(editorSource).not.toContain('initializePromptEditor(');
 
         const agentsSource = extractFunctionSource(tabsSource, 'buildInChatAgentsPanel');
         expect(agentsSource).toContain('let mountedController = null;');
@@ -400,8 +400,11 @@ describe('PR 7 chat-list fetch dedupe, invalidation & 0-chat no-poll', () => {
             canBrowseChats: true,
         };
 
-        const cacheMatch = tabsSource.match(/const SB_CHAT_FILES_FOCUS_STALE_MS[\s\S]*?const sbChatFilesCache = \{[\s\S]*?\};/);
+        const chatActionsSource = readFileSync(path.join(repoRoot, 'public', 'scripts', 'sillybunny-tabs', 'chat-actions-search.js'), 'utf8');
+        const cacheMatch = chatActionsSource.match(/const sbChatFilesCache = \{[\s\S]*?\};/);
         expect(cacheMatch).not.toBeNull();
+        const bindingsMatch = tabsSource.match(/const SB_CHAT_FILES_FOCUS_STALE_MS[\s\S]*?const sbChatFilesCacheBindings = \{[\s\S]*?\};/);
+        expect(bindingsMatch).not.toBeNull();
 
         try {
             const harness = new Function(
@@ -419,15 +422,16 @@ describe('PR 7 chat-list fetch dedupe, invalidation & 0-chat no-poll', () => {
                 'isMobileViewport',
                 'scheduleBottomChatBarRefresh',
                 [
+                    bindingsMatch[0],
                     cacheMatch[0],
-                    extractFunctionSource(tabsSource, 'fetchCharacterChatFiles'),
+                    extractFunctionSource(chatActionsSource, 'fetchCharacterChatFiles'),
                     'async function fetchGroupChatFiles() { return []; }',
-                    extractFunctionSource(tabsSource, 'getChatFilesCacheKey'),
-                    extractFunctionSource(tabsSource, 'invalidateChatFilesCache'),
-                    extractFunctionSource(tabsSource, 'markChatFilesCacheStale'),
-                    extractFunctionSource(tabsSource, 'invalidateChatFilesCacheIfOlderThan'),
-                    extractFunctionSource(tabsSource, 'loadChatFilesForContext'),
-                    extractFunctionSource(tabsSource, 'getChatFilesForContext'),
+                    extractFunctionSource(chatActionsSource, 'getChatFilesCacheKey'),
+                    extractFunctionSource(chatActionsSource, 'invalidateChatFilesCache'),
+                    extractFunctionSource(chatActionsSource, 'markChatFilesCacheStale'),
+                    extractFunctionSource(chatActionsSource, 'invalidateChatFilesCacheIfOlderThan'),
+                    extractFunctionSource(chatActionsSource, 'loadChatFilesForContext'),
+                    extractFunctionSource(chatActionsSource, 'getChatFilesForContext'),
                     extractFunctionSource(tabsSource, 'bindChatFilesCacheInvalidation'),
                     extractFunctionSource(tabsSource, 'writeBottomChatOptions'),
                     'function getBottomChatBarState() { return sbState.bottomChatBar; }',
@@ -551,8 +555,9 @@ describe('PR 7 drawer persistence guard, narrowed shell search & settings scroll
 
         const prepare = new Function(
             'sbState',
+            'loadUniversalSearchController',
             `${extractFunctionSource(tabsSource, 'prepareShellSearch')}\nreturn prepareShellSearch;`,
-        )(sbState);
+        )(sbState, async () => {});
 
         await prepare(['characters']);
         expect(leftReady).not.toHaveBeenCalled();

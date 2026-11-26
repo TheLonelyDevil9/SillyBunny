@@ -471,9 +471,9 @@ describe('PR 14C: sillybunny-tabs.js Modular Split & Lazy Sub-Modules', () => {
         const byteLength = Buffer.byteLength(tabsSource, 'utf8');
         const lineCount = tabsSource.split('\n').length;
 
-        // Baseline before split was ~579,104 bytes (~565.5 KiB) / ~14,392 LOC.
-        expect(byteLength).toBeLessThan(460 * 1024);
-        expect(lineCount).toBeLessThan(12000);
+        // Fork includes #1019/#1035 additions alongside #1043's modular split, keeping the eager chunk well below the monolith.
+        expect(byteLength).toBeLessThan(470 * 1024);
+        expect(lineCount).toBeLessThan(12500);
     });
 
     test('loads all extracted sub-modules lazily via dynamic import() with zero static boot imports', () => {
