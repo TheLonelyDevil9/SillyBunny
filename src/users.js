@@ -10,6 +10,7 @@ import { Buffer } from 'node:buffer';
 import storage from 'node-persist';
 import express from 'express';
 import mime from 'mime-types';
+// SillyBunny: archiver is lazy-loaded only as a ZIP64 backup fallback; routine backups stream with lazy fflate.
 import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import sanitize from 'sanitize-filename';
@@ -1187,49 +1188,633 @@ export function requireAdminMiddleware(request, response, next) {
     return response.sendStatus(403);
 }
 
+// SillyBunny: lazy-load fflate for streaming backups to avoid eager archiver boot cost, with lazy archiver ZIP64 fallback.
+const ZIP_STORE_EXTENSIONS = new Set([
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.webp',
+    '.gif',
+    '.avif',
+    '.zip',
+    '.gz',
+    '.gzip',
+    '.bz2',
+    '.xz',
+    '.7z',
+    '.zst',
+    '.woff2',
+    '.mp3',
+    '.mp4',
+    '.m4a',
+    '.ogg',
+    '.opus',
+    '.webm',
+    '.flac',
+]);
+const EMPTY_ZIP_CHUNK = new Uint8Array(0);
+const BACKUP_STREAM_HIGH_WATER_MARK = 64 * 1024;
+const SECRETS_MIGRATION_BACKUP_RE = /^backups\/secrets_migration_[^/]*\.json$/;
+const ZIP32_MAX_ENTRIES = 0xffff;
+const ZIP32_MAX_FILE_BYTES = 0xffffffff;
+const ZIP32_CONSERVATIVE_TOTAL_BYTES = 0xdfffffff;
+const DEFAULT_ZIP64_THRESHOLDS = Object.freeze({
+    maxEntries: ZIP32_MAX_ENTRIES,
+    maxFileBytes: ZIP32_MAX_FILE_BYTES,
+    maxTotalBytes: ZIP32_CONSERVATIVE_TOTAL_BYTES,
+});
+
+/** @type {Promise<typeof import('fflate')> | null} */
+let fflateModulePromise = null;
+
+/**
+ * Lazy-loads `fflate` only when a backup archive is requested.
+ * @returns {Promise<typeof import('fflate')>} Loaded fflate module
+ */
+function loadFflate() {
+    if (!fflateModulePromise) {
+        fflateModulePromise = import('fflate').catch((error) => {
+            fflateModulePromise = null;
+            throw error;
+        });
+    }
+    return fflateModulePromise;
+}
+
+/**
+ * Lazy-loads optional `archiver` only when a backup exceeds ZIP32 limits and needs ZIP64 headers.
+ * @param {() => Promise<any>} [importArchiver] Dynamic importer override (used by tests)
+ * @returns {Promise<typeof import('archiver').default>} Loaded archiver factory
+ */
+async function loadArchiverModule(importArchiver = () => import('archiver')) {
+    try {
+        const mod = await importArchiver();
+        return mod.default ?? mod;
+    } catch (error) {
+        if (
+            error?.code === 'ERR_MODULE_NOT_FOUND'
+            || error?.code === 'MODULE_NOT_FOUND'
+            || /Cannot find (?:package|module)/i.test(error?.message ?? '')
+        ) {
+            throw new Error(
+                'Backup exceeds ZIP32 limits (>4 GiB or >65,535 files) and requires the optional archiver ZIP64 fallback, which is not installed.',
+                { cause: error },
+            );
+        }
+        throw error;
+    }
+}
+
+/**
+ * Clamps a file timestamp into the local-time DOS ZIP range (1980-2099) required by `fflate`.
+ * @param {Date | number | null | undefined} mtime Raw filesystem modification time
+ * @returns {Date} Date within 1980-2099 local time
+ */
+export function clampZipEntryMtime(mtime) {
+    const date = mtime instanceof Date ? mtime : new Date(mtime ?? Date.now());
+    if (Number.isNaN(date.getTime())) {
+        return new Date();
+    }
+
+    const year = date.getFullYear();
+    if (year < 1980) {
+        return new Date(1980, 0, 1, 0, 0, 0);
+    }
+    if (year > 2099) {
+        return new Date(2099, 11, 31, 23, 59, 58);
+    }
+    return date;
+}
+
+/**
+ * Checks whether a relative POSIX path inside a user folder should be omitted from backups.
+ * @param {string} relativePosixPath Relative POSIX path under the user's root directory
+ * @returns {boolean} True when the file should be excluded
+ */
+function shouldIgnoreBackupEntry(relativePosixPath) {
+    if (allowKeysExposure) {
+        return false;
+    }
+
+    return relativePosixPath === SECRETS_FILE || SECRETS_MIGRATION_BACKUP_RE.test(relativePosixPath);
+}
+
+/**
+ * Walks a user root directory safely without following symlinks and returns regular files with size totals.
+ * @param {string} rootDir Absolute user root directory
+ * @returns {Promise<{ files: Array<{ absolutePath: string, entryName: string, size: number }>, totalUncompressedBytes: number, maxFileBytes: number }>} Ordered files and size summary
+ */
+async function collectBackupFiles(rootDir) {
+    const resolvedRoot = path.resolve(rootDir);
+    const rootStat = await fs.promises.lstat(resolvedRoot);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+        throw new Error('User backup root is not a valid directory.');
+    }
+
+    /** @type {Array<{ absolutePath: string, entryName: string, size: number }>} */
+    const files = [];
+    let totalUncompressedBytes = 0;
+    let maxFileBytes = 0;
+
+    /**
+     * @param {string} currentDir
+     * @param {string} relativePrefix
+     */
+    async function walk(currentDir, relativePrefix) {
+        const dirents = await fs.promises.readdir(currentDir, { withFileTypes: true });
+        dirents.sort((a, b) => a.name.localeCompare(b.name));
+
+        for (const dirent of dirents) {
+            if (dirent.isSymbolicLink()) {
+                continue;
+            }
+
+            const absolutePath = path.resolve(currentDir, dirent.name);
+            if (!isPathUnderParent(resolvedRoot, absolutePath)) {
+                continue;
+            }
+
+            const entryName = relativePrefix ? `${relativePrefix}/${dirent.name}` : dirent.name;
+            if (shouldIgnoreBackupEntry(entryName)) {
+                continue;
+            }
+
+            if (dirent.isDirectory()) {
+                await walk(absolutePath, entryName);
+            } else if (dirent.isFile()) {
+                let stat;
+                try {
+                    stat = await fs.promises.lstat(absolutePath);
+                } catch (error) {
+                    if (error?.code === 'ENOENT') {
+                        continue;
+                    }
+                    throw error;
+                }
+                if (stat.isSymbolicLink() || !stat.isFile()) {
+                    continue;
+                }
+                files.push({ absolutePath, entryName, size: stat.size });
+                totalUncompressedBytes += stat.size;
+                if (stat.size > maxFileBytes) {
+                    maxFileBytes = stat.size;
+                }
+            }
+        }
+    }
+
+    await walk(resolvedRoot, '');
+    return { files, totalUncompressedBytes, maxFileBytes };
+}
+
+/**
+ * Determines whether an archive exceeds ZIP32 bounds and must use the ZIP64 `archiver` fallback.
+ * @param {{ files: Array<unknown>, totalUncompressedBytes: number, maxFileBytes: number }} collected Walked backup files and size summary
+ * @param {{ maxEntries?: number, maxFileBytes?: number, maxTotalBytes?: number }} [thresholds] Optional threshold overrides
+ * @returns {boolean} True when ZIP64 fallback is required
+ */
+function needsZip64Fallback(collected, thresholds = DEFAULT_ZIP64_THRESHOLDS) {
+    const maxEntries = thresholds?.maxEntries ?? DEFAULT_ZIP64_THRESHOLDS.maxEntries;
+    const maxFileBytes = thresholds?.maxFileBytes ?? DEFAULT_ZIP64_THRESHOLDS.maxFileBytes;
+    const maxTotalBytes = thresholds?.maxTotalBytes ?? DEFAULT_ZIP64_THRESHOLDS.maxTotalBytes;
+
+    return collected.files.length > maxEntries
+        || collected.maxFileBytes >= maxFileBytes
+        || collected.totalUncompressedBytes >= maxTotalBytes;
+}
+
+/**
+ * Streams a ZIP64 backup archive using lazy-loaded `archiver` when an account exceeds ZIP32 limits.
+ * @param {object} options Archive options
+ * @param {Array<{ absolutePath: string, entryName: string }>} options.files Validated file list to archive
+ * @param {string} options.handle User handle
+ * @param {import('express').Response} options.response Express response or writable stream
+ * @param {() => Promise<typeof import('archiver').default>} [options.loadArchiver] Optional archiver loader override
+ * @returns {Promise<void>}
+ */
+async function createBackupArchiveWithArchiver({ files, handle, response, loadArchiver }) {
+    const archiver = await loadArchiverModule(loadArchiver);
+
+    const timestamp = generateTimestamp();
+    if (typeof response.attachment === 'function') {
+        response.attachment(`${handle}-${timestamp}.zip`);
+    }
+
+    const archive = archiver('zip', { forceZip64: true, zlib: { level: 6 } });
+    let aborted = false;
+    let settled = false;
+
+    await new Promise((resolve, reject) => {
+        const cleanup = () => {
+            response.off('close', onResponseClose);
+            response.off('finish', onResponseFinish);
+            response.off('error', onError);
+            archive.off('error', onError);
+            archive.off('warning', onWarning);
+        };
+
+        const finishResolve = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            resolve();
+        };
+
+        const onError = (error) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            aborted = true;
+            cleanup();
+            archive.abort();
+
+            if (typeof response.headersSent === 'boolean' && response.headersSent) {
+                console.error('ZIP64 backup stream failed after headers were sent:', error);
+                if (!response.destroyed) {
+                    response.destroy();
+                }
+                resolve();
+                return;
+            }
+
+            reject(error);
+        };
+
+        const onWarning = (warning) => {
+            if (warning?.code === 'ENOENT') {
+                console.warn('Backup ZIP64 warning (file vanished):', warning.message);
+                return;
+            }
+            onError(warning);
+        };
+
+        const onResponseClose = () => {
+            if (!response.writableFinished) {
+                aborted = true;
+                archive.abort();
+            }
+            finishResolve();
+        };
+
+        const onResponseFinish = () => {
+            console.info('Archive wrote %d bytes (ZIP64)', archive.pointer());
+            finishResolve();
+        };
+
+        response.on('close', onResponseClose);
+        response.on('finish', onResponseFinish);
+        response.on('error', onError);
+        archive.on('error', onError);
+        archive.on('warning', onWarning);
+
+        // @ts-ignore
+        archive.pipe(response);
+
+        (async () => {
+            for (const file of files) {
+                if (aborted || response.destroyed) {
+                    return;
+                }
+
+                let stat;
+                try {
+                    stat = await fs.promises.lstat(file.absolutePath);
+                } catch (error) {
+                    if (error?.code === 'ENOENT') {
+                        continue;
+                    }
+                    throw error;
+                }
+
+                if (stat.isSymbolicLink() || !stat.isFile()) {
+                    continue;
+                }
+
+                const ext = path.extname(file.entryName).toLowerCase();
+                archive.file(file.absolutePath, {
+                    name: file.entryName,
+                    store: ZIP_STORE_EXTENSIONS.has(ext),
+                    date: clampZipEntryMtime(stat.mtime),
+                });
+            }
+
+            if (!aborted && !response.destroyed) {
+                await archive.finalize();
+            }
+        })().catch(onError);
+    });
+}
+
+/**
+ * Waits for a writable stream to drain, resolving early on close/abort and rejecting on stream error.
+ * @param {import('node:stream').Writable} writable Target writable stream
+ * @param {() => boolean} isAborted Returns true when archiving has been aborted
+ * @returns {Promise<void>}
+ */
+function waitForWritableDrain(writable, isAborted) {
+    if (isAborted() || writable.destroyed || writable.writableEnded) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const cleanup = () => {
+            writable.off('drain', onDrain);
+            writable.off('close', onClose);
+            writable.off('error', onError);
+        };
+        const onDrain = () => {
+            cleanup();
+            resolve();
+        };
+        const onClose = () => {
+            cleanup();
+            resolve();
+        };
+        const onError = (err) => {
+            cleanup();
+            reject(err);
+        };
+
+        writable.once('drain', onDrain);
+        writable.once('close', onClose);
+        writable.once('error', onError);
+    });
+}
+
+/**
+ * Streams a single opened file handle into an fflate ZIP entry while honoring downstream backpressure.
+ * @param {object} options Stream options
+ * @param {fs.promises.FileHandle} options.fileHandle Opened regular file handle
+ * @param {import('fflate').ZipDeflate | import('fflate').ZipPassThrough} options.entry Target fflate ZIP entry
+ * @param {import('node:stream').Writable} options.writable Target HTTP response or writable stream
+ * @param {() => boolean} options.isAborted Returns true when aborted
+ * @param {() => boolean} options.consumeDrainFlag Consumes and returns whether downstream asked for backpressure
+ * @param {(stream: fs.ReadStream | null) => void} options.setActiveStream Tracks active read stream for abort cleanup
+ * @returns {Promise<void>}
+ */
+async function streamFileIntoZipEntry({ fileHandle, entry, writable, isAborted, consumeDrainFlag, setActiveStream }) {
+    const readStream = fileHandle.createReadStream({
+        highWaterMark: BACKUP_STREAM_HIGH_WATER_MARK,
+        autoClose: true,
+    });
+    setActiveStream(readStream);
+
+    try {
+        for await (const chunk of readStream) {
+            if (isAborted()) {
+                return;
+            }
+
+            const bytes = chunk instanceof Uint8Array
+                ? new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+                : Buffer.from(chunk);
+            entry.push(bytes, false);
+
+            if (consumeDrainFlag()) {
+                await waitForWritableDrain(writable, isAborted);
+            }
+        }
+
+        if (isAborted()) {
+            return;
+        }
+
+        entry.push(EMPTY_ZIP_CHUNK, true);
+        if (consumeDrainFlag()) {
+            await waitForWritableDrain(writable, isAborted);
+        }
+    } catch (error) {
+        if (isAborted() && error?.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+            return;
+        }
+        throw error;
+    } finally {
+        setActiveStream(null);
+        if (!readStream.destroyed) {
+            readStream.destroy();
+        }
+        await fileHandle.close().catch(() => {});
+    }
+}
+
 /**
  * Creates an archive of the user's data root directory.
  * @param {string} handle User handle
  * @param {import('express').Response} response Express response object to write to
+ * @param {object} [options] Optional internal overrides (used by tests)
+ * @param {{ maxEntries?: number, maxFileBytes?: number, maxTotalBytes?: number }} [options.zip64Thresholds] Thresholds triggering ZIP64 fallback
+ * @param {() => Promise<typeof import('archiver').default>} [options.loadArchiver] Loader override for optional `archiver` ZIP64 fallback
  * @returns {Promise<void>} Promise that resolves when the archive is created
  */
-export async function createBackupArchive(handle, response) {
+// SillyBunny: stream backups via lazy fflate (STORE for compressed media) and fall back to lazy archiver when ZIP64 is required.
+export async function createBackupArchive(handle, response, { zip64Thresholds = undefined, loadArchiver = undefined } = {}) {
     const directories = getUserDirectories(handle);
 
     console.info('Backup requested for', handle);
-    // SillyBunny: archiver and its zip stack load only when a backup is requested, not at server boot.
-    const { default: archiver } = await import('archiver');
-    const archive = archiver('zip');
 
-    archive.on('error', function (err) {
-        response.status(500).send({ error: err.message });
-    });
+    const collected = await collectBackupFiles(directories.root);
+    if (needsZip64Fallback(collected, zip64Thresholds)) {
+        await createBackupArchiveWithArchiver({
+            files: collected.files,
+            handle,
+            response,
+            loadArchiver,
+        });
+        return;
+    }
 
-    // On stream closed we can end the request
-    archive.on('end', function () {
-        console.info('Archive wrote %d bytes', archive.pointer());
-        response.end(); // End the Express response
-    });
+    const { files } = collected;
+    const { Zip, ZipDeflate, ZipPassThrough } = await loadFflate();
 
     const timestamp = generateTimestamp();
+    if (typeof response.attachment === 'function') {
+        response.attachment(`${handle}-${timestamp}.zip`);
+    }
 
-    // Set the archive name
-    response.attachment(`${handle}-${timestamp}.zip`);
+    let totalBytes = 0;
+    let needsDrain = false;
+    let aborted = false;
+    let zipEnded = false;
+    /** @type {Error | null} */
+    let streamError = null;
+    /** @type {fs.ReadStream | null} */
+    let activeReadStream = null;
 
-    // This is the streaming magic
-    // @ts-ignore
-    archive.pipe(response);
+    const zip = new Zip((err, chunk, final) => {
+        if (err) {
+            streamError = err;
+            aborted = true;
+            return;
+        }
 
-    // Append files from a sub-directory, putting its contents at the root of archive
-    const ignore = allowKeysExposure ? [] : [SECRETS_FILE, 'backups/secrets_migration_*.json'];
-    archive.glob('**/*', {
-        cwd: directories.root,
-        follow: false,
-        stat: true,
-        dot: true,
-        ignore,
+        if (aborted || response.destroyed) {
+            return;
+        }
+
+        if (chunk && chunk.byteLength > 0) {
+            totalBytes += chunk.byteLength;
+            if (!response.write(chunk)) {
+                needsDrain = true;
+            }
+        }
+
+        if (final) {
+            zipEnded = true;
+        }
     });
-    archive.finalize();
+
+    const onResponseClose = () => {
+        if (!response.writableFinished && !zipEnded) {
+            aborted = true;
+            activeReadStream?.destroy();
+            zip.terminate();
+        }
+    };
+
+    const onResponseError = (err) => {
+        streamError = err;
+        aborted = true;
+        activeReadStream?.destroy();
+        zip.terminate();
+    };
+
+    response.on('close', onResponseClose);
+    response.on('error', onResponseError);
+
+    const isAborted = () => aborted || streamError !== null || response.destroyed;
+    const consumeDrainFlag = () => {
+        const flag = needsDrain;
+        needsDrain = false;
+        return flag;
+    };
+
+    try {
+        for (const file of files) {
+            if (isAborted()) {
+                break;
+            }
+
+            let fileHandle = null;
+            let fdStat = null;
+            try {
+                const stat = await fs.promises.lstat(file.absolutePath);
+                if (stat.isSymbolicLink() || !stat.isFile()) {
+                    continue;
+                }
+                fileHandle = await fs.promises.open(file.absolutePath, 'r');
+                fdStat = await fileHandle.stat();
+                if (!fdStat.isFile()) {
+                    await fileHandle.close().catch(() => {});
+                    continue;
+                }
+            } catch (error) {
+                await fileHandle?.close().catch(() => {});
+                if (error?.code === 'ENOENT') {
+                    continue;
+                }
+                throw error;
+            }
+
+            let streamStarted = false;
+            try {
+                if (fdStat.size >= ZIP32_MAX_FILE_BYTES) {
+                    throw new Error(`Backup entry "${file.entryName}" grew past the 4 GiB ZIP32 limit during archiving.`);
+                }
+
+                const ext = path.extname(file.entryName).toLowerCase();
+                const entry = ZIP_STORE_EXTENSIONS.has(ext)
+                    ? new ZipPassThrough(file.entryName)
+                    : new ZipDeflate(file.entryName, { level: 6 });
+                entry.mtime = clampZipEntryMtime(fdStat.mtime);
+
+                zip.add(entry);
+                if (consumeDrainFlag()) {
+                    await waitForWritableDrain(response, isAborted);
+                }
+
+                streamStarted = true;
+                await streamFileIntoZipEntry({
+                    fileHandle,
+                    entry,
+                    writable: response,
+                    isAborted,
+                    consumeDrainFlag,
+                    setActiveStream: (stream) => {
+                        activeReadStream = stream;
+                    },
+                });
+            } finally {
+                if (!streamStarted) {
+                    await fileHandle.close().catch(() => {});
+                }
+            }
+
+            if (streamError) {
+                throw streamError;
+            }
+        }
+
+        if (streamError) {
+            throw streamError;
+        }
+
+        if (aborted || response.destroyed) {
+            return;
+        }
+
+        zip.end();
+        if (streamError) {
+            throw streamError;
+        }
+
+        console.info('Archive wrote %d bytes', totalBytes);
+
+        await new Promise((resolve, reject) => {
+            if (response.writableFinished || response.destroyed) {
+                resolve();
+                return;
+            }
+
+            const cleanup = () => {
+                response.off('finish', onDone);
+                response.off('close', onDone);
+                response.off('error', onErr);
+            };
+            const onDone = () => {
+                cleanup();
+                resolve();
+            };
+            const onErr = (err) => {
+                cleanup();
+                reject(err);
+            };
+
+            response.once('finish', onDone);
+            response.once('close', onDone);
+            response.once('error', onErr);
+            response.end();
+        });
+    } catch (error) {
+        aborted = true;
+        activeReadStream?.destroy();
+        zip.terminate();
+
+        if (typeof response.headersSent === 'boolean' && response.headersSent) {
+            console.error('Backup stream failed after headers were sent:', error);
+            if (!response.destroyed) {
+                response.destroy();
+            }
+            return;
+        }
+
+        throw error;
+    } finally {
+        response.off('close', onResponseClose);
+        response.off('error', onResponseError);
+    }
 }
 
 /**
