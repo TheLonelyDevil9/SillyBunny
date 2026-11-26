@@ -17,6 +17,7 @@ import {
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods } from './scripts/RossAscends-mods.js';
+import { cloneTemplate, getTemplateJQuery } from './scripts/dom-template.js'; // SillyBunny: clone inert <template> elements.
 import { userStatsHandler, statMesProcess, initStats } from './scripts/stats.js';
 import {
     generateKoboldWithStreaming,
@@ -677,7 +678,8 @@ let exportPopper = Popper.createPopper(document.getElementById('export_button'),
 let isExportPopupOpen = false;
 
 // Saved here for performance reasons
-const messageTemplate = $('#message_template .mes');
+// SillyBunny: read message prototype from inert <template id="message_template">.
+const messageTemplate = getTemplateJQuery('message_template', '.mes');
 export const chatElement = $('#chat');
 const MOBILE_CHAT_RENDER_MEDIA_QUERY = '(max-width: 1000px)';
 const MOBILE_CHAT_RENDER_BATCH_SIZE = 8;
@@ -1679,7 +1681,8 @@ export async function selectCharacterById(id, { switchMenu = true, onAccepted, t
  * @returns {JQuery<HTMLElement>}
  */
 export function getBackBlock() {
-    const template = $('#bogus_folder_back_template .bogus_folder_select').clone();
+    // SillyBunny: clone from inert <template id="bogus_folder_back_template">.
+    const template = cloneTemplate('bogus_folder_back_template', '.bogus_folder_select');
     return template;
 }
 
@@ -1730,7 +1733,8 @@ export function getCharacterBlock(item, id) {
         this_avatar = getThumbnailUrlForViewport('avatar', item.avatar);
     }
     // Populate the template
-    const template = $('#character_template .character_select').clone();
+    // SillyBunny: clone from inert <template id="character_template">.
+    const template = cloneTemplate('character_template', '.character_select');
     template.attr({ 'data-chid': id, 'id': `CharID${id}` });
     template.find('img').attr({
         src: this_avatar,
@@ -5306,7 +5310,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * @returns {JQuery<HTMLElement>} The appended image container element
      */
     function appendImageAttachment(attachment, index) {
-        const template = $('#message_image_template .mes_img_container').clone();
+        // SillyBunny: clone from inert <template id="message_image_template">.
+        const template = cloneTemplate('message_image_template', '.mes_img_container');
         template.attr('data-index', index);
 
         const image = template.find('.mes_img');
@@ -5346,7 +5351,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * @returns {JQuery<HTMLElement>} The appended video container element
      */
     function appendVideoAttachment(attachment, index) {
-        const template = $('#message_video_template .mes_video_container').clone();
+        // SillyBunny: clone from inert <template id="message_video_template">.
+        const template = cloneTemplate('message_video_template', '.mes_video_container');
         template.attr('data-index', index);
 
         const video = template.find('.mes_video');
@@ -5382,7 +5388,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * @returns {JQuery<HTMLElement>} The appended audio container element
      */
     function appendAudioAttachment(attachment, index) {
-        const template = $('#message_audio_template .mes_audio_container').clone();
+        // SillyBunny: clone from inert <template id="message_audio_template">.
+        const template = cloneTemplate('message_audio_template', '.mes_audio_container');
         template.attr('data-index', index);
         const audio = template.find('.mes_audio');
         audio.attr('src', attachment.url);
@@ -5484,7 +5491,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         const mediaIndex = getMediaIndex(mes);
         const selectedMedia = mes.extra.media[mediaIndex];
 
-        const galleryControls = $('#message_gallery_controls .mes_img_swipes').clone();
+        // SillyBunny: clone from inert <template id="message_gallery_controls">.
+        const galleryControls = cloneTemplate('message_gallery_controls', '.mes_img_swipes');
         const counter = galleryControls.find('.mes_img_swipe_counter');
         counter.text(`${mediaIndex + 1}/${mes.extra.media.length}`);
 
@@ -5508,7 +5516,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
     if (hasFiles) {
         for (let index = 0; index < mes.extra.files.length; index++) {
             const file = mes.extra.files[index];
-            const template = $('#message_file_template .mes_file_container').clone();
+            // SillyBunny: clone from inert <template id="message_file_template">.
+            const template = cloneTemplate('message_file_template', '.mes_file_container');
             template.attr('data-index', index);
             template.find('.mes_file_name').text(file.name).attr('title', file.name);
             template.find('.mes_file_size').text(humanFileSize(file.size)).attr('title', file.size);
@@ -12811,7 +12820,8 @@ export function buildAvatarList(block, entities, { templateId = 'inline_avatar_t
         const id = entity.id;
 
         // Populate the template
-        const avatarTemplate = $(`#${templateId} .avatar`).clone();
+        // SillyBunny: clone from inert <template> element.
+        const avatarTemplate = cloneTemplate(templateId, '.avatar');
 
         let this_avatar = default_avatar;
         if (entity.item.avatar !== undefined && entity.item.avatar != 'none') {
@@ -15596,7 +15606,8 @@ async function displayChats(searchQuery, currentChat, displayName, avatarImg, se
 
         for (const chat of filteredData) {
             const isSelected = currentChat === chat.file_name;
-            const template = $('#past_chat_template .select_chat_block_wrapper').clone();
+            // SillyBunny: clone from inert <template id="past_chat_template">.
+            const template = cloneTemplate('past_chat_template', '.select_chat_block_wrapper');
             template.find('.select_chat_block').attr('file_name', chat.file_name);
             template.find('.avatar img').attr('src', avatarImg);
             template.find('.select_chat_block_filename').text(chat.file_name);
@@ -15764,7 +15775,8 @@ function syncAlternateGreetingsEditor() {
 
     const greetings = getEditableAlternateGreetings() ?? [];
     greetings.forEach((greeting, index) => {
-        const greetingBlock = $('#alternate_greeting_form_template .alternate_greeting').clone();
+        // SillyBunny: clone from inert <template id="alternate_greeting_form_template">.
+        const greetingBlock = cloneTemplate('alternate_greeting_form_template', '.alternate_greeting');
         const textareaId = `alternate_greeting_inline_${index}`;
 
         greetingBlock.attr('data-index', index);
@@ -16857,7 +16869,8 @@ async function openCharacterWorldPopup() {
     const fileName = getCharaFilename(chid);
     const charName = (menu_type == 'create' ? create_save.name : characters[chid]?.data?.name) || 'Nameless';
     const worldId = (menu_type == 'create' ? create_save.world : characters[chid]?.data?.extensions?.world) || '';
-    const template = $('#character_world_template .character_world').clone();
+    // SillyBunny: clone from inert <template id="character_world_template">.
+    const template = cloneTemplate('character_world_template', '.character_world');
     template.find('.character_name').text(charName);
 
     // --- Event Handlers ---

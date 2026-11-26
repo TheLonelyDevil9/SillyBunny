@@ -17,6 +17,7 @@ import {
 import { RA_CountCharTokens, humanizedDateTime, dragElement, favsToHotswap, getMessageTimeStamp } from './RossAscends-mods.js';
 import { power_user, loadMovingUIState, sortEntitiesList } from './power-user.js';
 import { debounce_timeout } from './constants.js';
+import { cloneTemplate } from './dom-template.js'; // SillyBunny: clone inert <template> elements.
 // SillyBunny: group folder membership is settings-only editor state, removed with the group.
 import { getFolderId, removeEntityKey as removeFolderEntityKey, setFolder } from './sillybunny-folders.js';
 
@@ -1766,7 +1767,8 @@ export function getGroupBlock(group) {
         }
     }
 
-    const template = $('#group_list_template .group_select').clone();
+    // SillyBunny: clone from inert <template id="group_list_template">.
+    const template = cloneTemplate('group_list_template', '.group_select');
     template.data('id', group.id);
     template.attr('data-grid', group.id);
     template.find('.ch_name').text(group.name).attr('title', `[Group] ${group.name}`);
@@ -1856,7 +1858,8 @@ function getGroupAvatar(group) {
     const avatarCount = memberAvatars.length;
 
     if (avatarCount >= 1 && avatarCount <= 4) {
-        const groupAvatar = $(`#group_avatars_template .collage_${avatarCount}`).clone();
+        // SillyBunny: clone from inert <template id="group_avatars_template">.
+        const groupAvatar = cloneTemplate('group_avatars_template', `.collage_${avatarCount}`);
 
         for (let i = 0; i < avatarCount; i++) {
             groupAvatar.find(`.img_${i + 1}`).attr({
@@ -1876,7 +1879,8 @@ function getGroupAvatar(group) {
     }
 
     // default avatar
-    const groupAvatar = $('#group_avatars_template .collage_1').clone();
+    // SillyBunny: clone from inert <template id="group_avatars_template">.
+    const groupAvatar = cloneTemplate('group_avatars_template', '.collage_1');
     groupAvatar.find('.img_1').attr({
         src: group.avatar_url || system_avatar,
         loading: 'lazy',

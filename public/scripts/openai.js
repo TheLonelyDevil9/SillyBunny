@@ -4,6 +4,7 @@
 * https://github.com/CncAnon1/TavernAITurbo
 */
 import { Fuse, DOMPurify } from '../lib.js';
+import { cloneTemplate } from './dom-template.js'; // SillyBunny: clone inert <template> elements.
 
 import {
     abortStatusCheck,
@@ -7673,7 +7674,8 @@ function createLogitBiasListItem(entry) {
         entry.id = uuidv4();
     }
     const id = entry.id;
-    const template = $('#openai_logit_bias_template .openai_logit_bias_form').clone();
+    // SillyBunny: clone from inert <template id="openai_logit_bias_template">.
+    const template = cloneTemplate('openai_logit_bias_template', '.openai_logit_bias_form');
     template.data('id', id);
     template.find('.openai_logit_bias_text').val(entry.text).on('input', function () {
         entry.text = String($(this).val());
